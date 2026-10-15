@@ -143,14 +143,9 @@ pub fn render(g: &Graph, book: Option<&Book>, w: f64, h: f64) -> String {
     render_scene(g.id, &sc, w, h, None)
 }
 
-pub fn render_page(g: &Graph, project: &crate::Project, w: f64, h: f64) -> String {
-    render_scene(
-        g.id,
-        &scene::build_page(g, project, w, h, None),
-        w,
-        h,
-        Some((g.page.width_mm, g.page.height_mm)),
-    )
+pub fn render_page(g: &Graph, project: &crate::Project) -> String {
+    let sc = scene::layout_page(g, project, &[]);
+    render_scene(g.id, &sc, sc.w, sc.h, Some((g.page.width_mm, g.page.height_mm)))
 }
 
 fn render_scene(id: u64, sc: &scene::Scene, w: f64, h: f64, physical: Option<(f64, f64)>) -> String {

@@ -107,7 +107,7 @@ pub fn show(ctx: &egui::Context, project: &Project, draft: &mut Option<PlotSpec>
                                     .add_enabled_ui(valid.is_ok(), |ui| {
                                         let (rect, response) =
                                             ui.allocate_exact_size(egui::vec2(180.0, 140.0), egui::Sense::click());
-                                        let sc = scicanvas_core::scene::build_page(&g, project, 180.0, 140.0, None);
+                                        let sc = scicanvas_core::scene::layout_page(&g, project, &[]);
                                         crate::plot::paint(ui, rect, &sc);
                                         if selected {
                                             ui.painter().rect_stroke(

@@ -476,12 +476,7 @@ impl SciApp {
         let Some(g) = self.project.graph(gid).cloned() else {
             return;
         };
-        let content = svg::render_page(
-            &g,
-            &self.project,
-            g.page.width_mm * 96.0 / 25.4,
-            g.page.height_mm * 96.0 / 25.4,
-        );
+        let content = svg::render_page(&g, &self.project);
         let Some(path) = rfd::FileDialog::new()
             .set_title("导出图形")
             .add_filter("SVG 矢量图", &["svg"])

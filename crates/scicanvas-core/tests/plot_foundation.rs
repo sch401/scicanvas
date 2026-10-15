@@ -22,7 +22,10 @@ fn presets_have_example_data_and_use_the_shared_scene() {
         let sc = scene::build_page(&graph, &project, 800.0, 600.0, None);
         assert!(!sc.items.is_empty());
         assert_eq!(sc.layer_plots.len(), 1);
-        assert!(svg::render_page(&graph, &project, 800.0, 600.0).contains("85mm"));
+        assert!(svg::render_page(&graph, &project).contains("85mm"));
+        let layout = scene::layout_page(&graph, &project, &[]);
+        assert_eq!([layout.w, layout.h], graph.page.logical_size());
+        assert!(svg::render_page(&graph, &project).contains(&format!("viewBox=\"0 0 {} {}\"", layout.w, layout.h)));
     }
 }
 
@@ -41,6 +44,16 @@ fn invalid_plot_does_not_mutate_project_and_selection_rules_are_shared() {
     assert_eq!(spec.x_key.as_deref(), Some("A"));
     let id = project.plot_spec(spec).unwrap();
     assert_eq!(project.graph(id).unwrap().y_keys, vec!["B"]);
+    let mut book = Book::new(10, "空表");
+    book.push_column(Role::X);
+    assert_eq!(
+        PlotSpec::from_selection(&book, &[], PlotType::Line).unwrap_err(),
+        "工作簿里没有 Y 列，请先把列设为 Y"
+    );
+    assert_eq!(
+        PlotSpec::from_selection(&book, &["A".into()], PlotType::Line).unwrap_err(),
+        "选中的列里没有 Y 列，请至少选中一个 Y 列"
+    );
 }
 
 #[test]
@@ -85,7 +98,7 @@ fn multiple_books_and_layers_have_independent_layout_and_clipping() {
     let clipped: Vec<_> = sc.items.iter().filter_map(|item| item.clip).collect();
     assert!(clipped.contains(&sc.layer_plots[0]));
     assert!(clipped.contains(&sc.layer_plots[1]));
-    let image = svg::render_page(graph, &project, 1000.0, 450.0);
+    let image = svg::render_page(graph, &project);
     assert!(image.contains("clip2-1"));
     assert!(image.contains("第二图层标题"));
     assert!(image.contains("第二图层曲线"));

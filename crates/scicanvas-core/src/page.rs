@@ -22,6 +22,10 @@ impl Default for Page {
     }
 }
 impl Page {
+    /// 页面固定逻辑画布，96 个逻辑单位对应一英寸。
+    pub fn logical_size(&self) -> [f64; 2] {
+        [self.width_mm * 96.0 / 25.4, self.height_mm * 96.0 / 25.4]
+    }
     pub fn layers(&self) -> &[Layer] {
         &self.layers
     }

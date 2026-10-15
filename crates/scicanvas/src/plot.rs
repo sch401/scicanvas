@@ -66,6 +66,13 @@ fn rgb(c: Rgb) -> Color32 {
     Color32::from_rgb(c.0, c.1, c.2)
 }
 
+/// 页面整体缩放并居中，绘制与命中测试使用同一变换。
+fn page_transform(rect: Rect, size: [f64; 2]) -> egui::emath::TSTransform {
+    let logical = vec2(size[0] as f32, size[1] as f32);
+    let scale = (rect.width() / logical.x).min(rect.height() / logical.y);
+    egui::emath::TSTransform::new(rect.min.to_vec2() + (rect.size() - logical * scale) * 0.5, scale)
+}
+
 fn tf(v: f64, log: bool) -> f64 {
     if log {
         v.log10()
@@ -108,8 +115,11 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize) ->
         vec2(available.x, available.x / aspect)
     };
     let (rect, response) = ui.allocate_exact_size(size, Sense::click_and_drag());
-    let (w, h) = (rect.width() as f64, rect.height() as f64);
-    let local = |p: Pos2| ((p.x - rect.left()) as f64, (p.y - rect.top()) as f64);
+    let transform = page_transform(rect, g.page.logical_size());
+    let local = |p: Pos2| {
+        let p = transform.inverse() * p;
+        (p.x as f64, p.y as f64)
+    };
     // ponytail: 视图按图层序号缓存；增删时清空，支持重排时改用稳定图层编号。
     let mut saved = ui.data(|d| d.get_temp::<Vec<Option<Saved>>>(id)).unwrap_or_default();
     if saved.len() != g.page.layers().len() {
@@ -124,7 +134,7 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize) ->
         }
     }
     let views = |saved: &[Option<Saved>]| saved.iter().map(|s| s.as_ref().map(|s| s.view)).collect::<Vec<_>>();
-    let mut sc = scene::build_page_views(g, project, w, h, &views(&saved));
+    let mut sc = scene::layout_page(g, project, &views(&saved));
     let hovered = response.hover_pos().and_then(|p| {
         let (x, y) = local(p);
         sc.layers.iter().position(|layer| layer.contains(x, y))
@@ -161,8 +171,20 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize) ->
             if dragging.is_some() {
                 let d = response.drag_delta();
                 if d != egui::Vec2::ZERO {
-                    view.x = adjust(view.x, layer.x_log, -d.x as f64 / layout.plot[2], 1.0, 0.5);
-                    view.y = adjust(view.y, layer.y_log, d.y as f64 / layout.plot[3], 1.0, 0.5);
+                    view.x = adjust(
+                        view.x,
+                        layer.x_log,
+                        -d.x as f64 / f64::from(transform.scaling) / layout.plot[2],
+                        1.0,
+                        0.5,
+                    );
+                    view.y = adjust(
+                        view.y,
+                        layer.y_log,
+                        d.y as f64 / f64::from(transform.scaling) / layout.plot[3],
+                        1.0,
+                        0.5,
+                    );
                     changed = true;
                 }
             } else if let Some(p) = response.hover_pos() {
@@ -200,13 +222,16 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize) ->
         }
     }
     if changed {
-        sc = scene::build_page_views(g, project, w, h, &views(&saved));
+        sc = scene::layout_page(g, project, &views(&saved));
     }
     paint(ui, rect, &sc);
     if sc.layers.len() > 1 {
         let index = selected_layer.unwrap_or(selected).min(sc.layers.len() - 1);
         let [x, y, w, h] = sc.layers[index].plot;
-        let outline = Rect::from_min_size(rect.min + vec2(x as f32, y as f32), vec2(w as f32, h as f32));
+        let outline = Rect::from_min_size(
+            transform * pos2(x as f32, y as f32),
+            vec2(w as f32, h as f32) * transform.scaling,
+        );
         ui.painter().rect_stroke(
             outline.expand(3.0),
             0.0,
@@ -238,15 +263,16 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize) ->
 
 /// 把图元画到 rect 里。
 pub fn paint(ui: &egui::Ui, rect: Rect, sc: &Scene) {
-    let o = rect.min;
-    let at = |x: f64, y: f64| pos2(o.x + x as f32, o.y + y as f32);
+    let transform = page_transform(rect, [sc.w, sc.h]);
+    let scale = transform.scaling;
+    let at = |x: f64, y: f64| transform * pos2(x as f32, y as f32);
     let free = ui.painter_at(rect);
 
     for it in &sc.items {
         let p = match it.clip {
-            Some([x, y, w, h]) => {
-                free.with_clip_rect(Rect::from_min_size(at(x, y), vec2(w as f32, h as f32)).intersect(free.clip_rect()))
-            }
+            Some([x, y, w, h]) => free.with_clip_rect(
+                Rect::from_min_size(at(x, y), vec2(w as f32, h as f32) * scale).intersect(free.clip_rect()),
+            ),
             None => free.clone(),
         };
         match &it.prim {
@@ -258,12 +284,12 @@ pub fn paint(ui: &egui::Ui, rect: Rect, sc: &Scene) {
                 fill,
                 stroke,
             } => {
-                let r = Rect::from_min_size(at(*x, *y), vec2(*w as f32, *h as f32));
+                let r = Rect::from_min_size(at(*x, *y), vec2(*w as f32, *h as f32) * scale);
                 let fill = fill
                     .map(|(c, a)| rgb(c).gamma_multiply(a as f32))
                     .unwrap_or(Color32::TRANSPARENT);
                 let stroke = stroke
-                    .map(|(c, wd)| Stroke::new(wd as f32, rgb(c)))
+                    .map(|(c, wd)| Stroke::new(wd as f32 * scale, rgb(c)))
                     .unwrap_or(Stroke::NONE);
                 p.rect(r, 0.0, fill, stroke);
             }
@@ -273,11 +299,11 @@ pub fn paint(ui: &egui::Ui, rect: Rect, sc: &Scene) {
                 width,
                 dashed,
             } => {
-                let stroke = Stroke::new(*width as f32, rgb(*color));
+                let stroke = Stroke::new(*width as f32 * scale, rgb(*color));
                 for s in segs {
                     let pts = [at(s[0], s[1]), at(s[2], s[3])];
                     if *dashed {
-                        p.extend(Shape::dashed_line(&pts, stroke, 3.0, 3.0));
+                        p.extend(Shape::dashed_line(&pts, stroke, 3.0 * scale, 3.0 * scale));
                     } else {
                         p.line_segment(pts, stroke);
                     }
@@ -285,14 +311,14 @@ pub fn paint(ui: &egui::Ui, rect: Rect, sc: &Scene) {
             }
             Prim::Polyline { pts, color, width } => {
                 let pts: Vec<Pos2> = pts.iter().map(|q| at(q[0], q[1])).collect();
-                p.add(Shape::line(pts, Stroke::new(*width as f32, rgb(*color))));
+                p.add(Shape::line(pts, Stroke::new(*width as f32 * scale, rgb(*color))));
             }
             Prim::Symbols { sym, pts, r, color } => {
                 let c = rgb(*color);
                 for q in pts {
                     match scene::symbol_polygon(*sym, q[0], q[1], *r) {
                         None => {
-                            p.circle_filled(at(q[0], q[1]), *r as f32, c);
+                            p.circle_filled(at(q[0], q[1]), *r as f32 * scale, c);
                         }
                         Some(poly) => {
                             let poly: Vec<Pos2> = poly.iter().map(|v| at(v[0], v[1])).collect();
@@ -311,7 +337,7 @@ pub fn paint(ui: &egui::Ui, rect: Rect, sc: &Scene) {
                 bold,
                 color,
             } => {
-                let galley = p.layout_no_wrap(text.clone(), plot_font(*size as f32, *bold), rgb(*color));
+                let galley = p.layout_no_wrap(text.clone(), plot_font(*size as f32 * scale, *bold), rgb(*color));
                 let gs = galley.size();
                 let c = at(*x, *y);
                 let k = match anchor {
@@ -369,9 +395,9 @@ mod tests {
         }
     }
 
-    fn point(rect: Rect, view: &scene::LayerView) -> Pos2 {
-        let [x, y, w, h] = view.plot;
-        rect.min + vec2((x + w / 2.0) as f32, (y + h / 2.0) as f32)
+    fn point(rect: Rect, sc: &Scene, index: usize) -> Pos2 {
+        let [x, y, w, h] = sc.layers[index].plot;
+        page_transform(rect, [sc.w, sc.h]) * pos2((x + w / 2.0) as f32, (y + h / 2.0) as f32)
     }
 
     #[test]
@@ -380,14 +406,8 @@ mod tests {
         crate::fonts::setup(&ctx);
         let p = project();
         let initial = frame(&ctx, &p, vec![]);
-        let sc = scene::build_page(
-            &p.graphs[0],
-            &p,
-            initial.response.rect.width() as f64,
-            initial.response.rect.height() as f64,
-            None,
-        );
-        let at = point(initial.response.rect, &sc.layers[1]);
+        let sc = scene::layout_page(&p.graphs[0], &p, &[]);
+        let at = point(initial.response.rect, &sc, 1);
         let output = frame(&ctx, &p, vec![egui::Event::PointerMoved(at), button(at, true)]);
         assert_eq!(output.selected_layer, Some(1));
         frame(&ctx, &p, vec![button(at, false)]);
@@ -406,7 +426,7 @@ mod tests {
         let states = ctx.data(|d| d.get_temp::<Vec<Option<Saved>>>(view_id(2))).unwrap();
         assert!(states[0].is_none());
         assert!(states[1].is_some());
-        let first = point(initial.response.rect, &sc.layers[0]);
+        let first = point(initial.response.rect, &sc, 0);
         frame(&ctx, &p, wheel(first));
         reset_view(&ctx, 2, 1);
         let states = ctx.data(|d| d.get_temp::<Vec<Option<Saved>>>(view_id(2))).unwrap();
@@ -420,20 +440,56 @@ mod tests {
         crate::fonts::setup(&ctx);
         let p = project();
         let initial = frame(&ctx, &p, vec![]);
-        let sc = scene::build_page(
-            &p.graphs[0],
-            &p,
-            initial.response.rect.width() as f64,
-            initial.response.rect.height() as f64,
-            None,
-        );
-        let start = point(initial.response.rect, &sc.layers[0]);
-        let end = point(initial.response.rect, &sc.layers[1]);
+        let sc = scene::layout_page(&p.graphs[0], &p, &[]);
+        let start = point(initial.response.rect, &sc, 0);
+        let end = point(initial.response.rect, &sc, 1);
         frame(&ctx, &p, vec![egui::Event::PointerMoved(start), button(start, true)]);
         frame(&ctx, &p, vec![egui::Event::PointerMoved(start + vec2(12.0, 0.0))]);
         frame(&ctx, &p, vec![egui::Event::PointerMoved(end)]);
         let states = ctx.data(|d| d.get_temp::<Vec<Option<Saved>>>(view_id(2))).unwrap();
         assert!(states[0].is_some());
         assert!(states[1].is_none());
+    }
+
+    #[test]
+    fn page_geometry_text_and_strokes_scale_together() {
+        let p = Project::sample();
+        let sc = scene::layout_page(&p.graphs[0], &p, &[]);
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        for scale in [1.0_f32, 2.0, 0.5] {
+            let rect = Rect::from_min_size(pos2(20.0, 25.0), vec2(sc.w as f32, sc.h as f32) * scale);
+            let output = ctx.run(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1500.0, 1200.0))),
+                    ..Default::default()
+                },
+                |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| paint(ui, rect, &sc));
+                },
+            );
+            let stroke = output
+                .shapes
+                .iter()
+                .find_map(|s| match &s.shape {
+                    Shape::Rect(r) if r.stroke.width > 0.0 => Some(r.stroke.width),
+                    _ => None,
+                })
+                .unwrap();
+            let font = output
+                .shapes
+                .iter()
+                .find_map(|s| match &s.shape {
+                    Shape::Text(t) => Some(t.galley.job.sections[0].format.font_id.size),
+                    _ => None,
+                })
+                .unwrap();
+            assert!((stroke / scale - scene::AXIS_WIDTH as f32).abs() < 1e-4);
+            assert!((font / scale - scene::TICK_FONT as f32).abs() < 1e-4);
+            let transform = page_transform(rect, [sc.w, sc.h]);
+            let page_point = pos2(sc.px(10.0) as f32, sc.py(0.0) as f32);
+            let recovered = transform.inverse() * (transform * page_point);
+            assert!(recovered.distance(page_point) < 1e-4);
+        }
     }
 }

@@ -235,6 +235,12 @@ pub fn build_page_views(g: &Graph, project: &crate::Project, w: f64, h: f64, vie
     compose(g, |id| project.book(id), w, h, views)
 }
 
+/// 屏幕、图库与出版导出共用的页面排版；窗口大小只影响显示缩放。
+pub fn layout_page(g: &Graph, project: &crate::Project, views: &[Option<View>]) -> Scene {
+    let [w, h] = g.page.logical_size();
+    build_page_views(g, project, w, h, views)
+}
+
 fn compose<'a>(g: &Graph, book: impl Fn(u64) -> Option<&'a Book>, w: f64, h: f64, views: &[Option<View>]) -> Scene {
     let cols = g.page.columns.max(1);
     let rows = g.page.layers().len().div_ceil(cols).max(1);

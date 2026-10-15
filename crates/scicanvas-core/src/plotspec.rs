@@ -57,7 +57,11 @@ impl PlotSpec {
             .map(|c| c.key.clone())
             .collect();
         let Some(first_y) = y_keys.first().and_then(|k| book.column_index(k)) else {
-            return Err("请至少选择一个 Y 列".into());
+            return Err(if selected.is_empty() {
+                "工作簿里没有 Y 列，请先把列设为 Y".into()
+            } else {
+                "选中的列里没有 Y 列，请至少选中一个 Y 列".into()
+            });
         };
         let x_key = cols
             .iter()

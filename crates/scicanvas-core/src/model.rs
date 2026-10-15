@@ -120,7 +120,7 @@ pub fn fmt_num(v: f64) -> String {
         return String::new();
     }
     let a = v.abs();
-    if a != 0.0 && (a >= 1e6 || a < 1e-4) {
+    if a != 0.0 && !(1e-4..1e6).contains(&a) {
         return format!("{:.4e}", v);
     }
     format!("{}", round_sig(v, 8))

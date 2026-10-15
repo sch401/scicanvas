@@ -72,7 +72,7 @@ fn each_layer_view_has_independent_axes_and_does_not_change_export() {
     let (p, _) = project();
     let graph = &p.graphs[0];
     let original = scene::build_page(graph, &p, 900.0, 500.0, None);
-    let image = svg::render_page(graph, &p, 900.0, 500.0);
+    let image = svg::render_page(graph, &p);
     let view = View {
         x: (2.0, 4.0),
         y: (10.0, 20.0),
@@ -83,5 +83,5 @@ fn each_layer_view_has_independent_axes_and_does_not_change_export() {
     let [l, t, w, h] = zoomed.layers[1].plot;
     assert_eq!(zoomed.layers[1].data_at(l, t + h), (2.0, 10.0));
     assert_eq!(zoomed.layers[1].data_at(l + w, t), (4.0, 20.0));
-    assert_eq!(svg::render_page(graph, &p, 900.0, 500.0), image);
+    assert_eq!(svg::render_page(graph, &p), image);
 }
