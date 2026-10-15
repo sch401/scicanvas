@@ -18,7 +18,7 @@ fn presets_have_example_data_and_use_the_shared_scene() {
         assert!(ids.insert(preset.id));
         let spec = PlotSpec::from_selection(&book, &[], preset.kind).unwrap();
         let mut graph = Graph::new(20, preset.name);
-        graph.spec = spec;
+        graph.first_layer_mut().spec = spec;
         let sc = scene::build_page(&graph, &project, 800.0, 600.0, None);
         assert!(!sc.items.is_empty());
         assert_eq!(sc.layer_plots.len(), 1);
@@ -43,7 +43,7 @@ fn invalid_plot_does_not_mutate_project_and_selection_rules_are_shared() {
     let spec = PlotSpec::from_selection(project.book(1).unwrap(), &["B".into()], PlotType::Line).unwrap();
     assert_eq!(spec.x_key.as_deref(), Some("A"));
     let id = project.plot_spec(spec).unwrap();
-    assert_eq!(project.graph(id).unwrap().y_keys, vec!["B"]);
+    assert_eq!(project.graph(id).unwrap().first_layer().y_keys, vec!["B"]);
     let mut book = Book::new(10, "空表");
     book.push_column(Role::X);
     assert_eq!(
@@ -134,7 +134,7 @@ fn coordinate_inverse_and_palette_boundaries() {
     assert_eq!(ColorMap::Colorblind.sample(-1.0), ColorMap::Colorblind.sample(0.0));
     let mut p = Project::sample();
     let original = svg::render(&p.graphs[0], p.book(1), 800.0, 600.0);
-    p.graphs[0].color_map = ColorMap::Viridis;
+    p.graphs[0].first_layer_mut().color_map = ColorMap::Viridis;
     let colored = svg::render(&p.graphs[0], p.book(1), 800.0, 600.0);
     assert_ne!(original, colored);
     assert!(colored.contains("#440154"));

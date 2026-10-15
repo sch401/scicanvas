@@ -700,7 +700,11 @@ pub fn backstage(
                         }
                     }
                     for g in &app.project.graphs {
-                        let sub = format!("图形 · {}", g.plot_type.label());
+                        let sub = if g.page.layers().len() == 1 {
+                            format!("图形 · {}", g.first_layer().plot_type.label())
+                        } else {
+                            format!("图形 · {} 个图层", g.page.layers().len())
+                        };
                         if project_card(ui, "graph", &g.name, &sub, dark, pal).clicked() {
                             open = Some(g.id);
                         }

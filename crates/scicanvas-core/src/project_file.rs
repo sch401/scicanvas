@@ -8,7 +8,7 @@ use serde_json::Value;
 
 use crate::Project;
 
-pub const CURRENT_VERSION: u32 = 2;
+pub const CURRENT_VERSION: u32 = 3;
 
 /// 无版本号为 v0；显式未知版本拒绝打开，保留源文件。
 pub fn migrate(mut value: Value) -> Result<Value, String> {
@@ -22,7 +22,7 @@ pub fn migrate(mut value: Value) -> Result<Value, String> {
             "项目版本 {version} 高于当前支持的 {CURRENT_VERSION}，请更新 SciCanvas"
         ));
     }
-    if version == 2 {
+    if version >= 2 {
         if let Some(graphs) = object.get("graphs").and_then(Value::as_array) {
             for graph in graphs {
                 if graph
@@ -31,7 +31,7 @@ pub fn migrate(mut value: Value) -> Result<Value, String> {
                     .and_then(Value::as_array)
                     .is_none()
                 {
-                    return Err("第 2 版图形缺少页面或图层数据".into());
+                    return Err("图形缺少页面或图层数据".into());
                 }
             }
         }

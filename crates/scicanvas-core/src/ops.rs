@@ -201,11 +201,11 @@ impl Project {
         }
         let id = self.alloc_id();
         let mut g = Graph::new(id, self.unique_name("Graph"));
-        g.book_id = Some(r.book_id);
-        g.x_key = item.x.clone();
-        g.y_keys = vec![item.y.clone()];
-        g.plot_type = PlotType::Scatter;
-        g.rows = item.rows;
+        g.first_layer_mut().book_id = Some(r.book_id);
+        g.first_layer_mut().x_key = item.x.clone();
+        g.first_layer_mut().y_keys = vec![item.y.clone()];
+        g.first_layer_mut().plot_type = PlotType::Scatter;
+        g.first_layer_mut().rows = item.rows;
         self.graphs.push(g);
         (id, 0)
     }
@@ -560,7 +560,7 @@ mod tests {
         assert_eq!(keys, vec!["A", "B", "D", "E", "C", "F", "G"]);
         assert_eq!(book.column("D").unwrap().role, Role::X);
         assert_eq!(book.column("E").unwrap().data.len(), 200);
-        let g = p.graph(2).unwrap();
+        let g = p.graph(2).unwrap().first_layer();
         assert_eq!(g.y_keys, vec!["B", "C", "E", "G"]);
         assert_eq!(g.x_by_y.get("E").map(|s| s.as_str()), Some("D"));
         assert!(g.line_only.contains(&"G".to_string()));
@@ -578,7 +578,7 @@ mod tests {
         p.graphs.clear();
         let (gid, reps) = p.fit_poly(&book_src(&["C"]), 3).unwrap();
         assert_eq!(reps[0].kind, "3 阶多项式拟合");
-        let g = p.graph(gid).unwrap();
+        let g = p.graph(gid).unwrap().first_layer();
         assert_eq!(g.plot_type, PlotType::Scatter);
         assert_eq!(g.x_key.as_deref(), Some("A"));
         assert!(reps[0].fit.r2 > 0.99);
@@ -620,7 +620,7 @@ mod tests {
         let mut p = Project::sample();
         let keys = p.smooth(&Source::Graph(2), SmoothMethod::SavitzkyGolay, 7).unwrap();
         assert_eq!(keys.len(), 2);
-        let g = p.graph(2).unwrap();
+        let g = p.graph(2).unwrap().first_layer();
         assert!(keys.iter().all(|k| g.line_only.contains(k) && g.y_keys.contains(k)));
     }
 

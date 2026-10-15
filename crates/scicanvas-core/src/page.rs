@@ -50,8 +50,18 @@ impl Page {
         if self.layers.is_empty() || self.columns == 0 || self.columns > self.layers.len() {
             return Err("页面需要至少一个图层，排版列数应在 1 与图层数之间".into());
         }
-        if !self.width_mm.is_finite() || !self.height_mm.is_finite() || self.width_mm <= 0.0 || self.height_mm <= 0.0 {
+        if !self.width_mm.is_finite()
+            || !self.height_mm.is_finite()
+            || self.width_mm <= 0.0
+            || self.height_mm <= 0.0
+            || self.logical_size().iter().any(|v| !v.is_finite())
+        {
             return Err("页面毫米尺寸必须为有限正数".into());
+        }
+        for layer in &self.layers {
+            if let Some(rect) = layer.placement {
+                rect.validate()?;
+            }
         }
         Ok(())
     }
@@ -59,6 +69,11 @@ impl Page {
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Layer {
+    /// None 使用网格排版；自定义矩形按页面比例定位，可与其他图层重叠。
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub placement: Option<LayerRect>,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub transparent: bool,
     #[cfg_attr(feature = "serde", serde(flatten))]
     pub spec: PlotSpec,
     pub title: String,
@@ -80,6 +95,8 @@ pub struct Layer {
 impl Default for Layer {
     fn default() -> Self {
         Self {
+            placement: None,
+            transparent: false,
             spec: Default::default(),
             title: String::new(),
             x_title: String::new(),
@@ -97,6 +114,40 @@ impl Default for Layer {
             grid: false,
             legend: true,
         }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct LayerRect {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+impl Default for LayerRect {
+    fn default() -> Self {
+        Self {
+            x: 0.0,
+            y: 0.0,
+            width: 1.0,
+            height: 1.0,
+        }
+    }
+}
+impl LayerRect {
+    pub fn validate(self) -> Result<(), String> {
+        if [self.x, self.y, self.width, self.height].iter().any(|v| !v.is_finite())
+            || self.x < 0.0
+            || self.y < 0.0
+            || self.width <= 0.0
+            || self.height <= 0.0
+            || self.x + self.width > 1.0 + 1e-12
+            || self.y + self.height > 1.0 + 1e-12
+        {
+            return Err("图层位置和尺寸应为页面内的有效比例".into());
+        }
+        Ok(())
     }
 }
 impl std::ops::Deref for Layer {

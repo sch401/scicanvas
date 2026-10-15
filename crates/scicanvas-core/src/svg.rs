@@ -225,10 +225,10 @@ mod tests {
         let mut p = Project::sample();
         for t in PlotType::ALL {
             let g = p.graph_mut(2).unwrap();
-            g.plot_type = t;
-            g.y_log = true;
-            g.grid = true;
-            g.title = "测试 <标题>".into();
+            g.first_layer_mut().plot_type = t;
+            g.first_layer_mut().y_log = true;
+            g.first_layer_mut().grid = true;
+            g.first_layer_mut().title = "测试 <标题>".into();
             let svg = render(p.graph(2).unwrap(), p.book(1), 640.0, 480.0);
             assert!(svg.contains("测试 &lt;标题&gt;"));
             assert!(!svg.contains("NaN"));

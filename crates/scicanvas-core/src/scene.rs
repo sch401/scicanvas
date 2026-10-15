@@ -132,6 +132,13 @@ impl LayerView {
 }
 
 impl Scene {
+    /// 返回最上方图层；不穿透上层的背景与轴标签区域。
+    pub fn layer_at(&self, x: f64, y: f64) -> Option<usize> {
+        self.layers.iter().rposition(|layer| {
+            let [l, t, w, h] = layer.bounds;
+            x >= l && x <= l + w && y >= t && y <= t + h
+        })
+    }
     pub fn px(&self, v: f64) -> f64 {
         self.coord().project([v, self.ya.lo])[0]
     }
@@ -242,18 +249,33 @@ pub fn layout_page(g: &Graph, project: &crate::Project, views: &[Option<View>]) 
 }
 
 fn compose<'a>(g: &Graph, book: impl Fn(u64) -> Option<&'a Book>, w: f64, h: f64, views: &[Option<View>]) -> Scene {
-    let cols = g.page.columns.max(1);
-    let rows = g.page.layers().len().div_ceil(cols).max(1);
+    let grid_count = g
+        .page
+        .layers()
+        .iter()
+        .filter(|layer| layer.placement.is_none())
+        .count()
+        .max(1);
+    let cols = g.page.columns.min(grid_count).max(1);
+    let rows = grid_count.div_ceil(cols);
     let (cw, ch) = (w / cols as f64, h / rows as f64);
+    let mut grid_index = 0;
     let mut scenes = g.page.layers().iter().enumerate().map(|(i, layer)| {
+        let [dx, dy, lw, lh] = match layer.placement {
+            Some(rect) => [rect.x * w, rect.y * h, rect.width * w, rect.height * h],
+            None => {
+                let index = grid_index;
+                grid_index += 1;
+                [(index % cols) as f64 * cw, (index / cols) as f64 * ch, cw, ch]
+            }
+        };
         let mut sc = build_layer(
             layer,
             layer.book_id.and_then(&book),
-            cw,
-            ch,
+            lw,
+            lh,
             views.get(i).copied().flatten(),
         );
-        let (dx, dy) = ((i % cols) as f64 * cw, (i / cols) as f64 * ch);
         for item in &mut sc.items {
             translate(&mut item.prim, dx, dy);
             if let Some(rect) = &mut item.clip {
@@ -264,7 +286,7 @@ fn compose<'a>(g: &Graph, book: impl Fn(u64) -> Option<&'a Book>, w: f64, h: f64
         sc.plot[0] += dx;
         sc.plot[1] += dy;
         sc.layers[0].plot = sc.plot;
-        sc.layers[0].bounds = [dx, dy, cw, ch];
+        sc.layers[0].bounds = [dx, dy, lw, lh];
         sc
     });
     let mut page = scenes
@@ -272,7 +294,7 @@ fn compose<'a>(g: &Graph, book: impl Fn(u64) -> Option<&'a Book>, w: f64, h: f64
         .unwrap_or_else(|| build_layer(&Layer::default(), None, w, h, None));
     page.w = w;
     page.h = h;
-    if g.page.layers().len() > 1 {
+    if g.page.layers().len() > 1 || g.page.layers().iter().any(|l| l.transparent || l.placement.is_some()) {
         page.items.insert(
             0,
             Item {
@@ -403,7 +425,7 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
             y: 0.0,
             w,
             h,
-            fill: Some((PAPER, 1.0)),
+            fill: (!g.transparent).then_some((PAPER, 1.0)),
             stroke: None,
         },
         false,

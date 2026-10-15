@@ -401,7 +401,7 @@ pub fn series_styles(series: &[Series], plot_type: PlotType) -> Vec<SeriesStyle>
     out
 }
 
-/// 图形窗口：页面包含图层；兼容字段访问指向第一图层，图层操作显式指定序号。
+/// 图形窗口持有页面；调用方显式选择图层。
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Graph {
@@ -419,15 +419,11 @@ impl Graph {
         }
     }
 }
-// 兼容已有命令的字段访问，项目中仅保存一份图层数据。
-impl std::ops::Deref for Graph {
-    type Target = crate::page::Layer;
-    fn deref(&self) -> &Self::Target {
+impl Graph {
+    pub fn first_layer(&self) -> &crate::page::Layer {
         &self.page.layers()[0]
     }
-}
-impl std::ops::DerefMut for Graph {
-    fn deref_mut(&mut self) -> &mut Self::Target {
+    pub fn first_layer_mut(&mut self) -> &mut crate::page::Layer {
         &mut self.page.layers_mut()[0]
     }
 }
@@ -447,7 +443,7 @@ pub struct Project {
 impl Default for Project {
     fn default() -> Self {
         Project {
-            version: 2,
+            version: 3,
             books: Vec::new(),
             graphs: Vec::new(),
             next_id: 1,
@@ -462,7 +458,7 @@ impl Project {
         spec.validate(book)?;
         let id = self.alloc_id();
         let mut graph = Graph::new(id, self.unique_name("Graph"));
-        graph.spec = spec;
+        graph.first_layer_mut().spec = spec;
         self.graphs.push(graph);
         Ok(id)
     }
@@ -623,9 +619,9 @@ impl Project {
 
         let gid = p.alloc_id();
         let mut g = Graph::new(gid, "Graph1");
-        g.book_id = Some(bid);
-        g.x_key = Some("A".into());
-        g.y_keys = vec!["B".into(), "C".into()];
+        g.first_layer_mut().book_id = Some(bid);
+        g.first_layer_mut().x_key = Some("A".into());
+        g.first_layer_mut().y_keys = vec!["B".into(), "C".into()];
         p.graphs.push(g);
         p
     }
@@ -685,12 +681,12 @@ mod tests {
         let mut p = Project::sample();
         // 什么都不选：全部 Y 列，X = A
         let (gid, _) = p.plot_from_selection(1, &[], PlotType::Line).unwrap();
-        let g = p.graph(gid).unwrap();
+        let g = p.graph(gid).unwrap().first_layer();
         assert_eq!(g.y_keys, vec!["B", "C"]);
         assert_eq!(g.x_key.as_deref(), Some("A"));
         // 只选 C：X 自动找左边的 A
         let (gid, _) = p.plot_from_selection(1, &["C".to_string()], PlotType::Scatter).unwrap();
-        assert_eq!(p.graph(gid).unwrap().x_key.as_deref(), Some("A"));
+        assert_eq!(p.graph(gid).unwrap().first_layer().x_key.as_deref(), Some("A"));
         // 只选 X 列：报错
         assert!(p.plot_from_selection(1, &["A".to_string()], PlotType::Bar).is_err());
     }
@@ -698,7 +694,7 @@ mod tests {
     #[test]
     fn series_skip_blank_rows() {
         let p = Project::sample();
-        let g = p.graph(2).unwrap();
+        let g = p.graph(2).unwrap().first_layer();
         let (x, s) = g.series(p.book(1).unwrap());
         assert_eq!(x.unwrap().key, "A");
         assert_eq!(s.len(), 2);
@@ -710,7 +706,7 @@ mod tests {
     fn delete_columns_updates_graphs() {
         let mut p = Project::sample();
         p.delete_columns(1, &["A".to_string(), "B".to_string()]);
-        let g = p.graph(2).unwrap();
+        let g = p.graph(2).unwrap().first_layer();
         assert_eq!(g.x_key, None);
         assert_eq!(g.y_keys, vec!["C"]);
         assert_eq!(p.book(1).unwrap().columns.len(), 1);

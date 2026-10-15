@@ -10,8 +10,8 @@ fn old_versions_preserve_data_and_all_four_plot_layouts() {
     let mut p = project_file::from_json(V0).unwrap();
     assert_eq!(p, project_file::from_json(V1).unwrap());
     assert_eq!(p.version, project_file::CURRENT_VERSION);
-    assert!(!p.graphs[0].x_by_y.is_empty());
-    assert!(!p.graphs[0].line_only.is_empty());
+    assert!(!p.graphs[0].first_layer().x_by_y.is_empty());
+    assert!(!p.graphs[0].first_layer().line_only.is_empty());
     assert_eq!(project_file::from_json(&project_file::to_json(&p).unwrap()).unwrap(), p);
     for (kind, expected) in [
         (PlotType::Line, include_str!("fixtures/legacy-line.svg")),
@@ -19,7 +19,7 @@ fn old_versions_preserve_data_and_all_four_plot_layouts() {
         (PlotType::LineSymbol, include_str!("fixtures/legacy-linesym.svg")),
         (PlotType::Bar, include_str!("fixtures/legacy-bar.svg")),
     ] {
-        p.graphs[0].plot_type = kind;
+        p.graphs[0].first_layer_mut().plot_type = kind;
         assert_eq!(svg::render(&p.graphs[0], p.book(1), 800.0, 600.0), expected);
     }
 }
@@ -72,7 +72,7 @@ fn atomic_save_replaces_existing_file_and_failure_preserves_it() {
         second
     );
     let original = std::fs::read(&path).unwrap();
-    second.graphs[0].line_width = f32::NAN;
+    second.graphs[0].first_layer_mut().line_width = f32::NAN;
     assert!(project_file::save(&path, &second).is_err());
     assert_eq!(std::fs::read(&path).unwrap(), original);
     assert!(project_file::save(&directory, &first).is_err());

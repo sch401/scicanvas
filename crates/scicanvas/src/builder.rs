@@ -100,8 +100,8 @@ pub fn show(ctx: &egui::Context, project: &Project, draft: &mut Option<PlotSpec>
                             ui.vertical(|ui| {
                                 ui.label(preset.name);
                                 let mut g = Graph::new(i as u64, "预览");
-                                g.spec = spec.clone();
-                                g.plot_type = preset.kind;
+                                g.first_layer_mut().spec = spec.clone();
+                                g.first_layer_mut().plot_type = preset.kind;
                                 let selected = spec.plot_type == preset.kind;
                                 let response = ui
                                     .add_enabled_ui(valid.is_ok(), |ui| {

@@ -298,7 +298,7 @@ impl SciApp {
         match self.project.plot_from_selection(bid, &sel, t) {
             Ok((gid, msg)) => {
                 if let Some(g) = self.project.graph_mut(gid) {
-                    g.rows = rows;
+                    g.first_layer_mut().rows = rows;
                 }
                 self.show_item(gid);
                 self.status = match rows {
@@ -741,7 +741,8 @@ impl SciApp {
         let Some(id) = self.active_graph_id() else { return };
         let index = self.layer_index(id);
         let graph = self.project.graph_mut(id).unwrap();
-        let layer = graph.page.layers()[index].clone();
+        let mut layer = graph.page.layers()[index].clone();
+        layer.placement = None;
         graph.page.add_layer(layer);
         let n = graph.page.layers().len();
         graph.page.columns = (n as f64).sqrt().ceil() as usize;
@@ -2240,6 +2241,58 @@ impl SciApp {
                         });
                 });
                 let g = &mut graph.page.layers_mut()[props_layer];
+                ui.horizontal(|ui| {
+                    let mut custom = g.placement.is_some();
+                    if ui.checkbox(&mut custom, "自定义图层位置").changed() {
+                        g.placement = custom.then(scicanvas_core::page::LayerRect::default);
+                    }
+                    ui.checkbox(&mut g.transparent, "透明图层背景");
+                });
+                if let Some(rect) = &mut g.placement {
+                    ui.label("位置和尺寸（页面比例，0–1）");
+                    egui::Grid::new(("layer-rectangle", gid, props_layer))
+                        .num_columns(4)
+                        .show(ui, |ui| {
+                            ui.label("X");
+                            edit_group(
+                                &ui.add(
+                                    egui::DragValue::new(&mut rect.x)
+                                        .range(0.0..=1.0 - rect.width)
+                                        .speed(0.01),
+                                ),
+                                history_group,
+                            );
+                            ui.label("Y");
+                            edit_group(
+                                &ui.add(
+                                    egui::DragValue::new(&mut rect.y)
+                                        .range(0.0..=1.0 - rect.height)
+                                        .speed(0.01),
+                                ),
+                                history_group,
+                            );
+                            ui.end_row();
+                            ui.label("宽");
+                            edit_group(
+                                &ui.add(
+                                    egui::DragValue::new(&mut rect.width)
+                                        .range(f64::EPSILON..=1.0 - rect.x)
+                                        .speed(0.01),
+                                ),
+                                history_group,
+                            );
+                            ui.label("高");
+                            edit_group(
+                                &ui.add(
+                                    egui::DragValue::new(&mut rect.height)
+                                        .range(f64::EPSILON..=1.0 - rect.y)
+                                        .speed(0.01),
+                                ),
+                                history_group,
+                            );
+                            ui.end_row();
+                        });
+                }
                 let cols = g
                     .book_id
                     .and_then(|id| column_options.get(&id))
@@ -2728,7 +2781,7 @@ mod history_tests {
         let mut rect = egui::Rect::NOTHING;
         let mut frame = |app: &mut SciApp, events: Vec<egui::Event>| {
             app.begin_edit("线宽");
-            let before = app.project.graphs[0].line_width;
+            let before = app.project.graphs[0].first_layer().line_width;
             app.history_group = None;
             let _ = ctx.run(
                 egui::RawInput {
@@ -2737,14 +2790,16 @@ mod history_tests {
                 },
                 |ctx| {
                     egui::CentralPanel::default().show(ctx, |ui| {
-                        let response = ui
-                            .add(egui::Slider::new(&mut app.project.graphs[0].line_width, 0.5..=6.0).show_value(false));
+                        let response = ui.add(
+                            egui::Slider::new(&mut app.project.graphs[0].first_layer_mut().line_width, 0.5..=6.0)
+                                .show_value(false),
+                        );
                         rect = response.rect;
                         edit_group(&response, &mut app.history_group);
                     });
                 },
             );
-            if app.project.graphs[0].line_width != before {
+            if app.project.graphs[0].first_layer().line_width != before {
                 app.history.changed();
             }
             app.finish_frame_edit(app.history_group);
@@ -2897,7 +2952,7 @@ mod history_tests {
             crate::fonts::setup(&ctx);
             let mut app = app();
             let mut p = Project::sample();
-            p.graphs[0].title = "原图".into();
+            p.graphs[0].first_layer_mut().title = "原图".into();
             app.load_project(p, None);
             app.active = Some(1);
             if props {
@@ -2953,7 +3008,7 @@ mod history_tests {
             }
             assert!(app.history.is_pending());
             if props {
-                assert_eq!(app.project.graphs[0].title, "abc");
+                assert_eq!(app.project.graphs[0].first_layer().title, "abc");
             } else {
                 assert_eq!(app.project.books[0].columns[0].long_name, "abc");
             }
@@ -2976,5 +3031,44 @@ mod history_tests {
             assert!(!app.history.is_pending());
         }
         assert!(app.history.undo_label().is_none());
+    }
+
+    #[test]
+    fn layer_placement_control_is_undoable() {
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        let mut app = app();
+        app.props_for = Some(2);
+        let before = app.project.clone();
+        editor_frame(&mut app, &ctx, vec![], true);
+        let output = editor_frame(&mut app, &ctx, vec![], true);
+        let at = output
+            .shapes
+            .iter()
+            .find_map(|s| match &s.shape {
+                egui::Shape::Text(t) if t.galley.job.text == "自定义图层位置" => {
+                    Some(t.pos + egui::vec2(4.0, 4.0))
+                }
+                _ => None,
+            })
+            .unwrap();
+        for pressed in [true, false] {
+            editor_frame(
+                &mut app,
+                &ctx,
+                vec![
+                    egui::Event::PointerMoved(at),
+                    egui::Event::PointerButton {
+                        pos: at,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+                true,
+            );
+        }
+        assert!(app.project.graphs[0].first_layer().placement.is_some());
+        roundtrip(&mut app, &before);
     }
 }

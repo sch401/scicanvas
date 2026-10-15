@@ -137,15 +137,12 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize) ->
     let mut sc = scene::layout_page(g, project, &views(&saved));
     let hovered = response.hover_pos().and_then(|p| {
         let (x, y) = local(p);
-        sc.layers.iter().position(|layer| layer.contains(x, y))
+        sc.layer_at(x, y).filter(|index| sc.layers[*index].contains(x, y))
     });
     let selected_layer = if response.contains_pointer() && ui.input(|i| i.pointer.any_pressed()) {
         response.interact_pointer_pos().and_then(|p| {
             let (x, y) = local(p);
-            sc.layers.iter().position(|layer| {
-                let [l, t, w, h] = layer.bounds;
-                x >= l && x <= l + w && y >= t && y <= t + h
-            })
+            sc.layer_at(x, y)
         })
     } else {
         None
@@ -154,7 +151,7 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize) ->
     let dragging = if response.dragged_by(egui::PointerButton::Primary) {
         ui.input(|i| i.pointer.press_origin()).and_then(|p| {
             let (x, y) = local(p);
-            sc.layers.iter().position(|layer| layer.contains(x, y))
+            sc.layer_at(x, y).filter(|index| sc.layers[*index].contains(x, y))
         })
     } else {
         None
