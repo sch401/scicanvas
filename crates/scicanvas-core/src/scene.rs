@@ -349,17 +349,37 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
         None => (None, Vec::new()),
     };
     for s in &mut series {
-        let mut i = 0;
-        s.errors.retain(|_| {
-            let p = s.points[i];
-            i += 1;
-            (!g.x_log || p[0] > 0.0) && (!g.y_log || p[1] > 0.0)
-        });
-        s.points
-            .retain(|p| (!g.x_log || p[0] > 0.0) && (!g.y_log || p[1] > 0.0));
+        let keep: Vec<_> = s
+            .points
+            .iter()
+            .zip(&s.bases)
+            .map(|(p, base)| {
+                p[1].is_finite()
+                    && base.is_finite()
+                    && (!g.x_log || p[0] > 0.0)
+                    && (!g.y_log || p[1] > 0.0 || (g.plot_type.is_bar() && !s.line_only && *base > 0.0))
+            })
+            .collect();
+        let mut flags = keep.iter();
+        s.points.retain(|_| *flags.next().unwrap());
+        let mut flags = keep.iter();
+        s.errors.retain(|_| *flags.next().unwrap());
+        let mut flags = keep.iter();
+        s.bases.retain(|_| *flags.next().unwrap());
+        let mut flags = keep.iter();
+        s.rows.retain(|_| *flags.next().unwrap());
     }
     let mut all_x: Vec<f64> = series.iter().flat_map(|s| s.points.iter().map(|p| p[0])).collect();
     let mut all_y: Vec<f64> = series.iter().flat_map(|s| s.points.iter().map(|p| p[1])).collect();
+    if g.plot_type.is_bar() && g.plot_type != PlotType::Bar {
+        all_y.extend(
+            series
+                .iter()
+                .filter(|s| !s.line_only)
+                .flat_map(|s| s.bases.iter().copied())
+                .filter(|v| !g.y_log || *v > 0.0),
+        );
+    }
     if g.error_bars.visible {
         for s in &series {
             for (point, errors) in s.points.iter().zip(&s.errors) {
@@ -375,7 +395,7 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
             }
         }
     }
-    let is_bar = g.plot_type == PlotType::Bar;
+    let is_bar = g.plot_type.is_bar();
     let mut styles = series_styles(&series, g.plot_type);
     if g.color_map != crate::colormap::ColorMap::Origin {
         let n = series.iter().filter(|s| !s.line_only).count();
@@ -406,7 +426,17 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
             } else {
                 axis(&all_x, g.x_auto, g.x_min, g.x_max, g.x_log, false)
             };
-            (xa, axis(&all_y, g.y_auto, g.y_min, g.y_max, g.y_log, is_bar))
+            (
+                xa,
+                axis(
+                    &all_y,
+                    g.y_auto,
+                    g.y_min,
+                    g.y_max,
+                    g.y_log,
+                    is_bar && g.plot_type != PlotType::FloatingBar,
+                ),
+            )
         }
     };
 
@@ -502,15 +532,20 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
     let mut symbols: Vec<Prim> = Vec::new();
     for (s, st) in series.iter().zip(&styles) {
         let color = st.color.rgb();
-        if st.kind == PlotType::Bar {
+        if st.kind.is_bar() {
             let gw = dx * 0.7;
-            let bw = gw / st.bar_count.max(1) as f64;
-            let base = if ya.log { ya.lo } else { 0f64.clamp(ya.lo, ya.hi) };
-            let y0 = py(base);
-            for p in &s.points {
-                let x1 = px(p[0] - gw / 2.0 + st.bar_index as f64 * bw);
-                let x2 = px(p[0] - gw / 2.0 + (st.bar_index as f64 + 1.0) * bw);
-                let yy = py(p[1]);
+            let count = if st.kind.is_stacked() { 1 } else { st.bar_count.max(1) };
+            let index = if st.kind.is_stacked() { 0 } else { st.bar_index };
+            let bw = gw / count as f64;
+            for (p, base) in s.points.iter().zip(&s.bases) {
+                let x1 = px((p[0] - gw / 2.0 + index as f64 * bw).max(if xa.log { xa.lo } else { f64::NEG_INFINITY }));
+                let x2 = px((p[0] - gw / 2.0 + (index as f64 + 1.0) * bw).max(if xa.log {
+                    xa.lo
+                } else {
+                    f64::NEG_INFINITY
+                }));
+                let y0 = py(base.clamp(ya.lo, ya.hi));
+                let yy = py(if ya.log { p[1].max(ya.lo) } else { p[1] });
                 push(
                     Prim::Rect {
                         x: x1.min(x2),
@@ -569,7 +604,7 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
     if g.error_bars.visible {
         for (s, st) in series.iter().zip(&styles) {
             let mut segs = Vec::new();
-            let offset = if st.kind == PlotType::Bar {
+            let offset = if st.kind.is_bar() && !st.kind.is_stacked() {
                 dx * 0.7 * ((st.bar_index as f64 + 0.5) / st.bar_count.max(1) as f64 - 0.5)
             } else {
                 0.0
@@ -580,7 +615,7 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
                 if let Some(e) = errors[0] {
                     let ends = [x - e, x + e];
                     let yy = py(p[1]);
-                    if ends[1] >= xa.lo && ends[0] <= xa.hi {
+                    if (!ya.log || p[1] > 0.0) && ends[1] >= xa.lo && ends[0] <= xa.hi {
                         segs.push([px(ends[0].clamp(xa.lo, xa.hi)), yy, px(ends[1].clamp(xa.lo, xa.hi)), yy]);
                         for end in ends {
                             if (xa.lo..=xa.hi).contains(&end) {
@@ -785,7 +820,7 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
             let color = st.color.rgb();
             let cy = ly + 2.0 + lh * i as f64 + lh / 2.0;
             let x0 = lx + 4.0;
-            if st.kind == PlotType::Bar {
+            if st.kind.is_bar() {
                 push(
                     Prim::Rect {
                         x: x0 + 5.0,

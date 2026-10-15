@@ -335,6 +335,39 @@ fn build() -> Vec<Command> {
             |a| a.plot(PlotType::Bar),
         )
         .modifies(),
+        c(
+            "plot.stacked_bar",
+            "堆叠柱图",
+            "bar",
+            "",
+            "绘图",
+            "stacked column bar",
+            need_data,
+            |a| a.plot(PlotType::StackedBar),
+        )
+        .modifies(),
+        c(
+            "plot.percent_stacked_bar",
+            "百分比堆叠柱图",
+            "bar",
+            "",
+            "绘图",
+            "100 percent stacked column bar",
+            need_data,
+            |a| a.plot(PlotType::PercentStackedBar),
+        )
+        .modifies(),
+        c(
+            "plot.floating_bar",
+            "浮动柱图",
+            "bar",
+            "",
+            "绘图",
+            "floating column range bar",
+            need_data,
+            |a| a.plot(PlotType::FloatingBar),
+        )
+        .modifies(),
         // 图形
         c(
             "plot.step_horizontal",

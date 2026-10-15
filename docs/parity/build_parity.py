@@ -453,6 +453,7 @@ THREE_D = {
 }
 PROTO_GRAPHS = {"Horizontal Step Graph", "Vertical Step Graph"}
 ERROR_GRAPHS = {"Y Error Bar Graph", "XY Error Bar Graph"}
+BAR_GRAPHS = {"Stacked Column Graph", "100% Stacked Column Graph", "Floating Column Graph"}
 DONE_GRAPHS = {"Line Graph", "2D Scatter Graph", "Line+Symbol Graph", "Column Graph"}
 P1_3D = {"Color Map Surface", "3D Scatter Graph"}
 
@@ -512,12 +513,14 @@ for cat, (cn_cat, table) in GT.items():
             cn, p = table.get(en, (en, "P2"))
         else:
             cn, p = THREE_D.get(en, en), ("P1" if en in P1_3D else "P2")
-        status = DONE if en in DONE_GRAPHS else PROTO if en in PROTO_GRAPHS | ERROR_GRAPHS else TODO
+        status = DONE if en in DONE_GRAPHS else PROTO if en in PROTO_GRAPHS | ERROR_GRAPHS | BAR_GRAPHS else TODO
         how, verify = graph_how(cat, en), "与 Origin 同数据出图目视比较"
         if en in PROTO_GRAPHS:
             how, verify = "阶梯折线图元 + SVG 共享排版", "拐点几何、拟合线与项目往返测试；Origin 目视对照待做"
         elif en in ERROR_GRAPHS:
             how, verify = "对称误差列自动关联 + scene/SVG 共享图元", "关联、端点几何、裁剪和撤销回归；Origin 目视对照待做"
+        elif en in BAR_GRAPHS:
+            how, verify = "正负堆叠/百分比归一化/上下端配对 + scene/SVG", "缺失行、正负值、上下端、矩形几何、误差棒和撤销回归；Origin 目视对照待做"
         add("图类型 · " + cn_cat, cn, en, p, status, how, verify)
 
 # 网页原型已实现、Rust 版待移植的条目

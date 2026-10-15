@@ -197,6 +197,9 @@ impl Layer {
         if !self.y_title.trim().is_empty() {
             return self.y_title.clone();
         }
+        if self.plot_type == crate::PlotType::PercentStackedBar {
+            return "百分比 (%)".into();
+        }
         book.and_then(|b| self.y_keys.first().and_then(|k| b.column(k)))
             .map(|c| c.axis_label())
             .unwrap_or_default()

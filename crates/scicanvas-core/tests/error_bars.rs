@@ -113,7 +113,7 @@ fn insertion_fit_deletion_and_key_reuse_preserve_ownership() {
 #[test]
 fn autoscale_svg_and_all_basic_chart_types_share_error_segments() {
     let (mut p, gid) = project();
-    for kind in PlotType::ALL {
+    for kind in PlotType::ALL.into_iter().filter(|k| !k.is_bar() || *k == PlotType::Bar) {
         p.graph_mut(gid).unwrap().first_layer_mut().plot_type = kind;
         let g = p.graph(gid).unwrap();
         let sc = scene::layout_page(g, &p, &[]);
@@ -232,7 +232,7 @@ fn v4_roundtrip_and_old_projects_default_to_error_style() {
         .unwrap()
         .remove("error_bars");
     let migrated = project_file::from_json(&old.to_string()).unwrap();
-    assert_eq!(migrated.version, 4);
+    assert_eq!(migrated.version, project_file::CURRENT_VERSION);
     assert_eq!(migrated.graph(gid).unwrap().first_layer().error_bars.cap, 6.0);
     for bad in ["-1", "0", "NaN"] {
         let style = &mut p.graph_mut(gid).unwrap().first_layer_mut().error_bars;

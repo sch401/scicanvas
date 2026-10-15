@@ -4,7 +4,7 @@
 本清单只记录功能点，不包含 Origin 文档正文。实现时按公开说明和观察到的行为编写，不复制 Origin 的代码、文字或图片。
 
 共 488 项：P0 87 项，P1 136 项，P2 254 项，不做 11 项。
-状态：已完成 26 项，原型 31 项，未开始 420 项，不做 11 项。
+状态：已完成 26 项，原型 34 项，未开始 417 项，不做 11 项。
 
 - **P0 / M1 日常够用**：一个人做日常数据处理和论文作图需要的最小集合。
 - **P1 / M2 论文全流程**：拟合报告、统计检验、多面板、信号处理等，覆盖大部分论文工作。
@@ -389,12 +389,12 @@
 | F281 | 柱状图 | Column Graph | P0 | 已完成 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F282 | 带标签柱状图 | Column + Label Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F283 | 条形图 | Bar Graph | P0 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F284 | 堆叠柱状图 | Stacked Column Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
+| F284 | 堆叠柱状图 | Stacked Column Graph | P1 | 原型 | 正负堆叠/百分比归一化/上下端配对 + scene/SVG | 缺失行、正负值、上下端、矩形几何、误差棒和撤销回归；Origin 目视对照待做 |
 | F285 | 浮动条形图 | Floating Bar Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F286 | 堆叠条形图 | Stacked Bar Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F287 | 百分比堆叠柱状图 | 100% Stacked Column Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
+| F287 | 百分比堆叠柱状图 | 100% Stacked Column Graph | P1 | 原型 | 正负堆叠/百分比归一化/上下端配对 + scene/SVG | 缺失行、正负值、上下端、矩形几何、误差棒和撤销回归；Origin 目视对照待做 |
 | F288 | 百分比堆叠条形图 | 100% Stacked Bar Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F289 | 浮动柱状图 | Floating Column Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
+| F289 | 浮动柱状图 | Floating Column Graph | P2 | 原型 | 正负堆叠/百分比归一化/上下端配对 + scene/SVG | 缺失行、正负值、上下端、矩形几何、误差棒和撤销回归；Origin 目视对照待做 |
 | F290 | 百分比丝带图 | 100% Ribbon Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F291 | 丝带图 | Ribbon Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F292 | 圆堆积图 | Circular Packing Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |

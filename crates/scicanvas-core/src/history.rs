@@ -163,6 +163,11 @@ fn estimated_bytes(p: &Project) -> usize {
                 .iter()
                 .map(|(k, v)| 128 + k.capacity() + v.capacity())
                 .sum::<usize>();
+            bytes += layer
+                .base_by_y
+                .iter()
+                .map(|(k, v)| 128 + k.capacity() + v.capacity())
+                .sum::<usize>();
         }
     }
     bytes

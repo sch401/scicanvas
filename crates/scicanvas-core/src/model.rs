@@ -286,16 +286,22 @@ pub enum PlotType {
     Scatter,
     LineSymbol,
     Bar,
+    StackedBar,
+    PercentStackedBar,
+    FloatingBar,
     StepHorizontal,
     StepVertical,
 }
 
 impl PlotType {
-    pub const ALL: [PlotType; 6] = [
+    pub const ALL: [PlotType; 9] = [
         PlotType::Line,
         PlotType::Scatter,
         PlotType::LineSymbol,
         PlotType::Bar,
+        PlotType::StackedBar,
+        PlotType::PercentStackedBar,
+        PlotType::FloatingBar,
         PlotType::StepHorizontal,
         PlotType::StepVertical,
     ];
@@ -306,6 +312,9 @@ impl PlotType {
             PlotType::Scatter => "散点图",
             PlotType::LineSymbol => "点线图",
             PlotType::Bar => "柱状图",
+            PlotType::StackedBar => "堆叠柱图",
+            PlotType::PercentStackedBar => "百分比堆叠柱图",
+            PlotType::FloatingBar => "浮动柱图",
             PlotType::StepHorizontal => "水平阶梯图",
             PlotType::StepVertical => "垂直阶梯图",
         }
@@ -316,6 +325,17 @@ impl PlotType {
             self,
             PlotType::Line | PlotType::LineSymbol | PlotType::StepHorizontal | PlotType::StepVertical
         )
+    }
+
+    pub fn is_bar(self) -> bool {
+        matches!(
+            self,
+            Self::Bar | Self::StackedBar | Self::PercentStackedBar | Self::FloatingBar
+        )
+    }
+
+    pub fn is_stacked(self) -> bool {
+        matches!(self, Self::StackedBar | Self::PercentStackedBar)
     }
 
     pub fn has_symbol(self) -> bool {
@@ -373,6 +393,10 @@ pub struct Series {
     pub points: Vec<[f64; 2]>,
     /// 与 points 逐点对齐；无效或缺失的误差为 None。
     pub errors: Vec<[Option<f64>; 2]>,
+    /// 原始行用于堆叠对齐；均值变换后按 X 对齐。
+    pub rows: Vec<usize>,
+    /// 柱段起点；points 的 Y 为终点。
+    pub bases: Vec<f64>,
     /// 只画线（拟合曲线、平滑结果），不跟随图类型。
     pub line_only: bool,
     /// 结果曲线的来源列（用于避免拟合线和原数据同色）。
@@ -422,7 +446,7 @@ pub struct SeriesStyle {
 
 /// 颜色和符号只在数据曲线之间递增，结果曲线不占顺序。
 pub fn series_styles(series: &[Series], plot_type: PlotType) -> Vec<SeriesStyle> {
-    let bar_count = if plot_type == PlotType::Bar {
+    let bar_count = if plot_type.is_bar() {
         series.iter().filter(|s| !s.line_only).count()
     } else {
         0
@@ -509,7 +533,7 @@ pub struct Project {
 impl Default for Project {
     fn default() -> Self {
         Project {
-            version: 4,
+            version: 5,
             books: Vec::new(),
             graphs: Vec::new(),
             next_id: 1,
@@ -601,6 +625,13 @@ impl Project {
                     layer.y_keys.retain(|k| !keys.contains(k));
                     layer.line_only.retain(|k| !keys.contains(k));
                     layer.x_by_y.retain(|y, x| !keys.contains(y) && !keys.contains(x));
+                    // 保留缺失下端的映射，避免删除后把浮动柱静默改成从零开始。
+                    layer.base_by_y.retain(|y, _| !keys.contains(y));
+                    for base in layer.base_by_y.values_mut() {
+                        if keys.contains(base) {
+                            base.clear();
+                        }
+                    }
                     if layer.x_key.as_ref().is_some_and(|k| keys.contains(k)) {
                         layer.x_key = None;
                     }

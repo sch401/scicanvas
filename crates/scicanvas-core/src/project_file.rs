@@ -8,7 +8,7 @@ use serde_json::Value;
 
 use crate::Project;
 
-pub const CURRENT_VERSION: u32 = 4;
+pub const CURRENT_VERSION: u32 = 5;
 
 /// 无版本号为 v0；显式未知版本拒绝打开，保留源文件。
 pub fn migrate(mut value: Value) -> Result<Value, String> {

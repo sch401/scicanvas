@@ -84,6 +84,9 @@ pub static TABS: &[Tab] = &[
                         "plot.scatter",
                         "plot.linesym",
                         "plot.bar",
+                        "plot.stacked_bar",
+                        "plot.percent_stacked_bar",
+                        "plot.floating_bar",
                         "plot.step_horizontal",
                         "plot.step_vertical",
                     ]),
@@ -163,6 +166,7 @@ pub static TABS: &[Tab] = &[
                 items: &[
                     Smalls(&["plot.line", "plot.scatter", "plot.linesym"]),
                     Smalls(&["plot.bar", "plot.step_horizontal", "plot.step_vertical"]),
+                    Smalls(&["plot.stacked_bar", "plot.percent_stacked_bar", "plot.floating_bar"]),
                 ],
             },
             Group {

@@ -288,8 +288,10 @@ impl SciApp {
         if let Some(id) = self.active {
             let index = self.layer_index(id);
             if let Some(g) = self.project.graph_mut(id) {
-                g.page.layers_mut()[index].plot_type = t;
-                self.status = format!("{} 已改为{}", g.name, t.label());
+                self.status = match g.page.layers_mut()[index].set_plot_type(t) {
+                    Ok(()) => format!("{} 已改为{}", g.name, t.label()),
+                    Err(e) => e,
+                };
                 return;
             }
         }
@@ -1642,6 +1644,9 @@ impl SciApp {
                                                 ("plot.scatter", "散点图"),
                                                 ("plot.linesym", "点线图"),
                                                 ("plot.bar", "柱状图"),
+                                                ("plot.stacked_bar", "堆叠柱图"),
+                                                ("plot.percent_stacked_bar", "百分比堆叠柱图"),
+                                                ("plot.floating_bar", "浮动柱图"),
                                                 ("plot.step_horizontal", "水平阶梯图"),
                                                 ("plot.step_vertical", "垂直阶梯图"),
                                             ] {
@@ -1893,6 +1898,9 @@ impl SciApp {
                 ColAction::Plot(PlotType::Scatter) => "plot.scatter",
                 ColAction::Plot(PlotType::LineSymbol) => "plot.linesym",
                 ColAction::Plot(PlotType::Bar) => "plot.bar",
+                ColAction::Plot(PlotType::StackedBar) => "plot.stacked_bar",
+                ColAction::Plot(PlotType::PercentStackedBar) => "plot.percent_stacked_bar",
+                ColAction::Plot(PlotType::FloatingBar) => "plot.floating_bar",
                 ColAction::Plot(PlotType::StepHorizontal) => "plot.step_horizontal",
                 ColAction::Plot(PlotType::StepVertical) => "plot.step_vertical",
             };
@@ -2315,7 +2323,18 @@ impl SciApp {
                             .selected_text(g.plot_type.label())
                             .show_ui(ui, |ui| {
                                 for t in PlotType::ALL {
-                                    ui.selectable_value(&mut g.plot_type, t, t.label());
+                                    let mut next = g.spec.clone();
+                                    let valid = next.set_plot_type(t);
+                                    if ui
+                                        .add_enabled(
+                                            valid.is_ok(),
+                                            egui::SelectableLabel::new(g.plot_type == t, t.label()),
+                                        )
+                                        .on_hover_text(valid.as_ref().err().map_or(t.label(), String::as_str))
+                                        .clicked()
+                                    {
+                                        g.spec = next;
+                                    }
                                 }
                             });
                         ui.end_row();
@@ -2373,6 +2392,11 @@ impl SciApp {
                         });
                         ui.end_row();
 
+                        if g.plot_type == PlotType::FloatingBar {
+                            ui.label("浮动柱下端");
+                            crate::builder::floating_columns(ui, &mut g.spec, &cols);
+                            ui.end_row();
+                        }
                         ui.label("图标题");
                         edit_group(
                             &ui.add(egui::TextEdit::singleline(&mut g.title).hint_text("（无）")),
@@ -2642,6 +2666,8 @@ mod history_tests {
             "sort.desc",
             "fit.linear",
             "plot.bar",
+            "plot.stacked_bar",
+            "plot.percent_stacked_bar",
             "plot.step_horizontal",
             "plot.step_vertical",
             "col.setXError",
@@ -2976,6 +3002,104 @@ mod history_tests {
         );
         app.finish_frame_edit(app.history_group);
         output
+    }
+
+    #[test]
+    fn bar_variant_commands_preserve_layer_targets_pairing_and_history() {
+        for command in ["plot.stacked_bar", "plot.percent_stacked_bar", "plot.floating_bar"] {
+            let mut app = app();
+            app.active = Some(1);
+            app.selection.insert(1, vec!["B".into(), "C".into()]);
+            let before = app.project.clone();
+            app.run_command(command);
+            let id = app.active.unwrap();
+            assert_ne!(id, 1);
+            roundtrip(&mut app, &before);
+            let one_layer = app.project.graph(id).unwrap().first_layer().clone();
+            app.run_command("layer.add");
+            let before = app.project.clone();
+            app.run_command(if command == "plot.stacked_bar" {
+                "plot.percent_stacked_bar"
+            } else {
+                "plot.stacked_bar"
+            });
+            assert_eq!(*app.project.graph(id).unwrap().first_layer(), one_layer);
+            roundtrip(&mut app, &before);
+        }
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["B".into()]);
+        let before = app.project.clone();
+        app.run_command("plot.floating_bar");
+        assert_eq!(app.project, before);
+        assert!(app.status.contains("成对"));
+        assert!(app.history.undo_label().is_none());
+    }
+
+    #[test]
+    fn floating_baseline_dropdown_is_an_undoable_property_edit() {
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["B".into(), "C".into()]);
+        app.run_command("plot.floating_bar");
+        let id = app.active.unwrap();
+        app.props_for = Some(id);
+        editor_frame(&mut app, &ctx, vec![], true);
+        let output = editor_frame(&mut app, &ctx, vec![], true);
+        let at = output
+            .shapes
+            .iter()
+            .find_map(|s| match &s.shape {
+                egui::Shape::Text(t) if t.galley.job.text.starts_with("C 的下端：B") => {
+                    Some(t.pos + egui::vec2(4.0, 4.0))
+                }
+                _ => None,
+            })
+            .unwrap();
+        let click = |pos, pressed| egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        editor_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(at), click(at, true)],
+            true,
+        );
+        editor_frame(&mut app, &ctx, vec![click(at, false)], true);
+        let output = editor_frame(&mut app, &ctx, vec![], true);
+        let at = output
+            .shapes
+            .iter()
+            .filter_map(|s| match &s.shape {
+                egui::Shape::Text(t) if t.galley.job.text.starts_with("A ·") => Some(t.pos + egui::vec2(4.0, 4.0)),
+                _ => None,
+            })
+            .next_back()
+            .unwrap();
+        let before = app.project.clone();
+        editor_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(at), click(at, true)],
+            true,
+        );
+        editor_frame(&mut app, &ctx, vec![click(at, false)], true);
+        assert_eq!(
+            app.project
+                .graph(id)
+                .unwrap()
+                .first_layer()
+                .base_by_y
+                .get("C")
+                .map(String::as_str),
+            Some("A")
+        );
+        roundtrip(&mut app, &before);
     }
 
     #[test]

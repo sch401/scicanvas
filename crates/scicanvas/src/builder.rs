@@ -1,6 +1,31 @@
 //! 拖放列映射、实时预览与使用当前数据绘制的基础图库。
 use eframe::egui;
-use scicanvas_core::{colormap::ColorMap, plotspec::PlotSpec, Graph, Project};
+use scicanvas_core::{colormap::ColorMap, plotspec::PlotSpec, Graph, PlotType, Project};
+
+pub fn floating_columns(ui: &mut egui::Ui, spec: &mut PlotSpec, cols: &[(String, String)]) {
+    if spec.plot_type != PlotType::FloatingBar {
+        return;
+    }
+    ui.vertical(|ui| {
+        for key in spec.y_keys.clone().iter().filter(|k| !spec.line_only.contains(k)) {
+            let mut base = spec.base_by_y.get(key).cloned().unwrap_or_default();
+            let before = base.clone();
+            egui::ComboBox::from_id_salt(("floating-base", key))
+                .selected_text(format!(
+                    "{key} 的下端：{}",
+                    if base.is_empty() { "请选择" } else { &base }
+                ))
+                .show_ui(ui, |ui| {
+                    for (k, label) in cols.iter().filter(|(k, _)| k != key) {
+                        ui.selectable_value(&mut base, k.clone(), label);
+                    }
+                });
+            if base != before {
+                spec.base_by_y.insert(key.clone(), base);
+            }
+        }
+    });
+}
 
 pub fn show(ctx: &egui::Context, project: &Project, draft: &mut Option<PlotSpec>) -> bool {
     let Some(spec) = draft.as_mut() else { return false };
@@ -70,6 +95,13 @@ pub fn show(ctx: &egui::Context, project: &Project, draft: &mut Option<PlotSpec>
                     }
                 }
                 columns[0].label("配色");
+                let cols: Vec<_> = book
+                    .columns
+                    .iter()
+                    .filter(|c| !matches!(c.role, scicanvas_core::Role::XError | scicanvas_core::Role::YError))
+                    .map(|c| (c.key.clone(), format!("{} · {}", c.key, c.display_name())))
+                    .collect();
+                floating_columns(&mut columns[0], spec, &cols);
                 columns[0].horizontal_wrapped(|ui| {
                     ui.selectable_value(&mut spec.color_map, ColorMap::Origin, "Origin");
                     ui.selectable_value(&mut spec.color_map, ColorMap::Viridis, "Viridis");
@@ -93,43 +125,50 @@ pub fn show(ctx: &egui::Context, project: &Project, draft: &mut Option<PlotSpec>
                 }
 
                 columns[1].heading("图库 · 当前数据");
-                egui::Grid::new("builder-gallery")
-                    .num_columns(2)
+                egui::ScrollArea::vertical()
+                    .max_height(650.0)
                     .show(&mut columns[1], |ui| {
-                        for (i, preset) in scicanvas_core::presets::all().into_iter().enumerate() {
-                            ui.vertical(|ui| {
-                                ui.label(preset.name);
-                                let mut g = Graph::new(i as u64, "预览");
-                                g.first_layer_mut().spec = spec.clone();
-                                g.first_layer_mut().plot_type = preset.kind;
-                                let selected = spec.plot_type == preset.kind;
-                                let response = ui
-                                    .add_enabled_ui(valid.is_ok(), |ui| {
-                                        let (rect, response) =
-                                            ui.allocate_exact_size(egui::vec2(180.0, 140.0), egui::Sense::click());
-                                        let sc = scicanvas_core::scene::layout_page(&g, project, &[]);
-                                        crate::plot::paint(ui, rect, &sc);
-                                        if selected {
-                                            ui.painter().rect_stroke(
-                                                rect,
-                                                0.0,
-                                                egui::Stroke::new(2.0_f32, ui.visuals().selection.bg_fill),
-                                            );
-                                        }
-                                        response
-                                    })
-                                    .inner;
-                                if response
-                                    .on_hover_text(valid.as_ref().err().map_or("点击选择此图型", String::as_str))
-                                    .clicked()
-                                {
-                                    spec.plot_type = preset.kind;
+                        egui::Grid::new("builder-gallery").num_columns(2).show(ui, |ui| {
+                            for (i, preset) in scicanvas_core::presets::all().into_iter().enumerate() {
+                                ui.vertical(|ui| {
+                                    ui.label(preset.name);
+                                    let mut g = Graph::new(i as u64, "预览");
+                                    g.first_layer_mut().spec = spec.clone();
+                                    let preview_valid = g
+                                        .first_layer_mut()
+                                        .set_plot_type(preset.kind)
+                                        .and_then(|_| g.first_layer().validate(book));
+                                    let selected = spec.plot_type == preset.kind;
+                                    let response = ui
+                                        .add_enabled_ui(preview_valid.is_ok(), |ui| {
+                                            let (rect, response) =
+                                                ui.allocate_exact_size(egui::vec2(180.0, 140.0), egui::Sense::click());
+                                            let sc = scicanvas_core::scene::layout_page(&g, project, &[]);
+                                            crate::plot::paint(ui, rect, &sc);
+                                            if selected {
+                                                ui.painter().rect_stroke(
+                                                    rect,
+                                                    0.0,
+                                                    egui::Stroke::new(2.0_f32, ui.visuals().selection.bg_fill),
+                                                );
+                                            }
+                                            response
+                                        })
+                                        .inner;
+                                    if response
+                                        .on_hover_text(
+                                            preview_valid.as_ref().err().map_or("点击选择此图型", String::as_str),
+                                        )
+                                        .clicked()
+                                    {
+                                        *spec = g.first_layer().spec.clone();
+                                    }
+                                });
+                                if i % 2 == 1 {
+                                    ui.end_row();
                                 }
-                            });
-                            if i % 2 == 1 {
-                                ui.end_row();
                             }
-                        }
+                        });
                     });
             });
         });
