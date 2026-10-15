@@ -2,6 +2,8 @@
 
 仿 Origin 界面的开源科研绘图软件，用 Rust 编写。这是 0.1 原型版。
 
+**当前平台范围：Windows。** 开发、测试、性能验收、内置 Python 和安装包均以 Windows 为目标；macOS、Linux 适配与发布安排在后续阶段。
+
 ## 运行
 
 需要 Rust 1.80 或更新版本（`rustup update` 可升级）。
@@ -12,18 +14,13 @@ cargo run --release      # 第一次会下载并编译依赖，需要几分钟
 cargo test               # 运行核心库的单元测试
 ```
 
-编译好的程序在 `target/release/scicanvas`（Windows 上是 `scicanvas.exe`），可以直接双击运行。
+编译好的程序在 `target/release/scicanvas.exe`，可以直接双击运行。
 
-**中文字体**：程序会自动加载系统里的中文字体（Windows 微软雅黑、macOS 苹方/黑体、Linux Noto Sans CJK 或文泉驿）。如果中文显示成方框，用环境变量指定字体文件：
+**中文字体**：程序会自动加载 Windows 系统里的中文字体（如微软雅黑）。如果中文显示成方框，可通过环境变量 `SCICANVAS_FONT` 指定字体文件。
 
-```bash
-SCICANVAS_FONT=/path/to/font.ttf cargo run --release
-```
-
-**Linux**：如果编译时报缺少系统库，Debian/Ubuntu 上安装：
-
-```bash
-sudo apt install libxkbcommon-dev libwayland-dev libgl1-mesa-dev libxcursor-dev libxrandr-dev libxi-dev
+```powershell
+$env:SCICANVAS_FONT = "C:\Windows\Fonts\msyh.ttc"
+cargo run --release
 ```
 
 ## 现在能做什么
@@ -89,7 +86,7 @@ crates/
 
 项目文件统一通过 `project_file::from_json` / `save` 读写。v2 使用 `Graph → Page → Layer → PlotSpec`；迁移回归测试保存了 v0/v1 文件和重构前四种图的 SVG，确保数据、拟合曲线引用和版面保持一致。
 
-`.github/workflows/ci.yml` 在 Windows、macOS、Linux 上执行格式检查、全部特性测试、无界面核心库测试和 Clippy。私密仓库为 [sch401/scicanvas](https://github.com/sch401/scicanvas)，提交和拉取请求会自动触发。
+`.github/workflows/ci.yml` 仅在 Windows 上执行格式检查、全部特性测试、无界面核心库测试和 Clippy。私密仓库为 [sch401/scicanvas](https://github.com/sch401/scicanvas)，提交和拉取请求会自动触发。
 
 作图底座目前支持直角坐标、四种基础图、均值变换与等宽网格图层。现有分析命令和缩放平移操作第一图层；其他图层通过属性窗口编辑。分组 / 分面、连续数据色阶条、其他坐标系和更多图元按第二阶段路线继续扩展。
 

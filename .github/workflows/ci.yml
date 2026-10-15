@@ -9,21 +9,14 @@ permissions:
 
 jobs:
   check:
-    name: Rust / ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, windows-latest, macos-latest]
+    name: Rust / Windows
+    runs-on: windows-latest
     env:
       CARGO_INCREMENTAL: 0
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - name: Linux 系统依赖
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y pkg-config libxkbcommon-dev libwayland-dev libgl1-mesa-dev libxcursor-dev libxrandr-dev libxi-dev
       - name: Rust 工具链
         run: |
           rustup toolchain install stable --profile minimal --component rustfmt --component clippy
