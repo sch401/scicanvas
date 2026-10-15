@@ -117,7 +117,12 @@ impl Project {
                 let items: Vec<Item> = g
                     .y_keys
                     .iter()
-                    .filter(|k| !g.line_only.contains(k) && book.column(k).is_some())
+                    .filter(|k| {
+                        !g.line_only.contains(k)
+                            && book
+                                .column(k)
+                                .is_some_and(|c| !matches!(c.role, Role::XError | Role::YError))
+                    })
                     .map(|k| Item {
                         y: k.clone(),
                         x: g.x_by_y.get(k).cloned().or_else(|| g.x_key.clone()),
@@ -171,6 +176,7 @@ impl Project {
     /// 在 after_key 列右边插入结果列（排在同一来源已有结果列之后），返回新列标识。
     pub fn insert_result_column(&mut self, book_id: u64, after_key: &str, mut col: Column) -> Option<String> {
         let book = self.book_mut(book_id)?;
+        book.freeze_error_sources();
         let key = book.next_key();
         col.key = key.clone();
         col.derived_from = Some(after_key.to_string());

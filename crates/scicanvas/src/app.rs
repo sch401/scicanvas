@@ -318,15 +318,13 @@ impl SciApp {
             return;
         }
         if let Some(b) = self.project.book_mut(bid) {
-            for c in &mut b.columns {
-                if sel.contains(&c.key) {
-                    c.role = role;
-                }
-            }
+            b.set_roles(&sel, role);
         }
         let name = match role {
             Role::X => "X",
             Role::Y => "Y",
+            Role::XError => "X 误差",
+            Role::YError => "Y 误差",
             Role::Ignore => "忽略",
         };
         self.status = format!("已将 {} 列设为 {}", sel.join(", "), name);
@@ -1438,6 +1436,8 @@ impl SciApp {
                                         };
                                         pick(ui, "设为 X", ColAction::SetRole(Role::X));
                                         pick(ui, "设为 Y", ColAction::SetRole(Role::Y));
+                                        pick(ui, "设为 X 误差", ColAction::SetRole(Role::XError));
+                                        pick(ui, "设为 Y 误差", ColAction::SetRole(Role::YError));
                                         pick(ui, "设为忽略", ColAction::SetRole(Role::Ignore));
                                         ui.separator();
                                         for t in PlotType::ALL {
@@ -1883,6 +1883,8 @@ impl SciApp {
             let command = match act {
                 ColAction::SetRole(Role::X) => "col.setX",
                 ColAction::SetRole(Role::Y) => "col.setY",
+                ColAction::SetRole(Role::XError) => "col.setXError",
+                ColAction::SetRole(Role::YError) => "col.setYError",
                 ColAction::SetRole(Role::Ignore) => "col.setIgnore",
                 ColAction::InsertRight => "col.insert",
                 ColAction::Clear => "col.clear",
@@ -2436,6 +2438,21 @@ impl SciApp {
                             ui.checkbox(&mut g.legend, "图例");
                         });
                         ui.end_row();
+                        ui.label("误差棒");
+                        ui.checkbox(&mut g.error_bars.visible, "显示 X / Y 误差");
+                        ui.end_row();
+                        ui.label("误差端帽");
+                        edit_group(
+                            &ui.add(egui::Slider::new(&mut g.error_bars.cap, 0.0..=20.0)),
+                            history_group,
+                        );
+                        ui.end_row();
+                        ui.label("误差线宽");
+                        edit_group(
+                            &ui.add(egui::Slider::new(&mut g.error_bars.width, 0.5..=6.0)),
+                            history_group,
+                        );
+                        ui.end_row();
                     });
                 ui.add_space(6.0);
                 ui.label(
@@ -2627,6 +2644,8 @@ mod history_tests {
             "plot.bar",
             "plot.step_horizontal",
             "plot.step_vertical",
+            "col.setXError",
+            "col.setYError",
             "book.new",
         ] {
             let mut app = app();
@@ -2957,6 +2976,61 @@ mod history_tests {
         );
         app.finish_frame_edit(app.history_group);
         output
+    }
+
+    #[test]
+    fn error_role_commands_and_visibility_control_are_undoable() {
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["C".into()]);
+        let before = app.project.clone();
+        app.run_command("col.setYError");
+        let b = app.project.book(1).unwrap();
+        assert_eq!(b.columns[2].role, Role::YError);
+        assert_eq!(b.columns[2].error_for.as_deref(), Some("B"));
+        let (_, series) = app.project.graph(2).unwrap().first_layer().series(b);
+        assert_eq!(series.len(), 1);
+        assert_eq!(app.project.resolve(&Source::Graph(2)).unwrap().items.len(), 1);
+        roundtrip(&mut app, &before);
+        app.props_for = Some(2);
+        editor_frame(&mut app, &ctx, vec![], true);
+        let output = editor_frame(&mut app, &ctx, vec![], true);
+        let at = output
+            .shapes
+            .iter()
+            .find_map(|s| match &s.shape {
+                egui::Shape::Text(t) if t.galley.job.text == "显示 X / Y 误差" => {
+                    Some(t.pos + egui::vec2(3.0, 4.0))
+                }
+                _ => None,
+            })
+            .unwrap();
+        let before = app.project.clone();
+        let before_svg = scicanvas_core::svg::render_page(app.project.graph(2).unwrap(), &app.project);
+        for pressed in [true, false] {
+            editor_frame(
+                &mut app,
+                &ctx,
+                vec![
+                    egui::Event::PointerMoved(at),
+                    egui::Event::PointerButton {
+                        pos: at,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+                true,
+            );
+        }
+        assert!(!app.project.graph(2).unwrap().first_layer().error_bars.visible);
+        assert_ne!(
+            scicanvas_core::svg::render_page(app.project.graph(2).unwrap(), &app.project),
+            before_svg
+        );
+        roundtrip(&mut app, &before);
     }
 
     #[test]

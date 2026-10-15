@@ -473,6 +473,28 @@ fn build() -> Vec<Command> {
         )
         .modifies(),
         c(
+            "col.setXError",
+            "设为 X 误差",
+            "setx",
+            "",
+            "列",
+            "x error",
+            need_cols,
+            |a| a.set_role(Role::XError),
+        )
+        .modifies(),
+        c(
+            "col.setYError",
+            "设为 Y 误差",
+            "sety",
+            "",
+            "列",
+            "y error",
+            need_cols,
+            |a| a.set_role(Role::YError),
+        )
+        .modifies(),
+        c(
             "col.insert",
             "插入列",
             "colins",

@@ -9,6 +9,8 @@ use serde::{Deserialize, Serialize};
 pub enum Role {
     X,
     Y,
+    XError,
+    YError,
     Ignore,
 }
 
@@ -17,6 +19,8 @@ impl Role {
         match self {
             Role::X => "X",
             Role::Y => "Y",
+            Role::XError => "X Error",
+            Role::YError => "Y Error",
             Role::Ignore => "—",
         }
     }
@@ -36,6 +40,9 @@ pub struct Column {
     /// 由哪一列计算得来（拟合、平滑等结果列），新的结果列会排在同一来源的结果列后面。
     #[cfg_attr(feature = "serde", serde(default))]
     pub derived_from: Option<String>,
+    /// 误差列关联的 X/Y 列；空字符串表示来源已删除，None 按列顺序自动关联。
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub error_for: Option<String>,
 }
 
 impl Column {
@@ -48,6 +55,7 @@ impl Column {
             comment: String::new(),
             data: Vec::new(),
             derived_from: None,
+            error_for: None,
         }
     }
 
@@ -176,8 +184,50 @@ impl Book {
         self.columns.iter().position(|c| c.key == key)
     }
 
+    pub fn error_source(&self, index: usize) -> Option<&str> {
+        let col = &self.columns[index];
+        if !matches!(col.role, Role::XError | Role::YError) {
+            return None;
+        }
+        if let Some(key) = col.error_for.as_deref() {
+            return self
+                .column(key)
+                .filter(|c| c.role == Role::Y || (col.role == Role::XError && c.role == Role::X))
+                .map(|c| c.key.as_str());
+        }
+        self.columns[..index]
+            .iter()
+            .rev()
+            .find(|c| c.derived_from.is_none() && !matches!(c.role, Role::XError | Role::YError))
+            .filter(|c| c.role == Role::Y || (col.role == Role::XError && c.role == Role::X))
+            .map(|c| c.key.as_str())
+    }
+
+    pub fn set_roles(&mut self, keys: &[String], role: Role) {
+        self.freeze_error_sources();
+        for c in &mut self.columns {
+            if keys.contains(&c.key) {
+                c.role = role;
+                c.error_for = None;
+            }
+        }
+        self.freeze_error_sources();
+    }
+
+    pub(crate) fn freeze_error_sources(&mut self) {
+        let sources: Vec<_> = (0..self.columns.len())
+            .map(|i| self.error_source(i).map(str::to_string))
+            .collect();
+        for (col, source) in self.columns.iter_mut().zip(sources) {
+            if matches!(col.role, Role::XError | Role::YError) && col.error_for.is_none() {
+                col.error_for = source;
+            }
+        }
+    }
+
     /// 在 index 处插入新列，返回新列标识。
     pub fn insert_column(&mut self, index: usize, role: Role) -> String {
+        self.freeze_error_sources();
         let key = self.next_key();
         let index = index.min(self.columns.len());
         self.columns.insert(index, Column::new(key.clone(), role));
@@ -321,6 +371,8 @@ pub struct Series {
     pub key: String,
     pub name: String,
     pub points: Vec<[f64; 2]>,
+    /// 与 points 逐点对齐；无效或缺失的误差为 None。
+    pub errors: Vec<[Option<f64>; 2]>,
     /// 只画线（拟合曲线、平滑结果），不跟随图类型。
     pub line_only: bool,
     /// 结果曲线的来源列（用于避免拟合线和原数据同色）。
@@ -457,7 +509,7 @@ pub struct Project {
 impl Default for Project {
     fn default() -> Self {
         Project {
-            version: 3,
+            version: 4,
             books: Vec::new(),
             graphs: Vec::new(),
             next_id: 1,
@@ -535,6 +587,12 @@ impl Project {
     /// 删除工作簿中的若干列，并从图形里去掉对它们的引用。
     pub fn delete_columns(&mut self, book_id: u64, keys: &[String]) {
         if let Some(b) = self.book_mut(book_id) {
+            b.freeze_error_sources();
+            for col in &mut b.columns {
+                if col.error_for.as_ref().is_some_and(|key| keys.contains(key)) {
+                    col.error_for = Some(String::new());
+                }
+            }
             b.columns.retain(|c| !keys.contains(&c.key));
         }
         for g in &mut self.graphs {

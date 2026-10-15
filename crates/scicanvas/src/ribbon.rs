@@ -134,7 +134,10 @@ pub static TABS: &[Tab] = &[
             },
             Group {
                 label: "列属性",
-                items: &[Smalls(&["col.setX", "col.setY", "col.setIgnore"])],
+                items: &[
+                    Smalls(&["col.setX", "col.setY", "col.setIgnore"]),
+                    Smalls(&["col.setXError", "col.setYError"]),
+                ],
             },
             Group {
                 label: "列",

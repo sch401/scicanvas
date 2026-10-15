@@ -4,7 +4,7 @@
 本清单只记录功能点，不包含 Origin 文档正文。实现时按公开说明和观察到的行为编写，不复制 Origin 的代码、文字或图片。
 
 共 488 项：P0 87 项，P1 136 项，P2 254 项，不做 11 项。
-状态：已完成 26 项，原型 28 项，未开始 423 项，不做 11 项。
+状态：已完成 26 项，原型 31 项，未开始 420 项，不做 11 项。
 
 - **P0 / M1 日常够用**：一个人做日常数据处理和论文作图需要的最小集合。
 - **P1 / M2 论文全流程**：拟合报告、统计检验、多面板、信号处理等，覆盖大部分论文工作。
@@ -51,7 +51,7 @@
 | F023 | 单元格输入与编辑 | Basic Operations on Worksheet | P0 | 已完成 | egui_extras TableBuilder | 手动操作 |
 | F024 | 长名称 / 单位 / 注释表头行 | Displaying Supporting Data in Worksheet Header Rows | P0 | 已完成 | 列元数据 | 轴标题自动取“长名称 (单位)” |
 | F025 | 自定义表头行（参数、采样间隔、迷你图等） | Displaying Supporting Data in Worksheet Header Rows | P1 | 未开始 | 可扩展的表头行定义 | 手动操作 |
-| F026 | 列属性：X / Y / Z / X误差 / Y误差 / 标签 / 忽略 | Setting Column Designation | P0 | 原型 | X / Y / 忽略已做，Z 和误差列待做 | 按列属性自动配对绘图 |
+| F026 | 列属性：X / Y / Z / X误差 / Y误差 / 标签 / 忽略 | Setting Column Designation | P0 | 原型 | X / Y / X误差 / Y误差 / 忽略已做；Z 和标签待做 | 自动关联、插列、删除与撤销回归；Origin 目视对照待做 |
 | F027 | 插入 / 删除 / 移动列 | Arranging the Worksheet: Columns and Rows | P0 | 原型 | 插入、删除已做，拖动移动待做 | 手动操作 |
 | F028 | 插入 / 删除行 | Arranging the Worksheet: Columns and Rows | P0 | 未开始 | — | 手动操作 |
 | F029 | 从 Excel 复制粘贴（多单元格） | Copying and Pasting Worksheet Data | P0 | 已完成 | 制表符解析 | 单元测试 |
@@ -146,7 +146,7 @@
 | F103 | LaTeX 公式 | Creating Text Labels | P1 | 未开始 | 评估 typst 或 MathJax 转 SVG | 目视比较 |
 | F104 | 绘图对象（直线、箭头、矩形、圆） | Creating and Editing Drawing Objects | P1 | 未开始 | — | 手动操作 |
 | F105 | 数据标签 | Adding Labels to Plots | P1 | 未开始 | — | 目视检查 |
-| F106 | 误差棒 | Adding Error Bars to Your Graph | P0 | 未开始 | 需先有误差列 | 与 Origin 比较 |
+| F106 | 误差棒 | Adding Error Bars to Your Graph | P0 | 原型 | 对称 X/Y 误差列、稳定关联、端帽/线宽、共享 scene 与 SVG | 行对齐、对数裁剪、分组柱、项目往返和撤销回归；Origin 目视对照待做 |
 | F107 | 插入图片 / 表格到图中 | Inserting Image into Graph | P2 | 未开始 | — | 目视检查 |
 | F108 | 合并多张图 / 拆分图层 | The Merge Graph Dialog Box | P1 | 未开始 | — | 目视检查 |
 | F109 | 图层排列（行列网格、间距） | The Arrange Layers Dialog Box | P0 | 原型 | 网格与自定义图层矩形、叠放；独立网格间距待做 | 布局、命中、透明背景、迁移与撤销测试；Origin 目视对照待做 |
@@ -359,8 +359,8 @@
 | F261 | 散点图 | 2D Scatter Graph | P0 | 已完成 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F262 | 中心坐标散点图 | 2D Scatter Central Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F263 | 列散点图 | Column Scatter | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F264 | Y 误差棒图 | Y Error Bar Graph | P0 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F265 | XY 误差棒图 | XY Error Bar Graph | P0 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
+| F264 | Y 误差棒图 | Y Error Bar Graph | P0 | 原型 | 对称误差列自动关联 + scene/SVG 共享图元 | 关联、端点几何、裁剪和撤销回归；Origin 目视对照待做 |
+| F265 | XY 误差棒图 | XY Error Bar Graph | P0 | 原型 | 对称误差列自动关联 + scene/SVG 共享图元 | 关联、端点几何、裁剪和撤销回归；Origin 目视对照待做 |
 | F266 | 散点 + 地毯图 | Scatter+Rug Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F267 | 垂线图 | Vertical Drop Line | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F268 | 气泡图 | Indexed Size Bubble Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |

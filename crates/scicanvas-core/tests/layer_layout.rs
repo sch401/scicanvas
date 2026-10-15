@@ -104,7 +104,7 @@ fn v2_migrates_and_v3_free_layout_roundtrips() {
         layer.as_object_mut().unwrap().remove("transparent");
     }
     let migrated = project_file::from_json(&old.to_string()).unwrap();
-    assert_eq!(migrated.version, 3);
+    assert_eq!(migrated.version, project_file::CURRENT_VERSION);
     assert_eq!(migrated.graphs[0].first_layer().placement, None);
     assert!(!migrated.graphs[0].first_layer().transparent);
     let mut bad: serde_json::Value = serde_json::from_str(&json).unwrap();

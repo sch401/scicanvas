@@ -144,6 +144,7 @@ fn estimated_bytes(p: &Project) -> usize {
                 .sum::<usize>();
             bytes += c.data.capacity() * size_of::<String>() + c.data.iter().map(String::capacity).sum::<usize>();
             bytes += c.derived_from.as_ref().map_or(0, String::capacity);
+            bytes += c.error_for.as_ref().map_or(0, String::capacity);
         }
     }
     for g in &p.graphs {

@@ -100,6 +100,12 @@ impl PlotSpec {
                 return Err(format!("找不到列 {key}"));
             }
         }
+        if self.y_keys.iter().any(|key| {
+            book.column(key)
+                .is_some_and(|c| matches!(c.role, crate::Role::XError | crate::Role::YError))
+        }) {
+            return Err("误差列会自动关联数据，请从 Y 列列表中移除误差列".into());
+        }
         if self.rows.is_some_and(|(a, b)| a > b || b == usize::MAX) {
             return Err("行范围无效".into());
         }
@@ -112,6 +118,9 @@ impl PlotSpec {
         let mut out = Vec::new();
         for key in &self.y_keys {
             let Some(c) = book.column(key) else { continue };
+            if matches!(c.role, crate::Role::XError | crate::Role::YError) {
+                continue;
+            }
             let yv = c.values();
             let own_x = self.x_by_y.get(key).and_then(|k| book.column(k));
             let own_xv = own_x.map(|c| c.values());
@@ -122,6 +131,26 @@ impl PlotSpec {
                 _ => (0, n),
             };
             let mut pts = Vec::with_capacity(i1.saturating_sub(i0));
+            let error_values = [crate::Role::XError, crate::Role::YError].map(|role| {
+                if self.line_only.contains(key) || c.derived_from.is_some() {
+                    return None;
+                }
+                let find = |source: &str| {
+                    book.columns
+                        .iter()
+                        .enumerate()
+                        .find(|(i, col)| col.role == role && book.error_source(*i) == Some(source))
+                        .map(|(_, col)| col.values())
+                };
+                find(key).or_else(|| {
+                    if role == crate::Role::XError {
+                        own_x.or(xcol).and_then(|x| find(&x.key))
+                    } else {
+                        None
+                    }
+                })
+            });
+            let mut errors = Vec::with_capacity(pts.capacity());
             for i in i0..i1 {
                 let x = match xv {
                     Some(v) => v.get(i).copied().unwrap_or(f64::NAN),
@@ -130,12 +159,20 @@ impl PlotSpec {
                 let y = yv.get(i).copied().unwrap_or(f64::NAN);
                 if x.is_finite() && y.is_finite() {
                     pts.push([x, y]);
+                    errors.push(error_values.each_ref().map(|values| {
+                        values
+                            .as_ref()
+                            .and_then(|v| v.get(i))
+                            .copied()
+                            .filter(|v| v.is_finite() && *v >= 0.0)
+                    }));
                 }
             }
             out.push(Series {
                 key: c.key.clone(),
                 name: c.display_name().to_string(),
                 points: pts,
+                errors,
                 line_only: self.line_only.contains(key),
                 source: c.derived_from.clone(),
             });
@@ -159,6 +196,8 @@ impl PlotSpec {
                     i = end;
                 }
                 s.points = grouped;
+                // 原始行的测量误差不代表分组均值的标准误。
+                s.errors = vec![[None; 2]; s.points.len()];
             }
         }
         (xcol, out)

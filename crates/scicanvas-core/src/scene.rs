@@ -349,11 +349,32 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
         None => (None, Vec::new()),
     };
     for s in &mut series {
+        let mut i = 0;
+        s.errors.retain(|_| {
+            let p = s.points[i];
+            i += 1;
+            (!g.x_log || p[0] > 0.0) && (!g.y_log || p[1] > 0.0)
+        });
         s.points
             .retain(|p| (!g.x_log || p[0] > 0.0) && (!g.y_log || p[1] > 0.0));
     }
-    let all_x: Vec<f64> = series.iter().flat_map(|s| s.points.iter().map(|p| p[0])).collect();
-    let all_y: Vec<f64> = series.iter().flat_map(|s| s.points.iter().map(|p| p[1])).collect();
+    let mut all_x: Vec<f64> = series.iter().flat_map(|s| s.points.iter().map(|p| p[0])).collect();
+    let mut all_y: Vec<f64> = series.iter().flat_map(|s| s.points.iter().map(|p| p[1])).collect();
+    if g.error_bars.visible {
+        for s in &series {
+            for (point, errors) in s.points.iter().zip(&s.errors) {
+                for (dim, values, log) in [(0, &mut all_x, g.x_log), (1, &mut all_y, g.y_log)] {
+                    if let Some(error) = errors[dim] {
+                        values.extend(
+                            [point[dim] - error, point[dim] + error]
+                                .into_iter()
+                                .filter(|v| v.is_finite() && (!log || *v > 0.0)),
+                        );
+                    }
+                }
+            }
+        }
+    }
     let is_bar = g.plot_type == PlotType::Bar;
     let mut styles = series_styles(&series, g.plot_type);
     if g.color_map != crate::colormap::ColorMap::Origin {
@@ -543,6 +564,57 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
                 r: g.symbol_size as f64 / 2.0,
                 color,
             });
+        }
+    }
+    if g.error_bars.visible {
+        for (s, st) in series.iter().zip(&styles) {
+            let mut segs = Vec::new();
+            let offset = if st.kind == PlotType::Bar {
+                dx * 0.7 * ((st.bar_index as f64 + 0.5) / st.bar_count.max(1) as f64 - 0.5)
+            } else {
+                0.0
+            };
+            let cap = f64::from(g.error_bars.cap) / 2.0;
+            for (p, errors) in s.points.iter().zip(&s.errors) {
+                let x = p[0] + offset;
+                if let Some(e) = errors[0] {
+                    let ends = [x - e, x + e];
+                    let yy = py(p[1]);
+                    if ends[1] >= xa.lo && ends[0] <= xa.hi {
+                        segs.push([px(ends[0].clamp(xa.lo, xa.hi)), yy, px(ends[1].clamp(xa.lo, xa.hi)), yy]);
+                        for end in ends {
+                            if (xa.lo..=xa.hi).contains(&end) {
+                                let xx = px(end);
+                                segs.push([xx, yy - cap, xx, yy + cap]);
+                            }
+                        }
+                    }
+                }
+                if let Some(e) = errors[1] {
+                    let ends = [p[1] - e, p[1] + e];
+                    let xx = px(x);
+                    if (xa.lo..=xa.hi).contains(&x) && ends[1] >= ya.lo && ends[0] <= ya.hi {
+                        segs.push([xx, py(ends[0].clamp(ya.lo, ya.hi)), xx, py(ends[1].clamp(ya.lo, ya.hi))]);
+                        for end in ends {
+                            if (ya.lo..=ya.hi).contains(&end) {
+                                let yy = py(end);
+                                segs.push([xx - cap, yy, xx + cap, yy]);
+                            }
+                        }
+                    }
+                }
+            }
+            if !segs.is_empty() {
+                push(
+                    Prim::Segments {
+                        segs,
+                        color: st.color.rgb(),
+                        width: f64::from(g.error_bars.width),
+                        dashed: false,
+                    },
+                    true,
+                );
+            }
         }
     }
     for s in symbols {

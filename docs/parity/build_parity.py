@@ -51,7 +51,7 @@ M = "工作表"
 add(M, "单元格输入与编辑", "Basic Operations on Worksheet", "P0", DONE, "egui_extras TableBuilder", "手动操作")
 add(M, "长名称 / 单位 / 注释表头行", "Displaying Supporting Data in Worksheet Header Rows", "P0", DONE, "列元数据", "轴标题自动取“长名称 (单位)”")
 add(M, "自定义表头行（参数、采样间隔、迷你图等）", "Displaying Supporting Data in Worksheet Header Rows", "P1", TODO, "可扩展的表头行定义", "手动操作")
-add(M, "列属性：X / Y / Z / X误差 / Y误差 / 标签 / 忽略", "Setting Column Designation", "P0", PROTO, "X / Y / 忽略已做，Z 和误差列待做", "按列属性自动配对绘图")
+add(M, "列属性：X / Y / Z / X误差 / Y误差 / 标签 / 忽略", "Setting Column Designation", "P0", PROTO, "X / Y / X误差 / Y误差 / 忽略已做；Z 和标签待做", "自动关联、插列、删除与撤销回归；Origin 目视对照待做")
 add(M, "插入 / 删除 / 移动列", "Arranging the Worksheet: Columns and Rows", "P0", PROTO, "插入、删除已做，拖动移动待做", "手动操作")
 add(M, "插入 / 删除行", "Arranging the Worksheet: Columns and Rows", "P0", TODO, "", "手动操作")
 add(M, "从 Excel 复制粘贴（多单元格）", "Copying and Pasting Worksheet Data", "P0", DONE, "制表符解析", "单元测试")
@@ -140,7 +140,7 @@ add(M, "文字标签（上下标、希腊字母、富文本）", "Creating Text 
 add(M, "LaTeX 公式", "Creating Text Labels", "P1", TODO, "评估 typst 或 MathJax 转 SVG", "目视比较")
 add(M, "绘图对象（直线、箭头、矩形、圆）", "Creating and Editing Drawing Objects", "P1", TODO, "", "手动操作")
 add(M, "数据标签", "Adding Labels to Plots", "P1", TODO, "", "目视检查")
-add(M, "误差棒", "Adding Error Bars to Your Graph", "P0", TODO, "需先有误差列", "与 Origin 比较")
+add(M, "误差棒", "Adding Error Bars to Your Graph", "P0", PROTO, "对称 X/Y 误差列、稳定关联、端帽/线宽、共享 scene 与 SVG", "行对齐、对数裁剪、分组柱、项目往返和撤销回归；Origin 目视对照待做")
 add(M, "插入图片 / 表格到图中", "Inserting Image into Graph", "P2", TODO, "", "目视检查")
 add(M, "合并多张图 / 拆分图层", "The Merge Graph Dialog Box", "P1", TODO, "", "目视检查")
 add(M, "图层排列（行列网格、间距）", "The Arrange Layers Dialog Box", "P0", PROTO, "网格与自定义图层矩形、叠放；独立网格间距待做", "布局、命中、透明背景、迁移与撤销测试；Origin 目视对照待做")
@@ -452,6 +452,7 @@ THREE_D = {
     "3D Vector XYZ dXdYdZ": "3D 矢量（XYZ dXdYdZ）", "3D Ternary Symbol": "3D 三元散点", "3D Tetrahedral(Quaternary Phase Diagram)": "四面体图（四元相图）",
 }
 PROTO_GRAPHS = {"Horizontal Step Graph", "Vertical Step Graph"}
+ERROR_GRAPHS = {"Y Error Bar Graph", "XY Error Bar Graph"}
 DONE_GRAPHS = {"Line Graph", "2D Scatter Graph", "Line+Symbol Graph", "Column Graph"}
 P1_3D = {"Color Map Surface", "3D Scatter Graph"}
 
@@ -511,8 +512,13 @@ for cat, (cn_cat, table) in GT.items():
             cn, p = table.get(en, (en, "P2"))
         else:
             cn, p = THREE_D.get(en, en), ("P1" if en in P1_3D else "P2")
-        status = DONE if en in DONE_GRAPHS else PROTO if en in PROTO_GRAPHS else TODO
-        add("图类型 · " + cn_cat, cn, en, p, status, ("阶梯折线图元 + SVG 共享排版" if en in PROTO_GRAPHS else graph_how(cat, en)), ("拐点几何、拟合线与项目往返测试；Origin 目视对照待做" if en in PROTO_GRAPHS else "与 Origin 同数据出图目视比较"))
+        status = DONE if en in DONE_GRAPHS else PROTO if en in PROTO_GRAPHS | ERROR_GRAPHS else TODO
+        how, verify = graph_how(cat, en), "与 Origin 同数据出图目视比较"
+        if en in PROTO_GRAPHS:
+            how, verify = "阶梯折线图元 + SVG 共享排版", "拐点几何、拟合线与项目往返测试；Origin 目视对照待做"
+        elif en in ERROR_GRAPHS:
+            how, verify = "对称误差列自动关联 + scene/SVG 共享图元", "关联、端点几何、裁剪和撤销回归；Origin 目视对照待做"
+        add("图类型 · " + cn_cat, cn, en, p, status, how, verify)
 
 # 网页原型已实现、Rust 版待移植的条目
 PROTO_FEATURES = ("数值积分", "数值微分", "归一化", "列统计", "平滑（移动平均")

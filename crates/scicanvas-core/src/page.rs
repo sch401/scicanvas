@@ -89,6 +89,8 @@ pub struct Layer {
     pub y_log: bool,
     pub line_width: f32,
     pub symbol_size: f32,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub error_bars: ErrorBars,
     pub grid: bool,
     pub legend: bool,
 }
@@ -111,8 +113,26 @@ impl Default for Layer {
             y_log: false,
             line_width: 1.5,
             symbol_size: 6.0,
+            error_bars: Default::default(),
             grid: false,
             legend: true,
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize), serde(default))]
+pub struct ErrorBars {
+    pub visible: bool,
+    pub cap: f32,
+    pub width: f32,
+}
+impl Default for ErrorBars {
+    fn default() -> Self {
+        Self {
+            visible: true,
+            cap: 6.0,
+            width: 1.0,
         }
     }
 }
