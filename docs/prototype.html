@@ -1,0 +1,1137 @@
+<title>SciCanvas 原型</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* 布局：经典桌面科研软件——菜单栏 / 工具栏 / 左侧项目管理器 / 多文档工作区 / 状态栏；作图页面始终为白纸 */
+:root{
+  --desk:#b8c4d2; --chrome:#eef1f5; --chrome2:#dfe5ec; --line:#a3aebc; --line2:#c8d0da;
+  --text:#18212d; --muted:#5a6676; --title:#2c5d9f; --title2:#3f78c2; --title-in:#9aa5b4;
+  --sel:#c9dcf5; --selh:#9fc0ea; --cell:#ffffff; --meta:#f4efdc; --hover:#d6e4f6; --danger:#b3261e;
+  --panel:#fbfcfe; --accent:#2563c9; --ic-b:#2563c9; --ic-r:#d9372b; --ic-g:#2f9e44; --ic-o:#e08a00; --ic-paper:#ffffff; --ctxc:#7a4fd6;
+  --ui:"Segoe UI","Microsoft YaHei","PingFang SC","Noto Sans CJK SC",system-ui,sans-serif;
+  --num:"Consolas","Cascadia Mono","SFMono-Regular",ui-monospace,monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --desk:#14181e; --chrome:#262b33; --chrome2:#1e232a; --line:#4a5361; --line2:#353c47;
+  --text:#e3e8ef; --muted:#9aa6b6; --title:#2f5f9e; --title2:#3a6fb4; --title-in:#3b434f;
+  --sel:#27406a; --selh:#335489; --cell:#1b1f25; --meta:#2a2a22; --hover:#2d3b52; --danger:#f2a39b; --panel:#2b3039; --accent:#6ea8ff; --ic-b:#6ea8ff; --ic-r:#ff6b5e; --ic-g:#5ccf8b; --ic-o:#f0b45a; --ic-paper:#1b1f25; --ctxc:#b79cff; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --desk:#14181e; --chrome:#262b33; --chrome2:#1e232a; --line:#4a5361; --line2:#353c47;
+  --text:#e3e8ef; --muted:#9aa6b6; --title:#2f5f9e; --title2:#3a6fb4; --title-in:#3b434f;
+  --sel:#27406a; --selh:#335489; --cell:#1b1f25; --meta:#2a2a22; --hover:#2d3b52; --danger:#f2a39b; --panel:#2b3039; --accent:#6ea8ff; --ic-b:#6ea8ff; --ic-r:#ff6b5e; --ic-g:#5ccf8b; --ic-o:#f0b45a; --ic-paper:#1b1f25; --ctxc:#b79cff; color-scheme:dark}
+html,body{height:100%}
+body{background:var(--desk);color:var(--text);font:12px/1.4 var(--ui);overflow:hidden;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:10px;box-sizing:border-box}
+*{box-sizing:border-box}
+button,input,select{font:inherit;color:inherit}
+.app{height:100%;display:grid;grid-template-rows:auto 1fr auto;background:var(--chrome);border:1px solid var(--line);box-shadow:0 6px 24px rgba(0,0,0,.18);position:relative;min-width:0}
+/* 选项卡界面 */
+.rbhead{position:relative;z-index:50;user-select:none;background:var(--chrome2);min-width:0}
+.rbhead>*{min-width:0}
+.titlebar{display:flex;align-items:center;gap:10px;height:34px;padding:0 8px;min-width:0}
+.qat{display:flex;gap:2px}
+.qbtn,.tbtn{display:grid;place-items:center;width:28px;height:26px;border:1px solid transparent;border-radius:4px;background:none;padding:0;cursor:default;color:var(--text)}
+.qbtn:hover:not(:disabled),.tbtn:hover{background:var(--hover)}
+.qbtn svg{width:18px;height:18px}
+.qbtn:disabled{opacity:.4}
+.appname{font-weight:700;color:var(--accent);letter-spacing:.02em}
+.docname{color:var(--muted);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.searchbtn{display:flex;align-items:center;gap:8px;height:26px;min-width:0;width:min(260px,40vw);border:1px solid var(--line2);border-radius:5px;background:var(--cell);color:var(--muted);padding:0 8px;cursor:text;text-align:left}
+.searchbtn svg{width:15px;height:15px;flex:none}
+.searchbtn span{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.searchbtn kbd{font:11px var(--num);border:1px solid var(--line2);border-radius:3px;padding:0 4px}
+.tabbar{display:flex;align-items:flex-end;gap:2px;padding:0 6px;min-width:0;overflow-x:auto;scrollbar-width:none}
+.tab{position:relative;height:30px;padding:0 14px;border:1px solid transparent;border-bottom:0;border-radius:6px 6px 0 0;background:none;color:var(--text);cursor:default;white-space:nowrap;flex:none}
+.tab:hover{background:var(--hover)}
+.tab[aria-selected="true"]{background:var(--panel);border-color:var(--line);margin-bottom:-1px;z-index:1;font-weight:600;color:var(--accent)}
+.tab.file{background:var(--accent);color:#fff;border-radius:5px;height:26px;margin:0 6px 2px 0;font-weight:600}
+.tab.file:hover{filter:brightness(1.08)}
+.tab.ctxtab{color:var(--ctxc)}
+.tab.ctxtab::before{content:"";position:absolute;left:6px;right:6px;top:0;height:3px;border-radius:0 0 2px 2px;background:var(--ctxc)}
+.tab.ctxtab[aria-selected="true"]{color:var(--ctxc)}
+.tabspacer{flex:1}
+.tbtn{margin-bottom:2px;flex:none}
+.tbtn svg{width:14px;height:14px;transition:transform .15s}
+.rb-collapsed .tbtn svg{transform:rotate(180deg)}
+.ribbon{display:flex;align-items:stretch;background:var(--panel);border-top:1px solid var(--line);border-bottom:1px solid var(--line);height:98px;overflow-x:auto;overflow-y:hidden;padding:4px 4px 0;scrollbar-width:thin}
+.rb-collapsed .ribbon{display:none}
+.rb-collapsed.rb-flyout .ribbon{display:flex;position:absolute;left:0;right:0;top:100%;box-shadow:0 8px 18px rgba(0,0,0,.18)}
+.grp{display:flex;flex-direction:column;flex:none;padding:0 6px;border-right:1px solid var(--line2)}
+.grp:last-child{border-right:0}
+.grp-items{flex:1;display:flex;align-items:flex-start;gap:2px}
+.grp-label{font-size:11px;color:var(--muted);text-align:center;padding:2px 0 4px;white-space:nowrap}
+.rb-big{display:flex;flex-direction:column;align-items:center;justify-content:flex-start;gap:3px;min-width:58px;min-height:68px;padding:5px 3px 3px;border:1px solid transparent;border-radius:5px;background:none;color:var(--text);cursor:default;font-size:12px;line-height:1.25;text-align:center}
+.rb-big .ico svg{width:30px;height:30px;display:block}
+.rb-big .lbl{white-space:nowrap;padding:0 4px}
+.rb-smalls{display:grid;grid-auto-flow:column;grid-template-rows:repeat(3,22px);gap:1px 4px}
+.rb-small{display:flex;align-items:center;gap:6px;height:22px;padding:0 7px 0 4px;border:1px solid transparent;border-radius:4px;background:none;color:var(--text);cursor:default;font-size:12px;white-space:nowrap;text-align:left}
+.rb-small .ico svg{width:17px;height:17px;display:block}
+.rb-big:hover:not(:disabled),.rb-small:hover:not(:disabled),.rb-tile:hover:not(:disabled){background:var(--hover);border-color:var(--selh)}
+.rb-big[aria-pressed="true"],.rb-small[aria-pressed="true"]{background:var(--sel);border-color:var(--selh)}
+.rb-big:disabled,.rb-small:disabled,.rb-tile:disabled{opacity:.42}
+.rb-big:focus-visible,.rb-small:focus-visible,.rb-tile:focus-visible,.tab:focus-visible,.qbtn:focus-visible,.searchbtn:focus-visible,.btn:focus-visible{outline:2px solid var(--accent);outline-offset:-1px}
+.gallery{display:flex;gap:4px;padding:2px;border:1px solid var(--line2);border-radius:5px;background:var(--cell)}
+.rb-tile{display:flex;flex-direction:column;align-items:center;gap:2px;width:70px;padding:4px 2px 3px;border:1px solid transparent;border-radius:4px;background:none;color:var(--text);cursor:default;font-size:11.5px}
+.rb-tile svg{width:58px;height:40px;display:block;background:#fff;border:1px solid #d6dbe2;border-radius:3px}
+/* 文件页（Backstage） */
+.backstage{position:absolute;inset:0;z-index:9700;display:grid;grid-template-columns:200px 1fr;background:var(--cell)}
+.bs-nav{background:var(--accent);color:#fff;display:flex;flex-direction:column;padding:10px 0;gap:2px;min-width:0}
+.bs-nav button{display:flex;align-items:center;gap:10px;background:none;border:0;color:#fff;text-align:left;padding:9px 18px;font-size:13px;cursor:default}
+.bs-nav button:hover:not(:disabled){background:rgba(255,255,255,.16)}
+.bs-nav button:disabled{opacity:.5}
+.bs-nav button svg{width:18px;height:18px;filter:brightness(0) invert(1)}
+.bs-nav .bs-back{font-weight:600;margin-bottom:8px}
+.bs-nav .bs-back svg{color:#fff}
+.bs-main{padding:28px 36px;overflow:auto;display:grid;gap:22px;align-content:start;min-width:0}
+.bs-main h2{margin:0;font-size:22px;font-weight:600}
+.bs-main h3{margin:0 0 8px;font-size:13px;color:var(--muted);font-weight:600;letter-spacing:.04em}
+.bs-items{display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:8px}
+.bs-item{display:flex;align-items:center;gap:10px;padding:10px 12px;border:1px solid var(--line2);border-radius:6px;background:var(--chrome);text-align:left;cursor:default;color:var(--text)}
+.bs-item:hover{border-color:var(--accent)}
+.bs-item svg{width:20px;height:20px;flex:none}
+.bs-item small{display:block;color:var(--muted)}
+.keys{display:grid;grid-template-columns:auto 1fr;gap:4px 16px;max-width:520px}
+.keys kbd{font:12px var(--num);border:1px solid var(--line);border-radius:3px;padding:1px 6px;background:var(--chrome);justify-self:start}
+/* 命令面板 */
+.palette{position:absolute;inset:0;z-index:9900;background:rgba(10,20,35,.25);display:flex;justify-content:center;align-items:flex-start;padding:70px 12px 12px}
+.pal{width:min(560px,100%);background:var(--chrome);border:1px solid var(--line);border-radius:8px;box-shadow:0 14px 40px rgba(0,0,0,.35);overflow:hidden;display:flex;flex-direction:column;max-height:70%}
+.pal input{border:0;border-bottom:1px solid var(--line2);background:var(--cell);padding:12px 14px;font-size:14px;outline:none;color:var(--text)}
+.pal ul{list-style:none;margin:0;padding:4px;overflow:auto}
+.pal li{display:flex;align-items:center;gap:10px;padding:6px 10px;border-radius:5px;cursor:default}
+.pal li svg{width:18px;height:18px;flex:none}
+.pal li .pl{flex:1;min-width:0}
+.pal li .pg{font-size:11px;color:var(--muted)}
+.pal li kbd{font:11px var(--num);color:var(--muted)}
+.pal li.on{background:var(--title2);color:#fff}
+.pal li.on .pg,.pal li.on kbd{color:#dde8fb}
+.pal li.dis{opacity:.5}
+.pal .pempty{padding:16px;color:var(--muted)}
+.report{border-collapse:collapse;font-variant-numeric:tabular-nums;width:100%}
+.report th,.report td{border-bottom:1px solid var(--line2);padding:4px 8px;text-align:right}
+.report th:first-child,.report td:first-child{text-align:left}
+.report caption{text-align:left;font-weight:600;padding:4px 0}
+.eq{font:12px var(--num);background:var(--chrome2);padding:6px 8px;border-radius:4px;overflow-wrap:anywhere}
+@media (max-width:720px){.backstage{grid-template-columns:1fr;grid-template-rows:auto 1fr}.bs-nav{flex-direction:row;flex-wrap:wrap;padding:4px}.bs-nav button{padding:7px 10px}.bs-main{padding:16px}.docname{display:none}}
+/* 主区 */
+.main{display:grid;grid-template-columns:190px 1fr;min-height:0;min-width:0}
+.main.noexp{grid-template-columns:1fr}
+.explorer{border-right:1px solid var(--line);background:var(--cell);overflow:auto;min-width:0}
+.panelh{background:linear-gradient(var(--chrome),var(--chrome2));border-bottom:1px solid var(--line2);padding:3px 8px;font-weight:600;color:var(--muted);font-size:11px;letter-spacing:.04em}
+.tree{list-style:none;margin:0;padding:4px 0}
+.tree li{display:flex;align-items:center;gap:5px;padding:2px 8px 2px 22px;cursor:default;white-space:nowrap}
+.tree li.folder{padding-left:8px;font-weight:600}
+.tree li:hover{background:var(--hover)}
+.tree li.on{background:var(--sel)}
+.tree li.hid{color:var(--muted)}
+.tree svg{width:14px;height:14px;flex:none}
+.workspace{position:relative;overflow:hidden;background:var(--chrome2);min-width:0}
+.wsbg{position:absolute;inset:0;background-image:radial-gradient(var(--line2) 1px,transparent 1px);background-size:14px 14px;opacity:.6;pointer-events:none}
+/* MDI 子窗口 */
+.mdi{position:absolute;display:flex;flex-direction:column;background:var(--chrome);border:1px solid var(--line);box-shadow:2px 3px 10px rgba(0,0,0,.22);min-width:180px;min-height:90px}
+.mdi .tbar{display:flex;align-items:center;gap:6px;height:22px;padding:0 2px 0 6px;background:var(--title-in);color:#fff;cursor:default;user-select:none;flex:none}
+.mdi.act .tbar{background:linear-gradient(90deg,var(--title),var(--title2))}
+.mdi .tbar svg.ic{width:13px;height:13px}
+.mdi .tname{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.wbtn{width:20px;height:17px;border:1px solid rgba(255,255,255,.35);background:rgba(255,255,255,.12);color:#fff;display:grid;place-items:center;padding:0;border-radius:2px}
+.wbtn:hover{background:rgba(255,255,255,.3)}
+.wbtn.x:hover{background:#c42b1c}
+.wbtn svg{width:10px;height:10px}
+.mdi .body{flex:1;min-height:0;overflow:auto;background:var(--cell);position:relative}
+.mdi .grip{position:absolute;right:0;bottom:0;width:14px;height:14px;cursor:nwse-resize;background:linear-gradient(135deg,transparent 50%,var(--line) 50%,transparent 60%,var(--line) 70%,transparent 80%)}
+.mdi.max{left:0!important;top:0!important;width:100%!important;height:100%!important;border:0}
+.mdi.max .grip{display:none}
+.mdi.min{height:24px!important;width:170px!important;min-height:0;top:auto!important;bottom:4px}
+.mdi.min .body,.mdi.min .grip{display:none}
+/* 工作表 */
+table.ws{border-collapse:separate;border-spacing:0;font-variant-numeric:tabular-nums;table-layout:fixed}
+.ws th,.ws td{border-right:1px solid var(--line2);border-bottom:1px solid var(--line2);padding:0;height:21px}
+.ws thead th{position:sticky;top:0;z-index:3;background:linear-gradient(var(--chrome),var(--chrome2));font-weight:600;cursor:default;user-select:none;border-bottom:1px solid var(--line)}
+.ws th.rh{position:sticky;left:0;z-index:2;background:var(--chrome);color:var(--muted);font-weight:400;width:62px;text-align:center;font-size:11px;user-select:none}
+.ws thead th.rh{z-index:4}
+.ws tr.meta th.rh{text-align:left;padding-left:6px;color:var(--text)}
+.ws tr.meta td{background:var(--meta)}
+.ws tr.meta:last-of-type td,.ws tr.meta:last-of-type th{border-bottom:1px solid var(--line)}
+.ws thead th.colh{width:104px}
+.ws thead th.colh.sel{background:var(--selh);color:#fff}
+.ws col.sel{background:var(--sel)}
+.ws tr.meta td.sel{background:var(--sel)}
+.ws td input{width:100%;height:20px;border:0;background:transparent;padding:0 5px;text-align:right;font-family:var(--num);font-size:12px;outline:none}
+.ws tbody tr:not(.meta) td input{cursor:cell}
+.ws tbody tr:not(.meta) td input:focus{cursor:text}
+.ws tbody tr:not(.meta) th.rh{cursor:e-resize}
+.ws td.rsel{background:var(--sel)}
+.ws tr:not(.meta) th.rh.rsel{background:var(--selh);color:#fff}
+.ws thead th.colh.rsel{box-shadow:inset 0 -2px 0 var(--title2)}
+.rangebox{position:absolute;border:2px solid var(--title2);pointer-events:none;z-index:1}
+.dragging,.dragging *{user-select:none!important;-webkit-user-select:none!important}
+.dragging input{pointer-events:none}
+.ws tr.meta td input{text-align:left;font-family:var(--ui)}
+.ws td input:focus{outline:2px solid var(--title2);outline-offset:-2px;background:var(--cell)}
+.role{font-weight:400;color:var(--muted);font-size:11px}
+.colh.sel .role{color:#e8f0fc}
+/* 图窗 */
+.graphbody{background:#9aa3ad;display:grid;place-items:center;overflow:hidden}
+.graphbody svg{display:block;background:#fff;box-shadow:1px 1px 4px rgba(0,0,0,.35)}
+/* 状态栏 */
+.status{display:flex;gap:16px;align-items:center;border-top:1px solid var(--line);padding:2px 8px;background:var(--chrome2);font-size:11px;color:var(--muted);min-width:0}
+.status .msg{flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--text)}
+.status .stat{font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+/* 右键菜单与对话框 */
+.ctx{position:absolute;z-index:9500;background:var(--chrome);border:1px solid var(--line);box-shadow:2px 3px 8px rgba(0,0,0,.25);padding:3px 0;min-width:190px}
+.modal{position:absolute;inset:0;z-index:9800;background:rgba(10,20,35,.28);display:grid;place-items:center;padding:12px}
+.dlg{background:var(--chrome);border:1px solid var(--line);box-shadow:0 10px 30px rgba(0,0,0,.35);width:min(520px,100%);max-height:100%;display:flex;flex-direction:column}
+.dlg .tbar{display:flex;align-items:center;height:24px;padding:0 4px 0 8px;background:linear-gradient(90deg,var(--title),var(--title2));color:#fff;font-weight:600;flex:none}
+.dlg .tbar span{flex:1}
+.dlg .dbody{padding:12px 14px;overflow:auto;display:grid;gap:10px}
+.dlg .dfoot{display:flex;justify-content:flex-end;gap:6px;padding:8px 14px;border-top:1px solid var(--line2);flex-wrap:wrap}
+.btn{min-width:76px;padding:3px 12px;background:linear-gradient(var(--cell),var(--chrome2));border:1px solid var(--line);border-radius:2px}
+.btn:hover{border-color:var(--title2);background:var(--hover)}
+.btn.pri{border-color:var(--title2)}
+fieldset{border:1px solid var(--line2);padding:6px 10px 10px;margin:0;display:grid;gap:6px;min-width:0}
+legend{padding:0 4px;color:var(--muted)}
+.row{display:grid;grid-template-columns:96px 1fr;gap:8px;align-items:center}
+.row2{display:grid;grid-template-columns:96px 1fr 1fr;gap:8px;align-items:center}
+.dlg input[type=text],.dlg input[type=number],.dlg select{height:23px;border:1px solid var(--line);background:var(--cell);padding:0 5px;min-width:0;width:100%}
+.chk{display:flex;gap:6px;align-items:center}
+.help p{margin:0 0 6px;max-width:62ch}
+.help ol{margin:0;padding-left:20px;display:grid;gap:4px}
+.preview{max-width:100%;border:1px solid var(--line2);background:#fff}
+textarea.code{width:100%;height:120px;font:11px var(--num);border:1px solid var(--line);background:var(--cell)}
+.note{color:var(--muted);font-size:11px}
+@media (max-width:720px){.main,.main.noexp{grid-template-columns:1fr}.explorer{display:none}.brand{display:none}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="app" id="app">
+  <header class="rbhead" id="rbhead">
+    <div class="titlebar"><div class="qat" id="qat" aria-label="快速访问"></div><span class="appname">SciCanvas</span><span class="docname" id="docname"></span>
+      <button type="button" class="searchbtn" id="searchbtn" aria-label="搜索命令"></button></div>
+    <div class="tabbar" id="tabbar" role="tablist" aria-label="功能区选项卡"></div>
+    <div class="ribbon" id="ribbon" role="tabpanel"></div>
+  </header>
+  <div class="main" id="main">
+    <aside class="explorer" id="explorer"><div class="panelh">项目管理器</div><ul class="tree" id="tree"></ul></aside>
+    <section class="workspace" id="workspace"><div class="wsbg"></div></section>
+  </div>
+  <div class="status"><span class="msg" id="msg">就绪</span><span class="stat" id="stat"></span></div>
+  <input type="file" id="file" accept=".csv,.txt,.tsv,.dat" hidden>
+</div>
+
+<script>
+"use strict";
+/* ---------- 图标 ---------- */
+const IC={
+ book:'<svg viewBox="0 0 16 16" class="ic"><rect x="1.5" y="2" width="13" height="12" fill="#fff" stroke="#3c6cb0"/><path d="M1.5 5.5h13M6 2v12M10.5 2v12M1.5 9h13" stroke="#3c6cb0" fill="none"/><rect x="1.5" y="2" width="13" height="3.5" fill="#7da6dd"/></svg>',
+ graph:'<svg viewBox="0 0 16 16" class="ic"><rect x="1.5" y="1.5" width="13" height="13" fill="#fff" stroke="#b0453c"/><path d="M3.5 12.5V3.5M3.5 12.5h9" stroke="#333" fill="none"/><path d="M4.5 10.5l2.5-3 2 1.5 3-4.5" stroke="#d0342c" stroke-width="1.4" fill="none"/></svg>',
+ folder:'<svg viewBox="0 0 16 16"><path d="M1 4h5l1.5 1.5H15V13H1z" fill="#e8c35a" stroke="#a9862a"/></svg>',
+ newbook:'<svg viewBox="0 0 18 18"><rect x="2" y="3" width="13" height="12" fill="#fff" stroke="#3c6cb0"/><path d="M2 6.5h13M6.5 3v12M11 3v12M2 10h13" stroke="#3c6cb0" fill="none"/><circle cx="14.5" cy="4" r="3.2" fill="#2f9e44"/><path d="M14.5 2.3v3.4M12.8 4h3.4" stroke="#fff" stroke-width="1.3"/></svg>',
+ import:'<svg viewBox="0 0 18 18"><path d="M3 11v4h12v-4" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M9 2v9M5.5 7.5L9 11l3.5-3.5" fill="none" stroke="#2c6fc4" stroke-width="1.6"/></svg>',
+ export:'<svg viewBox="0 0 18 18"><rect x="2.5" y="2.5" width="11" height="11" fill="#fff" stroke="currentColor"/><path d="M4.5 11l2.5-3 2 1.5 2.5-4" stroke="#d0342c" fill="none" stroke-width="1.3"/><path d="M12 16.5h5M14.5 12v4.5" stroke="#2c6fc4" stroke-width="1.6"/></svg>',
+ line:'<svg viewBox="0 0 18 18"><path d="M2.5 15.5V2.5M2.5 15.5h13" stroke="currentColor" fill="none"/><path d="M4 12l3-5 3 3 5-7" stroke="#d0342c" stroke-width="1.6" fill="none"/></svg>',
+ scatter:'<svg viewBox="0 0 18 18"><path d="M2.5 15.5V2.5M2.5 15.5h13" stroke="currentColor" fill="none"/><rect x="4" y="10" width="3" height="3" fill="#000"/><rect x="8" y="7" width="3" height="3" fill="#000"/><rect x="12" y="3.5" width="3" height="3" fill="#000"/><rect x="10" y="11" width="3" height="3" fill="#000"/></svg>',
+ linesym:'<svg viewBox="0 0 18 18"><path d="M2.5 15.5V2.5M2.5 15.5h13" stroke="currentColor" fill="none"/><path d="M5 12l4-5 5-3" stroke="#000" stroke-width="1.2" fill="none"/><rect x="3.5" y="10.5" width="3" height="3" fill="#000"/><rect x="7.5" y="5.5" width="3" height="3" fill="#000"/><rect x="12.5" y="2.5" width="3" height="3" fill="#000"/></svg>',
+ bar:'<svg viewBox="0 0 18 18"><path d="M2.5 15.5V2.5M2.5 15.5h13" stroke="currentColor" fill="none"/><rect x="4.5" y="9" width="3" height="6.5" fill="#d0342c"/><rect x="9" y="5" width="3" height="10.5" fill="#d0342c"/><rect x="13.3" y="7.5" width="2.5" height="8" fill="#d0342c"/></svg>',
+ addcol:'<svg viewBox="0 0 18 18"><rect x="2" y="3" width="8" height="12" fill="#fff" stroke="#3c6cb0"/><path d="M2 6.5h8M6 3v12" stroke="#3c6cb0"/><path d="M14 6v6M11 9h6" stroke="#2f9e44" stroke-width="1.8"/></svg>',
+ setx:'<svg viewBox="0 0 18 18"><text x="9" y="13.5" text-anchor="middle" font-size="12" font-weight="700" fill="#2c6fc4" font-family="Arial">X</text></svg>',
+ sety:'<svg viewBox="0 0 18 18"><text x="9" y="13.5" text-anchor="middle" font-size="12" font-weight="700" fill="#d0342c" font-family="Arial">Y</text></svg>',
+ props:'<svg viewBox="0 0 18 18"><circle cx="9" cy="9" r="2.4" fill="none" stroke="currentColor" stroke-width="1.4"/><path d="M9 1.8v2.6M9 13.6v2.6M1.8 9h2.6M13.6 9h2.6M3.9 3.9l1.8 1.8M12.3 12.3l1.8 1.8M3.9 14.1l1.8-1.8M12.3 5.7l1.8-1.8" stroke="currentColor" stroke-width="1.4"/></svg>',
+ cascade:'<svg viewBox="0 0 18 18"><rect x="2" y="2" width="9" height="7" fill="var(--cell)" stroke="currentColor"/><rect x="5" y="5" width="9" height="7" fill="var(--cell)" stroke="currentColor"/><rect x="8" y="8" width="8" height="7" fill="var(--cell)" stroke="currentColor"/></svg>',
+ tile:'<svg viewBox="0 0 18 18"><rect x="2" y="2" width="6.5" height="14" fill="none" stroke="currentColor"/><rect x="9.5" y="2" width="6.5" height="6.5" fill="none" stroke="currentColor"/><rect x="9.5" y="9.5" width="6.5" height="6.5" fill="none" stroke="currentColor"/></svg>',
+ wmin:'<svg viewBox="0 0 10 10"><path d="M2 7.5h6" stroke="#fff" stroke-width="1.5"/></svg>',
+ wmax:'<svg viewBox="0 0 10 10"><rect x="1.5" y="1.5" width="7" height="7" fill="none" stroke="#fff" stroke-width="1.3"/></svg>',
+ wx:'<svg viewBox="0 0 10 10"><path d="M2 2l6 6M8 2l-6 6" stroke="#fff" stroke-width="1.4"/></svg>'
+};
+const $=s=>document.querySelector(s);
+const el=(t,a={},h='')=>{const e=document.createElement(t);for(const k in a){if(k==='class')e.className=a[k];else if(k.startsWith('on'))e.addEventListener(k.slice(2),a[k]);else e.setAttribute(k,a[k]);}if(h)e.innerHTML=h;return e;};
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+
+/* ---------- 数据模型 ---------- */
+let S; // 项目状态
+const STORE='scicanvas-project-v1';
+function letter(i){let s='';i++;while(i>0){const m=(i-1)%26;s=String.fromCharCode(65+m)+s;i=Math.floor((i-1)/26);}return s;}
+function nextKey(book){const used=new Set(book.cols.map(c=>c.key));let i=0;while(used.has(letter(i)))i++;return letter(i);}
+function newCol(book,role){return {key:nextKey(book),role,lname:'',units:'',comment:'',data:[]};}
+function fmt(v){if(!isFinite(v))return '';const a=Math.abs(v);if(a!==0&&(a>=1e6||a<1e-4))return v.toExponential(4).replace(/\.?0+e/,'e');return String(Number(v.toPrecision(8)));}
+function sampleProject(){
+  const book={id:'b1',type:'book',name:'Book1',cols:[],nrows:0,win:null};
+  let seed=7;const rnd=()=>{seed=(seed*16807)%2147483647;return seed/2147483647-.5;};
+  const a={key:'A',role:'X',lname:'时间',units:'s',comment:'示例数据',data:[]};
+  const b={key:'B',role:'Y',lname:'电压 A',units:'mV',comment:'阻尼振荡',data:[]};
+  const c={key:'C',role:'Y',lname:'电压 B',units:'mV',comment:'充电曲线',data:[]};
+  for(let i=0;i<=40;i++){const t=i*0.5;a.data.push(fmt(t));
+    b.data.push(fmt(+(10*Math.exp(-t/6)*Math.cos(1.2*t)+0.35*rnd()).toFixed(3)));
+    c.data.push(fmt(+(8*(1-Math.exp(-t/4))+0.25*rnd()).toFixed(3)));}
+  book.cols=[a,b,c];book.nrows=41;
+  const g={id:'g1',type:'graph',name:'Graph1',bookId:'b1',xKey:'A',yKeys:['B','C'],ptype:'linesym',title:'',xTitle:'',yTitle:'',
+    xAuto:true,xmin:0,xmax:20,yAuto:true,ymin:-10,ymax:10,xLog:false,yLog:false,lw:1.5,sym:5,grid:false,legend:true,win:null};
+  return {items:[book,g],seq:3,z:20,active:'g1',showExp:true};
+}
+function blankGraph(over){return Object.assign({id:'g'+(S.seq++),type:'graph',name:nextName('Graph'),bookId:null,xKey:null,yKeys:[],ptype:'linesym',title:'',xTitle:'',yTitle:'',
+  xAuto:true,xmin:0,xmax:10,yAuto:true,ymin:0,ymax:10,xLog:false,yLog:false,lw:1.5,sym:5,grid:false,legend:true,win:null},over);}
+function nextName(base){let i=1;const names=new Set(S.items.map(x=>x.name));while(names.has(base+i))i++;return base+i;}
+const item=id=>S.items.find(x=>x.id===id);
+const books=()=>S.items.filter(x=>x.type==='book');
+const graphs=()=>S.items.filter(x=>x.type==='graph');
+const nums=col=>col.data.map(s=>{const t=String(s??'').trim();if(t==='')return NaN;return Number(t.replace(/,/g,''));});
+const colLabel=c=>{const n=c.lname||c.key;return c.units?`${n} (${c.units})`:n;};
+
+let saveT=null;
+function save(){clearTimeout(saveT);saveT=setTimeout(()=>{try{localStorage.setItem(STORE,JSON.stringify(S));}catch(e){}},300);}
+function load(){try{const t=localStorage.getItem(STORE);if(t){const p=JSON.parse(t);if(p&&Array.isArray(p.items))return p;}}catch(e){}return null;}
+
+/* ---------- 状态栏 ---------- */
+function say(t){$('#msg').textContent=t;}
+function updateStats(){
+  const a=item(S.active);let txt='';
+  if(a&&a.type==='book'){const sel=selOf(a);const R=rangeOf(a);let v=[];
+    if(sel.size)v=a.cols.filter(c=>sel.has(c.key)).flatMap(nums);
+    else if(isMulti(R))for(let c=R.c0;c<=R.c1;c++){const n=nums(a.cols[c]);for(let r=R.r0;r<=R.r1;r++)v.push(n[r]);}
+    v=v.filter(isFinite);
+    if(v.length){const sum=v.reduce((p,q)=>p+q,0);txt=`平均值=${fmt(sum/v.length)}  总和=${fmt(sum)}  计数=${v.length}  最小=${fmt(Math.min(...v))}  最大=${fmt(Math.max(...v))}`;}}
+  $('#stat').textContent=txt;
+  refreshRibbon();
+}
+
+/* ---------- 下拉 / 右键菜单的公共部分 ---------- */
+function fillItems(d,items){items.forEach(it=>{if(it==='-'){d.appendChild(el('hr'));return;}
+  const [label,fn,k,dis]=it;const b=el('button',{type:'button'},`<span>${esc(label)}</span>${k?`<span class="kbd">${esc(k)}</span>`:''}`);if(dis)b.disabled=true;
+  b.addEventListener('click',e=>{e.stopPropagation();closeMenus();fn();});d.appendChild(b);});}
+function closeMenus(){closeCtx();}
+document.addEventListener('click',e=>{closeMenus();if(!e.target.closest('#rbhead'))closeFlyout();});
+
+/* ---------- 图标（功能区） ---------- */
+const sv=(b)=>`<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${b}</svg>`;
+const AX='<path d="M4 3.5V20h16.5"/>';
+const RI={
+  newbook:sv('<rect x="3" y="3.5" width="14" height="16" rx="1.5" fill="var(--ic-paper)" stroke="var(--ic-b)"/><path d="M3 8h14M8 3.5v16M12.5 3.5v16M3 12h14M3 16h14" stroke="var(--ic-b)" stroke-width="1" opacity=".75"/><circle cx="18.5" cy="17.5" r="4.3" fill="var(--ic-g)" stroke="none"/><path d="M18.5 15.3v4.4M16.3 17.5h4.4" stroke="#fff" stroke-width="1.7"/>'),
+  import:sv('<path d="M4 14v5.5h16V14"/><path d="M12 3.5v11M7.5 10l4.5 4.5 4.5-4.5" stroke="var(--ic-b)" stroke-width="1.9"/>'),
+  export:sv('<rect x="3" y="5" width="13" height="14" rx="1.5" fill="var(--ic-paper)"/><path d="M5.5 15l3-3.5 2.2 1.8 3-4" stroke="var(--ic-r)"/><path d="M14 10l7-7M16 3h5v5" stroke="var(--ic-b)" stroke-width="1.9"/>'),
+  copy:sv('<rect x="8" y="8" width="12" height="12" rx="2" fill="var(--ic-paper)"/><path d="M16 8V5.5A1.5 1.5 0 0 0 14.5 4h-9A1.5 1.5 0 0 0 4 5.5v9A1.5 1.5 0 0 0 5.5 16H8"/>'),
+  clear:sv('<path d="M8 20h12"/><path d="M5 15l8.5-8.5a2 2 0 0 1 2.8 0l2.2 2.2a2 2 0 0 1 0 2.8L12 18H8z" fill="var(--ic-paper)"/><path d="M9.5 10.5l5 5" stroke="var(--ic-r)"/>'),
+  line:sv(AX+'<path d="M6 16l4-6 3.5 3.5L20 6" stroke="var(--ic-r)" stroke-width="2"/>'),
+  scatter:sv(AX+'<g fill="currentColor" stroke="none"><rect x="6.3" y="13.3" width="3" height="3"/><rect x="10.5" y="9.5" width="3" height="3"/><rect x="15.5" y="5.5" width="3" height="3"/><rect x="14" y="12.5" width="3" height="3"/></g>'),
+  linesym:sv(AX+'<path d="M7.5 15l4.5-5 6-3.5" stroke="currentColor"/><g fill="var(--ic-r)" stroke="none"><rect x="6" y="13.5" width="3" height="3"/><rect x="10.5" y="8.5" width="3" height="3"/><rect x="16.5" y="5" width="3" height="3"/></g>'),
+  bar:sv(AX+'<g fill="var(--ic-r)" stroke="none" opacity=".9"><rect x="6.5" y="11" width="3" height="9"/><rect x="11.5" y="6" width="3" height="14"/><rect x="16.5" y="9" width="3" height="11"/></g>'),
+  props:sv('<path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2" fill="var(--ic-paper)" stroke="var(--ic-b)"/><circle cx="9" cy="12" r="2" fill="var(--ic-paper)" stroke="var(--ic-b)"/><circle cx="17" cy="18" r="2" fill="var(--ic-paper)" stroke="var(--ic-b)"/>'),
+  cascade:sv('<rect x="3" y="3" width="11" height="8" rx="1" fill="var(--ic-paper)"/><rect x="6.5" y="7.5" width="11" height="8" rx="1" fill="var(--ic-paper)"/><rect x="10" y="12" width="11" height="8" rx="1" fill="var(--ic-paper)" stroke="var(--ic-b)"/>'),
+  tile:sv('<rect x="3" y="3.5" width="8" height="17" rx="1"/><rect x="13" y="3.5" width="8" height="7.5" rx="1"/><rect x="13" y="13" width="8" height="7.5" rx="1" stroke="var(--ic-b)"/>'),
+  minall:sv('<rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M7 20h10" stroke="var(--ic-b)" stroke-width="2"/>'),
+  fitlin:sv(AX+'<g fill="currentColor" stroke="none"><circle cx="7.5" cy="15.5" r="1.3"/><circle cx="10.5" cy="14" r="1.3"/><circle cx="13" cy="10.5" r="1.3"/><circle cx="16" cy="9.5" r="1.3"/><circle cx="18.5" cy="6.5" r="1.3"/></g><path d="M5.5 17.5L20.5 5" stroke="var(--ic-r)" stroke-width="1.9"/>'),
+  fitpoly:sv(AX+'<g fill="currentColor" stroke="none"><circle cx="6.5" cy="8" r="1.3"/><circle cx="9" cy="13" r="1.3"/><circle cx="12" cy="15.5" r="1.3"/><circle cx="15.5" cy="13.5" r="1.3"/><circle cx="18.5" cy="7.5" r="1.3"/></g><path d="M5.5 6.5C9 18 15 18 19.5 5.5" stroke="var(--ic-r)" stroke-width="1.9"/>'),
+  smooth:sv('<path d="M3 14l1.5-4 1.5 6 1.5-7 1.5 5 1.5-3 1.5 4 1.5-6 1.5 5 1.5-4 1.5 3 1.5-2" stroke-width="1.1" opacity=".55"/><path d="M3 12.5c4-2.5 6 2 9 0s5-2 9 0" stroke="var(--ic-b)" stroke-width="2"/>'),
+  diff:sv(AX+'<path d="M6 17c4-1 7-6 9-11" stroke="currentColor"/><path d="M8 15.5L18.5 6" stroke="var(--ic-r)" stroke-width="1.8" stroke-dasharray="0"/><circle cx="12.8" cy="11" r="1.6" fill="var(--ic-r)" stroke="none"/>'),
+  integ:sv('<path d="M4 20h16.5M4 3.5V20"/><path d="M6 20V15c3-6 6-8 12-9v14z" fill="var(--ic-b)" stroke="none" opacity=".28"/><path d="M6 15c3-6 6-8 12-9" stroke="var(--ic-b)" stroke-width="1.9"/>'),
+  norm:sv('<path d="M4 20h16.5"/><path d="M4 6h16.5" stroke="var(--ic-g)" stroke-dasharray="2 2"/><g fill="var(--ic-g)" stroke="none" opacity=".85"><rect x="6" y="12" width="3" height="8"/><rect x="10.5" y="6" width="3" height="14"/><rect x="15" y="9" width="3" height="11"/></g>'),
+  stats:sv('<path d="M4 20h16.5"/><rect x="7" y="8" width="10" height="7" rx="1" fill="var(--ic-paper)" stroke="var(--ic-b)"/><path d="M12 3.5V8M12 15v3.5M9.5 3.5h5M9.5 18.5h5M7 11.5h10" stroke="var(--ic-b)"/>'),
+  setx:sv('<rect x="3.5" y="3.5" width="17" height="17" rx="3" fill="var(--ic-paper)" stroke="var(--ic-b)"/><path d="M8.5 8l7 8M15.5 8l-7 8" stroke="var(--ic-b)" stroke-width="2"/>'),
+  sety:sv('<rect x="3.5" y="3.5" width="17" height="17" rx="3" fill="var(--ic-paper)" stroke="var(--ic-r)"/><path d="M8.5 7.5l3.5 4.5 3.5-4.5M12 12v5" stroke="var(--ic-r)" stroke-width="2"/>'),
+  ignore:sv('<rect x="3.5" y="3.5" width="17" height="17" rx="3" fill="var(--ic-paper)"/><path d="M8 12h8"/>'),
+  colins:sv('<rect x="3.5" y="3.5" width="8" height="17" rx="1" fill="var(--ic-paper)"/><path d="M3.5 8h8"/><path d="M17 8.5v7M13.5 12h7" stroke="var(--ic-g)" stroke-width="2"/>'),
+  coldel:sv('<rect x="3.5" y="3.5" width="8" height="17" rx="1" fill="var(--ic-paper)"/><path d="M3.5 8h8"/><path d="M14.5 9.5l5 5M19.5 9.5l-5 5" stroke="var(--ic-r)" stroke-width="2"/>'),
+  colclear:sv('<rect x="3.5" y="3.5" width="8" height="17" rx="1" fill="var(--ic-paper)"/><path d="M3.5 8h8"/><path d="M14 18h7M14.5 15l3.5-3.5 2 2-3.5 3.5z" stroke="var(--ic-o)"/>'),
+  rowsadd:sv('<path d="M3.5 5h11M3.5 9.5h11M3.5 14h7"/><path d="M17 13v7M13.5 16.5h7" stroke="var(--ic-g)" stroke-width="2"/>'),
+  sortasc:sv('<path d="M7 4v16M3.5 7.5L7 4l3.5 3.5" stroke="var(--ic-b)" stroke-width="1.8"/><path d="M13 6h3M13 11h5M13 16h7"/>'),
+  sortdesc:sv('<path d="M7 4v16M3.5 16.5L7 20l3.5-3.5" stroke="var(--ic-b)" stroke-width="1.8"/><path d="M13 6h7M13 11h5M13 16h3"/>'),
+  logx:sv('<path d="M3.5 18h17"/><path d="M5 18v-2M8.5 18v-3M11 18v-2M14.5 18v-4M17 18v-2" stroke="var(--ic-b)"/><text x="12" y="10" text-anchor="middle" font-size="7.5" font-family="Arial" fill="currentColor" stroke="none" font-weight="700">log X</text>'),
+  logy:sv('<path d="M6 3.5v17"/><path d="M6 5h2M6 8.5h3M6 11h2M6 14.5h4M6 17h2" stroke="var(--ic-r)"/><text x="16" y="14" text-anchor="middle" font-size="7.5" font-family="Arial" fill="currentColor" stroke="none" font-weight="700">log Y</text>'),
+  grid:sv('<rect x="3.5" y="3.5" width="17" height="17" rx="1"/><path d="M3.5 9.2h17M3.5 14.8h17M9.2 3.5v17M14.8 3.5v17" stroke-dasharray="1.5 1.5" opacity=".7"/>'),
+  legend:sv('<rect x="3" y="5" width="18" height="14" rx="1.5" fill="var(--ic-paper)"/><path d="M6 10h3" stroke="currentColor" stroke-width="2"/><path d="M6 14h3" stroke="var(--ic-r)" stroke-width="2"/><path d="M11 10h7M11 14h5" opacity=".6"/>'),
+  sun:sv('<circle cx="12" cy="12" r="4" fill="var(--ic-o)" stroke="var(--ic-o)"/><path d="M12 2.5v2M12 19.5v2M2.5 12h2M19.5 12h2M5.3 5.3l1.4 1.4M17.3 17.3l1.4 1.4M5.3 18.7l1.4-1.4M17.3 6.7l1.4-1.4" stroke="var(--ic-o)"/>'),
+  moon:sv('<path d="M20 14.5A8 8 0 0 1 9.5 4a8 8 0 1 0 10.5 10.5z" fill="var(--ic-b)" stroke="var(--ic-b)" opacity=".85"/>'),
+  system:sv('<rect x="3" y="4" width="18" height="12" rx="1.5"/><path d="M12 4v12" /><path d="M12 4h7.5A1.5 1.5 0 0 1 21 5.5v9a1.5 1.5 0 0 1-1.5 1.5H12z" fill="currentColor" opacity=".25" stroke="none"/><path d="M8 20h8M12 16v4"/>'),
+  explorer:sv('<rect x="3" y="4" width="18" height="16" rx="1.5"/><path d="M9 4v16" /><path d="M5 8h2M5 11h2M5 14h2" stroke="var(--ic-b)"/>'),
+  help:sv('<circle cx="12" cy="12" r="8.5"/><path d="M9.5 9.5a2.5 2.5 0 1 1 3.5 2.3c-.7.3-1 .9-1 1.6v.6" stroke="var(--ic-b)" stroke-width="1.8"/><circle cx="12" cy="17" r="1" fill="var(--ic-b)" stroke="none"/>'),
+  search:sv('<circle cx="10.5" cy="10.5" r="6"/><path d="M15 15l5 5"/>'),
+  reset:sv('<path d="M4.5 12a7.5 7.5 0 1 0 2.2-5.3"/><path d="M4 4.5v4h4" stroke="var(--ic-b)"/>'),
+  chevron:sv('<path d="M6 15l6-6 6 6"/>'),
+  back:sv('<circle cx="12" cy="12" r="9"/><path d="M13.5 8l-4 4 4 4M9.5 12h6"/>'),
+  palette:sv('<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M7 10l3 2-3 2M12 14h5" stroke="var(--ic-b)"/>'),
+};
+/* 图类型画廊缩略图：白底小图，跟导出图一样的 Origin 配色 */
+const TH=(b)=>`<svg viewBox="0 0 58 40" aria-hidden="true"><path d="M8 4v30h46" fill="none" stroke="#333" stroke-width="1"/>${b}</svg>`;
+const THUMB={
+  line:TH('<path d="M10 26l8-9 7 5 8-10 8 6 10-9" fill="none" stroke="#000" stroke-width="1.3"/><path d="M10 31l9-4 8 1 8-6 8 2 9-5" fill="none" stroke="#f00" stroke-width="1.3"/>'),
+  scatter:TH('<g fill="#000"><rect x="11" y="25" width="2.6" height="2.6"/><rect x="18" y="18" width="2.6" height="2.6"/><rect x="25" y="21" width="2.6" height="2.6"/><rect x="33" y="12" width="2.6" height="2.6"/><rect x="41" y="16" width="2.6" height="2.6"/><rect x="48" y="9" width="2.6" height="2.6"/></g><g fill="#f00"><circle cx="13" cy="31" r="1.4"/><circle cx="21" cy="28" r="1.4"/><circle cx="29" cy="29" r="1.4"/><circle cx="37" cy="24" r="1.4"/><circle cx="45" cy="25" r="1.4"/><circle cx="51" cy="21" r="1.4"/></g>'),
+  linesym:TH('<path d="M12 26l8-8 8 3 8-9 8 5 7-7" fill="none" stroke="#000" stroke-width="1.1"/><g fill="#000"><rect x="10.7" y="24.7" width="2.6" height="2.6"/><rect x="18.7" y="16.7" width="2.6" height="2.6"/><rect x="26.7" y="19.7" width="2.6" height="2.6"/><rect x="34.7" y="10.7" width="2.6" height="2.6"/><rect x="42.7" y="15.7" width="2.6" height="2.6"/><rect x="49.7" y="8.7" width="2.6" height="2.6"/></g><path d="M12 31l8-3 8 1 8-5 8 1 7-4" fill="none" stroke="#f00" stroke-width="1.1"/><g fill="#f00"><circle cx="12" cy="31" r="1.4"/><circle cx="20" cy="28" r="1.4"/><circle cx="28" cy="29" r="1.4"/><circle cx="36" cy="24" r="1.4"/><circle cx="44" cy="25" r="1.4"/><circle cx="51" cy="21" r="1.4"/></g>'),
+  bar:TH('<g stroke="#000" stroke-width=".6"><rect x="12" y="20" width="5" height="14" fill="#000" fill-opacity=".85"/><rect x="17" y="25" width="5" height="9" fill="#f00" fill-opacity=".85"/><rect x="27" y="11" width="5" height="23" fill="#000" fill-opacity=".85"/><rect x="32" y="18" width="5" height="16" fill="#f00" fill-opacity=".85"/><rect x="42" y="15" width="5" height="19" fill="#000" fill-opacity=".85"/><rect x="47" y="22" width="5" height="12" fill="#f00" fill-opacity=".85"/></g>'),
+};
+
+/* ---------- 命令注册表 ----------
+   每个操作是一条命令：功能区按钮、右键菜单、命令面板和快捷键都调用同一套命令。
+   Rust 版按同样的架构实现，以后脚本和 AI 代理也通过它驱动软件。 */
+const TYPE_NAME={line:'折线图',scatter:'散点图',linesym:'点线图',bar:'柱状图'};
+const CMDS={};
+function cmd(id,o){CMDS[id]=Object.assign({id},o);}
+function cmdState(id){const c=CMDS[id];if(!c)return{ok:false,why:'未知命令'};const r=c.when?c.when():true;return r===true?{ok:true}:{ok:false,why:typeof r==='string'?r:'当前不可用'};}
+function runCmd(id){const c=CMDS[id];if(!c)return;const st=cmdState(id);if(!st.ok){say(st.why);return;}closeFlyout();c.run();refreshRibbon();}
+const act=()=>item(S.active);
+const quietBook=()=>{const a=act();return a&&a.type==='book'?a:null;};
+const quietGraph=()=>{const a=act();return a&&a.type==='graph'?a:null;};
+const WHEN={
+  book:()=>quietBook()?true:'请先单击一个工作簿窗口',
+  graph:()=>quietGraph()?true:'请先单击一个图形窗口',
+  anyGraph:()=>graphs().some(g=>g.win&&g.win.state!=='hidden')?true:'还没有打开的图形',
+  data:()=>{const a=act();return a&&(a.type==='book'||(a.type==='graph'&&item(a.bookId)))?true:'请先单击一个工作簿或图形窗口';},
+  cols:()=>{const b=quietBook();if(!b)return '请先单击一个工作簿窗口';return pickedKeys(b).size?true:'请先单击列标题或框选单元格';},
+  headerCols:()=>{const b=quietBook();if(!b)return '请先单击一个工作簿窗口';return selOf(b).size?true:'请先单击列标题选中列';},
+  range:()=>{const b=quietBook();if(!b)return '请先单击一个工作簿窗口';return rangeOf(b)?true:'请先选择单元格';},
+  sortable:()=>{const b=quietBook();if(!b)return '请先单击一个工作簿窗口';return sortKeyCol(b)>=0?true:'请先选中一列或单击一个单元格';},
+};
+function toggleGraph(prop,label){const g=quietGraph();if(!g)return;g[prop]=!g[prop];drawGraph(g);save();say(`${label}：${g[prop]?'开':'关'}`);}
+function setTheme(t){S.ui.theme=t;applyTheme();save();say({light:'已切换到浅色主题',dark:'已切换到深色主题',system:'主题跟随系统'}[t]);}
+function applyTheme(){const t=S.ui?.theme||'system';if(t==='system')delete document.documentElement.dataset.theme;else document.documentElement.dataset.theme=t;}
+
+cmd('book.new',{label:'新建工作簿',icon:'newbook',keys:'Ctrl+N',group:'文件',kw:'new workbook sheet',run:newBook});
+cmd('file.import',{label:'导入数据',icon:'import',keys:'Ctrl+I',group:'文件',kw:'import csv txt',run:()=>$('#file').click()});
+cmd('graph.export',{label:'导出图形',icon:'export',keys:'Ctrl+E',group:'文件',kw:'export png svg',when:WHEN.anyGraph,run:exportGraph});
+cmd('project.reset',{label:'恢复示例项目',icon:'reset',group:'文件',kw:'reset sample',run:resetProject});
+cmd('help.show',{label:'快速上手',icon:'help',keys:'F1',group:'帮助',kw:'help',run:showHelp});
+cmd('palette.open',{label:'搜索命令',icon:'search',keys:'Ctrl+K',group:'帮助',kw:'command palette search',run:()=>openPalette()});
+for(const [t,ic] of [['line','line'],['scatter','scatter'],['linesym','linesym'],['bar','bar']])
+  cmd('plot.'+t,{label:TYPE_NAME[t],icon:ic,group:'绘图',kw:'plot graph '+t,when:WHEN.data,run:()=>plot(t)});
+cmd('graph.props',{label:'绘图属性',icon:'props',group:'图形',kw:'properties format axis',when:WHEN.anyGraph,run:graphProps});
+cmd('graph.logx',{label:'X 对数',icon:'logx',group:'图形',kw:'log scale x',when:WHEN.graph,checked:()=>!!quietGraph()?.xLog,run:()=>toggleGraph('xLog','X 轴对数刻度')});
+cmd('graph.logy',{label:'Y 对数',icon:'logy',group:'图形',kw:'log scale y',when:WHEN.graph,checked:()=>!!quietGraph()?.yLog,run:()=>toggleGraph('yLog','Y 轴对数刻度')});
+cmd('graph.grid',{label:'网格线',icon:'grid',group:'图形',kw:'grid',when:WHEN.graph,checked:()=>!!quietGraph()?.grid,run:()=>toggleGraph('grid','网格线')});
+cmd('graph.legend',{label:'图例',icon:'legend',group:'图形',kw:'legend',when:WHEN.graph,checked:()=>!!quietGraph()?.legend,run:()=>toggleGraph('legend','图例')});
+cmd('col.setX',{label:'设为 X',icon:'setx',group:'列',kw:'set x column',when:WHEN.cols,run:()=>setRole('X')});
+cmd('col.setY',{label:'设为 Y',icon:'sety',group:'列',kw:'set y column',when:WHEN.cols,run:()=>setRole('Y')});
+cmd('col.setIgnore',{label:'设为忽略',icon:'ignore',group:'列',kw:'disregard',when:WHEN.cols,run:()=>setRole('-')});
+cmd('col.insert',{label:'插入列',icon:'colins',group:'列',kw:'add column',when:WHEN.book,run:()=>addCol()});
+cmd('col.delete',{label:'删除列',icon:'coldel',group:'列',kw:'delete column',when:WHEN.headerCols,run:delCols});
+cmd('col.clear',{label:'清空列',icon:'colclear',group:'列',kw:'clear column',when:WHEN.headerCols,run:clearCols});
+cmd('rows.add',{label:'添加 20 行',icon:'rowsadd',group:'行',kw:'add rows',when:WHEN.book,run:()=>addRows(20)});
+cmd('sort.asc',{label:'升序排序',icon:'sortasc',group:'排序',kw:'sort ascending',when:WHEN.sortable,run:()=>sortSheet(1)});
+cmd('sort.desc',{label:'降序排序',icon:'sortdesc',group:'排序',kw:'sort descending',when:WHEN.sortable,run:()=>sortSheet(-1)});
+cmd('range.copy',{label:'复制',icon:'copy',keys:'Ctrl+C',group:'选区',kw:'copy',when:WHEN.range,run:()=>copyRange(quietBook())});
+cmd('range.clear',{label:'清除内容',icon:'clear',keys:'Delete',group:'选区',kw:'clear delete',when:WHEN.range,run:()=>clearRange(quietBook())});
+cmd('win.cascade',{label:'层叠',icon:'cascade',group:'窗口',kw:'cascade',run:cascade});
+cmd('win.tile',{label:'平铺',icon:'tile',group:'窗口',kw:'tile',run:tile});
+cmd('win.minall',{label:'全部最小化',icon:'minall',group:'窗口',kw:'minimize',run:()=>wins().forEach(w=>setWinState(w,'min'))});
+cmd('view.explorer',{label:'项目管理器',icon:'explorer',group:'视图',kw:'project explorer',checked:()=>!!S.showExp,run:toggleExp});
+cmd('theme.light',{label:'浅色',icon:'sun',group:'主题',kw:'light theme',checked:()=>S.ui.theme==='light',run:()=>setTheme('light')});
+cmd('theme.dark',{label:'深色',icon:'moon',group:'主题',kw:'dark theme',checked:()=>S.ui.theme==='dark',run:()=>setTheme('dark')});
+cmd('theme.system',{label:'跟随系统',icon:'system',group:'主题',kw:'system theme',checked:()=>(S.ui.theme||'system')==='system',run:()=>setTheme('system')});
+cmd('stats.columns',{label:'列统计',icon:'stats',group:'统计',kw:'descriptive statistics mean sd',when:WHEN.data,run:statsOnColumns});
+cmd('fit.linear',{label:'线性拟合',icon:'fitlin',group:'分析',kw:'linear fit regression',when:WHEN.data,run:()=>fitPolyCmd(1)});
+cmd('fit.poly',{label:'多项式拟合',icon:'fitpoly',group:'分析',kw:'polynomial fit regression',when:WHEN.data,run:polyDialog});
+cmd('math.smooth',{label:'平滑',icon:'smooth',group:'分析',kw:'smooth savitzky golay moving average',when:WHEN.data,run:smoothDialog});
+cmd('math.diff',{label:'微分',icon:'diff',group:'分析',kw:'derivative differentiate',when:WHEN.data,run:differentiate});
+cmd('math.integ',{label:'积分',icon:'integ',group:'分析',kw:'integrate area',when:WHEN.data,run:integrate});
+cmd('math.norm',{label:'归一化',icon:'norm',group:'分析',kw:'normalize',when:WHEN.data,run:normalizeDialog});
+cmd('ribbon.toggle',{label:'折叠 / 展开功能区',icon:'chevron',keys:'Ctrl+F1',group:'视图',kw:'collapse ribbon',run:toggleRibbon});
+
+/* ---------- 功能区布局 ---------- */
+const B=(id)=>({k:'big',id}),Sm=(...ids)=>({k:'small',ids}),G=(...ids)=>({k:'gallery',ids});
+const TABS=[
+  {id:'home',label:'开始',groups:[
+    {label:'新建',items:[B('book.new'),Sm('file.import','graph.export')]},
+    {label:'选区',items:[Sm('range.copy','range.clear')]},
+    {label:'快速绘图',items:[B('plot.linesym'),Sm('plot.line','plot.scatter','plot.bar')]},
+    {label:'窗口',items:[Sm('win.cascade','win.tile','win.minall')]},
+  ]},
+  {id:'plot',label:'绘图',groups:[
+    {label:'二维图',items:[G('plot.line','plot.scatter','plot.linesym','plot.bar')]},
+    {label:'图形',items:[B('graph.props'),Sm('graph.export')]},
+  ]},
+  {id:'analysis',label:'分析',groups:[
+    {label:'拟合',items:[B('fit.linear'),B('fit.poly')]},
+    {label:'数学',items:[Sm('math.smooth','math.diff','math.integ'),Sm('math.norm')]},
+  ]},
+  {id:'stats',label:'统计',groups:[
+    {label:'描述统计',items:[B('stats.columns')]},
+  ]},
+  {id:'sheet',label:'工作表',ctx:'book',groups:[
+    {label:'列属性',items:[Sm('col.setX','col.setY','col.setIgnore')]},
+    {label:'列与行',items:[Sm('col.insert','col.delete','col.clear'),Sm('rows.add')]},
+    {label:'排序',items:[Sm('sort.asc','sort.desc')]},
+    {label:'选区',items:[Sm('range.copy','range.clear')]},
+  ]},
+  {id:'graph',label:'图形',ctx:'graph',groups:[
+    {label:'图类型',items:[Sm('plot.line','plot.scatter','plot.linesym'),Sm('plot.bar')]},
+    {label:'坐标轴',items:[Sm('graph.logx','graph.logy','graph.grid')]},
+    {label:'图例',items:[B('graph.legend')]},
+    {label:'设置',items:[B('graph.props')]},
+    {label:'导出',items:[B('graph.export')]},
+  ]},
+  {id:'view',label:'视图',groups:[
+    {label:'主题',items:[Sm('theme.light','theme.dark','theme.system')]},
+    {label:'显示',items:[B('view.explorer'),Sm('ribbon.toggle')]},
+    {label:'窗口',items:[Sm('win.cascade','win.tile','win.minall')]},
+    {label:'帮助',items:[B('help.show'),Sm('palette.open')]},
+  ]},
+];
+const QAT=['book.new','file.import','graph.export'];
+let lastCtx=null;
+function visibleTabs(){const a=act();return TABS.filter(t=>!t.ctx||(a&&a.type===t.ctx));}
+function btnHTML(kind,id){const c=CMDS[id];const tog=c.checked?` aria-pressed="false"`:'';
+  if(kind==='big')return `<button type="button" class="rb-big" data-cmd="${id}"${tog}><span class="ico">${RI[c.icon]}</span><span class="lbl">${esc(c.label)}</span></button>`;
+  if(kind==='tile')return `<button type="button" class="rb-tile" data-cmd="${id}">${THUMB[id.split('.')[1]]}<span>${esc(c.label)}</span></button>`;
+  return `<button type="button" class="rb-small" data-cmd="${id}"${tog}><span class="ico">${RI[c.icon]}</span><span>${esc(c.label)}</span></button>`;}
+function renderTabs(){const vis=visibleTabs();if(!vis.some(t=>t.id===S.ui.tab))S.ui.tab='home';
+  $('#tabbar').innerHTML=`<button type="button" class="tab file" id="tabFile" aria-haspopup="dialog">文件</button>`+
+    vis.map(t=>`<button type="button" class="tab${t.ctx?' ctxtab':''}" role="tab" data-tab="${t.id}" aria-selected="${t.id===S.ui.tab}" title="${t.ctx?(t.ctx==='book'?'工作簿工具：激活工作簿时出现':'图形工具：激活图形时出现'):''}">${t.label}</button>`).join('')+
+    `<span class="tabspacer"></span><button type="button" class="tbtn" id="rbToggle" title="折叠 / 展开功能区（Ctrl+F1）" aria-label="折叠或展开功能区">${RI.chevron}</button>`;}
+function renderPanel(){const t=TABS.find(x=>x.id===S.ui.tab)||TABS[0];
+  $('#ribbon').innerHTML=t.groups.map(g=>`<div class="grp" role="group" aria-label="${g.label}"><div class="grp-items">${g.items.map(it=>
+    it.k==='big'?btnHTML('big',it.id):it.k==='gallery'?`<div class="gallery">${it.ids.map(id=>btnHTML('tile',id)).join('')}</div>`:`<div class="rb-smalls">${it.ids.map(id=>btnHTML('small',id)).join('')}</div>`).join('')}</div><div class="grp-label">${g.label}</div></div>`).join('');
+  updateRibbonStates();}
+function updateRibbonStates(){document.querySelectorAll('#rbhead [data-cmd]').forEach(b=>{const id=b.dataset.cmd,c=CMDS[id];const st=cmdState(id);
+  b.disabled=!st.ok;if(c.checked)b.setAttribute('aria-pressed',String(!!c.checked()));
+  b.title=c.label+(c.keys?`（${c.keys}）`:'')+(st.ok?'':` — ${st.why}`);});
+  const a=act();$('#docname').textContent=a?`${a.name}${a.type==='book'?' · 工作簿':' · 图形'}`:'未选中窗口';}
+function refreshRibbon(){if(!S||!S.ui||!$('#ribbon'))return;const ctx=act()?.type||'';
+  if(ctx!==lastCtx){lastCtx=ctx;renderTabs();renderPanel();}else updateRibbonStates();
+  $('#app').classList.toggle('rb-collapsed',!!S.ui.collapsed);}
+function buildChrome(){
+  $('#qat').innerHTML=QAT.map(id=>`<button type="button" class="qbtn" data-cmd="${id}" aria-label="${CMDS[id].label}">${RI[CMDS[id].icon]}</button>`).join('');
+  $('#searchbtn').innerHTML=`${RI.search}<span>搜索命令</span><kbd>Ctrl K</kbd>`;
+  $('#searchbtn').onclick=e=>{e.stopPropagation();openPalette();};
+  $('#rbhead').addEventListener('click',e=>{
+    const b=e.target.closest('[data-cmd]');if(b){e.stopPropagation();runCmd(b.dataset.cmd);return;}
+    const t=e.target.closest('[data-tab]');if(t){e.stopPropagation();selectTab(t.dataset.tab);return;}
+    if(e.target.closest('#tabFile')){e.stopPropagation();openBackstage();return;}
+    if(e.target.closest('#rbToggle')){e.stopPropagation();toggleRibbon();}});
+  $('#tabbar').addEventListener('dblclick',e=>{if(e.target.closest('[data-tab]'))toggleRibbon();});
+  $('#tabbar').addEventListener('keydown',e=>{if(e.key!=='ArrowRight'&&e.key!=='ArrowLeft')return;const vis=visibleTabs();const i=vis.findIndex(t=>t.id===S.ui.tab);
+    const n=vis[(i+(e.key==='ArrowRight'?1:-1)+vis.length)%vis.length];selectTab(n.id);document.querySelector(`[data-tab="${n.id}"]`)?.focus();});}
+function selectTab(id){S.ui.tab=id;document.querySelectorAll('#tabbar [data-tab]').forEach(b=>b.setAttribute('aria-selected',String(b.dataset.tab===id)));renderPanel();
+  if(S.ui.collapsed)$('#app').classList.add('rb-flyout');save();}
+function closeFlyout(){$('#app')?.classList.remove('rb-flyout');}
+function toggleRibbon(){S.ui.collapsed=!S.ui.collapsed;closeFlyout();refreshRibbon();save();say(S.ui.collapsed?'功能区已折叠：单击选项卡临时展开，Ctrl+F1 恢复':'功能区已展开');
+  graphs().forEach(drawGraph);}
+
+/* ---------- 文件页 ---------- */
+function openBackstage(){closeBackstage();const bs=el('div',{class:'backstage',id:'backstage',role:'dialog','aria-label':'文件'});
+  const nav=['book.new','file.import','graph.export','project.reset','help.show'];
+  const counts=`${books().length} 个工作簿，${graphs().length} 个图形`;
+  bs.innerHTML=`<nav class="bs-nav"><button type="button" class="bs-back" id="bsBack">${RI.back}返回</button>${nav.map(id=>{const st=cmdState(id);return `<button type="button" data-bs="${id}"${st.ok?'':' disabled'} title="${st.ok?'':esc(st.why)}">${RI[CMDS[id].icon].replace(/var\(--ic-paper\)/g,'transparent')}${CMDS[id].label}${CMDS[id].keys?`<span style="margin-left:auto;opacity:.7;font-size:11px">${CMDS[id].keys}</span>`:''}</button>`;}).join('')}</nav>
+  <div class="bs-main"><h2>当前项目</h2>
+   <section><h3>项目内容 · ${counts}</h3><div class="bs-items">${S.items.map(it=>`<button type="button" class="bs-item" data-open="${it.id}">${IC[it.type]}<span>${esc(it.name)}<small>${it.type==='book'?`工作簿 · ${it.cols.length} 列 × ${it.nrows} 行`:`图形 · ${TYPE_NAME[it.ptype]||''}`}</small></span></button>`).join('')||'<p class="note">项目是空的。</p>'}</div></section>
+   <section><h3>保存位置</h3><p style="margin:0;max-width:62ch">项目自动保存在这台浏览器里，换浏览器或清除网站数据后会丢失。Rust 桌面版保存为 .scproj 项目文件。</p></section>
+   <section><h3>常用快捷键</h3><div class="keys">${Object.values(CMDS).filter(c=>c.keys).map(c=>`<kbd>${c.keys}</kbd><span>${c.label}</span>`).join('')}<kbd>Shift+单击</kbd><span>扩展单元格选区</span><kbd>双击选项卡</kbd><span>折叠 / 展开功能区</span></div></section></div>`;
+  $('#app').appendChild(bs);
+  bs.addEventListener('click',e=>{e.stopPropagation();if(e.target.closest('#bsBack')){closeBackstage();return;}
+    const b=e.target.closest('[data-bs]');if(b){closeBackstage();runCmd(b.dataset.bs);return;}
+    const o=e.target.closest('[data-open]');if(o){closeBackstage();const it=item(o.dataset.open);if(it)showWin(it);}});
+  bs.addEventListener('keydown',e=>{if(e.key==='Escape')closeBackstage();});
+  $('#bsBack').focus();}
+function closeBackstage(){$('#backstage')?.remove();}
+
+/* ---------- 命令面板（Ctrl+K） ---------- */
+function openPalette(){closePalette();closeBackstage();
+  const pv=el('div',{class:'palette',id:'palette'});pv.innerHTML=`<div class="pal" role="dialog" aria-label="搜索命令"><input type="text" id="palQ" placeholder="输入功能名称，例如 拟合、排序、导出" aria-label="搜索命令" autocomplete="off"><ul id="palList" role="listbox"></ul></div>`;
+  $('#app').appendChild(pv);let sel=0,list=[];
+  const draw=()=>{const q=$('#palQ').value.trim().toLowerCase();
+    list=Object.values(CMDS).filter(c=>!q||c.label.toLowerCase().includes(q)||(c.group||'').includes(q)||(c.kw||'').includes(q)||c.id.includes(q));
+    list.sort((a,b)=>(cmdState(b.id).ok-cmdState(a.id).ok));sel=Math.min(sel,Math.max(0,list.length-1));
+    $('#palList').innerHTML=list.length?list.map((c,i)=>{const st=cmdState(c.id);return `<li role="option" data-i="${i}" class="${i===sel?'on':''}${st.ok?'':' dis'}" aria-selected="${i===sel}">${RI[c.icon]}<span class="pl">${esc(c.label)}<div class="pg">${esc(c.group||'')}${st.ok?'':' · '+esc(st.why)}</div></span>${c.keys?`<kbd>${c.keys}</kbd>`:''}</li>`;}).join(''):'<li class="pempty">没有找到匹配的命令</li>';
+    $('#palList .on')?.scrollIntoView({block:'nearest'});};
+  const go=i=>{const c=list[i];if(!c)return;closePalette();runCmd(c.id);};
+  $('#palQ').addEventListener('input',()=>{sel=0;draw();});
+  $('#palQ').addEventListener('keydown',e=>{if(e.key==='ArrowDown'){e.preventDefault();sel=Math.min(sel+1,list.length-1);draw();}
+    else if(e.key==='ArrowUp'){e.preventDefault();sel=Math.max(sel-1,0);draw();}
+    else if(e.key==='Enter'){e.preventDefault();go(sel);}else if(e.key==='Escape'){closePalette();}});
+  $('#palList').addEventListener('click',e=>{const li=e.target.closest('[data-i]');if(li)go(+li.dataset.i);});
+  pv.addEventListener('click',e=>{e.stopPropagation();if(e.target===pv)closePalette();});
+  draw();$('#palQ').focus();}
+function closePalette(){$('#palette')?.remove();}
+
+/* ---------- 分析：取数据 ---------- */
+function xFor(b,y,cols){return (cols||[]).find(c=>c.role==='X')||b.cols.slice(0,b.cols.indexOf(y)).filter(c=>c.role==='X').pop()||b.cols.find(c=>c.role==='X')||null;}
+/** 分析的输入：当前图形里的数据曲线，或工作簿里选中的 Y 列 / 选区；什么都没选时用全部 Y 列 */
+function analysisSrc(){const a=act();
+  if(a&&a.type==='graph'){const b=item(a.bookId);if(!b){say('这个图形没有关联数据');return null;}
+    const ys=a.yKeys.filter(k=>!(a.lineOnly||[]).includes(k)).map(k=>b.cols.find(c=>c.key===k)).filter(Boolean);
+    if(!ys.length){say('图形里没有数据曲线');return null;}
+    return {b,g:a,items:ys.map(y=>({y,x:b.cols.find(c=>c.key===((a.xByY||{})[y.key]||a.xKey))||null,rows:a.rows||null}))};}
+  if(a&&a.type==='book'){const b=a;const sel=selOf(b);const R=rangeOf(b);let cols=b.cols.filter(c=>sel.has(c.key));let rows=null;
+    if(!cols.length&&isMulti(R)){cols=b.cols.slice(R.c0,R.c1+1);if(R.r1>R.r0)rows=[R.r0,R.r1];}
+    const all=!cols.length;if(all)cols=b.cols;const ys=cols.filter(c=>c.role==='Y');
+    if(!ys.length){say(all?'工作簿里没有 Y 列':'选中的列里没有 Y 列，请至少选中一个 Y 列');return null;}
+    return {b,g:null,items:ys.map(y=>({y,x:xFor(b,y,cols),rows}))};}
+  say('请先单击一个工作簿或图形窗口');return null;}
+function getXY(it){const yv=nums(it.y),xv=it.x?nums(it.x):null;const n=Math.max(yv.length,xv?xv.length:0);
+  const i0=it.rows?it.rows[0]:0,i1=it.rows?Math.min(it.rows[1],n-1):n-1;const xs=[],ys=[],idx=[];
+  for(let i=i0;i<=i1;i++){const x=xv?xv[i]:i+1,y=yv[i];if(isFinite(x)&&isFinite(y)){xs.push(x);ys.push(y);idx.push(i);}}return {xs,ys,idx};}
+const nameOf=c=>c.lname||c.key;
+/** 在某列右边插入结果列，返回新列 */
+function addResultCol(b,afterKey,o){const c=newCol(b,o.role||'Y');Object.assign(c,{lname:o.lname||'',units:o.units||'',comment:o.comment||'',data:o.data||[]});
+  let i=b.cols.findIndex(x=>x.key===afterKey);let j=i+1;while(j<b.cols.length&&b.cols[j].derivedFrom===afterKey)j++;
+  c.derivedFrom=afterKey;b.cols.splice(i<0?b.cols.length:j,0,c);return c;}
+function placeAt(idx,vals,len){const d=Array(len).fill('');idx.forEach((r,k)=>{d[r]=isFinite(vals[k])?fmt(vals[k]):'';});return d;}
+function graphForResult(src,it){if(src.g)return src.g;
+  const g=graphs().find(gr=>gr.bookId===src.b.id&&gr.yKeys.includes(it.y.key)&&gr.win&&gr.win.state!=='hidden');if(g)return g;
+  const ng=blankGraph({bookId:src.b.id,xKey:it.x?it.x.key:null,yKeys:[it.y.key],ptype:'scatter',rows:it.rows});S.items.push(ng);return ng;}
+
+/* ---------- 线性 / 多项式拟合 ---------- */
+function matInv(A){const n=A.length;const M=A.map((r,i)=>[...r,...Array.from({length:n},(_,j)=>i===j?1:0)]);
+  for(let c=0;c<n;c++){let p=c;for(let r=c+1;r<n;r++)if(Math.abs(M[r][c])>Math.abs(M[p][c]))p=r;if(Math.abs(M[p][c])<1e-14)return null;[M[c],M[p]]=[M[p],M[c]];
+    const d=M[c][c];for(let j=0;j<2*n;j++)M[c][j]/=d;for(let r=0;r<n;r++){if(r===c)continue;const f=M[r][c];if(f)for(let j=0;j<2*n;j++)M[r][j]-=f*M[c][j];}}
+  return M.map(r=>r.slice(n));}
+const binom=(n,k)=>{let r=1;for(let i=1;i<=k;i++)r=r*(n-k+i)/i;return r;};
+/** 最小二乘多项式拟合。先把 x 标准化再解正规方程（数值更稳），再换算回原始 x 的系数和标准误 */
+function polyfit(xs,ys,m){const n=xs.length,p=m+1;if(n<=p)return null;
+  const mx=xs.reduce((a,b)=>a+b,0)/n;const sx=Math.sqrt(xs.reduce((a,x)=>a+(x-mx)**2,0)/n)||1;const T=xs.map(x=>(x-mx)/sx);
+  const A=Array.from({length:p},()=>Array(p).fill(0)),bv=Array(p).fill(0);
+  for(let i=0;i<n;i++){const pw=[1];for(let j=1;j<p;j++)pw.push(pw[j-1]*T[i]);for(let r=0;r<p;r++){bv[r]+=pw[r]*ys[i];for(let c=0;c<p;c++)A[r][c]+=pw[r]*pw[c];}}
+  const inv=matInv(A);if(!inv)return null;const bt=inv.map(r=>r.reduce((s,v,j)=>s+v*bv[j],0));
+  const evalT=x=>{const t=(x-mx)/sx;let f=0,tp=1;for(let j=0;j<p;j++){f+=bt[j]*tp;tp*=t;}return f;};
+  const ym=ys.reduce((a,b)=>a+b,0)/n;let rss=0,tss=0;for(let i=0;i<n;i++){rss+=(ys[i]-evalT(xs[i]))**2;tss+=(ys[i]-ym)**2;}
+  const dof=n-p,s2=rss/dof;
+  const M=Array.from({length:p},(_,k)=>Array.from({length:p},(_,j)=>j>=k?binom(j,k)*Math.pow(-mx,j-k)/Math.pow(sx,j):0));
+  const coef=M.map(r=>r.reduce((s,v,j)=>s+v*bt[j],0));
+  const se=M.map(r=>{let v=0;for(let j=0;j<p;j++)for(let l=0;l<p;l++)v+=r[j]*inv[j][l]*r[l];return Math.sqrt(Math.max(0,v*s2));});
+  const r2=tss>0?1-rss/tss:NaN;return {coef,se,r2,adj:1-(1-r2)*(n-1)/dof,rss,n,dof,f:evalT,xmin:Math.min(...xs),xmax:Math.max(...xs)};}
+const SUPS=['','','²','³','⁴','⁵','⁶'];
+function eqText(coef){return 'y = '+coef.map((c,k)=>{const v=fmt(c);return k===0?v:`${c<0?'− ':'+ '}${fmt(Math.abs(c))}·x${k===1?'':(SUPS[k]||'^'+k)}`;}).join(' ');}
+function fitPolyCmd(order){const src=analysisSrc();if(!src)return;const b=src.b;let g=null;const reports=[];
+  for(const it of src.items){const {xs,ys}=getXY(it);const res=polyfit(xs,ys,order);
+    if(!res){say(`${nameOf(it.y)}：有效数据点太少，${order===1?'线性':order+' 阶多项式'}拟合至少需要 ${order+2} 个点`);continue;}
+    const N=200,fx=[],fy=[];for(let i=0;i<N;i++){const x=res.xmin+(res.xmax-res.xmin)*i/(N-1);fx.push(fmt(x));fy.push(fmt(res.f(x)));}
+    const kind=order===1?'线性拟合':`${order} 阶多项式拟合`;
+    const cx=addResultCol(b,it.y.key,{role:'X',lname:`${nameOf(it.y)} 拟合 X`,units:it.x?.units||'',comment:kind,data:fx});
+    const cy=addResultCol(b,it.y.key,{role:'Y',lname:`${nameOf(it.y)} ${kind}`,units:it.y.units||'',comment:eqText(res.coef),data:fy});
+    g=graphForResult(src,it);if(!g.yKeys.includes(it.y.key))g.yKeys.push(it.y.key);
+    g.yKeys.push(cy.key);g.xByY=Object.assign({},g.xByY,{[cy.key]:cx.key});g.lineOnly=[...(g.lineOnly||[]),cy.key];
+    reports.push({it,res,kind});}
+  if(!reports.length)return;
+  rebuildSheet(b);changed(b);if(!g.win||g.win.state==='hidden')showWin(g);else{drawGraph(g);}
+  showFitReport(reports);renderTree();save();}
+function showFitReport(reps){const html=reps.map(({it,res,kind})=>{const names=res.coef.map((_,k)=>res.coef.length===2?(k?'斜率 B':'截距 A'):`B${k}`+(k?`（x${k===1?'':(SUPS[k]||'^'+k)} 项）`:'（常数项）'));
+  const r=res.coef.length===2?Math.sign(res.coef[1])*Math.sqrt(Math.max(0,res.r2)):NaN;
+  return `<table class="report"><caption>${esc(nameOf(it.y))} · ${kind}</caption><tr><th>参数</th><th>值</th><th>标准误</th></tr>
+   ${res.coef.map((c,k)=>`<tr><td>${names[k]}</td><td>${fmt(c)}</td><td>${fmt(res.se[k])}</td></tr>`).join('')}
+   <tr><td>R²</td><td>${fmt(res.r2)}</td><td></td></tr><tr><td>调整后 R²</td><td>${fmt(res.adj)}</td><td></td></tr>
+   ${isFinite(r)?`<tr><td>Pearson r</td><td>${fmt(r)}</td><td></td></tr>`:''}<tr><td>残差平方和</td><td>${fmt(res.rss)}</td><td></td></tr><tr><td>数据点数 N</td><td>${res.n}</td><td></td></tr></table>
+   <div class="eq">${esc(eqText(res.coef))}</div>`;}).join('');
+  const text=reps.map(({it,res,kind})=>`${nameOf(it.y)}\t${kind}\n${eqText(res.coef)}\n参数\t值\t标准误\n`+res.coef.map((c,k)=>`B${k}\t${c}\t${res.se[k]}`).join('\n')+`\nR²\t${res.r2}\n调整后 R²\t${res.adj}\nN\t${res.n}`).join('\n\n');
+  modal('拟合结果',`<div style="display:grid;gap:12px">${html}<p class="note" style="margin:0">拟合曲线已加到工作簿（新增“拟合 X”和拟合结果两列）和图形中，红色实线。</p></div>`,
+    [['复制结果',()=>{copyText(text,'拟合结果已复制，可粘贴到 Excel');return false;}],['关闭',()=>true,1]]);}
+function copyText(t,okMsg){const legacy=()=>{const ta=el('textarea',{style:'position:fixed;left:-9999px;top:0'});ta.value=t;document.body.appendChild(ta);ta.select();let ok=false;try{ok=document.execCommand('copy');}catch(e){}ta.remove();say(ok?okMsg:'浏览器不允许访问剪贴板');};
+  if(navigator.clipboard?.writeText)navigator.clipboard.writeText(t).then(()=>say(okMsg)).catch(legacy);else legacy();}
+function polyDialog(){if(!analysisSrc())return;const bd=modal('多项式拟合',`<div class="row"><label for="po">阶数</label><select id="po">${[2,3,4,5,6].map(k=>`<option${k===2?' selected':''}>${k}</option>`).join('')}</select></div><p class="note" style="margin:0">对当前图形的数据曲线，或工作簿里选中的 Y 列拟合。阶数越高越容易过拟合，一般用 2 或 3 阶。</p>`,
+  [['拟合',bd=>{fitPolyCmd(+bd.querySelector('#po').value);},1],['取消',()=>true]]);}
+
+/* ---------- 平滑 / 微分 / 积分 / 归一化 ---------- */
+function forEachItem(fn){const src=analysisSrc();if(!src)return null;const out=[];for(const it of src.items){const d=getXY(it);if(d.xs.length<3){say(`${nameOf(it.y)}：有效数据点太少`);continue;}out.push(fn(it,d,src));}return {src,out:out.filter(Boolean)};}
+function finishMath(src,msg){if(!src)return;rebuildSheet(src.b);changed(src.b);renderTree();save();say(msg);}
+function smoothDialog(){if(!analysisSrc())return;modal('平滑',`<div class="row"><label for="sm-m">方法</label><select id="sm-m"><option value="sg">Savitzky-Golay（二阶）</option><option value="ma">移动平均</option></select></div>
+  <div class="row"><label for="sm-n">窗口点数</label><input type="number" id="sm-n" value="7" min="3" max="101" step="2"></div><p class="note" style="margin:0">窗口点数取奇数。Savitzky-Golay 能更好地保留峰形。</p>`,
+  [['平滑',bd=>{smooth(bd.querySelector('#sm-m').value,Math.max(3,(+bd.querySelector('#sm-n').value|1)));},1],['取消',()=>true]]);}
+function smooth(method,w){const h=Math.floor(w/2);let g=null;
+  const r=forEachItem((it,{xs,ys,idx},src)=>{const n=ys.length,out=[];
+    for(let i=0;i<n;i++){let a=i-h,b=i+h;if(a<0){b-=a;a=0;}if(b>n-1){a-=b-(n-1);b=n-1;}a=Math.max(0,a);
+      if(method==='ma'){let s=0,c=0;for(let k=Math.max(0,i-h);k<=Math.min(n-1,i+h);k++){s+=ys[k];c++;}out.push(s/c);}
+      else{const res=polyfit(xs.slice(a,b+1),ys.slice(a,b+1),2);out.push(res?res.f(xs[i]):ys[i]);}}
+    const c=addResultCol(src.b,it.y.key,{lname:`${nameOf(it.y)} 平滑`,units:it.y.units,comment:`${method==='ma'?'移动平均':'Savitzky-Golay 二阶'}，${w} 点`,data:placeAt(idx,out,src.b.nrows)});
+    if(src.g){src.g.yKeys.push(c.key);src.g.lineOnly=[...(src.g.lineOnly||[]),c.key];if(it.x&&it.x.key!==src.g.xKey)src.g.xByY=Object.assign({},src.g.xByY,{[c.key]:it.x.key});g=src.g;}
+    return c;});
+  if(!r||!r.out.length)return;finishMath(r.src,`已平滑 ${r.out.length} 条曲线，结果在新列 ${r.out.map(c=>c.key).join(', ')}`);if(g)drawGraph(g);}
+function differentiate(){const r=forEachItem((it,{xs,ys,idx},src)=>{const n=ys.length,d=[];
+    for(let i=0;i<n;i++){const a=i===0?0:i-1,b=i===n-1?n-1:i+1;d.push((ys[b]-ys[a])/(xs[b]-xs[a]));}
+    return addResultCol(src.b,it.y.key,{lname:`d(${nameOf(it.y)})/dX`,units:it.y.units&&it.x?.units?`${it.y.units}/${it.x.units}`:'',comment:'中心差分',data:placeAt(idx,d,src.b.nrows)});});
+  if(r&&r.out.length)finishMath(r.src,`已求导数，结果在新列 ${r.out.map(c=>c.key).join(', ')}`);}
+function integrate(){const areas=[];const r=forEachItem((it,{xs,ys,idx},src)=>{const n=ys.length,cum=[0];let abs=0;
+    for(let i=1;i<n;i++){const seg=(xs[i]-xs[i-1])*(ys[i]+ys[i-1])/2;cum.push(cum[i-1]+seg);
+      const y0=ys[i-1],y1=ys[i],dx=xs[i]-xs[i-1];abs+=(y0*y1>=0)?Math.abs(seg):Math.abs(dx)*(y0*y0+y1*y1)/(2*(Math.abs(y0)+Math.abs(y1)));}
+    areas.push({name:nameOf(it.y),area:cum[n-1],abs,n});
+    return addResultCol(src.b,it.y.key,{lname:`∫${nameOf(it.y)} dX`,units:it.y.units&&it.x?.units?`${it.y.units}·${it.x.units}`:'',comment:`梯形法累积积分，总面积 ${fmt(cum[n-1])}`,data:placeAt(idx,cum,src.b.nrows)});});
+  if(!r||!r.out.length)return;finishMath(r.src,`已积分，结果在新列 ${r.out.map(c=>c.key).join(', ')}`);
+  modal('积分结果',`<table class="report"><tr><th>数据</th><th>面积</th><th>绝对面积</th><th>点数</th></tr>${areas.map(a=>`<tr><td>${esc(a.name)}</td><td>${fmt(a.area)}</td><td>${fmt(a.abs)}</td><td>${a.n}</td></tr>`).join('')}</table><p class="note" style="margin:0">梯形法。绝对面积把 X 轴下方的部分也按正值计入。累积积分已写入新列。</p>`);}
+function normalizeDialog(){if(!analysisSrc())return;modal('归一化',`<div class="row"><label for="nm">方法</label><select id="nm"><option value="minmax">缩放到 [0, 1]</option><option value="max">除以最大值</option><option value="z">Z 分数（减均值除以标准差）</option></select></div>`,
+  [['归一化',bd=>{normalize(bd.querySelector('#nm').value);},1],['取消',()=>true]]);}
+function normalize(m){const r=forEachItem((it,{ys,idx},src)=>{const mn=Math.min(...ys),mx=Math.max(...ys),mean=ys.reduce((a,b)=>a+b,0)/ys.length;
+    const sd=Math.sqrt(ys.reduce((a,y)=>a+(y-mean)**2,0)/(ys.length-1));
+    const v=ys.map(y=>m==='minmax'?(y-mn)/(mx-mn):m==='max'?y/mx:(y-mean)/sd);
+    return addResultCol(src.b,it.y.key,{lname:`${nameOf(it.y)} 归一化`,comment:{minmax:'缩放到 [0, 1]',max:'除以最大值',z:'Z 分数'}[m],data:placeAt(idx,v,src.b.nrows)});});
+  if(r&&r.out.length)finishMath(r.src,`已归一化，结果在新列 ${r.out.map(c=>c.key).join(', ')}`);}
+
+/* ---------- 列统计 ---------- */
+function quantile(sorted,q){const pos=(sorted.length-1)*q,lo=Math.floor(pos),hi=Math.ceil(pos);return sorted[lo]+(sorted[hi]-sorted[lo])*(pos-lo);}
+function statsOnColumns(){const a=act();let b,cols,rows=null;
+  if(a.type==='graph'){b=item(a.bookId);cols=a.yKeys.filter(k=>!(a.lineOnly||[]).includes(k)).map(k=>b.cols.find(c=>c.key===k)).filter(Boolean);rows=a.rows||null;}
+  else{b=a;const sel=selOf(b);const R=rangeOf(b);cols=b.cols.filter(c=>sel.has(c.key));if(!cols.length&&isMulti(R)){cols=b.cols.slice(R.c0,R.c1+1);rows=[R.r0,R.r1];}if(!cols.length)cols=b.cols.filter(c=>c.role==='Y');}
+  const stats=cols.map(c=>{let v=nums(c);if(rows)v=v.slice(rows[0],rows[1]+1);v=v.filter(isFinite);const n=v.length;if(!n)return null;
+    const s=[...v].sort((x,y)=>x-y);const mean=v.reduce((x,y)=>x+y,0)/n;const sd=n>1?Math.sqrt(v.reduce((x,y)=>x+(y-mean)**2,0)/(n-1)):NaN;
+    return {name:`${c.key} · ${nameOf(c)}`,n,mean,sd,se:sd/Math.sqrt(n),min:s[0],q1:quantile(s,.25),med:quantile(s,.5),q3:quantile(s,.75),max:s[n-1],sum:v.reduce((x,y)=>x+y,0)};}).filter(Boolean);
+  if(!stats.length){say('选中的数据里没有数值');return;}
+  const nb={id:'b'+(S.seq++),type:'book',name:nextName('列统计'),cols:[],nrows:stats.length,win:null};
+  const defs=[['数据列','-','name'],['N','Y','n'],['均值','Y','mean'],['标准差','Y','sd'],['标准误','Y','se'],['最小值','Y','min'],['下四分位数','Y','q1'],['中位数','Y','med'],['上四分位数','Y','q3'],['最大值','Y','max'],['总和','Y','sum']];
+  defs.forEach(([ln,role,k])=>{const c=newCol(nb,role);c.lname=ln;c.comment=`来自 ${b.name}${rows?` 第 ${rows[0]+1}–${rows[1]+1} 行`:''}`;c.data=stats.map(s=>k==='name'?s.name:k==='n'?String(s.n):fmt(s[k]));nb.cols.push(c);});
+  S.items.push(nb);const w=Math.min(wsEl().clientWidth-40,780);showWin(nb);nb.win.w=Math.max(nb.win.w,w);renderWins();
+  say(`已统计 ${stats.length} 列，结果在 ${nb.name}（标准差为样本标准差，分位数用线性插值）`);}
+
+/* ---------- 排序 ---------- */
+function sortKeyCol(b){const sel=[...selOf(b)];if(sel.length)return b.cols.findIndex(c=>c.key===sel[0]);const x=ranges.get(b.id);if(x)return Math.min(x.a.c,b.cols.length-1);return -1;}
+function sortSheet(dir){const b=quietBook();if(!b)return;const ci=sortKeyCol(b);if(ci<0)return;const n=b.nrows;const key=b.cols[ci];
+  const idx=[...Array(n).keys()];const val=i=>String(key.data[i]??'').trim();
+  idx.sort((i,j)=>{const a=val(i),c=val(j);if(!a&&!c)return i-j;if(!a)return 1;if(!c)return -1;const na=parseNum(a),nc=parseNum(c);
+    if(isFinite(na)&&isFinite(nc))return (na-nc)*dir||i-j;if(isFinite(na))return -1;if(isFinite(nc))return 1;return a.localeCompare(c,'zh')*dir||i-j;});
+  b.cols.forEach(c=>{const d=idx.map(i=>c.data[i]??'');c.data=d;});trimRows(b);ranges.delete(b.id);rebuildSheet(b);changed(b);
+  say(`已按 ${key.key} 列${dir>0?'升序':'降序'}排序整张工作表（${n} 行，各行数据一起移动）`);}
+const parseNum=t=>Number(String(t).replace(/,/g,''));
+
+/* ---------- 右键菜单 / 对话框 ---------- */
+function closeCtx(){document.querySelectorAll('.ctx').forEach(c=>c.remove());}
+function ctxMenu(ev,items){ev.preventDefault();ev.stopPropagation();closeMenus();const app=$('#app').getBoundingClientRect();
+  const c=el('div',{class:'ctx'});fillItems(c,items);$('#app').appendChild(c);
+  let x=ev.clientX-app.left,y=ev.clientY-app.top;const r=c.getBoundingClientRect();
+  if(x+r.width>app.width)x=app.width-r.width-4;if(y+r.height>app.height)y=app.height-r.height-4;c.style.left=Math.max(0,x)+'px';c.style.top=Math.max(0,y)+'px';}
+function modal(title,body,buttons){
+  const m=el('div',{class:'modal'});const d=el('div',{class:'dlg',role:'dialog','aria-label':title});
+  const tb=el('div',{class:'tbar'},`<span>${esc(title)}</span>`);const x=el('button',{type:'button',class:'wbtn x','aria-label':'关闭'},IC.wx);x.onclick=()=>m.remove();tb.appendChild(x);
+  const bd=el('div',{class:'dbody'});if(typeof body==='string')bd.innerHTML=body;else bd.appendChild(body);
+  const ft=el('div',{class:'dfoot'});(buttons||[['关闭',()=>true]]).forEach(([t,fn,pri])=>{const b=el('button',{type:'button',class:'btn'+(pri?' pri':'')},esc(t));b.onclick=()=>{if(fn(bd)!==false)m.remove();};ft.appendChild(b);});
+  d.append(tb,bd,ft);m.appendChild(d);m.addEventListener('click',e=>{if(e.target===m)m.remove();});
+  m.addEventListener('keydown',e=>{if(e.key==='Escape')m.remove();});
+  $('#app').appendChild(m);setTimeout(()=>{(bd.querySelector('input,select')||ft.querySelector('.pri')||ft.querySelector('button'))?.focus();},0);return bd;
+}
+
+/* ---------- 窗口管理 ---------- */
+const wsEl=()=>$('#workspace');
+const wins=()=>S.items.filter(x=>x.win&&x.win.state!=='hidden');
+function defaultWin(it){const n=S.items.filter(x=>x.win).length;const W=wsEl().clientWidth,H=wsEl().clientHeight;
+  const w=it.type==='book'?Math.min(430,W-40):Math.min(520,W-40),h=Math.min(it.type==='book'?380:400,H-40);
+  return {x:20+(n%6)*26,y:16+(n%6)*24,w:Math.max(200,w),h:Math.max(140,h),state:'normal',z:++S.z};}
+function showWin(it){if(!it.win)it.win=defaultWin(it);if(it.win.state==='hidden'||it.win.state==='min')it.win.state='normal';
+  if(wsEl().clientWidth<600)it.win.state='max';activate(it.id);}
+function activate(id){const it=item(id);if(!it)return;S.active=id;if(it.win)it.win.z=++S.z;renderWins();renderTree();updateStats();save();}
+function setWinState(it,st){it.win.state=it.win.state===st&&st==='max'?'normal':st;if(st==='hidden'&&S.active===it.id){const o=wins().sort((a,b)=>b.win.z-a.win.z)[0];S.active=o?o.id:null;}renderWins();renderTree();save();}
+const winEls=new Map();
+function renderWins(){
+  const ws=wsEl();const live=new Set();let minIdx=0;
+  S.items.forEach(it=>{if(!it.win||it.win.state==='hidden'){return;}
+    live.add(it.id);let w=winEls.get(it.id);if(!w){w=makeWin(it);winEls.set(it.id,w);ws.appendChild(w);}
+    const g=it.win;w.className='mdi'+(S.active===it.id?' act':'')+(g.state==='max'?' max':'')+(g.state==='min'?' min':'');
+    w.style.zIndex=g.z;w.querySelector('.tname').textContent=it.name+(it.type==='graph'&&item(it.bookId)?'':'');
+    if(g.state==='min'){w.style.left=(4+minIdx*174)+'px';minIdx++;}else{w.style.left=g.x+'px';w.style.top=g.y+'px';w.style.width=g.w+'px';w.style.height=g.h+'px';}
+  });
+  for(const [id,w] of winEls){if(!live.has(id)){w.remove();winEls.delete(id);}}
+  S.items.forEach(it=>{if(it.type==='graph'&&live.has(it.id))drawGraph(it);});
+}
+function makeWin(it){
+  const w=el('div',{class:'mdi','data-id':it.id});
+  const tb=el('div',{class:'tbar'},`${IC[it.type]}<span class="tname"></span>`);
+  const bmin=el('button',{type:'button',class:'wbtn',title:'最小化','aria-label':'最小化'},IC.wmin);
+  const bmax=el('button',{type:'button',class:'wbtn',title:'最大化 / 还原','aria-label':'最大化'},IC.wmax);
+  const bx=el('button',{type:'button',class:'wbtn x',title:'隐藏窗口（项目管理器中可重新打开）','aria-label':'关闭'},IC.wx);
+  bmin.onclick=e=>{e.stopPropagation();setWinState(it,'min');};
+  bmax.onclick=e=>{e.stopPropagation();if(it.win.state==='min')it.win.state='normal';else setWinState(it,'max');activate(it.id);};
+  bx.onclick=e=>{e.stopPropagation();setWinState(it,'hidden');say(`${it.name} 已隐藏，可在项目管理器中重新打开`);};
+  tb.append(bmin,bmax,bx);
+  tb.addEventListener('dblclick',()=>{if(it.win.state==='min')it.win.state='normal';else setWinState(it,'max');activate(it.id);});
+  tb.addEventListener('pointerdown',e=>{if(e.target.closest('button'))return;activate(it.id);if(it.win.state!=='normal')return;
+    const sx=e.clientX,sy=e.clientY,ox=it.win.x,oy=it.win.y;tb.setPointerCapture(e.pointerId);
+    const mv=ev=>{it.win.x=Math.max(-it.win.w+60,ox+ev.clientX-sx);it.win.y=Math.max(0,oy+ev.clientY-sy);w.style.left=it.win.x+'px';w.style.top=it.win.y+'px';};
+    const up=()=>{tb.removeEventListener('pointermove',mv);tb.removeEventListener('pointerup',up);save();};
+    tb.addEventListener('pointermove',mv);tb.addEventListener('pointerup',up);});
+  const body=el('div',{class:'body'+(it.type==='graph'?' graphbody':'')});
+  const grip=el('div',{class:'grip'});
+  grip.addEventListener('pointerdown',e=>{e.stopPropagation();const sx=e.clientX,sy=e.clientY,ow=it.win.w,oh=it.win.h;grip.setPointerCapture(e.pointerId);
+    const mv=ev=>{it.win.w=Math.max(200,ow+ev.clientX-sx);it.win.h=Math.max(120,oh+ev.clientY-sy);w.style.width=it.win.w+'px';w.style.height=it.win.h+'px';};
+    const up=()=>{grip.removeEventListener('pointermove',mv);grip.removeEventListener('pointerup',up);save();};
+    grip.addEventListener('pointermove',mv);grip.addEventListener('pointerup',up);});
+  w.append(tb,body,grip);
+  w.addEventListener('pointerdown',()=>{if(S.active!==it.id)activate(it.id);},true);
+  if(it.type==='book')buildSheet(it,body);
+  else{body.addEventListener('dblclick',()=>graphProps());body.addEventListener('contextmenu',e=>ctxMenu(e,graphCtx(it)));
+    new ResizeObserver(()=>drawGraph(it)).observe(body);}
+  return w;
+}
+function cascade(){wins().forEach((it,i)=>{Object.assign(it.win,{state:'normal',x:16+i*26,y:12+i*24,w:Math.min(520,wsEl().clientWidth-60),h:Math.min(400,wsEl().clientHeight-60)});});renderWins();save();}
+function tile(){const ws=wins();if(!ws.length)return;const W=wsEl().clientWidth,H=wsEl().clientHeight;const cols=Math.ceil(Math.sqrt(ws.length)),rows=Math.ceil(ws.length/cols);
+  ws.forEach((it,i)=>{const c=i%cols,r=Math.floor(i/cols);Object.assign(it.win,{state:'normal',x:Math.round(c*W/cols),y:Math.round(r*H/rows),w:Math.floor(W/cols),h:Math.floor(H/rows)});});renderWins();save();}
+
+/* ---------- 项目管理器 ---------- */
+function renderTree(){const t=$('#tree');t.innerHTML='';
+  const f=el('li',{class:'folder'},IC.folder+'<span>文件夹1</span>');t.appendChild(f);
+  S.items.forEach(it=>{const li=el('li',{class:(S.active===it.id?'on ':'')+(!it.win||it.win.state==='hidden'?'hid':''),title:it.type==='book'?'工作簿':'图形'},IC[it.type]+`<span>${esc(it.name)}</span>`);
+    li.addEventListener('click',()=>showWin(it));
+    li.addEventListener('contextmenu',e=>ctxMenu(e,[['打开',()=>showWin(it)],['重命名…',()=>rename(it)],'-',['删除…',()=>delItem(it)]]));
+    t.appendChild(li);});}
+function rename(it){const bd=modal('重命名',`<div class="row"><label for="rn">名称</label><input type="text" id="rn" value="${esc(it.name)}"></div>`,
+  [['确定',bd=>{const v=bd.querySelector('#rn').value.trim();if(!v)return false;it.name=v;renderWins();renderTree();save();},1],['取消',()=>true]]);
+  bd.querySelector('#rn').addEventListener('keydown',e=>{if(e.key==='Enter')bd.closest('.dlg').querySelector('.pri').click();});}
+function delItem(it){modal('删除',`<p style="margin:0">确定删除 <b>${esc(it.name)}</b>？此操作无法撤销。${it.type==='book'&&graphs().some(g=>g.bookId===it.id)?'<br><span class="note">引用这个工作簿的图形会变成空图。</span>':''}</p>`,
+  [['删除',()=>{S.items=S.items.filter(x=>x!==it);if(S.active===it.id)S.active=null;renderWins();renderTree();save();say(`已删除 ${it.name}`);},1],['取消',()=>true]]);}
+function toggleExp(){S.showExp=!S.showExp;$('#main').classList.toggle('noexp',!S.showExp);$('#explorer').hidden=!S.showExp;save();}
+
+/* ---------- 工作表 ---------- */
+const sels=new Map(); // bookId -> Set(keys)
+const selOf=b=>{if(!sels.has(b.id))sels.set(b.id,new Set());return sels.get(b.id);};
+const roleTxt=r=>r==='X'?'X':r==='Y'?'Y':'—';
+function buildSheet(book,body){
+  body.innerHTML='';const sel=selOf(book);
+  const tbl=el('table',{class:'ws',style:`width:${62+104*book.cols.length}px`});const cg=el('colgroup');cg.appendChild(el('col',{style:'width:62px'}));
+  book.cols.forEach(c=>cg.appendChild(el('col',{class:sel.has(c.key)?'sel':'',style:'width:104px'})));tbl.appendChild(cg);
+  const th=el('thead');const hr=el('tr');hr.appendChild(el('th',{class:'rh'}));
+  book.cols.forEach((c,i)=>{const h=el('th',{class:'colh'+(sel.has(c.key)?' sel':''),title:'单击选中列，Ctrl/Shift 多选，右键更多操作'},`${c.key}<span class="role">(${roleTxt(c.role)})</span>`);
+    h.addEventListener('click',e=>selectCol(book,c.key,e));h.addEventListener('contextmenu',e=>{if(!sel.has(c.key))selectCol(book,c.key,{});ctxMenu(e,colCtx(book,c));});hr.appendChild(h);});
+  th.appendChild(hr);tbl.appendChild(th);
+  const tb=el('tbody');
+  [['lname','长名称'],['units','单位'],['comment','注释']].forEach(([f,lab])=>{const tr=el('tr',{class:'meta'});tr.appendChild(el('th',{class:'rh'},lab));
+    book.cols.forEach(c=>{const td=el('td',{class:sel.has(c.key)?'sel':''});const inp=el('input',{type:'text','data-k':c.key,'data-f':f,'aria-label':`${c.key} 列${lab}`});inp.value=c[f]||'';
+      inp.addEventListener('input',()=>{c[f]=inp.value;changed(book);});td.appendChild(inp);tr.appendChild(td);});tb.appendChild(tr);});
+  tbl.appendChild(tb);body.appendChild(tbl);
+  const rows=Math.max(book.nrows+12,30,(rangeOf(book)?.r1??0)+6);for(let r=0;r<rows;r++)appendRow(book,tb,r);
+  tb.addEventListener('pointerdown',e=>cellPointerDown(e,book,body));
+  tb.addEventListener('contextmenu',e=>cellContext(e,book));
+  hr.addEventListener('pointerdown',e=>{const h=e.target.closest('th.colh');if(!h||e.button!==0||e.shiftKey||e.ctrlKey||e.metaKey)return;
+    drag={mode:'cols',book,body,start:[...hr.children].indexOf(h)-1,moved:false};});
+  refreshRange(book);
+  body.onscroll=()=>{if(body.scrollTop+body.clientHeight>body.scrollHeight-60){const n=tb.querySelectorAll('tr:not(.meta)').length;for(let r=n;r<n+20;r++)appendRow(book,tb,r);}};
+}
+function appendRow(book,tb,r){const tr=el('tr');tr.appendChild(el('th',{class:'rh','data-r':r,title:'拖动选择整行'},String(r+1)));
+  const R=rangeOf(book);
+  book.cols.forEach((c,ci)=>{const td=el('td',{'data-c':ci,'data-r':r});if(R&&isMulti(R)&&r>=R.r0&&r<=R.r1&&ci>=R.c0&&ci<=R.c1)td.classList.add('rsel');const inp=el('input',{type:'text',inputmode:'decimal','data-k':c.key,'data-r':r,'aria-label':`${c.key}${r+1}`});inp.value=c.data[r]??'';
+    inp.addEventListener('input',()=>{while(c.data.length<=r)c.data.push('');c.data[r]=inp.value;book.nrows=Math.max(book.nrows,r+1);trimRows(book);changed(book);
+      const n=tb.querySelectorAll('tr:not(.meta)').length;if(n-r<4)for(let k=n;k<n+10;k++)appendRow(book,tb,k);});
+    inp.addEventListener('keydown',e=>cellKey(e,book,ci,r));
+    inp.addEventListener('paste',e=>pasteInto(e,book,ci,r));
+    inp.addEventListener('focus',()=>{if(selOf(book).size){selOf(book).clear();refreshSel(book);}
+      if(!drag){ranges.set(book.id,{a:{c:ci,r},b:{c:ci,r}});refreshRange(book);}});
+    td.appendChild(inp);tr.appendChild(td);});tb.appendChild(tr);}
+function trimRows(book){let n=0;book.cols.forEach(c=>{for(let i=c.data.length-1;i>=0;i--){if(String(c.data[i]).trim()!==''){n=Math.max(n,i+1);break;}}});book.nrows=n;}
+function focusCell(book,ci,r){const w=winEls.get(book.id);if(!w||ci<0||r<0||ci>=book.cols.length)return;const inp=w.querySelector(`input[data-k="${book.cols[ci].key}"][data-r="${r}"]`);if(inp){inp.focus();inp.select();}}
+const ARROWS={ArrowUp:[0,-1],ArrowDown:[0,1],ArrowLeft:[-1,0],ArrowRight:[1,0]};
+function cellKey(e,book,ci,r){
+  if(e.shiftKey&&ARROWS[e.key]){e.preventDefault();const [dc,dr]=ARROWS[e.key];ranges.set(book.id,{a:{c:ci,r},b:{c:ci,r}});e.target.blur();extendRange(book,dc,dr);return;}
+  if(e.key==='Enter'||e.key==='ArrowDown'){e.preventDefault();focusCell(book,ci,r+1);}
+  else if(e.key==='ArrowUp'){e.preventDefault();focusCell(book,ci,r-1);}
+  else if(e.key==='ArrowRight'&&e.target.selectionStart===e.target.value.length){e.preventDefault();focusCell(book,ci+1,r);}
+  else if(e.key==='ArrowLeft'&&e.target.selectionEnd===0){e.preventDefault();focusCell(book,ci-1,r);}
+}
+function parseTable(text){const lines=text.replace(/\r/g,'').split('\n');while(lines.length&&lines[lines.length-1].trim()==='')lines.pop();
+  const delim=lines.some(l=>l.includes('\t'))?'\t':lines.some(l=>l.includes(','))?',':lines.some(l=>l.includes(';'))?';':/\s+/;
+  return lines.map(l=>(typeof delim==='string'?l.split(delim):l.trim().split(delim)).map(s=>s.trim().replace(/^"(.*)"$/,'$1')));}
+const isNum=s=>s!==''&&isFinite(Number(String(s).replace(/,/g,'')));
+function pasteInto(e,book,ci,r){const text=e.clipboardData?.getData('text')||'';if(!/[\t\n]/.test(text.trim()))return;e.preventDefault();pasteAt(book,ci,r,text);}
+function pasteAt(book,ci,r,text){
+  const R=rangeOf(book);
+  if(!/[\t\n]/.test(text.trim())&&R&&isMulti(R)){const v=text.trim();for(let c=R.c0;c<=R.c1;c++){const col=book.cols[c];for(let rr=R.r0;rr<=R.r1;rr++){while(col.data.length<=rr)col.data.push('');col.data[rr]=v;}}
+    trimRows(book);rebuildSheet(book);changed(book);say(`已把 ${v} 填入选区 ${R.r1-R.r0+1} 行 × ${R.c1-R.c0+1} 列`);return;}
+  let rows=parseTable(text);let r0=r;
+  if(r===0&&rows.length>1&&rows[0].some(s=>s!==''&&!isNum(s))){const hdr=rows.shift();hdr.forEach((h,j)=>{ensureCols(book,ci+j+1);book.cols[ci+j].lname=h;});}
+  rows.forEach((row,i)=>row.forEach((v,j)=>{ensureCols(book,ci+j+1);const c=book.cols[ci+j];while(c.data.length<=r0+i)c.data.push('');c.data[r0+i]=v;}));
+  const nc=Math.max(1,...rows.map(x=>x.length));if(rows.length)ranges.set(book.id,{a:{c:ci,r:r0},b:{c:ci+nc-1,r:r0+rows.length-1}});
+  trimRows(book);rebuildSheet(book);changed(book);say(`已粘贴 ${rows.length} 行 × ${nc} 列`);}
+function ensureCols(book,n){while(book.cols.length<n)book.cols.push(newCol(book,'Y'));}
+function rebuildSheet(book){const w=winEls.get(book.id);if(w){const b=w.querySelector('.body');const st=b.scrollTop;buildSheet(book,b);b.scrollTop=st;}}
+function selectCol(book,key,e){const sel=selOf(book);const keys=book.cols.map(c=>c.key);
+  if(e.shiftKey&&sel.size){const last=[...sel].pop();const a=keys.indexOf(last),b=keys.indexOf(key);for(let i=Math.min(a,b);i<=Math.max(a,b);i++)sel.add(keys[i]);}
+  else if(e.ctrlKey||e.metaKey){sel.has(key)?sel.delete(key):sel.add(key);}
+  else{sel.clear();sel.add(key);}
+  ranges.delete(book.id);document.activeElement?.blur?.();refreshRange(book);refreshSel(book);}
+function refreshSel(book){const w=winEls.get(book.id);if(!w)return;const sel=selOf(book);
+  const cols=w.querySelectorAll('col');book.cols.forEach((c,i)=>{cols[i+1]?.classList.toggle('sel',sel.has(c.key));});
+  w.querySelectorAll('thead th.colh').forEach((h,i)=>h.classList.toggle('sel',sel.has(book.cols[i]?.key)));
+  w.querySelectorAll('tr.meta').forEach(tr=>tr.querySelectorAll('td').forEach((td,i)=>td.classList.toggle('sel',sel.has(book.cols[i]?.key))));
+  updateStats();
+  if(sel.size)say(`已选中 ${[...sel].join(', ')} 列`);}
+/* ---------- 单元格选区：拖动框选 / Shift 扩展 / 整行 ---------- */
+const ranges=new Map(); // bookId -> {a:{c,r}, b:{c,r}}，a 为起点（活动单元格）
+let drag=null;
+function rangeOf(book){const x=ranges.get(book.id);if(!x||!book.cols.length)return null;const m=book.cols.length-1;
+  const ca=Math.min(x.a.c,m),cb=Math.min(x.b.c,m);return {c0:Math.min(ca,cb),c1:Math.max(ca,cb),r0:Math.min(x.a.r,x.b.r),r1:Math.max(x.a.r,x.b.r)};}
+const isMulti=R=>R&&(R.c0!==R.c1||R.r0!==R.r1);
+function cellTd(book,c,r){const tb=winEls.get(book.id)?.querySelector('tbody');return tb?.rows[3+r]?.cells[c+1]||null;}
+function ensureRendered(book,r){const tb=winEls.get(book.id)?.querySelector('tbody');if(!tb)return;let n=tb.querySelectorAll('tr:not(.meta)').length;while(n<=r+5){appendRow(book,tb,n);n++;}}
+function refreshRange(book){const w=winEls.get(book.id);if(!w)return;const body=w.querySelector('.body');
+  w.querySelectorAll('.rsel').forEach(x=>x.classList.remove('rsel'));
+  let box=body.querySelector('.rangebox');const R=rangeOf(book);
+  if(!isMulti(R)){box?.remove();updateStats();return;}
+  ensureRendered(book,R.r1);const tb=w.querySelector('tbody');
+  for(let r=R.r0;r<=R.r1;r++){const tr=tb.rows[3+r];if(!tr)break;for(let c=R.c0;c<=R.c1;c++)tr.cells[c+1]?.classList.add('rsel');
+    if(R.c0===0&&R.c1===book.cols.length-1)tr.cells[0].classList.add('rsel');}
+  w.querySelectorAll('thead th.colh').forEach((h,i)=>h.classList.toggle('rsel',i>=R.c0&&i<=R.c1));
+  const a=cellTd(book,R.c0,R.r0),b=cellTd(book,R.c1,R.r1);
+  if(a&&b){if(!box){box=el('div',{class:'rangebox'});body.appendChild(box);}
+    const br=body.getBoundingClientRect(),ra=a.getBoundingClientRect(),rb=b.getBoundingClientRect();
+    Object.assign(box.style,{left:(ra.left-br.left+body.scrollLeft-1)+'px',top:(ra.top-br.top+body.scrollTop-1)+'px',width:(rb.right-ra.left+1)+'px',height:(rb.bottom-ra.top+1)+'px'});}
+  updateStats();}
+function setRangeEnd(book,c,r){const x=ranges.get(book.id);if(!x)return;x.b={c:Math.max(0,Math.min(c,book.cols.length-1)),r:Math.max(0,r)};refreshRange(book);}
+function extendRange(book,dc,dr){const x=ranges.get(book.id);if(!x)return;setRangeEnd(book,x.b.c+dc,x.b.r+dr);
+  const t=cellTd(book,x.b.c,x.b.r);t?.scrollIntoView({block:'nearest',inline:'nearest'});
+  sayRange(book);}
+function cellPointerDown(e,book,body){
+  if(e.button!==0)return;
+  const rh=e.target.closest('th.rh[data-r]');const td=e.target.closest('td[data-r]');
+  if(!rh&&!td)return;
+  if(selOf(book).size){selOf(book).clear();refreshSel(book);}
+  activate(book.id);
+  if(rh){e.preventDefault();document.activeElement?.blur?.();const r=+rh.dataset.r;const last=book.cols.length-1;
+    const x=ranges.get(book.id);
+    if(e.shiftKey&&x){x.a={c:0,r:x.a.r};x.b={c:last,r};}else ranges.set(book.id,{a:{c:0,r},b:{c:last,r}});
+    drag={mode:'rows',book,body,moved:true};document.body.classList.add('dragging');refreshRange(book);return;}
+  const c=+td.dataset.c,r=+td.dataset.r;
+  if(e.shiftKey&&ranges.get(book.id)){e.preventDefault();document.activeElement?.blur?.();setRangeEnd(book,c,r);sayRange(book);return;}
+  ranges.set(book.id,{a:{c,r},b:{c,r}});drag={mode:'cells',book,body,moved:false};refreshRange(book);}
+function sayRange(book){const R=rangeOf(book);if(!isMulti(R))return;say(`已选中 ${book.cols[R.c0].key}${R.r0+1}:${book.cols[R.c1].key}${R.r1+1}（${R.r1-R.r0+1} 行 × ${R.c1-R.c0+1} 列）— Ctrl+C 复制，Delete 清除，点绘图按钮按选区作图`);}
+document.addEventListener('pointermove',e=>{if(!drag)return;const {book,body}=drag;
+  const br=body.getBoundingClientRect();
+  if(e.clientY>br.bottom-18)body.scrollTop+=18;else if(e.clientY<br.top+46)body.scrollTop-=18;
+  if(e.clientX>br.right-18)body.scrollLeft+=18;else if(e.clientX<br.left+70)body.scrollLeft-=18;
+  const t=document.elementFromPoint(e.clientX,e.clientY);if(!t||!body.contains(t))return;
+  if(drag.mode==='cols'){const h=t.closest('th.colh');if(!h)return;const i=[...h.parentNode.children].indexOf(h)-1;if(i===drag.start&&!drag.moved)return;
+    drag.moved=true;const sel=selOf(book);sel.clear();for(let k=Math.min(i,drag.start);k<=Math.max(i,drag.start);k++)sel.add(book.cols[k].key);ranges.delete(book.id);refreshRange(book);refreshSel(book);return;}
+  if(drag.mode==='rows'){const rh=t.closest('th.rh[data-r]')||t.closest('tr')?.querySelector('th.rh[data-r]');if(!rh)return;setRangeEnd(book,book.cols.length-1,+rh.dataset.r);return;}
+  const td=t.closest('td[data-r]');if(!td)return;const c=+td.dataset.c,r=+td.dataset.r;const x=ranges.get(book.id);if(!x)return;
+  if(!drag.moved&&c===x.a.c&&r===x.a.r)return;
+  if(!drag.moved){drag.moved=true;document.activeElement?.blur?.();window.getSelection?.()?.removeAllRanges();document.body.classList.add('dragging');}
+  if(x.b.c!==c||x.b.r!==r)setRangeEnd(book,c,r);});
+document.addEventListener('pointerup',()=>{if(!drag)return;const {book,moved,mode}=drag;drag=null;document.body.classList.remove('dragging');
+  if(mode==='cols'){if(moved){const sel=selOf(book);say(`已选中 ${[...sel].join(', ')} 列`);}return;}
+  if(moved)sayRange(book);});
+function rangeTSV(book,R){const out=[];for(let r=R.r0;r<=R.r1;r++){const row=[];for(let c=R.c0;c<=R.c1;c++)row.push(book.cols[c].data[r]??'');out.push(row.join('\t'));}return out.join('\n');}
+function copyRange(book){const R=rangeOf(book);if(!R)return;const t=rangeTSV(book,R);const ok=`已复制 ${R.r1-R.r0+1} 行 × ${R.c1-R.c0+1} 列，可直接粘贴到 Excel`;
+  const legacy=()=>{const ta=el('textarea',{style:'position:fixed;left:-9999px;top:0','aria-hidden':'true'});ta.value=t;document.body.appendChild(ta);ta.select();
+    let done=false;try{done=document.execCommand('copy');}catch(e){}ta.remove();say(done?ok:'浏览器不允许访问剪贴板，复制没有成功');};
+  if(navigator.clipboard?.writeText)navigator.clipboard.writeText(t).then(()=>say(ok)).catch(legacy);else legacy();}
+function clearRange(book){const R=rangeOf(book);if(!R)return;for(let c=R.c0;c<=R.c1;c++){const col=book.cols[c];for(let r=R.r0;r<=R.r1;r++){if(r<col.data.length)col.data[r]='';const inp=cellTd(book,c,r)?.querySelector('input');if(inp)inp.value='';}}
+  trimRows(book);changed(book);say(`已清除 ${R.r1-R.r0+1} 行 × ${R.c1-R.c0+1} 列`);}
+function cellContext(e,book){const td=e.target.closest('td[data-r]');if(!td)return;const c=+td.dataset.c,r=+td.dataset.r;const R=rangeOf(book);
+  if(!R||c<R.c0||c>R.c1||r<R.r0||r>R.r1){ranges.set(book.id,{a:{c,r},b:{c,r}});refreshRange(book);}
+  activate(book.id);
+  ctxMenu(e,[['复制',()=>copyRange(book),'Ctrl+C'],['清除内容',()=>clearRange(book),'Delete'],'-',
+    ['折线图',()=>plot('line')],['散点图',()=>plot('scatter')],['点线图',()=>plot('linesym')],['柱状图',()=>plot('bar')]]);}
+/** 选中的列：优先用列标题选择，其次用单元格选区覆盖的列 */
+function pickedKeys(book){const sel=selOf(book);if(sel.size)return sel;const R=rangeOf(book);if(isMulti(R))return new Set(book.cols.slice(R.c0,R.c1+1).map(c=>c.key));return sel;}
+function sheetKey(e){
+  if(document.querySelector('.modal'))return false;const ae=document.activeElement;if(ae&&/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName))return false;
+  const b=item(S.active);if(!b||b.type!=='book')return false;const x=ranges.get(b.id);const R=rangeOf(b);if(!x||!R)return false;
+  const mod=e.ctrlKey||e.metaKey;const k=e.key.toLowerCase();
+  if(mod&&k==='c'){e.preventDefault();copyRange(b);return true;}
+  if(mod&&k==='a'){e.preventDefault();ranges.set(b.id,{a:{c:0,r:0},b:{c:b.cols.length-1,r:Math.max(0,b.nrows-1)}});refreshRange(b);sayRange(b);return true;}
+  if(e.key==='Delete'||e.key==='Backspace'){e.preventDefault();clearRange(b);return true;}
+  if(e.key==='Escape'){ranges.set(b.id,{a:x.a,b:{...x.a}});refreshRange(b);focusCell(b,x.a.c,x.a.r);return true;}
+  if(ARROWS[e.key]){e.preventDefault();const [dc,dr]=ARROWS[e.key];
+    if(e.shiftKey){extendRange(b,dc,dr);}else{const c=Math.max(0,Math.min(x.a.c+dc,b.cols.length-1)),r=Math.max(0,x.a.r+dr);ensureRendered(b,r);ranges.set(b.id,{a:{c,r},b:{c,r}});refreshRange(b);focusCell(b,c,r);}
+    return true;}
+  if(e.key==='Enter'||e.key==='F2'){e.preventDefault();focusCell(b,x.a.c,x.a.r);return true;}
+  if(e.key.length===1&&!mod&&!e.altKey){ranges.set(b.id,{a:x.a,b:{...x.a}});refreshRange(b);const inp=cellTd(b,x.a.c,x.a.r)?.querySelector('input');if(inp){inp.focus();inp.select();}return true;}
+  return false;}
+document.addEventListener('paste',e=>{if(e.defaultPrevented)return;const ae=document.activeElement;if(ae&&/^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName))return;
+  const b=item(S.active);if(!b||b.type!=='book')return;const R=rangeOf(b);if(!R)return;const text=e.clipboardData?.getData('text')||'';if(!text)return;e.preventDefault();pasteAt(b,R.c0,R.r0,text);});
+function colCtx(book,c){return [['设为 X',()=>setRole('X')],['设为 Y',()=>setRole('Y')],['设为忽略',()=>setRole('-')],'-',
+  ['折线图',()=>plot('line')],['散点图',()=>plot('scatter')],['点线图',()=>plot('linesym')],['柱状图',()=>plot('bar')],'-',
+  ['在右侧插入列',()=>addCol(c.key)],['清空',clearCols],['删除列',delCols]];}
+let chT=null;
+function changed(book){clearTimeout(chT);chT=setTimeout(()=>{graphs().filter(g=>g.bookId===book.id).forEach(drawGraph);updateStats();},120);save();}
+function activeBook(){const a=item(S.active);if(a&&a.type==='book')return a;say('请先激活一个工作簿窗口');return null;}
+function addCol(afterKey){const b=activeBook();if(!b)return;const c=newCol(b,'Y');let idx=b.cols.length;
+  const sel=selOf(b);const k=typeof afterKey==='string'?afterKey:[...sel].pop();if(k){const i=b.cols.findIndex(x=>x.key===k);if(i>=0)idx=i+1;}
+  b.cols.splice(idx,0,c);rebuildSheet(b);changed(b);say(`已添加列 ${c.key}`);}
+function delCols(){const b=activeBook();if(!b)return;const sel=selOf(b);if(!sel.size){say('请先单击列标题选中要删除的列');return;}
+  b.cols=b.cols.filter(c=>!sel.has(c.key));graphs().forEach(g=>{if(g.bookId===b.id){g.yKeys=g.yKeys.filter(k=>!sel.has(k));if(sel.has(g.xKey))g.xKey=null;}});
+  const n=sel.size;sel.clear();trimRows(b);rebuildSheet(b);changed(b);say(`已删除 ${n} 列`);}
+function clearCols(){const b=activeBook();if(!b)return;const sel=selOf(b);if(!sel.size){say('请先选中列');return;}b.cols.forEach(c=>{if(sel.has(c.key))c.data=[];});trimRows(b);rebuildSheet(b);changed(b);}
+function addRows(n){const b=activeBook();if(!b)return;const w=winEls.get(b.id);const tb=w.querySelector('tbody');const m=tb.querySelectorAll('tr:not(.meta)').length;for(let r=m;r<m+n;r++)appendRow(b,tb,r);say(`已添加 ${n} 行`);}
+function setRole(role){const b=activeBook();if(!b)return;const sel=pickedKeys(b);if(!sel.size){say('请先单击列标题或框选单元格');return;}
+  b.cols.forEach(c=>{if(sel.has(c.key))c.role=role;});rebuildSheet(b);changed(b);say(`已将 ${[...sel].join(', ')} 设为 ${role==='-'?'忽略':role}`);}
+function newBook(){const b={id:'b'+(S.seq++),type:'book',name:nextName('Book'),cols:[],nrows:0,win:null};
+  b.cols.push({key:'A',role:'X',lname:'',units:'',comment:'',data:[]});b.cols.push({key:'B',role:'Y',lname:'',units:'',comment:'',data:[]});
+  S.items.push(b);showWin(b);say(`已新建 ${b.name}，可直接输入数据或从 Excel 粘贴`);return b;}
+
+/* ---------- 绘图 ---------- */
+function plot(ptype){const a=item(S.active);
+  if(a&&a.type==='graph'){a.ptype=ptype;drawGraph(a);save();say(`${a.name} 已改为${TYPE_NAME[ptype]}`);return;}
+  const b=activeBook();if(!b)return;const sel=selOf(b);const R=rangeOf(b);
+  let rows=null;let cols=b.cols.filter(c=>sel.has(c.key));
+  if(!cols.length&&isMulti(R)){cols=b.cols.slice(R.c0,R.c1+1);if(R.r1>R.r0)rows=[R.r0,R.r1];}
+  const auto=!cols.length;if(auto)cols=b.cols;
+  const xs=cols.filter(c=>c.role==='X');const ys=cols.filter(c=>c.role==='Y');
+  if(!ys.length){say(auto?'工作簿里没有 Y 列，请先把列设为 Y':'选中的列里没有 Y 列，请至少选中一个 Y 列');return;}
+  const x=xs[0]||b.cols.filter((c,i)=>c.role==='X'&&i<b.cols.indexOf(ys[0])).pop()||b.cols.find(c=>c.role==='X')||null;
+  const g=blankGraph({bookId:b.id,xKey:x?x.key:null,yKeys:ys.map(c=>c.key),ptype,rows});S.items.push(g);showWin(g);
+  say(`已用 ${b.name} 的 ${ys.map(c=>c.key).join(', ')} 列${rows?`第 ${rows[0]+1}–${rows[1]+1} 行`:''}绘制${TYPE_NAME[ptype]}${x?`，X = ${x.key}`:'，X 为行号'}${auto?'（未选列，已使用全部 Y 列）':''}`);}
+const FIT_COLOR='#e8182c',FIT_ALT='#1f6fe5';
+const COLORS=['#000000','#ff0000','#0000ff','#ff00ff','#808000','#000080','#8000ff','#008080','#800000'];
+const SYMS=['square','circle','tri','itri','diamond','left','right','hex'];
+function symPath(t,x,y,s){const r=s;switch(t){
+  case'square':return`M${x-r},${y-r}h${2*r}v${2*r}h${-2*r}z`;
+  case'circle':return`M${x-r},${y}a${r},${r} 0 1,0 ${2*r},0a${r},${r} 0 1,0 ${-2*r},0`;
+  case'tri':return`M${x},${y-r*1.2}L${x+r*1.1},${y+r*.8}L${x-r*1.1},${y+r*.8}z`;
+  case'itri':return`M${x},${y+r*1.2}L${x+r*1.1},${y-r*.8}L${x-r*1.1},${y-r*.8}z`;
+  case'diamond':return`M${x},${y-r*1.3}L${x+r*1.1},${y}L${x},${y+r*1.3}L${x-r*1.1},${y}z`;
+  case'left':return`M${x-r*1.2},${y}L${x+r*.8},${y-r*1.1}L${x+r*.8},${y+r*1.1}z`;
+  case'right':return`M${x+r*1.2},${y}L${x-r*.8},${y-r*1.1}L${x-r*.8},${y+r*1.1}z`;
+  default:{let p='';for(let i=0;i<6;i++){const a=Math.PI/3*i;p+=(i?'L':'M')+(x+r*1.15*Math.cos(a)).toFixed(2)+','+(y+r*1.15*Math.sin(a)).toFixed(2);}return p+'z';}}}
+function niceLin(min,max,count){if(!isFinite(min)||!isFinite(max)){min=0;max=1;}if(min===max){const d=Math.abs(min)*.1||1;min-=d;max+=d;}
+  const raw=(max-min)/count;let step=Math.pow(10,Math.floor(Math.log10(raw)));const e=raw/step;if(e>=7.5)step*=10;else if(e>=3.5)step*=5;else if(e>=1.5)step*=2;
+  return {lo:Math.floor(min/step+1e-9)*step,hi:Math.ceil(max/step-1e-9)*step,step};}
+function tickList(lo,hi,step){const t=[];const n=Math.round((hi-lo)/step);for(let i=0;i<=n;i++)t.push(+(lo+i*step).toPrecision(12));return t;}
+function tickFmt(v){if(v===0)return'0';const a=Math.abs(v);if(a>=1e5||a<1e-3){const e=Math.floor(Math.log10(a));const m=+(v/Math.pow(10,e)).toPrecision(3);return(m===1?'':m===-1?'-':m+'×')+'10'+supNum(e);}return String(+v.toPrecision(10));}
+const SUP={'-':'⁻','0':'⁰','1':'¹','2':'²','3':'³','4':'⁴','5':'⁵','6':'⁶','7':'⁷','8':'⁸','9':'⁹'};
+const supNum=n=>String(n).split('').map(c=>SUP[c]).join('');
+function textW(s,px){let w=0;for(const ch of String(s))w+=/[⺀-￿]/.test(ch)?px:px*.56;return w;}
+function axisSpec(vals,auto,mn,mx,log,forceZero){
+  if(log){const v=vals.filter(x=>x>0);let a=auto?Math.min(...v):mn,b=auto?Math.max(...v):mx;if(!(a>0)||!isFinite(a)){a=1;b=10;}if(!(b>a))b=a*10;
+    const lo=auto?Math.pow(10,Math.floor(Math.log10(a))):a,hi=auto?Math.pow(10,Math.ceil(Math.log10(b))):b;const ticks=[],minor=[];
+    for(let e=Math.floor(Math.log10(lo));e<=Math.ceil(Math.log10(hi));e++){const p=Math.pow(10,e);if(p>=lo*0.999&&p<=hi*1.001)ticks.push(p);for(let k=2;k<10;k++){const m=k*p;if(m>lo&&m<hi)minor.push(m);}}
+    return {lo,hi,ticks,minor,log:true};}
+  let a=Math.min(...vals),b=Math.max(...vals);if(!vals.length){a=0;b=1;}if(forceZero){a=Math.min(a,0);b=Math.max(b,0);}
+  if(!auto){a=mn;b=mx;if(!(b>a)){b=a+1;}const st=niceLin(a,b,5).step;const ticks=tickList(Math.ceil(a/st-1e-9)*st,Math.floor(b/st+1e-9)*st,st);
+    return {lo:a,hi:b,ticks,minor:ticks.slice(0,-1).map(t=>t+st/2).concat([ticks[0]-st/2,ticks[ticks.length-1]+st/2]).filter(t=>t>a&&t<b),log:false};}
+  const n=niceLin(a,b,5);const ticks=tickList(n.lo,n.hi,n.step);return {lo:n.lo,hi:n.hi,ticks,minor:ticks.slice(0,-1).map(t=>t+n.step/2),log:false};}
+function renderGraph(g,W,H){
+  const F="Arial,'Microsoft YaHei','PingFang SC',sans-serif";const book=item(g.bookId);
+  let out=`<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="${H}" viewBox="0 0 ${W} ${H}" font-family="${F}"><rect width="${W}" height="${H}" fill="#ffffff"/>`;
+  const series=[];let xc=null;
+  if(book){xc=book.cols.find(c=>c.key===g.xKey)||null;const xvMain=xc?nums(xc):null;
+    g.yKeys.forEach((k,si)=>{const c=book.cols.find(cc=>cc.key===k);if(!c)return;const yv=nums(c);const pts=[];
+      // 拟合曲线等可以有自己的 X 列（xByY），并且总是画成线（lineOnly）
+      const ox=g.xByY&&g.xByY[k];const oxc=ox?book.cols.find(cc=>cc.key===ox):null;const xv=oxc?nums(oxc):xvMain;const useRows=g.rows&&!oxc;
+      const n=Math.max(yv.length,xv?xv.length:0);const i0=useRows?g.rows[0]:0,i1=useRows?Math.min(g.rows[1],n-1):n-1;for(let i=i0;i<=i1;i++){const x=xv?xv[i]:i+1,y=yv[i];if(isFinite(x)&&isFinite(y)&&(!g.xLog||x>0)&&(!g.yLog||y>0))pts.push([x,y]);}
+      const style=(g.lineOnly||[]).includes(k)?'line':g.ptype;
+      series.push({col:c,pts,style,lineOnly:(g.lineOnly||[]).includes(k),color:COLORS[si%COLORS.length],sym:SYMS[si%SYMS.length]});});
+    // 拟合 / 平滑曲线默认红色；如果它的原始数据本身是红色，就改用蓝色，避免混在一起
+    let di=0;series.forEach(s=>{if(!s.lineOnly){s.color=COLORS[di%COLORS.length];s.sym=SYMS[di%SYMS.length];di++;}});
+    series.forEach(s=>{if(!s.lineOnly)return;const src=series.find(q=>!q.lineOnly&&q.col.key===s.col.derivedFrom);s.color=src&&src.color==='#ff0000'?FIT_ALT:FIT_COLOR;});}
+  const allX=series.flatMap(s=>s.pts.map(p=>p[0])),allY=series.flatMap(s=>s.pts.map(p=>p[1]));
+  const isBar=g.ptype==='bar';
+  let xA,yA;
+  if(isBar&&allX.length&&g.xAuto&&!g.xLog){const ux=[...new Set(allX)].sort((a,b)=>a-b);let dx=Infinity;for(let i=1;i<ux.length;i++)dx=Math.min(dx,ux[i]-ux[i-1]);if(!isFinite(dx))dx=1;
+    xA=axisSpec([ux[0]-dx*.6,ux[ux.length-1]+dx*.6],true,0,0,false,false);xA.dx=dx;}
+  else xA=axisSpec(allX,g.xAuto,+g.xmin,+g.xmax,g.xLog,false);
+  yA=axisSpec(allY,g.yAuto,+g.ymin,+g.ymax,g.yLog,isBar);
+  if(isBar&&!xA.dx){const ux=[...new Set(allX)].sort((a,b)=>a-b);let dx=Infinity;for(let i=1;i<ux.length;i++)dx=Math.min(dx,ux[i]-ux[i-1]);xA.dx=isFinite(dx)?dx:1;}
+  const yLabW=Math.max(...yA.ticks.map(t=>textW(tickFmt(t),13)),14);
+  // SCI 风格：四边闭合坐标框、刻度朝内且四边都有、无网格、图例无边框并自动避开数据
+  const L=Math.round(yLabW+36),R=18,T=g.title?40:16,B=50;const MJ=5,MN=2.8;const pw=Math.max(20,W-L-R),ph=Math.max(20,H-T-B);
+  const tr=(v,log)=>log?Math.log10(v):v;
+  const X=v=>L+(tr(v,xA.log)-tr(xA.lo,xA.log))/(tr(xA.hi,xA.log)-tr(xA.lo,xA.log))*pw;
+  const Y=v=>T+ph-(tr(v,yA.log)-tr(yA.lo,yA.log))/(tr(yA.hi,yA.log)-tr(yA.lo,yA.log))*ph;
+  const cid='clip'+g.id;out+=`<defs><clipPath id="${cid}"><rect x="${L}" y="${T}" width="${pw}" height="${ph}"/></clipPath></defs>`;
+  if(g.grid){yA.ticks.forEach(t=>{const y=Y(t);if(y>T+.5&&y<T+ph-.5)out+=`<line x1="${L}" x2="${L+pw}" y1="${y}" y2="${y}" stroke="#d9d9d9" stroke-dasharray="3 3"/>`;});
+    xA.ticks.forEach(t=>{const x=X(t);if(x>L+.5&&x<L+pw-.5)out+=`<line x1="${x}" x2="${x}" y1="${T}" y2="${T+ph}" stroke="#d9d9d9" stroke-dasharray="3 3"/>`;});}
+  // 数据：线和柱子裁剪到坐标框内，符号只画范围内的点、不裁剪
+  const inX=x=>x>=L-.5&&x<=L+pw+.5,inY=y=>y>=T-.5&&y<=T+ph+.5;let symOut='';
+  out+=`<rect x="${L}" y="${T}" width="${pw}" height="${ph}" fill="none" stroke="#000" stroke-width="1.2"/>`;
+  out+=`<g clip-path="url(#${cid})">`;
+  if(!series.length||!allX.length){out+=`</g><text x="${L+pw/2}" y="${T+ph/2}" text-anchor="middle" font-size="13" fill="#888">${book?'没有可绘制的数值数据':'没有关联数据，请从工作簿选列后绘图'}</text>`;}
+  else{
+    series.forEach((s,si)=>{
+      if(s.style==='bar'){const nb=series.filter(q=>q.style==='bar').length,bi=series.filter(q=>q.style==='bar').indexOf(s);const gw=xA.dx*.7,bw=gw/nb;si=bi;const y0=Y(yA.log?yA.lo:Math.max(yA.lo,Math.min(0,yA.hi)));
+        s.pts.forEach(([x,y])=>{const x1=X(x-gw/2+si*bw),x2=X(x-gw/2+(si+1)*bw),yy=Y(y);out+=`<rect x="${Math.min(x1,x2).toFixed(2)}" y="${Math.min(yy,y0).toFixed(2)}" width="${Math.abs(x2-x1).toFixed(2)}" height="${Math.abs(y0-yy).toFixed(2)}" fill="${s.color}" stroke="#000" stroke-width=".8"/>`;});return;}
+      if(s.style==='line'||s.style==='linesym'){const d=s.pts.map((p,i)=>(i?'L':'M')+X(p[0]).toFixed(2)+','+Y(p[1]).toFixed(2)).join('');out+=`<path d="${d}" fill="none" stroke="${s.color}" stroke-width="${g.lw}" stroke-linejoin="round" stroke-linecap="round"/>`;}
+      if(s.style==='scatter'||s.style==='linesym'){const sz=+g.sym||5;let d='';s.pts.forEach(p=>{const x=X(p[0]),y=Y(p[1]);if(inX(x)&&inY(y))d+=symPath(s.sym,x,y,sz/2*1.4);});if(d)symOut+=`<path d="${d}" fill="${s.color}"/>`;}
+    });out+='</g>'+symOut;}
+  // 刻度：四边都有、朝内；标签只在下边和左边
+  let tk='';
+  xA.ticks.forEach(t=>{const x=X(t);if(!inX(x))return;tk+=`M${x},${T+ph}v${-MJ}M${x},${T}v${MJ}`;out+=`<text x="${x}" y="${T+ph+6+6.5}" dominant-baseline="central" text-anchor="middle" font-size="13" fill="#000">${esc(tickFmt(t))}</text>`;});
+  xA.minor.forEach(t=>{const x=X(t);if(x<=L||x>=L+pw)return;tk+=`M${x},${T+ph}v${-MN}M${x},${T}v${MN}`;});
+  yA.ticks.forEach(t=>{const y=Y(t);if(!inY(y))return;tk+=`M${L},${y}h${MJ}M${L+pw},${y}h${-MJ}`;out+=`<text x="${L-6}" y="${y}" dominant-baseline="central" text-anchor="end" font-size="13" fill="#000">${esc(tickFmt(t))}</text>`;});
+  yA.minor.forEach(t=>{const y=Y(t);if(y<=T||y>=T+ph)return;tk+=`M${L},${y}h${MN}M${L+pw},${y}h${-MN}`;});
+  out+=`<path d="${tk}" stroke="#000" stroke-width="1.2" fill="none"/>`;
+  const xt=g.xTitle||(xc?colLabel(xc):'行号');const yt=g.yTitle||(series[0]?colLabel(series[0].col):'');
+  out+=`<text x="${L+pw/2}" y="${T+ph+6+13+6+7}" dominant-baseline="central" text-anchor="middle" font-size="14" fill="#000">${esc(xt)}</text>`;
+  out+=`<text transform="translate(${L-6-yLabW-8-7},${T+ph/2}) rotate(-90)" dominant-baseline="central" text-anchor="middle" font-size="14" fill="#000">${esc(yt)}</text>`;
+  if(g.title)out+=`<text x="${L+pw/2}" y="${T/2}" dominant-baseline="central" text-anchor="middle" font-size="16" font-weight="700" fill="#000">${esc(g.title)}</text>`;
+  // 图例
+  if(g.legend&&series.length){const lh=18.5,sw=26;const names=series.map(s=>s.col.lname||s.col.key);const lw=Math.max(...names.map(n=>textW(n,12.5)))+sw+16;const h=series.length*lh+4;
+    // 放在四个角里数据最少的一个
+    const probe=[];series.forEach(s=>{const q=s.pts.map(p=>[X(p[0]),Y(p[1])]);probe.push(...q);if(s.style!=='scatter'&&s.style!=='bar')for(let i=1;i<q.length;i++)for(let k=1;k<8;k++)probe.push([q[i-1][0]+(q[i][0]-q[i-1][0])*k/8,q[i-1][1]+(q[i][1]-q[i-1][1])*k/8]);});
+    const px0=MJ+6,py0=MJ+4;const corners=[[L+px0,T+py0],[L+pw-px0-lw,T+py0],[L+pw-px0-lw,T+ph-py0-h],[L+px0,T+ph-py0-h]];
+    const score=([x,y])=>probe.filter(q=>q[0]>=x-4&&q[0]<=x+lw+4&&q[1]>=y-4&&q[1]<=y+h+4).length;
+    let best=corners[0],bs=Infinity;corners.forEach(c=>{const v=score(c);if(v<bs){bs=v;best=c;}});const [lx,ly]=best;
+    out+=`<rect x="${lx}" y="${ly}" width="${lw}" height="${h}" fill="#fff"/>`;
+    series.forEach((s,i)=>{const cy=ly+2+lh*i+lh/2;const x0=lx+4;
+      if(s.style==='bar')out+=`<rect x="${x0+5}" y="${cy-5.5}" width="${sw-10}" height="11" fill="${s.color}" stroke="#000" stroke-width=".8"/>`;
+      else{if(s.style!=='scatter')out+=`<line x1="${x0}" x2="${x0+sw}" y1="${cy}" y2="${cy}" stroke="${s.color}" stroke-width="${g.lw}"/>`;
+        if(s.style!=='line')out+=`<path d="${symPath(s.sym,x0+sw/2,cy,(+g.sym||5)/2*1.4)}" fill="${s.color}"/>`;}
+      out+=`<text x="${x0+sw+6}" y="${cy}" dominant-baseline="central" font-size="12.5" fill="#000">${esc(names[i])}</text>`;});}
+  return out+'</svg>';
+}
+function drawGraph(g){const w=winEls.get(g.id);if(!w||g.win?.state==='min')return;const body=w.querySelector('.body');const W=body.clientWidth-16,H=body.clientHeight-16;if(W<60||H<60){body.innerHTML='';return;}
+  const pageW=Math.min(W,Math.round(H*4/3)),pageH=Math.min(H,Math.round(pageW*3/4));body.innerHTML=renderGraph(g,pageW,pageH);}
+function graphCtx(g){return [['绘图属性…',graphProps],['导出图形…',exportGraph],'-',['折线图',()=>plot('line')],['散点图',()=>plot('scatter')],['点线图',()=>plot('linesym')],['柱状图',()=>plot('bar')],'-',
+  [g.grid?'隐藏网格线':'显示网格线',()=>{g.grid=!g.grid;drawGraph(g);save();}],[g.legend?'隐藏图例':'显示图例',()=>{g.legend=!g.legend;drawGraph(g);save();}]];}
+function activeGraph(){const a=item(S.active);if(a&&a.type==='graph')return a;const g=graphs().filter(x=>x.win&&x.win.state!=='hidden').sort((a,b)=>b.win.z-a.win.z)[0];if(g)return g;say('请先激活一个图形窗口');return null;}
+function graphProps(){const g=activeGraph();if(!g)return;const book=item(g.bookId);
+  const colOpts=(sel,withNone)=>(withNone?`<option value="">行号</option>`:'')+(book?book.cols.map(c=>`<option value="${c.key}"${c.key===sel?' selected':''}>${c.key}${c.lname?' · '+esc(c.lname):''}</option>`).join(''):'');
+  const html=`<fieldset><legend>数据</legend>
+   <div class="row"><label for="p-type">图类型</label><select id="p-type">${Object.entries(TYPE_NAME).map(([k,v])=>`<option value="${k}"${g.ptype===k?' selected':''}>${v}</option>`).join('')}</select></div>
+   <div class="row"><label for="p-x">X 列</label><select id="p-x">${colOpts(g.xKey,true)}</select></div>
+   <div class="row"><label for="p-y">Y 列</label><select id="p-y" multiple size="${Math.min(5,Math.max(2,book?book.cols.length:2))}">${book?book.cols.map(c=>`<option value="${c.key}"${g.yKeys.includes(c.key)?' selected':''}>${c.key}${c.lname?' · '+esc(c.lname):''}</option>`).join(''):''}</select></div>
+   ${g.rows?`<div class="row"><span>数据行</span><label class="chk"><input type="checkbox" id="p-rows" checked>只用第 ${g.rows[0]+1}–${g.rows[1]+1} 行（取消勾选改为全部行）</label></div>`:''}
+   <p class="note" style="margin:0">Y 列可按住 Ctrl 多选。</p></fieldset>
+  <fieldset><legend>标题</legend>
+   <div class="row"><label for="p-t">图标题</label><input type="text" id="p-t" value="${esc(g.title)}" placeholder="（无）"></div>
+   <div class="row"><label for="p-xt">X 轴标题</label><input type="text" id="p-xt" value="${esc(g.xTitle)}" placeholder="自动：长名称 (单位)"></div>
+   <div class="row"><label for="p-yt">Y 轴标题</label><input type="text" id="p-yt" value="${esc(g.yTitle)}" placeholder="自动：长名称 (单位)"></div></fieldset>
+  <fieldset><legend>坐标轴</legend>
+   <div class="row2"><span>X 范围</span><input type="number" id="p-x0" value="${g.xmin}" step="any" aria-label="X 最小值"><input type="number" id="p-x1" value="${g.xmax}" step="any" aria-label="X 最大值"></div>
+   <div class="row"><span></span><span style="display:flex;gap:14px;flex-wrap:wrap"><label class="chk"><input type="checkbox" id="p-xa"${g.xAuto?' checked':''}>自动范围</label><label class="chk"><input type="checkbox" id="p-xl"${g.xLog?' checked':''}>对数刻度</label></span></div>
+   <div class="row2"><span>Y 范围</span><input type="number" id="p-y0" value="${g.ymin}" step="any" aria-label="Y 最小值"><input type="number" id="p-y1" value="${g.ymax}" step="any" aria-label="Y 最大值"></div>
+   <div class="row"><span></span><span style="display:flex;gap:14px;flex-wrap:wrap"><label class="chk"><input type="checkbox" id="p-ya"${g.yAuto?' checked':''}>自动范围</label><label class="chk"><input type="checkbox" id="p-yl"${g.yLog?' checked':''}>对数刻度</label></span></div></fieldset>
+  <fieldset><legend>样式</legend>
+   <div class="row2"><span>线宽 / 符号</span><input type="number" id="p-lw" value="${g.lw}" min="0.5" max="8" step="0.5" aria-label="线宽"><input type="number" id="p-sz" value="${g.sym}" min="2" max="20" step="1" aria-label="符号大小"></div>
+   <div class="row"><span></span><span style="display:flex;gap:14px;flex-wrap:wrap"><label class="chk"><input type="checkbox" id="p-gr"${g.grid?' checked':''}>网格线</label><label class="chk"><input type="checkbox" id="p-lg"${g.legend?' checked':''}>图例</label></span></div></fieldset>`;
+  const apply=bd=>{const v=id=>bd.querySelector(id);if(v('#p-rows')&&!v('#p-rows').checked)g.rows=null;g.ptype=v('#p-type').value;g.xKey=v('#p-x').value||null;g.yKeys=[...v('#p-y').selectedOptions].map(o=>o.value);
+    g.title=v('#p-t').value;g.xTitle=v('#p-xt').value;g.yTitle=v('#p-yt').value;
+    g.xAuto=v('#p-xa').checked;g.yAuto=v('#p-ya').checked;g.xLog=v('#p-xl').checked;g.yLog=v('#p-yl').checked;
+    g.xmin=+v('#p-x0').value;g.xmax=+v('#p-x1').value;g.ymin=+v('#p-y0').value;g.ymax=+v('#p-y1').value;
+    g.lw=Math.max(.5,+v('#p-lw').value||1.5);g.sym=Math.max(2,+v('#p-sz').value||5);g.grid=v('#p-gr').checked;g.legend=v('#p-lg').checked;drawGraph(g);save();};
+  modal(`绘图属性 — ${g.name}`,html,[['确定',bd=>{apply(bd);},1],['应用',bd=>{apply(bd);return false;}],['取消',()=>true]]);}
+
+/* ---------- 导出 ---------- */
+function exportGraph(){const g=activeGraph();if(!g)return;
+  const html=`<div class="row"><label for="e-size">尺寸</label><select id="e-size"><option value="800x600">800 × 600</option><option value="1200x900" selected>1200 × 900</option><option value="1600x1200">1600 × 1200</option><option value="2400x1800">2400 × 1800（约 300 dpi，8 英寸宽）</option></select></div>
+   <div class="row"><label for="e-fmt">格式</label><select id="e-fmt"><option value="png">PNG 位图</option><option value="svg">SVG 矢量图</option></select></div>
+   <div id="e-out"></div>`;
+  const bd=modal(`导出图形 — ${g.name}`,html,[['关闭',()=>true]]);
+  const go=()=>{const [w,h]=bd.querySelector('#e-size').value.split('x').map(Number);const fmt=bd.querySelector('#e-fmt').value;const out=bd.querySelector('#e-out');
+    const base=renderGraph(g,800,600);const svg=base.replace('width="800" height="600"',`width="${w}" height="${h}"`);
+    if(fmt==='svg'){out.innerHTML=`<p class="note" style="margin:0 0 6px">复制下面的 SVG 代码，保存为 .svg 文件即可在 Inkscape、Illustrator 或 Word 中编辑。</p><textarea class="code" id="e-code" readonly aria-label="SVG 代码"></textarea><div style="margin-top:6px"><button type="button" class="btn" id="e-copy">复制代码</button></div>`;
+      const ta=out.querySelector('#e-code');ta.value=svg;out.querySelector('#e-copy').onclick=()=>{navigator.clipboard.writeText(svg).then(()=>say('SVG 代码已复制')).catch(()=>{ta.select();say('请按 Ctrl+C 复制已选中的代码');});};return;}
+    const img=new Image();img.onload=()=>{const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d');x.drawImage(img,0,0,w,h);
+      try{out.innerHTML=`<p class="note" style="margin:0 0 6px">右键图片选择“图片另存为”，或长按保存。</p><img class="preview" alt="${esc(g.name)} 导出预览" src="${c.toDataURL('image/png')}">`;}catch(e){out.textContent='生成 PNG 失败，请改用 SVG。';}};
+    img.src='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(svg);};
+  bd.querySelector('#e-size').onchange=go;bd.querySelector('#e-fmt').onchange=go;go();}
+
+/* ---------- 导入 ---------- */
+$('#file').addEventListener('change',e=>{const f=e.target.files[0];if(!f)return;const rd=new FileReader();rd.onload=()=>{
+  const rows=parseTable(String(rd.result));if(!rows.length){say('文件里没有数据');return;}
+  const b={id:'b'+(S.seq++),type:'book',name:f.name.replace(/\.[^.]+$/,'').slice(0,24)||nextName('Book'),cols:[],nrows:0,win:null};
+  if(S.items.some(x=>x.name===b.name))b.name=nextName(b.name+'_');
+  let hdr=null;if(rows[0].some(s=>s!==''&&!isNum(s)))hdr=rows.shift();
+  const nc=Math.max(...rows.map(r=>r.length),hdr?hdr.length:0);
+  for(let j=0;j<nc;j++){const c=newCol(b,j===0?'X':'Y');const h=hdr?.[j]||'';const m=h.match(/^(.*?)\s*[\(\[（](.+?)[\)\]）]\s*$/);c.lname=m?m[1]:h;c.units=m?m[2]:'';c.data=rows.map(r=>r[j]??'');b.cols.push(c);}
+  trimRows(b);S.items.push(b);showWin(b);say(`已导入 ${f.name}：${b.nrows} 行 × ${nc} 列`);e.target.value='';};rd.readAsText(f);});
+
+/* ---------- 帮助 / 重置 ---------- */
+function showHelp(){modal('快速上手',`<div class="help"><p>这是 Rust 版科研绘图软件的界面原型，数据只保存在你这台浏览器里。</p><ol>
+ <li><b>功能区</b>：顶部选项卡按任务分组。激活工作簿时出现紫色的“工作表”选项卡，激活图形时出现“图形”选项卡。双击选项卡或按 Ctrl+F1 折叠功能区，Ctrl+K 搜索任何命令。</li>
+ <li><b>输入数据</b>：在工作簿里直接键入，或从 Excel 复制一块区域后点单元格粘贴；首行是文字时会自动当作长名称。也可以用 文件 → 导入 CSV / TXT。</li>
+ <li><b>选列</b>：单击列标题选中，Ctrl 或 Shift 多选，也可以在列标题上横向拖动；右键列标题可设为 X / Y。</li>
+ <li><b>框选单元格</b>：按住鼠标在单元格上拖动，或单击一格后 Shift+单击另一格，或 Shift+方向键；拖动行号选整行。选中后 Ctrl+C 复制、Delete 清除、Ctrl+V 粘贴，点绘图按钮只用选区里的列和行作图。</li>
+ <li><b>绘图</b>：点工具栏的折线、散点、点线或柱状图按钮。没有选列时会用全部 Y 列。</li>
+ <li><b>调整</b>：双击图形打开绘图属性，修改标题、坐标范围、对数刻度、线宽和符号大小。修改工作表数据，图形会实时更新。</li>
+ <li><b>分析</b>：在“分析”选项卡做线性 / 多项式拟合、平滑、微分、积分、归一化；“统计”选项卡做列统计。对当前图形的曲线，或工作簿里选中的 Y 列计算，结果写入新列。</li>
+ <li><b>导出</b>：文件 → 导出图形，可得到 PNG 或 SVG。</li></ol></div>`);}
+function resetProject(){modal('恢复示例项目','<p style="margin:0">当前项目的所有工作簿和图形会被示例数据替换，确定继续？</p>',[['恢复',()=>{start(sampleProject(),true);say('已恢复示例项目');},1],['取消',()=>true]]);}
+document.addEventListener('keydown',e=>{const k=e.key.toLowerCase();
+  if((e.ctrlKey||e.metaKey)&&k==='k'){e.preventDefault();openPalette();return;}
+  if((e.ctrlKey||e.metaKey)&&e.key==='F1'){e.preventDefault();toggleRibbon();return;}
+  if(e.key==='Escape'&&($('#palette')||$('#backstage'))){closePalette();closeBackstage();return;}
+  if(sheetKey(e))return;
+  if((e.ctrlKey||e.metaKey)&&k==='n'){e.preventDefault();newBook();}
+  else if((e.ctrlKey||e.metaKey)&&k==='i'){e.preventDefault();$('#file').click();}
+  else if((e.ctrlKey||e.metaKey)&&k==='e'){e.preventDefault();exportGraph();}
+  else if(e.key==='F1'){e.preventDefault();showHelp();}
+  else if(e.key==='Escape'){closeMenus();}});
+
+/* ---------- 启动 ---------- */
+function start(p,fresh){S=p;S.ui=Object.assign({tab:'home',collapsed:false,theme:'system'},S.ui||{});lastCtx=null;applyTheme();for(const w of winEls.values())w.remove();winEls.clear();sels.clear();
+  $('#main').classList.toggle('noexp',!S.showExp);$('#explorer').hidden=!S.showExp;
+  const W=wsEl().clientWidth,H=wsEl().clientHeight;
+  S.items.forEach(it=>{if(!it.win){it.win=defaultWin(it);}});
+  const b=S.items.find(x=>x.id==='b1'),g=S.items.find(x=>x.id==='g1');
+  if(fresh&&b&&g){ // 首次打开：并排摆放示例
+    const bw=Math.min(380,Math.floor(W*0.42));Object.assign(b.win,{x:10,y:10,w:bw,h:Math.max(200,H-20)});Object.assign(g.win,{x:bw+20,y:10,w:Math.max(260,W-bw-30),h:Math.max(200,H-20)});}
+  if(W<600){const a=item(S.active)||S.items[0];if(a)a.win.state='max';}
+  renderWins();renderTree();updateStats();save();}
+buildChrome();
+{const sp=load();start(sp||sampleProject(),!sp);}
+say('就绪 — 双击图形可修改属性，按 F1 查看快速上手');
+</script>

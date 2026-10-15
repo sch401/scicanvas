@@ -1,0 +1,951 @@
+//! 选项卡式功能区（类似 Word）、文件页和 Ctrl+K 命令面板。
+//!
+//! 这里只负责显示和收集点击：被点击的命令 id 写进 `clicked`，由 app.rs 在绘制结束后执行。
+//! 这样渲染时只需要只读地访问程序状态。
+
+use eframe::egui::{self, vec2, Align, Align2, Color32, FontId, Layout, Rect, RichText, Sense, Stroke};
+
+use crate::app::SciApp;
+use crate::commands::{self, Command};
+use crate::icons;
+use crate::theme::Palette;
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Ctx {
+    Book,
+    Graph,
+}
+
+pub enum Item {
+    /// 大按钮：图标在上，文字在下。
+    Big(&'static str),
+    /// 一列小按钮（最多三个）。
+    Smalls(&'static [&'static str]),
+    /// 图类型画廊（带缩略图）。
+    Gallery(&'static [&'static str]),
+}
+
+pub struct Group {
+    pub label: &'static str,
+    pub items: &'static [Item],
+}
+
+pub struct Tab {
+    pub id: &'static str,
+    pub label: &'static str,
+    /// 上下文选项卡：只在激活对应窗口时出现。
+    pub ctx: Option<Ctx>,
+    pub groups: &'static [Group],
+}
+
+use Item::*;
+
+pub static TABS: &[Tab] = &[
+    Tab {
+        id: "home",
+        label: "开始",
+        ctx: None,
+        groups: &[
+            Group {
+                label: "新建",
+                items: &[Big("book.new"), Smalls(&["file.import", "file.open", "file.save"])],
+            },
+            Group {
+                label: "选区",
+                items: &[
+                    Smalls(&["edit.undo", "edit.redo"]),
+                    Smalls(&["edit.copy", "edit.clear"]),
+                ],
+            },
+            Group {
+                label: "快速绘图",
+                items: &[Big("plot.linesym"), Smalls(&["plot.line", "plot.scatter", "plot.bar"])],
+            },
+            Group {
+                label: "分析",
+                items: &[Big("fit.linear"), Smalls(&["math.smooth", "stats.columns"])],
+            },
+            Group {
+                label: "窗口",
+                items: &[Smalls(&["win.cascade", "win.tile", "win.minall"])],
+            },
+        ],
+    },
+    Tab {
+        id: "plot",
+        label: "绘图",
+        ctx: None,
+        groups: &[
+            Group {
+                label: "二维图",
+                items: &[
+                    Gallery(&["plot.line", "plot.scatter", "plot.linesym", "plot.bar"]),
+                    Big("plot.builder"),
+                ],
+            },
+            Group {
+                label: "图形",
+                items: &[Big("graph.props"), Smalls(&["graph.export"])],
+            },
+        ],
+    },
+    Tab {
+        id: "analysis",
+        label: "分析",
+        ctx: None,
+        groups: &[
+            Group {
+                label: "拟合",
+                items: &[Big("fit.linear"), Big("fit.poly")],
+            },
+            Group {
+                label: "数学",
+                items: &[
+                    Smalls(&["math.smooth", "math.diff", "math.integ"]),
+                    Smalls(&["math.norm"]),
+                ],
+            },
+        ],
+    },
+    Tab {
+        id: "stats",
+        label: "统计",
+        ctx: None,
+        groups: &[Group {
+            label: "描述统计",
+            items: &[Big("stats.columns")],
+        }],
+    },
+    Tab {
+        id: "sheet",
+        label: "工作表",
+        ctx: Some(Ctx::Book),
+        groups: &[
+            Group {
+                label: "选区",
+                items: &[Smalls(&["edit.copy", "edit.clear"])],
+            },
+            Group {
+                label: "列属性",
+                items: &[Smalls(&["col.setX", "col.setY", "col.setIgnore"])],
+            },
+            Group {
+                label: "列",
+                items: &[Smalls(&["col.insert", "col.delete", "col.clear"])],
+            },
+            Group {
+                label: "排序",
+                items: &[Smalls(&["sort.asc", "sort.desc"])],
+            },
+            Group {
+                label: "绘图",
+                items: &[Big("plot.linesym"), Smalls(&["plot.line", "plot.scatter", "plot.bar"])],
+            },
+        ],
+    },
+    Tab {
+        id: "graph",
+        label: "图形",
+        ctx: Some(Ctx::Graph),
+        groups: &[
+            Group {
+                label: "图类型",
+                items: &[
+                    Smalls(&["plot.line", "plot.scatter", "plot.linesym"]),
+                    Smalls(&["plot.bar"]),
+                ],
+            },
+            Group {
+                label: "坐标轴",
+                items: &[Smalls(&["graph.logx", "graph.logy", "graph.grid"])],
+            },
+            Group {
+                label: "图例",
+                items: &[Big("graph.legend")],
+            },
+            Group {
+                label: "设置",
+                items: &[Big("graph.props"), Smalls(&["layer.add", "layer.remove"])],
+            },
+            Group {
+                label: "导出",
+                items: &[Big("graph.export")],
+            },
+        ],
+    },
+    Tab {
+        id: "view",
+        label: "视图",
+        ctx: None,
+        groups: &[
+            Group {
+                label: "主题",
+                items: &[Smalls(&["theme.light", "theme.dark", "theme.system"])],
+            },
+            Group {
+                label: "显示",
+                items: &[Big("view.explorer"), Smalls(&["ribbon.toggle"])],
+            },
+            Group {
+                label: "窗口",
+                items: &[
+                    Smalls(&["win.cascade", "win.tile", "win.minall"]),
+                    Smalls(&["win.showall", "win.hideall"]),
+                ],
+            },
+            Group {
+                label: "帮助",
+                items: &[Big("help.show"), Smalls(&["palette.open"])],
+            },
+        ],
+    },
+];
+
+const QAT: &[&str] = &[
+    "book.new",
+    "file.import",
+    "file.save",
+    "edit.undo",
+    "edit.redo",
+    "graph.export",
+];
+const BACKSTAGE_NAV: &[&str] = &[
+    "book.new",
+    "file.import",
+    "file.open",
+    "file.save",
+    "file.saveas",
+    "graph.export",
+    "project.reset",
+    "help.show",
+    "app.quit",
+];
+
+pub struct PaletteState {
+    pub query: String,
+    pub sel: usize,
+    pub focus: bool,
+}
+
+/// 功能区自己的界面状态。
+pub struct UiState {
+    pub tab: &'static str,
+    pub collapsed: bool,
+    /// 折叠时单击选项卡临时弹出的面板。
+    pub flyout: bool,
+    pub backstage: bool,
+    pub palette: Option<PaletteState>,
+    /// 上一帧选项卡栏所在区域，用来判断是否点在弹出面板外面。
+    tab_rect: Rect,
+}
+
+impl Default for UiState {
+    fn default() -> Self {
+        UiState {
+            tab: "home",
+            collapsed: false,
+            flyout: false,
+            backstage: false,
+            palette: None,
+            tab_rect: Rect::NOTHING,
+        }
+    }
+}
+
+impl UiState {
+    pub fn open_palette(&mut self) {
+        self.backstage = false;
+        self.palette = Some(PaletteState {
+            query: String::new(),
+            sel: 0,
+            focus: true,
+        });
+    }
+
+    pub fn toggle_collapsed(&mut self) {
+        self.collapsed = !self.collapsed;
+        self.flyout = false;
+    }
+}
+
+fn visible_tabs(ctx: Option<Ctx>) -> impl Iterator<Item = &'static Tab> {
+    TABS.iter().filter(move |t| t.ctx.is_none() || t.ctx == ctx)
+}
+
+/// 绘制标题栏、选项卡栏和功能区。被点击的命令写进 `clicked`。
+pub fn show(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palette, clicked: &mut Option<&'static str>) {
+    let active_ctx = app.active_ctx();
+    if !visible_tabs(active_ctx).any(|t| t.id == st.tab) {
+        st.tab = "home";
+    }
+    let dark = pal.dark;
+
+    egui::TopBottomPanel::top("ribbon")
+        .frame(egui::Frame::none().fill(pal.chrome))
+        .show_separator_line(false)
+        .show(ctx, |ui| {
+            ui.spacing_mut().item_spacing = vec2(4.0, 0.0);
+            // 标题栏：快速访问 + 名称 + 搜索
+            ui.add_space(3.0);
+            ui.horizontal(|ui| {
+                ui.add_space(6.0);
+                for id in QAT {
+                    if let Some(c) = commands::find(id) {
+                        if icon_button(ui, app, c, dark, pal, 18.0).clicked() {
+                            *clicked = Some(c.id);
+                        }
+                    }
+                }
+                ui.add_space(8.0);
+                ui.label(RichText::new("SciCanvas").strong().color(pal.accent));
+                ui.add_space(6.0);
+                ui.label(RichText::new(app.doc_title()).color(pal.weak));
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    ui.add_space(8.0);
+                    let text = RichText::new("搜索命令            Ctrl K").color(pal.weak);
+                    let b = egui::Button::image_and_text(
+                        icons::icon("search", dark).fit_to_exact_size(vec2(14.0, 14.0)),
+                        text,
+                    )
+                    .min_size(vec2(220.0, 24.0));
+                    if ui.add(b).on_hover_text("搜索任何命令（Ctrl+K）").clicked() {
+                        *clicked = Some("palette.open");
+                    }
+                });
+            });
+            ui.add_space(4.0);
+
+            // 选项卡栏
+            let tabs_resp = ui.horizontal(|ui| {
+                ui.add_space(6.0);
+                if file_tab(ui, pal).clicked() {
+                    st.backstage = true;
+                    st.palette = None;
+                }
+                for t in visible_tabs(active_ctx) {
+                    let r = tab_button(ui, t, st.tab == t.id, pal);
+                    if r.clicked() {
+                        st.tab = t.id;
+                        if st.collapsed {
+                            st.flyout = true;
+                        }
+                    }
+                    if r.double_clicked() {
+                        st.toggle_collapsed();
+                    }
+                }
+                ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
+                    ui.add_space(8.0);
+                    let name = if st.collapsed { "chevrondown" } else { "chevron" };
+                    let b = egui::ImageButton::new(icons::icon(name, dark).fit_to_exact_size(vec2(14.0, 14.0)))
+                        .frame(false);
+                    if ui
+                        .add(b)
+                        .on_hover_text(if st.collapsed {
+                            "展开功能区（Ctrl+F1）"
+                        } else {
+                            "折叠功能区（Ctrl+F1）"
+                        })
+                        .clicked()
+                    {
+                        st.toggle_collapsed();
+                    }
+                });
+            });
+            st.tab_rect = tabs_resp.response.rect;
+
+            if !st.collapsed {
+                panel(ui, app, st.tab, pal, clicked);
+            }
+        });
+
+    // 折叠状态下单击选项卡：临时弹出面板
+    if st.collapsed && st.flyout {
+        let pos = st.tab_rect.left_bottom();
+        let area = egui::Area::new(egui::Id::new("ribbon-flyout"))
+            .order(egui::Order::Foreground)
+            .fixed_pos(pos)
+            .show(ctx, |ui| {
+                ui.set_width(ctx.screen_rect().width());
+                panel(ui, app, st.tab, pal, clicked);
+            });
+        let area_rect = area.response.rect;
+        let outside = ctx.input(|i| {
+            i.pointer.any_pressed()
+                && i.pointer
+                    .interact_pos()
+                    .is_some_and(|p| !area_rect.contains(p) && !st.tab_rect.contains(p))
+        });
+        if outside || clicked.is_some() {
+            st.flyout = false;
+        }
+    }
+}
+
+fn panel(ui: &mut egui::Ui, app: &SciApp, tab_id: &str, pal: &Palette, clicked: &mut Option<&'static str>) {
+    let Some(tab) = TABS.iter().find(|t| t.id == tab_id) else {
+        return;
+    };
+    egui::Frame::none()
+        .fill(pal.panel)
+        .stroke(Stroke::new(1.0_f32, pal.line))
+        .inner_margin(egui::Margin {
+            left: 6.0,
+            right: 6.0,
+            top: 4.0,
+            bottom: 2.0,
+        })
+        .show(ui, |ui| {
+            // 不收缩宽度：面板铺满整个窗口宽度
+            egui::ScrollArea::horizontal()
+                .id_salt("ribbon-scroll")
+                .auto_shrink([false, true])
+                .show(ui, |ui| {
+                    ui.horizontal_top(|ui| {
+                        ui.set_min_height(92.0);
+                        for (gi, g) in tab.groups.iter().enumerate() {
+                            if gi > 0 {
+                                ui.separator();
+                            }
+                            group(ui, app, g, pal, clicked);
+                        }
+                    });
+                });
+        });
+}
+
+fn group(ui: &mut egui::Ui, app: &SciApp, g: &Group, pal: &Palette, clicked: &mut Option<&'static str>) {
+    ui.vertical(|ui| {
+        ui.spacing_mut().item_spacing = vec2(2.0, 1.0);
+        let items = ui.horizontal_top(|ui| {
+            ui.set_min_height(72.0);
+            for it in g.items {
+                match it {
+                    Big(id) => {
+                        if let Some(c) = commands::find(id) {
+                            if big_button(ui, app, c, pal).clicked() {
+                                *clicked = Some(c.id);
+                            }
+                        }
+                    }
+                    Smalls(ids) => {
+                        ui.vertical(|ui| {
+                            for id in *ids {
+                                if let Some(c) = commands::find(id) {
+                                    if small_button(ui, app, c, pal).clicked() {
+                                        *clicked = Some(c.id);
+                                    }
+                                }
+                            }
+                        });
+                    }
+                    Gallery(ids) => {
+                        egui::Frame::none()
+                            .fill(if pal.dark {
+                                Color32::from_rgb(27, 31, 37)
+                            } else {
+                                Color32::WHITE
+                            })
+                            .stroke(Stroke::new(1.0_f32, pal.line))
+                            .rounding(4.0)
+                            .inner_margin(2.0)
+                            .show(ui, |ui| {
+                                ui.horizontal(|ui| {
+                                    for id in *ids {
+                                        if let Some(c) = commands::find(id) {
+                                            if gallery_tile(ui, app, c, pal).clicked() {
+                                                *clicked = Some(c.id);
+                                            }
+                                        }
+                                    }
+                                });
+                            });
+                    }
+                }
+            }
+        });
+        let w = items.response.rect.width().max(40.0);
+        let (rect, _) = ui.allocate_exact_size(vec2(w, 16.0), Sense::hover());
+        ui.painter().text(
+            rect.center(),
+            Align2::CENTER_CENTER,
+            g.label,
+            FontId::proportional(11.0),
+            pal.weak,
+        );
+    });
+}
+
+fn button_bg(ui: &egui::Ui, rect: Rect, resp: &egui::Response, enabled: bool, checked: bool, pal: &Palette) {
+    let (fill, stroke) = if enabled && resp.is_pointer_button_down_on() {
+        (pal.press, Stroke::new(1.0_f32, pal.hover_line))
+    } else if enabled && resp.hovered() {
+        (pal.hover, Stroke::new(1.0_f32, pal.hover_line))
+    } else if checked {
+        (pal.sel_bg, Stroke::new(1.0_f32, pal.hover_line))
+    } else {
+        return;
+    };
+    ui.painter().rect(rect, 4.0, fill, stroke);
+}
+
+fn dim(enabled: bool) -> Color32 {
+    if enabled {
+        Color32::WHITE
+    } else {
+        Color32::from_rgba_unmultiplied(255, 255, 255, 105)
+    }
+}
+
+fn text_color(enabled: bool, pal: &Palette) -> Color32 {
+    if enabled {
+        pal.ink
+    } else {
+        pal.ink.gamma_multiply(0.42)
+    }
+}
+
+fn big_button(ui: &mut egui::Ui, app: &SciApp, c: &Command, pal: &Palette) -> egui::Response {
+    let enabled = (c.when)(app).is_ok();
+    let checked = c.checked.is_some_and(|f| f(app));
+    let galley = ui.painter().layout_no_wrap(
+        c.label.to_string(),
+        FontId::proportional(12.0),
+        text_color(enabled, pal),
+    );
+    let size = vec2((galley.size().x + 14.0).max(58.0), 70.0);
+    let (rect, resp) = ui.allocate_exact_size(size, if enabled { Sense::click() } else { Sense::hover() });
+    button_bg(ui, rect, &resp, enabled, checked, pal);
+    let icon_rect = Rect::from_center_size(egui::pos2(rect.center().x, rect.top() + 22.0), vec2(30.0, 30.0));
+    icons::icon(c.icon, pal.dark).tint(dim(enabled)).paint_at(ui, icon_rect);
+    let text_pos = egui::pos2(rect.center().x - galley.size().x / 2.0, rect.top() + 44.0);
+    ui.painter().galley(text_pos, galley, pal.ink);
+    resp.on_hover_text(commands::tooltip(app, c))
+}
+
+fn small_button(ui: &mut egui::Ui, app: &SciApp, c: &Command, pal: &Palette) -> egui::Response {
+    let enabled = (c.when)(app).is_ok();
+    let checked = c.checked.is_some_and(|f| f(app));
+    let galley = ui.painter().layout_no_wrap(
+        c.label.to_string(),
+        FontId::proportional(12.0),
+        text_color(enabled, pal),
+    );
+    let size = vec2(galley.size().x + 34.0, 23.0);
+    let (rect, resp) = ui.allocate_exact_size(size, if enabled { Sense::click() } else { Sense::hover() });
+    button_bg(ui, rect, &resp, enabled, checked, pal);
+    let icon_rect = Rect::from_min_size(egui::pos2(rect.left() + 5.0, rect.center().y - 8.5), vec2(17.0, 17.0));
+    icons::icon(c.icon, pal.dark).tint(dim(enabled)).paint_at(ui, icon_rect);
+    let text_pos = egui::pos2(rect.left() + 28.0, rect.center().y - galley.size().y / 2.0);
+    ui.painter().galley(text_pos, galley, pal.ink);
+    resp.on_hover_text(commands::tooltip(app, c))
+}
+
+fn gallery_tile(ui: &mut egui::Ui, app: &SciApp, c: &Command, pal: &Palette) -> egui::Response {
+    let enabled = (c.when)(app).is_ok();
+    let (rect, resp) = ui.allocate_exact_size(vec2(72.0, 62.0), if enabled { Sense::click() } else { Sense::hover() });
+    button_bg(ui, rect, &resp, enabled, false, pal);
+    let kind = c.id.split('.').nth(1).unwrap_or("line");
+    let thumb_rect = Rect::from_center_size(egui::pos2(rect.center().x, rect.top() + 24.0), vec2(58.0, 40.0));
+    icons::thumb(kind).tint(dim(enabled)).paint_at(ui, thumb_rect);
+    ui.painter().text(
+        egui::pos2(rect.center().x, rect.bottom() - 9.0),
+        Align2::CENTER_CENTER,
+        c.label,
+        FontId::proportional(11.5),
+        text_color(enabled, pal),
+    );
+    resp.on_hover_text(commands::tooltip(app, c))
+}
+
+fn icon_button(ui: &mut egui::Ui, app: &SciApp, c: &Command, dark: bool, pal: &Palette, size: f32) -> egui::Response {
+    let enabled = (c.when)(app).is_ok();
+    let (rect, resp) = ui.allocate_exact_size(
+        vec2(size + 10.0, size + 8.0),
+        if enabled { Sense::click() } else { Sense::hover() },
+    );
+    button_bg(ui, rect, &resp, enabled, false, pal);
+    icons::icon(c.icon, dark)
+        .tint(dim(enabled))
+        .paint_at(ui, Rect::from_center_size(rect.center(), vec2(size, size)));
+    resp.on_hover_text(commands::tooltip(app, c))
+}
+
+fn file_tab(ui: &mut egui::Ui, pal: &Palette) -> egui::Response {
+    let galley = ui
+        .painter()
+        .layout_no_wrap("文件".to_string(), FontId::proportional(13.0), Color32::WHITE);
+    let (rect, resp) = ui.allocate_exact_size(vec2(galley.size().x + 28.0, 26.0), Sense::click());
+    let fill = if resp.hovered() {
+        pal.accent.gamma_multiply(1.15)
+    } else {
+        pal.accent
+    };
+    ui.painter().rect_filled(rect, 4.0, fill);
+    ui.painter()
+        .galley(rect.center() - galley.size() / 2.0, galley, Color32::WHITE);
+    resp.on_hover_text("新建、打开、保存、导出")
+}
+
+fn tab_button(ui: &mut egui::Ui, t: &Tab, selected: bool, pal: &Palette) -> egui::Response {
+    let color = if t.ctx.is_some() {
+        pal.ctx
+    } else if selected {
+        pal.accent
+    } else {
+        pal.ink
+    };
+    let font = FontId::proportional(13.0);
+    let galley = ui.painter().layout_no_wrap(t.label.to_string(), font, color);
+    let (rect, resp) = ui.allocate_exact_size(vec2(galley.size().x + 28.0, 30.0), Sense::click());
+    let p = ui.painter();
+    if selected {
+        let r = Rect::from_min_max(rect.min, egui::pos2(rect.max.x, rect.max.y + 1.0));
+        p.rect(
+            r,
+            egui::Rounding {
+                nw: 5.0,
+                ne: 5.0,
+                sw: 0.0,
+                se: 0.0,
+            },
+            pal.panel,
+            Stroke::new(1.0_f32, pal.line),
+        );
+        // 盖住面板顶边，让选中的选项卡和面板连在一起
+        p.line_segment(
+            [
+                egui::pos2(rect.left() + 1.0, rect.bottom() + 0.5),
+                egui::pos2(rect.right() - 1.0, rect.bottom() + 0.5),
+            ],
+            Stroke::new(2.0_f32, pal.panel),
+        );
+    } else if resp.hovered() {
+        p.rect_filled(rect.shrink2(vec2(0.0, 2.0)), 4.0, pal.hover);
+    }
+    if t.ctx.is_some() {
+        let bar = Rect::from_min_size(
+            egui::pos2(rect.left() + 6.0, rect.top()),
+            vec2(rect.width() - 12.0, 3.0),
+        );
+        p.rect_filled(bar, 1.5, pal.ctx);
+    }
+    p.galley(rect.center() - galley.size() / 2.0, galley, color);
+    resp.on_hover_text(match t.ctx {
+        Some(Ctx::Book) => "工作簿工具：激活工作簿时出现",
+        Some(Ctx::Graph) => "图形工具：激活图形时出现",
+        None => "双击折叠或展开功能区",
+    })
+}
+
+/// 文件页（Backstage）。返回要打开的窗口（单击项目内容时）。
+pub fn backstage(
+    ctx: &egui::Context,
+    app: &SciApp,
+    st: &mut UiState,
+    pal: &Palette,
+    clicked: &mut Option<&'static str>,
+) -> Option<u64> {
+    let mut open = None;
+    let dark = pal.dark;
+    egui::SidePanel::left("backstage-nav")
+        .resizable(false)
+        .exact_width(210.0)
+        .frame(
+            egui::Frame::none()
+                .fill(pal.backstage)
+                .inner_margin(egui::Margin::symmetric(0.0, 12.0)),
+        )
+        .show(ctx, |ui| {
+            ui.spacing_mut().item_spacing = vec2(0.0, 2.0);
+            if nav_item(ui, "back", "返回", "Esc", true).clicked() {
+                st.backstage = false;
+            }
+            ui.add_space(8.0);
+            for id in BACKSTAGE_NAV {
+                if let Some(c) = commands::find(id) {
+                    let enabled = (c.when)(app).is_ok();
+                    let r = nav_item(ui, c.icon, c.label, c.keys, enabled);
+                    if enabled && r.clicked() {
+                        st.backstage = false;
+                        *clicked = Some(c.id);
+                    }
+                }
+            }
+        });
+    egui::CentralPanel::default()
+        .frame(
+            egui::Frame::none()
+                .fill(ctx.style().visuals.window_fill)
+                .inner_margin(egui::Margin::symmetric(36.0, 28.0)),
+        )
+        .show(ctx, |ui| {
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                ui.heading(RichText::new("当前项目").size(22.0));
+                ui.add_space(14.0);
+                let nb = app.project.books.len();
+                let ng = app.project.graphs.len();
+                ui.label(
+                    RichText::new(format!("项目内容 · {} 个工作簿，{} 个图形", nb, ng))
+                        .strong()
+                        .color(pal.weak),
+                );
+                ui.add_space(6.0);
+                ui.horizontal_wrapped(|ui| {
+                    ui.spacing_mut().item_spacing = vec2(8.0, 8.0);
+                    for b in &app.project.books {
+                        let sub = format!("工作簿 · {} 列 × {} 行", b.columns.len(), b.nrows());
+                        if project_card(ui, "book", &b.name, &sub, dark, pal).clicked() {
+                            open = Some(b.id);
+                        }
+                    }
+                    for g in &app.project.graphs {
+                        let sub = format!("图形 · {}", g.plot_type.label());
+                        if project_card(ui, "graph", &g.name, &sub, dark, pal).clicked() {
+                            open = Some(g.id);
+                        }
+                    }
+                });
+                ui.add_space(20.0);
+                ui.label(RichText::new("保存位置").strong().color(pal.weak));
+                ui.add_space(4.0);
+                let where_ = match &app.project_path {
+                    Some(p) => format!("当前项目文件：{}", p.display()),
+                    None => "当前项目还没有保存。用“保存项目”存为 .scproj 文件。".to_string(),
+                };
+                ui.label(where_);
+                ui.add_space(20.0);
+                ui.label(RichText::new("常用快捷键").strong().color(pal.weak));
+                ui.add_space(4.0);
+                egui::Grid::new("backstage-keys")
+                    .num_columns(2)
+                    .spacing([18.0, 4.0])
+                    .show(ui, |ui| {
+                        for c in commands::commands().iter().filter(|c| !c.keys.is_empty()) {
+                            ui.label(RichText::new(c.keys).monospace());
+                            ui.label(c.label);
+                            ui.end_row();
+                        }
+                        ui.label(RichText::new("双击选项卡").monospace());
+                        ui.label("折叠 / 展开功能区");
+                        ui.end_row();
+                    });
+            });
+        });
+    open
+}
+
+fn nav_item(ui: &mut egui::Ui, icon: &str, label: &str, keys: &str, enabled: bool) -> egui::Response {
+    let w = ui.available_width();
+    let (rect, resp) = ui.allocate_exact_size(vec2(w, 36.0), if enabled { Sense::click() } else { Sense::hover() });
+    if enabled && resp.hovered() {
+        ui.painter().rect_filled(rect, 0.0, Color32::from_white_alpha(40));
+    }
+    let alpha = if enabled { 255 } else { 120 };
+    // 图标在蓝底上统一染成白色
+    icons::icon(icon, true)
+        .tint(Color32::from_rgba_unmultiplied(255, 255, 255, alpha))
+        .paint_at(
+            ui,
+            Rect::from_min_size(egui::pos2(rect.left() + 18.0, rect.center().y - 9.0), vec2(18.0, 18.0)),
+        );
+    let white = Color32::from_rgba_unmultiplied(255, 255, 255, alpha);
+    ui.painter().text(
+        egui::pos2(rect.left() + 46.0, rect.center().y),
+        Align2::LEFT_CENTER,
+        label,
+        FontId::proportional(13.5),
+        white,
+    );
+    if !keys.is_empty() {
+        ui.painter().text(
+            egui::pos2(rect.right() - 14.0, rect.center().y),
+            Align2::RIGHT_CENTER,
+            keys,
+            FontId::proportional(11.0),
+            Color32::from_rgba_unmultiplied(255, 255, 255, alpha / 2 + 40),
+        );
+    }
+    resp
+}
+
+fn project_card(ui: &mut egui::Ui, icon: &str, name: &str, sub: &str, dark: bool, pal: &Palette) -> egui::Response {
+    let (rect, resp) = ui.allocate_exact_size(vec2(230.0, 52.0), Sense::click());
+    let stroke = if resp.hovered() { pal.accent } else { pal.line };
+    ui.painter().rect(rect, 6.0, pal.panel, Stroke::new(1.0_f32, stroke));
+    icons::icon(icon, dark).paint_at(
+        ui,
+        Rect::from_min_size(egui::pos2(rect.left() + 12.0, rect.center().y - 11.0), vec2(22.0, 22.0)),
+    );
+    ui.painter().text(
+        egui::pos2(rect.left() + 44.0, rect.top() + 17.0),
+        Align2::LEFT_CENTER,
+        name,
+        FontId::proportional(13.0),
+        pal.ink,
+    );
+    ui.painter().text(
+        egui::pos2(rect.left() + 44.0, rect.top() + 35.0),
+        Align2::LEFT_CENTER,
+        sub,
+        FontId::proportional(11.0),
+        pal.weak,
+    );
+    resp
+}
+
+/// 命令面板（Ctrl+K）：输入关键词，方向键选择，回车执行。
+pub fn palette(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palette, clicked: &mut Option<&'static str>) {
+    let Some(ps) = st.palette.as_mut() else { return };
+    let q = ps.query.trim().to_lowercase();
+    let mut list: Vec<&'static Command> = commands::commands()
+        .iter()
+        .filter(|c| {
+            q.is_empty()
+                || c.label.to_lowercase().contains(&q)
+                || c.group.contains(&q)
+                || c.kw.contains(&q)
+                || c.id.contains(&q)
+        })
+        .collect();
+    // 可用的命令排在前面
+    list.sort_by_key(|c| (c.when)(app).is_err());
+    if !list.is_empty() {
+        ps.sel = ps.sel.min(list.len() - 1);
+    }
+
+    let (up, down, enter, esc) = ctx.input_mut(|i| {
+        (
+            i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp),
+            i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown),
+            i.consume_key(egui::Modifiers::NONE, egui::Key::Enter),
+            i.consume_key(egui::Modifiers::NONE, egui::Key::Escape),
+        )
+    });
+    if esc {
+        st.palette = None;
+        return;
+    }
+    if up {
+        ps.sel = ps.sel.saturating_sub(1);
+    }
+    if down && ps.sel + 1 < list.len() {
+        ps.sel += 1;
+    }
+    let mut run: Option<&'static str> = None;
+    if enter {
+        if let Some(c) = list.get(ps.sel) {
+            run = Some(c.id);
+        }
+    }
+
+    let mut close = false;
+    egui::Window::new("命令面板")
+        .id(egui::Id::new("scicanvas-palette"))
+        .title_bar(false)
+        .resizable(false)
+        .collapsible(false)
+        .anchor(Align2::CENTER_TOP, vec2(0.0, 80.0))
+        .fixed_size(vec2(520.0, 440.0))
+        .show(ctx, |ui| {
+            let te = ui.add(
+                egui::TextEdit::singleline(&mut ps.query)
+                    .hint_text("输入功能名称，例如 拟合、排序、导出")
+                    .desired_width(f32::INFINITY)
+                    .font(FontId::proportional(15.0)),
+            );
+            if ps.focus {
+                te.request_focus();
+                ps.focus = false;
+            }
+            if te.changed() {
+                ps.sel = 0;
+            }
+            ui.separator();
+            egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
+                if list.is_empty() {
+                    ui.label(RichText::new("没有找到匹配的命令").color(pal.weak));
+                }
+                for (i, c) in list.iter().enumerate() {
+                    let ok = (c.when)(app);
+                    let selected = i == ps.sel;
+                    let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 38.0), Sense::click());
+                    if selected {
+                        ui.painter().rect_filled(rect, 5.0, pal.accent);
+                        resp.scroll_to_me(None);
+                    } else if resp.hovered() {
+                        ui.painter().rect_filled(rect, 5.0, pal.hover);
+                    }
+                    let fg = if selected {
+                        Color32::WHITE
+                    } else if ok.is_ok() {
+                        pal.ink
+                    } else {
+                        pal.ink.gamma_multiply(0.45)
+                    };
+                    let sub = if selected {
+                        Color32::from_white_alpha(200)
+                    } else {
+                        pal.weak
+                    };
+                    let icon_tint = if ok.is_ok() {
+                        Color32::WHITE
+                    } else {
+                        Color32::from_rgba_unmultiplied(255, 255, 255, 110)
+                    };
+                    icons::icon(c.icon, pal.dark || selected).tint(icon_tint).paint_at(
+                        ui,
+                        Rect::from_min_size(egui::pos2(rect.left() + 10.0, rect.center().y - 9.0), vec2(18.0, 18.0)),
+                    );
+                    ui.painter().text(
+                        egui::pos2(rect.left() + 38.0, rect.top() + 12.0),
+                        Align2::LEFT_CENTER,
+                        c.label,
+                        FontId::proportional(13.5),
+                        fg,
+                    );
+                    let detail = match ok {
+                        Ok(()) => c.group.to_string(),
+                        Err(why) => format!("{} · {}", c.group, why),
+                    };
+                    ui.painter().text(
+                        egui::pos2(rect.left() + 38.0, rect.top() + 28.0),
+                        Align2::LEFT_CENTER,
+                        detail,
+                        FontId::proportional(11.0),
+                        sub,
+                    );
+                    if !c.keys.is_empty() {
+                        ui.painter().text(
+                            egui::pos2(rect.right() - 10.0, rect.center().y),
+                            Align2::RIGHT_CENTER,
+                            c.keys,
+                            FontId::monospace(11.0),
+                            sub,
+                        );
+                    }
+                    if resp.clicked() {
+                        run = Some(c.id);
+                    }
+                }
+            });
+            ui.add_space(4.0);
+            ui.label(RichText::new("↑ ↓ 选择 · 回车执行 · Esc 关闭").small().color(pal.weak));
+        });
+    // 点到面板外面也关闭
+    if ctx.input(|i| i.pointer.any_pressed()) {
+        let inside = ctx
+            .layer_id_at(ctx.input(|i| i.pointer.interact_pos()).unwrap_or_default())
+            .is_some_and(|l| l.id == egui::Id::new("scicanvas-palette"));
+        if !inside {
+            close = true;
+        }
+    }
+    if let Some(id) = run {
+        *clicked = Some(id);
+        close = true;
+    }
+    if close {
+        st.palette = None;
+    }
+}

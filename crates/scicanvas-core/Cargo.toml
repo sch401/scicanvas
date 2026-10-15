@@ -1,0 +1,19 @@
+[package]
+name = "scicanvas-core"
+description = "SciCanvas 核心库：数据模型、CSV 解析、刻度计算、SVG 导出（不依赖界面）"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[features]
+default = []
+# 项目文件保存/读取（JSON）
+serde = ["dep:serde", "dep:serde_json"]
+# 导入 GBK 编码的 CSV（中文版 Excel 常见）
+encoding = ["dep:encoding_rs"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"], optional = true }
+serde_json = { version = "1", optional = true }
+encoding_rs = { version = "0.8", optional = true }

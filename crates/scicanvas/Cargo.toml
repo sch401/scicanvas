@@ -1,0 +1,19 @@
+[package]
+name = "scicanvas"
+description = "SciCanvas：仿 Origin 界面的开源科研绘图软件（原型）"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "scicanvas"
+path = "src/main.rs"
+
+[dependencies]
+scicanvas-core = { path = "../scicanvas-core", features = ["serde", "encoding"] }
+# 界面：eframe/egui 及其表格、SVG 图标组件，版本必须一致
+eframe = "0.29"
+egui_extras = { version = "0.29", features = ["svg"] }
+# 系统原生的打开/保存文件对话框
+rfd = "0.15"

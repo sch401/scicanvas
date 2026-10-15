@@ -1,0 +1,34 @@
+name: 检查
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    name: Rust / ${{ matrix.os }}
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+    env:
+      CARGO_INCREMENTAL: 0
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Linux 系统依赖
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y pkg-config libxkbcommon-dev libwayland-dev libgl1-mesa-dev libxcursor-dev libxrandr-dev libxi-dev
+      - name: Rust 工具链
+        run: |
+          rustup toolchain install stable --profile minimal --component rustfmt --component clippy
+          rustup default stable
+      - run: cargo fmt --all -- --check
+      - run: cargo test --workspace --all-features --locked
+      - run: cargo test -p scicanvas-core --no-default-features --locked
+      - run: cargo clippy --workspace --all-targets --all-features --locked -- -D warnings

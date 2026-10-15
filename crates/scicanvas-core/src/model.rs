@@ -1,0 +1,728 @@
+//! 数据模型：项目、工作簿、列、图形。
+
+#[cfg(feature = "serde")]
+use serde::{Deserialize, Serialize};
+
+/// 列的绘图角色，对应 Origin 里的 X / Y / 忽略。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum Role {
+    X,
+    Y,
+    Ignore,
+}
+
+impl Role {
+    pub fn label(self) -> &'static str {
+        match self {
+            Role::X => "X",
+            Role::Y => "Y",
+            Role::Ignore => "—",
+        }
+    }
+}
+
+/// 工作表中的一列。数据按字符串保存，保留用户输入的原样，绘图时再解析成数值。
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct Column {
+    /// 列标识：A、B、C……，创建后不再变化，图形通过它引用列。
+    pub key: String,
+    pub role: Role,
+    pub long_name: String,
+    pub units: String,
+    pub comment: String,
+    pub data: Vec<String>,
+    /// 由哪一列计算得来（拟合、平滑等结果列），新的结果列会排在同一来源的结果列后面。
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub derived_from: Option<String>,
+}
+
+impl Column {
+    pub fn new(key: impl Into<String>, role: Role) -> Self {
+        Column {
+            key: key.into(),
+            role,
+            long_name: String::new(),
+            units: String::new(),
+            comment: String::new(),
+            data: Vec::new(),
+            derived_from: None,
+        }
+    }
+
+    /// 解析为数值；空单元格或非数值为 NaN。
+    pub fn values(&self) -> Vec<f64> {
+        self.data.iter().map(|s| parse_num(s)).collect()
+    }
+
+    /// 图例里用的名字：有长名称用长名称，否则用列标识。
+    pub fn display_name(&self) -> &str {
+        if self.long_name.trim().is_empty() {
+            &self.key
+        } else {
+            self.long_name.trim()
+        }
+    }
+
+    /// 坐标轴标题：长名称 (单位)。
+    pub fn axis_label(&self) -> String {
+        let n = self.display_name();
+        if self.units.trim().is_empty() {
+            n.to_string()
+        } else {
+            format!("{} ({})", n, self.units.trim())
+        }
+    }
+
+    /// 写入一个单元格；写空值时会去掉末尾多余的空行。
+    pub fn set(&mut self, row: usize, value: String) {
+        if row >= self.data.len() {
+            if value.trim().is_empty() {
+                return;
+            }
+            self.data.resize(row + 1, String::new());
+        }
+        self.data[row] = value;
+        while self.data.last().is_some_and(|s| s.trim().is_empty()) {
+            self.data.pop();
+        }
+    }
+}
+
+/// 解析一个单元格。允许千分位逗号。
+pub fn parse_num(s: &str) -> f64 {
+    let t = s.trim();
+    if t.is_empty() {
+        return f64::NAN;
+    }
+    let cleaned: String = t.chars().filter(|c| *c != ',').collect();
+    cleaned.parse::<f64>().unwrap_or(f64::NAN)
+}
+
+pub fn looks_numeric(s: &str) -> bool {
+    !s.trim().is_empty() && parse_num(s).is_finite()
+}
+
+/// 按有效数字取整，消除 0.30000000000000004 这类浮点尾巴。
+pub fn round_sig(x: f64, digits: i32) -> f64 {
+    if x == 0.0 || !x.is_finite() {
+        return x;
+    }
+    let mag = x.abs().log10().ceil() as i32;
+    let p = 10f64.powi(digits - mag);
+    (x * p).round() / p
+}
+
+/// 工作表里显示数值的格式。
+pub fn fmt_num(v: f64) -> String {
+    if !v.is_finite() {
+        return String::new();
+    }
+    let a = v.abs();
+    if a != 0.0 && (a >= 1e6 || a < 1e-4) {
+        return format!("{:.4e}", v);
+    }
+    format!("{}", round_sig(v, 8))
+}
+
+/// 列标识：0 → A，25 → Z，26 → AA。
+pub fn column_letter(mut i: usize) -> String {
+    let mut s = Vec::new();
+    i += 1;
+    while i > 0 {
+        let m = (i - 1) % 26;
+        s.push((b'A' + m as u8) as char);
+        i = (i - 1) / 26;
+    }
+    s.iter().rev().collect()
+}
+
+/// 工作簿（Origin 的 Book），这一版每个工作簿只有一张工作表。
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct Book {
+    pub id: u64,
+    pub name: String,
+    pub columns: Vec<Column>,
+}
+
+impl Book {
+    pub fn new(id: u64, name: impl Into<String>) -> Self {
+        Book {
+            id,
+            name: name.into(),
+            columns: Vec::new(),
+        }
+    }
+
+    pub fn nrows(&self) -> usize {
+        self.columns.iter().map(|c| c.data.len()).max().unwrap_or(0)
+    }
+
+    /// 下一个没用过的列标识。
+    pub fn next_key(&self) -> String {
+        (0..)
+            .map(column_letter)
+            .find(|k| !self.columns.iter().any(|c| &c.key == k))
+            .unwrap()
+    }
+
+    pub fn column(&self, key: &str) -> Option<&Column> {
+        self.columns.iter().find(|c| c.key == key)
+    }
+
+    pub fn column_index(&self, key: &str) -> Option<usize> {
+        self.columns.iter().position(|c| c.key == key)
+    }
+
+    /// 在 index 处插入新列，返回新列标识。
+    pub fn insert_column(&mut self, index: usize, role: Role) -> String {
+        let key = self.next_key();
+        let index = index.min(self.columns.len());
+        self.columns.insert(index, Column::new(key.clone(), role));
+        key
+    }
+
+    pub fn push_column(&mut self, role: Role) -> String {
+        self.insert_column(self.columns.len(), role)
+    }
+
+    /// 保证至少有 n 列，不够时补 Y 列。
+    pub fn ensure_columns(&mut self, n: usize) {
+        while self.columns.len() < n {
+            self.push_column(Role::Y);
+        }
+    }
+
+    /// 单元格区域（列 c0..=c1，行 r0..=r1）的内容，制表符分隔，可直接粘贴到 Excel。
+    pub fn range_tsv(&self, c0: usize, c1: usize, r0: usize, r1: usize) -> String {
+        let c1 = c1.min(self.columns.len().saturating_sub(1));
+        (r0..=r1)
+            .map(|r| {
+                (c0..=c1)
+                    .map(|c| self.columns[c].data.get(r).map(String::as_str).unwrap_or(""))
+                    .collect::<Vec<_>>()
+                    .join("\t")
+            })
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    /// 清空单元格区域。
+    pub fn clear_range(&mut self, c0: usize, c1: usize, r0: usize, r1: usize) {
+        self.fill_range(c0, c1, r0, r1, "");
+    }
+
+    /// 用同一个值填满单元格区域。
+    pub fn fill_range(&mut self, c0: usize, c1: usize, r0: usize, r1: usize, value: &str) {
+        let c1 = c1.min(self.columns.len().saturating_sub(1));
+        if self.columns.is_empty() {
+            return;
+        }
+        for c in c0..=c1 {
+            // 从下往上写，清空时末尾的空行能一次去掉
+            for r in (r0..=r1).rev() {
+                self.columns[c].set(r, value.to_string());
+            }
+        }
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum PlotType {
+    Line,
+    Scatter,
+    LineSymbol,
+    Bar,
+}
+
+impl PlotType {
+    pub const ALL: [PlotType; 4] = [PlotType::Line, PlotType::Scatter, PlotType::LineSymbol, PlotType::Bar];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            PlotType::Line => "折线图",
+            PlotType::Scatter => "散点图",
+            PlotType::LineSymbol => "点线图",
+            PlotType::Bar => "柱状图",
+        }
+    }
+
+    pub fn has_line(self) -> bool {
+        matches!(self, PlotType::Line | PlotType::LineSymbol)
+    }
+
+    pub fn has_symbol(self) -> bool {
+        matches!(self, PlotType::Scatter | PlotType::LineSymbol)
+    }
+}
+
+/// Origin 默认的颜色递增顺序：黑、红、蓝、品红、橄榄、海军蓝……
+pub const PALETTE: [(u8, u8, u8); 9] = [
+    (0, 0, 0),
+    (255, 0, 0),
+    (0, 0, 255),
+    (255, 0, 255),
+    (128, 128, 0),
+    (0, 0, 128),
+    (128, 0, 255),
+    (0, 128, 128),
+    (128, 0, 0),
+];
+
+pub fn palette_hex(i: usize) -> String {
+    let (r, g, b) = PALETTE[i % PALETTE.len()];
+    format!("#{:02x}{:02x}{:02x}", r, g, b)
+}
+
+/// 符号递增顺序：方块、圆、上三角、下三角、菱形……
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Symbol {
+    Square,
+    Circle,
+    Up,
+    Down,
+    Diamond,
+    Left,
+    Right,
+    Hexagon,
+}
+
+pub const SYMBOLS: [Symbol; 8] = [
+    Symbol::Square,
+    Symbol::Circle,
+    Symbol::Up,
+    Symbol::Down,
+    Symbol::Diamond,
+    Symbol::Left,
+    Symbol::Right,
+    Symbol::Hexagon,
+];
+
+/// 一条曲线的数据。
+#[derive(Clone, Debug, PartialEq)]
+pub struct Series {
+    pub key: String,
+    pub name: String,
+    pub points: Vec<[f64; 2]>,
+    /// 只画线（拟合曲线、平滑结果），不跟随图类型。
+    pub line_only: bool,
+    /// 结果曲线的来源列（用于避免拟合线和原数据同色）。
+    pub source: Option<String>,
+}
+
+/// 拟合 / 平滑曲线的颜色：默认红色；如果它的原始数据本身是红色，改用蓝色。
+pub const FIT_RGB: (u8, u8, u8) = (232, 24, 44);
+pub const FIT_ALT_RGB: (u8, u8, u8) = (31, 111, 229);
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SeriesColor {
+    /// Origin 默认颜色顺序里的第 i 个。
+    Palette(usize),
+    Fit,
+    FitAlt,
+    Rgb((u8, u8, u8)),
+}
+
+impl SeriesColor {
+    pub fn rgb(self) -> (u8, u8, u8) {
+        match self {
+            SeriesColor::Palette(i) => PALETTE[i % PALETTE.len()],
+            SeriesColor::Fit => FIT_RGB,
+            SeriesColor::FitAlt => FIT_ALT_RGB,
+            SeriesColor::Rgb(color) => color,
+        }
+    }
+
+    pub fn hex(self) -> String {
+        let (r, g, b) = self.rgb();
+        format!("#{:02x}{:02x}{:02x}", r, g, b)
+    }
+}
+
+/// 每条曲线的画法。SVG 导出和界面共用，保证两边一致。
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct SeriesStyle {
+    /// 结果曲线固定为 Line，其余跟随图类型。
+    pub kind: PlotType,
+    pub color: SeriesColor,
+    pub symbol: Symbol,
+    /// 柱状图里这条曲线是第几组、一共几组。
+    pub bar_index: usize,
+    pub bar_count: usize,
+}
+
+/// 颜色和符号只在数据曲线之间递增，结果曲线不占顺序。
+pub fn series_styles(series: &[Series], plot_type: PlotType) -> Vec<SeriesStyle> {
+    let bar_count = if plot_type == PlotType::Bar {
+        series.iter().filter(|s| !s.line_only).count()
+    } else {
+        0
+    };
+    let mut data_index = 0;
+    let mut by_key = std::collections::HashMap::new();
+    let mut out: Vec<SeriesStyle> = series
+        .iter()
+        .map(|s| {
+            if s.line_only {
+                SeriesStyle {
+                    kind: PlotType::Line,
+                    color: SeriesColor::Fit,
+                    symbol: Symbol::Square,
+                    bar_index: 0,
+                    bar_count,
+                }
+            } else {
+                let i = data_index;
+                data_index += 1;
+                by_key.insert(s.key.clone(), i);
+                SeriesStyle {
+                    kind: plot_type,
+                    color: SeriesColor::Palette(i),
+                    symbol: SYMBOLS[i % SYMBOLS.len()],
+                    bar_index: i,
+                    bar_count,
+                }
+            }
+        })
+        .collect();
+    for (st, s) in out.iter_mut().zip(series) {
+        if s.line_only {
+            let src = s.source.as_ref().and_then(|k| by_key.get(k));
+            if let Some(&i) = src {
+                if PALETTE[i % PALETTE.len()] == (255, 0, 0) {
+                    st.color = SeriesColor::FitAlt;
+                }
+            }
+        }
+    }
+    out
+}
+
+/// 图形窗口：页面包含图层；现有命令和分析默认操作第一个图层。
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct Graph {
+    pub id: u64,
+    pub name: String,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub page: crate::page::Page,
+}
+impl Graph {
+    pub fn new(id: u64, name: impl Into<String>) -> Self {
+        Self {
+            id,
+            name: name.into(),
+            page: Default::default(),
+        }
+    }
+}
+// 兼容已有命令的字段访问，项目中仅保存一份图层数据。
+impl std::ops::Deref for Graph {
+    type Target = crate::page::Layer;
+    fn deref(&self) -> &Self::Target {
+        &self.page.layers()[0]
+    }
+}
+impl std::ops::DerefMut for Graph {
+    fn deref_mut(&mut self) -> &mut Self::Target {
+        &mut self.page.layers_mut()[0]
+    }
+}
+
+/// 整个项目。
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct Project {
+    /// 文件格式版本；无版本号的旧文件按第 0 版迁移。
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub version: u32,
+    pub books: Vec<Book>,
+    pub graphs: Vec<Graph>,
+    pub next_id: u64,
+}
+
+impl Default for Project {
+    fn default() -> Self {
+        Project {
+            version: 2,
+            books: Vec::new(),
+            graphs: Vec::new(),
+            next_id: 1,
+        }
+    }
+}
+
+impl Project {
+    /// 界面、预设和未来脚本共用的声明式作图入口；校验成功后才修改项目。
+    pub fn plot_spec(&mut self, spec: crate::plotspec::PlotSpec) -> Result<u64, String> {
+        let book = self.book(spec.book_id.ok_or("请选择工作簿")?).ok_or("找不到工作簿")?;
+        spec.validate(book)?;
+        let id = self.alloc_id();
+        let mut graph = Graph::new(id, self.unique_name("Graph"));
+        graph.spec = spec;
+        self.graphs.push(graph);
+        Ok(id)
+    }
+    pub fn alloc_id(&mut self) -> u64 {
+        let id = self.next_id;
+        self.next_id += 1;
+        id
+    }
+
+    pub fn book(&self, id: u64) -> Option<&Book> {
+        self.books.iter().find(|b| b.id == id)
+    }
+
+    pub fn book_mut(&mut self, id: u64) -> Option<&mut Book> {
+        self.books.iter_mut().find(|b| b.id == id)
+    }
+
+    pub fn graph(&self, id: u64) -> Option<&Graph> {
+        self.graphs.iter().find(|g| g.id == id)
+    }
+
+    pub fn graph_mut(&mut self, id: u64) -> Option<&mut Graph> {
+        self.graphs.iter_mut().find(|g| g.id == id)
+    }
+
+    pub fn name_of(&self, id: u64) -> Option<&str> {
+        self.book(id)
+            .map(|b| b.name.as_str())
+            .or_else(|| self.graph(id).map(|g| g.name.as_str()))
+    }
+
+    pub fn name_of_mut(&mut self, id: u64) -> Option<&mut String> {
+        if let Some(i) = self.books.iter().position(|b| b.id == id) {
+            return Some(&mut self.books[i].name);
+        }
+        self.graphs.iter_mut().find(|g| g.id == id).map(|g| &mut g.name)
+    }
+
+    /// Book1、Book2……里第一个没用过的名字。
+    pub fn unique_name(&self, base: &str) -> String {
+        (1..)
+            .map(|i| format!("{}{}", base, i))
+            .find(|n| !self.books.iter().any(|b| &b.name == n) && !self.graphs.iter().any(|g| &g.name == n))
+            .unwrap()
+    }
+
+    /// 删除工作簿或图形。删除工作簿时，引用它的图形变成空图。
+    pub fn remove(&mut self, id: u64) {
+        self.books.retain(|b| b.id != id);
+        self.graphs.retain(|g| g.id != id);
+        for g in &mut self.graphs {
+            for layer in g.page.layers_mut() {
+                if layer.book_id == Some(id) {
+                    layer.book_id = None;
+                }
+            }
+        }
+    }
+
+    /// 删除工作簿中的若干列，并从图形里去掉对它们的引用。
+    pub fn delete_columns(&mut self, book_id: u64, keys: &[String]) {
+        if let Some(b) = self.book_mut(book_id) {
+            b.columns.retain(|c| !keys.contains(&c.key));
+        }
+        for g in &mut self.graphs {
+            for layer in g.page.layers_mut() {
+                if layer.book_id == Some(book_id) {
+                    layer.y_keys.retain(|k| !keys.contains(k));
+                    layer.line_only.retain(|k| !keys.contains(k));
+                    layer.x_by_y.retain(|y, x| !keys.contains(y) && !keys.contains(x));
+                    if layer.x_key.as_ref().is_some_and(|k| keys.contains(k)) {
+                        layer.x_key = None;
+                    }
+                }
+            }
+        }
+    }
+
+    pub fn new_book(&mut self) -> u64 {
+        let id = self.alloc_id();
+        let mut b = Book::new(id, self.unique_name("Book"));
+        b.push_column(Role::X);
+        b.push_column(Role::Y);
+        self.books.push(b);
+        id
+    }
+
+    /// 按选中的列绘图，规则与 Origin 一致：
+    /// 选中的 Y 列各成一条曲线；X 取选中的 X 列，没有就取工作表里位于第一条 Y 列左边最近的 X 列；
+    /// 什么都没选时使用全部 Y 列。
+    pub fn plot_from_selection(
+        &mut self,
+        book_id: u64,
+        selected: &[String],
+        plot_type: PlotType,
+    ) -> Result<(u64, String), String> {
+        let book = self.book(book_id).ok_or("找不到工作簿")?;
+        let auto = selected.is_empty();
+        let spec = crate::plotspec::PlotSpec::from_selection(book, selected, plot_type)?;
+        let x_key = spec.x_key.clone();
+        let ys = spec.y_keys.clone();
+        let book_name = book.name.clone();
+
+        let id = self.plot_spec(spec)?;
+
+        let msg = format!(
+            "已用 {} 的 {} 列绘制{}，{}{}",
+            book_name,
+            ys.join(", "),
+            plot_type.label(),
+            match &x_key {
+                Some(k) => format!("X = {}", k),
+                None => "X 为行号".to_string(),
+            },
+            if auto {
+                "（未选列，已使用全部 Y 列）"
+            } else {
+                ""
+            }
+        );
+        Ok((id, msg))
+    }
+
+    /// 示例项目：一个工作簿（阻尼振荡 + 充电曲线）和一张点线图。
+    pub fn sample() -> Project {
+        let mut p = Project::default();
+        let bid = p.alloc_id();
+        let mut book = Book::new(bid, "Book1");
+        let mut a = Column::new("A", Role::X);
+        a.long_name = "时间".into();
+        a.units = "s".into();
+        a.comment = "示例数据".into();
+        let mut b = Column::new("B", Role::Y);
+        b.long_name = "电压 A".into();
+        b.units = "mV".into();
+        b.comment = "阻尼振荡".into();
+        let mut c = Column::new("C", Role::Y);
+        c.long_name = "电压 B".into();
+        c.units = "mV".into();
+        c.comment = "充电曲线".into();
+
+        // 固定种子的伪随机噪声，保证每次打开都一样
+        let mut seed: u64 = 7;
+        let mut rnd = move || {
+            seed = (seed * 16807) % 2147483647;
+            seed as f64 / 2147483647.0 - 0.5
+        };
+        for i in 0..=40 {
+            let t = i as f64 * 0.5;
+            a.data.push(fmt_num(t));
+            let vb = 10.0 * (-t / 6.0).exp() * (1.2 * t).cos() + 0.35 * rnd();
+            let vc = 8.0 * (1.0 - (-t / 4.0).exp()) + 0.25 * rnd();
+            b.data.push(fmt_num((vb * 1000.0).round() / 1000.0));
+            c.data.push(fmt_num((vc * 1000.0).round() / 1000.0));
+        }
+        book.columns = vec![a, b, c];
+        p.books.push(book);
+
+        let gid = p.alloc_id();
+        let mut g = Graph::new(gid, "Graph1");
+        g.book_id = Some(bid);
+        g.x_key = Some("A".into());
+        g.y_keys = vec!["B".into(), "C".into()];
+        p.graphs.push(g);
+        p
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn range_copy_clear_fill() {
+        let mut b = Book::new(1, "B");
+        b.columns.push(Column::new("A", Role::X));
+        b.columns.push(Column::new("B", Role::Y));
+        for r in 0..3 {
+            b.columns[0].set(r, format!("{}", r));
+            b.columns[1].set(r, format!("{}", r * 10));
+        }
+        assert_eq!(b.range_tsv(0, 1, 1, 2), "1\t10\n2\t20");
+        assert_eq!(b.range_tsv(1, 5, 0, 0), "0");
+        b.clear_range(0, 1, 1, 2);
+        assert_eq!(b.nrows(), 1);
+        b.fill_range(1, 1, 0, 3, "7");
+        assert_eq!(b.columns[1].data, vec!["7"; 4]);
+    }
+
+    #[test]
+    fn letters() {
+        assert_eq!(column_letter(0), "A");
+        assert_eq!(column_letter(25), "Z");
+        assert_eq!(column_letter(26), "AA");
+        assert_eq!(column_letter(27), "AB");
+    }
+
+    #[test]
+    fn number_parsing_and_format() {
+        assert_eq!(parse_num(" 1,234.5 "), 1234.5);
+        assert!(parse_num("abc").is_nan());
+        assert!(parse_num("").is_nan());
+        assert_eq!(fmt_num(0.1 + 0.2), "0.3");
+        assert_eq!(fmt_num(2.0), "2");
+    }
+
+    #[test]
+    fn set_cell_trims_trailing_blanks() {
+        let mut c = Column::new("A", Role::Y);
+        c.set(3, "5".into());
+        assert_eq!(c.data.len(), 4);
+        c.set(3, "".into());
+        assert_eq!(c.data.len(), 0);
+        c.set(10, "".into());
+        assert_eq!(c.data.len(), 0);
+    }
+
+    #[test]
+    fn plot_selection_rules() {
+        let mut p = Project::sample();
+        // 什么都不选：全部 Y 列，X = A
+        let (gid, _) = p.plot_from_selection(1, &[], PlotType::Line).unwrap();
+        let g = p.graph(gid).unwrap();
+        assert_eq!(g.y_keys, vec!["B", "C"]);
+        assert_eq!(g.x_key.as_deref(), Some("A"));
+        // 只选 C：X 自动找左边的 A
+        let (gid, _) = p.plot_from_selection(1, &["C".to_string()], PlotType::Scatter).unwrap();
+        assert_eq!(p.graph(gid).unwrap().x_key.as_deref(), Some("A"));
+        // 只选 X 列：报错
+        assert!(p.plot_from_selection(1, &["A".to_string()], PlotType::Bar).is_err());
+    }
+
+    #[test]
+    fn series_skip_blank_rows() {
+        let p = Project::sample();
+        let g = p.graph(2).unwrap();
+        let (x, s) = g.series(p.book(1).unwrap());
+        assert_eq!(x.unwrap().key, "A");
+        assert_eq!(s.len(), 2);
+        assert_eq!(s[0].points.len(), 41);
+        assert_eq!(s[0].name, "电压 A");
+    }
+
+    #[test]
+    fn delete_columns_updates_graphs() {
+        let mut p = Project::sample();
+        p.delete_columns(1, &["A".to_string(), "B".to_string()]);
+        let g = p.graph(2).unwrap();
+        assert_eq!(g.x_key, None);
+        assert_eq!(g.y_keys, vec!["C"]);
+        assert_eq!(p.book(1).unwrap().columns.len(), 1);
+        // 新列标识不会和剩下的 C 冲突
+        assert_eq!(p.book(1).unwrap().next_key(), "A");
+    }
+
+    #[test]
+    fn unique_names() {
+        let mut p = Project::sample();
+        assert_eq!(p.unique_name("Book"), "Book2");
+        let id = p.new_book();
+        assert_eq!(p.name_of(id), Some("Book2"));
+    }
+}

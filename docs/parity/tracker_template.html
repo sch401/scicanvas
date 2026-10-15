@@ -1,0 +1,214 @@
+<title>SciCanvas 对照清单</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+/* 布局：规格书式清单——顶部里程碑进度，下方筛选栏 + 按模块分组的功能表；手机上每行变成卡片 */
+:root{
+  --bg:#f6f7f9; --paper:#ffffff; --ink:#18202b; --muted:#5f6b7a; --line:#dde2e8; --line2:#eceff3;
+  --accent:#2563c9; --accent-soft:#e3ecfb;
+  --done:#1f8a4c; --done-soft:#e1f3e8; --proto:#b26a00; --proto-soft:#fdf0d9; --todo:#5f6b7a; --todo-soft:#eef1f4; --skip:#9aa3ae;
+  --p0:#c2362b; --p1:#2563c9; --p2:#6b5bb5;
+  --sans:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
+  --serif:"Noto Serif SC","Songti SC","SimSun",serif;
+  --mono:"IBM Plex Mono",ui-monospace,"Consolas",monospace;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#14171c; --paper:#1c2027; --ink:#e4e8ee; --muted:#9aa4b1; --line:#323843; --line2:#272c34;
+  --accent:#6ea8ff; --accent-soft:#22324d;
+  --done:#5ccf8b; --done-soft:#17352a; --proto:#f0b45a; --proto-soft:#3a2d17; --todo:#a4adb9; --todo-soft:#2a2f37; --skip:#6b7480;
+  --p0:#ff7b70; --p1:#6ea8ff; --p2:#b3a6f2; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#14171c; --paper:#1c2027; --ink:#e4e8ee; --muted:#9aa4b1; --line:#323843; --line2:#272c34;
+  --accent:#6ea8ff; --accent-soft:#22324d;
+  --done:#5ccf8b; --done-soft:#17352a; --proto:#f0b45a; --proto-soft:#3a2d17; --todo:#a4adb9; --todo-soft:#2a2f37; --skip:#6b7480;
+  --p0:#ff7b70; --p1:#6ea8ff; --p2:#b3a6f2; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--ink);font:14px/1.6 var(--sans);
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:28px 48px}
+.wrap{max-width:1180px;margin:0 auto;display:grid;gap:22px}
+header{display:grid;gap:6px}
+.eyebrow{font:500 12px var(--mono);letter-spacing:.08em;color:var(--muted);text-transform:uppercase}
+h1{font:700 clamp(24px,3.4vw,34px)/1.2 var(--serif);margin:0;text-wrap:balance}
+.lead{margin:0;color:var(--muted);max-width:68ch}
+.lead b{color:var(--ink);font-weight:500}
+.miles{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px}
+.mile{background:var(--paper);border:1px solid var(--line);border-radius:8px;padding:14px 16px;display:grid;gap:8px;text-align:left;cursor:pointer;color:inherit;font:inherit}
+.mile:hover{border-color:var(--accent)}
+.mile[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+.mile:focus-visible,button:focus-visible,select:focus-visible,input:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mile .k{display:flex;justify-content:space-between;align-items:baseline;gap:8px}
+.mile .name{font-weight:700}
+.mile .num{font:500 13px var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.mile .desc{font-size:12.5px;color:var(--muted)}
+.bar{height:6px;border-radius:3px;background:var(--line2);overflow:hidden;display:flex}
+.bar i{display:block;height:100%}
+.bar .d{background:var(--done)} .bar .p{background:var(--proto)}
+.tools{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:10px;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;border-bottom:1px solid var(--line)}
+.tools input[type=search]{flex:1 1 220px;min-width:0;height:34px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);padding:0 10px;font:inherit}
+.tools select{height:34px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);padding:0 8px;font:inherit;max-width:100%}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{height:30px;padding:0 11px;border-radius:15px;border:1px solid var(--line);background:var(--paper);color:var(--ink);font:inherit;font-size:13px;cursor:pointer;display:inline-flex;align-items:center;gap:6px}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--paper);border-color:var(--ink)}
+.chip .dot{width:8px;height:8px;border-radius:50%}
+.count{font:12.5px var(--mono);color:var(--muted);font-variant-numeric:tabular-nums}
+.sync{font-size:12.5px;color:var(--muted)}
+.tablewrap{background:var(--paper);border:1px solid var(--line);border-radius:8px;overflow-x:auto}
+table{width:100%;border-collapse:collapse;min-width:900px}
+th,td{text-align:left;vertical-align:top;padding:9px 12px;border-bottom:1px solid var(--line2)}
+thead th{font-size:12px;font-weight:500;color:var(--muted);letter-spacing:.04em;background:var(--paper);position:sticky;top:0}
+tr.group td{background:var(--bg);font-weight:700;padding-top:14px;border-bottom:1px solid var(--line)}
+tr.group .gcount{font:400 12px var(--mono);color:var(--muted);margin-left:8px}
+td.id{font:12px var(--mono);color:var(--muted);white-space:nowrap}
+.feat{font-weight:500}
+.ref{display:block;font:12px var(--mono);color:var(--muted);margin-top:2px;overflow-wrap:anywhere}
+td.small{font-size:13px;color:var(--muted);min-width:0}
+.pri{font:500 12px var(--mono);padding:1px 7px;border-radius:4px;border:1px solid currentColor;white-space:nowrap}
+.pri.P0{color:var(--p0)} .pri.P1{color:var(--p1)} .pri.P2{color:var(--p2)} .pri.skip{color:var(--skip)}
+.ms{display:block;font-size:11.5px;color:var(--muted);margin-top:4px;white-space:nowrap}
+.st{appearance:none;-webkit-appearance:none;border:1px solid transparent;border-radius:5px;padding:3px 24px 3px 9px;font:inherit;font-size:13px;cursor:pointer;
+  background-image:linear-gradient(45deg,transparent 50%,currentColor 50%),linear-gradient(135deg,currentColor 50%,transparent 50%);
+  background-position:calc(100% - 12px) 55%,calc(100% - 8px) 55%;background-size:4px 4px;background-repeat:no-repeat}
+.st:disabled{cursor:default;background-image:none;padding-right:9px;opacity:1}
+.st.s-done{color:var(--done);background-color:var(--done-soft)}
+.st.s-proto{color:var(--proto);background-color:var(--proto-soft)}
+.st.s-todo{color:var(--todo);background-color:var(--todo-soft)}
+.st.s-skip{color:var(--skip);background-color:transparent;border-color:var(--line)}
+tr.skip .feat{color:var(--skip);text-decoration:line-through;text-decoration-color:var(--line)}
+.empty{padding:40px 16px;text-align:center;color:var(--muted)}
+footer{font-size:12.5px;color:var(--muted);max-width:80ch}
+@media (max-width:720px){
+  table{min-width:0}
+  thead{display:none}
+  tbody tr:not(.group){display:grid;grid-template-columns:auto 1fr auto;gap:4px 10px;padding:12px;border-bottom:1px solid var(--line2)}
+  tbody tr:not(.group) td{border:0;padding:0}
+  td.id{grid-row:1}
+  td.featcell{grid-column:2/4;grid-row:1}
+  td.pricell{grid-column:1/2;grid-row:2}
+  td.stcell{grid-column:2/4;grid-row:2}
+  td.small{grid-column:1/4}
+  td.small:empty{display:none}
+  td.small[data-label]::before{content:attr(data-label);font-weight:500;color:var(--ink);margin-right:6px}
+  tr.group td{display:block}
+}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+
+<div class="wrap">
+  <header>
+    <span class="eyebrow">SciCanvas · Origin 功能对照</span>
+    <h1>SciCanvas 对照清单</h1>
+    <p class="lead">按 Origin 帮助文档目录整理的 <b id="total"></b> 个功能点，每项标了优先级、当前状态、Rust 实现方案和验证方法。“Origin 参考”是对应的帮助章节标题，可以回原文档查阅。改状态会保存下来，其他打开此页的人也能看到。</p>
+    <p class="lead">安装包体积估算：全部功能完成后约 <b>100–130 MB</b>，其中软件本体约 20–40 MB，内置 Python 运行时及 numpy、scipy、pandas 约 60–90 MB（均为压缩后）。</p>
+  </header>
+
+  <section class="miles" id="miles" aria-label="里程碑进度"></section>
+
+  <div class="tools" role="search">
+    <input type="search" id="q" placeholder="搜索功能、Origin 章节或实现方案" aria-label="搜索">
+    <div class="chips" id="stChips" aria-label="按状态筛选"></div>
+    <select id="mod" aria-label="按模块筛选"></select>
+    <span class="count" id="count"></span>
+    <span class="sync" id="sync">正在连接状态存储…</span>
+  </div>
+
+  <div class="tablewrap">
+    <table>
+      <thead><tr><th style="width:62px">编号</th><th>功能 / Origin 参考</th><th style="width:118px">优先级</th><th style="width:104px">状态</th><th>实现方案</th><th>验证方法</th></tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="empty" hidden>没有符合筛选条件的功能。</div>
+  </div>
+
+  <footer>本清单只记录功能点，不含 Origin 文档正文。实现时按公开说明和观察到的行为编写，不复制 Origin 的代码、文字或图片。分析结果用 Origin、NIST StRD 认证数据集和 SciPy / R 交叉比对。</footer>
+</div>
+
+<script>
+"use strict";
+const BASE = __DATA__;
+const STATUSES=[["已完成","s-done","var(--done)"],["原型","s-proto","var(--proto)"],["未开始","s-todo","var(--todo)"],["不做","s-skip","var(--skip)"]];
+const ST_CLASS=Object.fromEntries(STATUSES.map(s=>[s[0],s[1]]));
+const MILES=[
+  ["M1 日常够用","P0","日常数据处理与论文作图的最小集合"],
+  ["M2 论文全流程","P1","拟合报告、统计检验、多面板、信号处理"],
+  ["M3 高级功能","P2","3D、专业图、高级统计、图像处理"],
+];
+const overrides=new Map(); // id -> status（来自共享存储）
+let db=null, canWrite=false;
+const state={q:"",status:new Set(),mod:"",mile:""};
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const statusOf=r=>overrides.get(r.id)||r.status;
+
+function renderMiles(){
+  $("#miles").innerHTML=MILES.map(([name,pri,desc])=>{
+    const rs=BASE.filter(r=>r.pri===pri);const d=rs.filter(r=>statusOf(r)==="已完成").length,p=rs.filter(r=>statusOf(r)==="原型").length;
+    const pct=n=>(rs.length?n/rs.length*100:0).toFixed(1)+"%";
+    return `<button type="button" class="mile" data-mile="${pri}" aria-pressed="${state.mile===pri}">
+      <span class="k"><span class="name">${name}</span><span class="num">${d} / ${rs.length}</span></span>
+      <span class="bar" aria-hidden="true"><i class="d" style="width:${pct(d)}"></i><i class="p" style="width:${pct(p)}"></i></span>
+      <span class="desc">${desc} · 已完成 ${d}，原型 ${p}</span></button>`;}).join("");
+  $("#miles").querySelectorAll(".mile").forEach(b=>b.onclick=()=>{state.mile=state.mile===b.dataset.mile?"":b.dataset.mile;renderMiles();renderRows();});
+}
+function renderChips(){
+  $("#stChips").innerHTML=STATUSES.map(([s,,c])=>`<button type="button" class="chip" data-s="${s}" aria-pressed="${state.status.has(s)}"><span class="dot" style="background:${c}"></span>${s}</button>`).join("");
+  $("#stChips").querySelectorAll(".chip").forEach(b=>b.onclick=()=>{const s=b.dataset.s;state.status.has(s)?state.status.delete(s):state.status.add(s);renderChips();renderRows();});
+}
+function renderModules(){
+  const mods=[...new Set(BASE.map(r=>r.module))];
+  $("#mod").innerHTML=`<option value="">全部模块（${mods.length}）</option>`+mods.map(m=>`<option>${esc(m)}</option>`).join("");
+  $("#mod").onchange=e=>{state.mod=e.target.value;renderRows();};
+}
+function matches(r){
+  if(state.mile&&r.pri!==state.mile)return false;
+  if(state.mod&&r.module!==state.mod)return false;
+  if(state.status.size&&!state.status.has(statusOf(r)))return false;
+  if(state.q){const q=state.q.toLowerCase();if(![r.id,r.feature,r.ref,r.how,r.verify,r.module].some(x=>String(x).toLowerCase().includes(q)))return false;}
+  return true;
+}
+function statusCell(r){
+  const s=statusOf(r);
+  const opts=STATUSES.map(([v])=>`<option${v===s?" selected":""}>${v}</option>`).join("");
+  return `<select class="st ${ST_CLASS[s]}" data-id="${r.id}" aria-label="${esc(r.id)} 状态"${canWrite?"":" disabled"}>${opts}</select>`;
+}
+function renderRows(){
+  const rs=BASE.filter(matches);let html="",cur=null;
+  const groupCount={};rs.forEach(r=>groupCount[r.module]=(groupCount[r.module]||0)+1);
+  for(const r of rs){
+    if(r.module!==cur){cur=r.module;html+=`<tr class="group"><td colspan="6">${esc(cur)}<span class="gcount">${groupCount[cur]} 项</span></td></tr>`;}
+    const s=statusOf(r);
+    html+=`<tr class="${s==="不做"?"skip":""}">
+      <td class="id">${r.id}</td>
+      <td class="featcell"><span class="feat">${esc(r.feature)}</span><span class="ref">${esc(r.ref)}</span></td>
+      <td class="pricell"><span class="pri ${r.pri==="不做"?"skip":r.pri}">${esc(r.pri)}</span><span class="ms">${esc(r.milestone)}</span></td>
+      <td class="stcell">${statusCell(r)}</td>
+      <td class="small" data-label="实现">${esc(r.how)}</td>
+      <td class="small" data-label="验证">${esc(r.verify)}</td></tr>`;
+  }
+  $("#rows").innerHTML=html;$("#empty").hidden=rs.length>0;
+  $("#count").textContent=`显示 ${rs.length} / ${BASE.length}`;
+}
+$("#rows").addEventListener("change",async e=>{
+  const sel=e.target.closest("select.st");if(!sel||!db)return;
+  const id=sel.dataset.id,v=sel.value;const prev=overrides.get(id);
+  overrides.set(id,v);sel.className="st "+ST_CLASS[v];renderMiles();
+  try{await db.collection("status").doc(id).set({status:v,at:new Date().toISOString()});$("#sync").textContent=`已保存 ${id} → ${v}`;}
+  catch(err){if(prev)overrides.set(id,prev);else overrides.delete(id);renderRows();renderMiles();
+    $("#sync").textContent=err&&err.code==="permission_denied"?"你没有修改权限，状态未保存":"保存失败，请稍后再试";}
+});
+$("#q").addEventListener("input",e=>{state.q=e.target.value.trim();renderRows();});
+
+$("#total").textContent=BASE.length;
+renderMiles();renderChips();renderModules();renderRows();
+
+(async()=>{
+  try{db=await window.claude?.use?.("db");}catch(e){db=null;}
+  if(!db){$("#sync").textContent="只读：此视图无法连接状态存储";return;}
+  canWrite=true;$("#sync").textContent="状态已同步";renderRows();
+  db.collection("status").limit(1000).onSnapshot(snap=>{
+    overrides.clear();
+    snap.docs.forEach(d=>{const v=d.data()?.status;if(typeof v==="string"&&ST_CLASS[v])overrides.set(d.id,v);});
+    renderMiles();renderRows();
+  },err=>{$("#sync").textContent="状态同步中断，刷新页面可重新连接";});
+})();
+</script>

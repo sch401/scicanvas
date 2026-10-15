@@ -1,0 +1,16 @@
+[workspace]
+resolver = "2"
+members = ["crates/scicanvas-core", "crates/scicanvas"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+rust-version = "1.80"
+
+[profile.release]
+opt-level = 3
+
+# 让调试构建里的依赖也开优化，界面会流畅很多
+[profile.dev.package."*"]
+opt-level = 2
