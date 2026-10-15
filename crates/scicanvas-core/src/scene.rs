@@ -505,9 +505,25 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
             continue;
         }
         if st.kind.has_line() && s.points.len() > 1 {
+            let pts = if matches!(st.kind, PlotType::StepHorizontal | PlotType::StepVertical) {
+                let first = s.points[0];
+                let mut pts = vec![[px(first[0]), py(first[1])]];
+                for pair in s.points.windows(2) {
+                    let bend = if st.kind == PlotType::StepHorizontal {
+                        [pair[1][0], pair[0][1]]
+                    } else {
+                        [pair[0][0], pair[1][1]]
+                    };
+                    pts.push([px(bend[0]), py(bend[1])]);
+                    pts.push([px(pair[1][0]), py(pair[1][1])]);
+                }
+                pts
+            } else {
+                s.points.iter().map(|p| [px(p[0]), py(p[1])]).collect()
+            };
             push(
                 Prim::Polyline {
-                    pts: s.points.iter().map(|p| [px(p[0]), py(p[1])]).collect(),
+                    pts,
                     color,
                     width: g.line_width as f64,
                 },

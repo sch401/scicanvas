@@ -68,6 +68,15 @@ fn placement_and_page_dimensions_have_valid_numeric_bounds() {
             y: f64::NAN,
             ..Default::default()
         },
+        LayerRect {
+            x: 1.0,
+            width: f64::EPSILON / 2.0,
+            ..Default::default()
+        },
+        LayerRect {
+            width: 1.0 + f64::EPSILON,
+            ..Default::default()
+        },
     ] {
         assert!(rect.validate().is_err());
     }

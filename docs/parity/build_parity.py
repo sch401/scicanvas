@@ -30,7 +30,7 @@ add(M, "窗口排列：层叠 / 平铺", "Arrange Windows", "P1", PROTO, "按工
 add(M, "项目文件保存 / 打开", "Opening, Closing and Backing Up the Origin Project File", "P0", DONE, "serde_json（.scproj）；以后换成带二进制块的压缩格式", "保存→打开→逐字段比较")
 add(M, "自动备份与崩溃恢复", "Opening, Closing and Backing Up the Origin Project File", "P1", TODO, "定时写临时文件", "强制退出后恢复")
 add(M, "最近打开的文件", "Recent Origin Files", "P1", TODO, "配置文件记录", "手动操作")
-add(M, "撤销 / 重做", "—", "P0", DONE, "项目快照；连续编辑合并；100 步 / 300 MiB 上限", "核心历史、命令与无头界面回归测试")
+add(M, "撤销 / 重做", "—", "P0", DONE, "显式修改标记与编辑事务；100 步 / 300 MiB 上限", "十万行事务复用、空闲帧、真实编辑控件回归测试")
 add(M, "命令注册表（菜单、工具栏、脚本共用同一套命令）", "—", "P0", PROTO, "参照 PhotoCraft：每个操作是一个命令", "每个菜单项都有对应命令")
 add(M, "结果日志（分析结果记录）", "Analysis Results: The Results Log", "P1", TODO, "停靠面板 + 结构化记录", "手动操作")
 add(M, "Notes 文本窗口 / Markdown 报告", "Notes Window", "P2", TODO, "egui_commonmark", "手动操作")
@@ -116,7 +116,7 @@ add(M, "导入 Origin 工程中的工作表", "Importing from Origin Project", "
 M = "绘图基础"
 add(M, "按选列自动配对 X / Y 绘图", "Creating Graphs from Graph Templates", "P0", DONE, "plot_from_selection", "单元测试")
 add(M, "按选区（部分行）绘图", "Creating Graphs from Graph Templates", "P0", PROTO, "网页原型已做", "手动操作")
-add(M, "页面-图层-曲线 三层结构", "The Page-Layer-Plot Hierarchy", "P0", DONE, "Graph → Page → Layer → PlotSpec；v0/v1 自动迁移", "迁移、往返和 SVG 版面回归测试")
+add(M, "页面-图层-曲线 三层结构", "The Page-Layer-Plot Hierarchy", "P0", DONE, "Graph → Page → Layer → PlotSpec；v0–v2 迁移与显式图层访问", "迁移、往返和 SVG 版面回归测试")
 add(M, "往图层添加 / 移除曲线", "Adding or Swapping Data Plots in the Graph Layer", "P0", TODO, "图层内容对话框", "手动操作")
 add(M, "多图层图形", "Creating Multi-Layer Graphs", "P0", PROTO, "多图层增删、各层属性与独立裁剪；分析与缩放跟随所选图层", "跨工作簿、裁剪、保存与撤销测试；Origin 目视对照待做")
 add(M, "函数绘图（y = f(x)）", "Plotting Mathematical Functions", "P1", TODO, "复用公式解析器", "与解析值比较")
@@ -143,13 +143,13 @@ add(M, "数据标签", "Adding Labels to Plots", "P1", TODO, "", "目视检查")
 add(M, "误差棒", "Adding Error Bars to Your Graph", "P0", TODO, "需先有误差列", "与 Origin 比较")
 add(M, "插入图片 / 表格到图中", "Inserting Image into Graph", "P2", TODO, "", "目视检查")
 add(M, "合并多张图 / 拆分图层", "The Merge Graph Dialog Box", "P1", TODO, "", "目视检查")
-add(M, "图层排列（行列网格、间距）", "The Arrange Layers Dialog Box", "P0", PROTO, "可设置列数的等宽网格；独立间距待做", "多图层裁剪测试；Origin 目视对照待做")
+add(M, "图层排列（行列网格、间距）", "The Arrange Layers Dialog Box", "P0", PROTO, "网格与自定义图层矩形、叠放；独立网格间距待做", "布局、命中、透明背景、迁移与撤销测试；Origin 目视对照待做")
 add(M, "布局页（多图拼版）", "Using the Layout Page Window", "P1", TODO, "", "目视检查")
 add(M, "曲线颜色、线型、符号递增", "Customizing Data Plot Colors", "P0", DONE, "Origin 默认颜色 / 符号顺序", "目视比较")
 add(M, "按数据集控制颜色 / 大小（颜色映射）", "Using a Dataset to Control Plot Color", "P1", TODO, "", "目视比较")
 add(M, "绘图属性对话框（Plot Details）", "Plot Details Controls", "P0", PROTO, "基础项已做，分页完整版待做", "手动操作")
 add(M, "显示范围（只画部分行）", "Editing the Plots Display Range", "P1", PROTO, "", "手动操作")
-add(M, "页面尺寸、背景、边距", "The (Plot Details) Print/Dimensions Tab", "P0", PROTO, "毫米尺寸和 SVG 毫米单位；背景、边距待做", "SVG 尺寸和项目往返测试")
+add(M, "页面尺寸、背景、边距", "The (Plot Details) Print/Dimensions Tab", "P0", PROTO, "毫米尺寸、统一逻辑画布与图层背景；页面配色、边距待做", "显示缩放比例、SVG 尺寸和项目往返测试")
 
 # ---------------------------------------------------------------- 图形探索与小工具
 M = "图形探索与小工具"
@@ -451,6 +451,7 @@ THREE_D = {
     "3D 100% Stacked Bar Graph": "3D 百分比堆叠柱状图", "3D Floating Bar Graph": "3D 浮动柱状图", "3D Vector XYZ XYZ": "3D 矢量（XYZ XYZ）",
     "3D Vector XYZ dXdYdZ": "3D 矢量（XYZ dXdYdZ）", "3D Ternary Symbol": "3D 三元散点", "3D Tetrahedral(Quaternary Phase Diagram)": "四面体图（四元相图）",
 }
+PROTO_GRAPHS = {"Horizontal Step Graph", "Vertical Step Graph"}
 DONE_GRAPHS = {"Line Graph", "2D Scatter Graph", "Line+Symbol Graph", "Column Graph"}
 P1_3D = {"Color Map Surface", "3D Scatter Graph"}
 
@@ -510,8 +511,8 @@ for cat, (cn_cat, table) in GT.items():
             cn, p = table.get(en, (en, "P2"))
         else:
             cn, p = THREE_D.get(en, en), ("P1" if en in P1_3D else "P2")
-        status = DONE if en in DONE_GRAPHS else TODO
-        add("图类型 · " + cn_cat, cn, en, p, status, graph_how(cat, en), "与 Origin 同数据出图目视比较")
+        status = DONE if en in DONE_GRAPHS else PROTO if en in PROTO_GRAPHS else TODO
+        add("图类型 · " + cn_cat, cn, en, p, status, ("阶梯折线图元 + SVG 共享排版" if en in PROTO_GRAPHS else graph_how(cat, en)), ("拐点几何、拟合线与项目往返测试；Origin 目视对照待做" if en in PROTO_GRAPHS else "与 Origin 同数据出图目视比较"))
 
 # 网页原型已实现、Rust 版待移植的条目
 PROTO_FEATURES = ("数值积分", "数值微分", "归一化", "列统计", "平滑（移动平均")

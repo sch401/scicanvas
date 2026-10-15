@@ -1642,6 +1642,8 @@ impl SciApp {
                                                 ("plot.scatter", "散点图"),
                                                 ("plot.linesym", "点线图"),
                                                 ("plot.bar", "柱状图"),
+                                                ("plot.step_horizontal", "水平阶梯图"),
+                                                ("plot.step_vertical", "垂直阶梯图"),
                                             ] {
                                                 if cid.is_empty() {
                                                     ui.separator();
@@ -1889,6 +1891,8 @@ impl SciApp {
                 ColAction::Plot(PlotType::Scatter) => "plot.scatter",
                 ColAction::Plot(PlotType::LineSymbol) => "plot.linesym",
                 ColAction::Plot(PlotType::Bar) => "plot.bar",
+                ColAction::Plot(PlotType::StepHorizontal) => "plot.step_horizontal",
+                ColAction::Plot(PlotType::StepVertical) => "plot.step_vertical",
             };
             self.run_command(command);
         }
@@ -2253,6 +2257,8 @@ impl SciApp {
                     egui::Grid::new(("layer-rectangle", gid, props_layer))
                         .num_columns(4)
                         .show(ui, |ui| {
+                            let min_width = f64::MIN_POSITIVE.min(rect.width);
+                            let min_height = f64::MIN_POSITIVE.min(rect.height);
                             ui.label("X");
                             edit_group(
                                 &ui.add(
@@ -2276,7 +2282,7 @@ impl SciApp {
                             edit_group(
                                 &ui.add(
                                     egui::DragValue::new(&mut rect.width)
-                                        .range(f64::EPSILON..=1.0 - rect.x)
+                                        .range(min_width..=1.0 - rect.x)
                                         .speed(0.01),
                                 ),
                                 history_group,
@@ -2285,7 +2291,7 @@ impl SciApp {
                             edit_group(
                                 &ui.add(
                                     egui::DragValue::new(&mut rect.height)
-                                        .range(f64::EPSILON..=1.0 - rect.y)
+                                        .range(min_height..=1.0 - rect.y)
                                         .speed(0.01),
                                 ),
                                 history_group,
@@ -2614,7 +2620,15 @@ mod history_tests {
 
     #[test]
     fn commands_restore_columns_graphs_fits_and_sorting() {
-        for command in ["col.delete", "sort.desc", "fit.linear", "plot.bar", "book.new"] {
+        for command in [
+            "col.delete",
+            "sort.desc",
+            "fit.linear",
+            "plot.bar",
+            "plot.step_horizontal",
+            "plot.step_vertical",
+            "book.new",
+        ] {
             let mut app = app();
             app.active = Some(1);
             app.selection.insert(1, vec!["B".into()]);

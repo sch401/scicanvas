@@ -79,7 +79,14 @@ pub static TABS: &[Tab] = &[
             Group {
                 label: "二维图",
                 items: &[
-                    Gallery(&["plot.line", "plot.scatter", "plot.linesym", "plot.bar"]),
+                    Gallery(&[
+                        "plot.line",
+                        "plot.scatter",
+                        "plot.linesym",
+                        "plot.bar",
+                        "plot.step_horizontal",
+                        "plot.step_vertical",
+                    ]),
                     Big("plot.builder"),
                 ],
             },
@@ -152,7 +159,7 @@ pub static TABS: &[Tab] = &[
                 label: "图类型",
                 items: &[
                     Smalls(&["plot.line", "plot.scatter", "plot.linesym"]),
-                    Smalls(&["plot.bar"]),
+                    Smalls(&["plot.bar", "plot.step_horizontal", "plot.step_vertical"]),
                 ],
             },
             Group {

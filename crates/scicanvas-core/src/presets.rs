@@ -20,6 +20,8 @@ pub fn all() -> Vec<Preset> {
                 "Scatter" => PlotType::Scatter,
                 "LineSymbol" => PlotType::LineSymbol,
                 "Bar" => PlotType::Bar,
+                "StepHorizontal" => PlotType::StepHorizontal,
+                "StepVertical" => PlotType::StepVertical,
                 _ => unreachable!("内置预设使用已实现的图元"),
             };
             Preset { id, name, kind }

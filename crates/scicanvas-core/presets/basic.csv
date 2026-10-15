@@ -3,3 +3,5 @@ line,折线图,Line
 scatter,散点图,Scatter
 linesym,点线图,LineSymbol
 bar,柱状图,Bar
+step-horizontal,水平阶梯图,StepHorizontal
+step-vertical,垂直阶梯图,StepVertical

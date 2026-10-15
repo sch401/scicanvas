@@ -337,6 +337,28 @@ fn build() -> Vec<Command> {
         .modifies(),
         // 图形
         c(
+            "plot.step_horizontal",
+            "水平阶梯图",
+            "steph",
+            "",
+            "绘图",
+            "step horizontal staircase",
+            need_data,
+            |a| a.plot(PlotType::StepHorizontal),
+        )
+        .modifies(),
+        c(
+            "plot.step_vertical",
+            "垂直阶梯图",
+            "stepv",
+            "",
+            "绘图",
+            "step vertical staircase",
+            need_data,
+            |a| a.plot(PlotType::StepVertical),
+        )
+        .modifies(),
+        c(
             "layer.add",
             "添加图层",
             "newbook",

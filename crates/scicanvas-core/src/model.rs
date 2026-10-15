@@ -236,10 +236,19 @@ pub enum PlotType {
     Scatter,
     LineSymbol,
     Bar,
+    StepHorizontal,
+    StepVertical,
 }
 
 impl PlotType {
-    pub const ALL: [PlotType; 4] = [PlotType::Line, PlotType::Scatter, PlotType::LineSymbol, PlotType::Bar];
+    pub const ALL: [PlotType; 6] = [
+        PlotType::Line,
+        PlotType::Scatter,
+        PlotType::LineSymbol,
+        PlotType::Bar,
+        PlotType::StepHorizontal,
+        PlotType::StepVertical,
+    ];
 
     pub fn label(self) -> &'static str {
         match self {
@@ -247,11 +256,16 @@ impl PlotType {
             PlotType::Scatter => "散点图",
             PlotType::LineSymbol => "点线图",
             PlotType::Bar => "柱状图",
+            PlotType::StepHorizontal => "水平阶梯图",
+            PlotType::StepVertical => "垂直阶梯图",
         }
     }
 
     pub fn has_line(self) -> bool {
-        matches!(self, PlotType::Line | PlotType::LineSymbol)
+        matches!(
+            self,
+            PlotType::Line | PlotType::LineSymbol | PlotType::StepHorizontal | PlotType::StepVertical
+        )
     }
 
     pub fn has_symbol(self) -> bool {

@@ -4,7 +4,7 @@
 本清单只记录功能点，不包含 Origin 文档正文。实现时按公开说明和观察到的行为编写，不复制 Origin 的代码、文字或图片。
 
 共 488 项：P0 87 项，P1 136 项，P2 254 项，不做 11 项。
-状态：已完成 26 项，原型 26 项，未开始 425 项，不做 11 项。
+状态：已完成 26 项，原型 28 项，未开始 423 项，不做 11 项。
 
 - **P0 / M1 日常够用**：一个人做日常数据处理和论文作图需要的最小集合。
 - **P1 / M2 论文全流程**：拟合报告、统计检验、多面板、信号处理等，覆盖大部分论文工作。
@@ -28,7 +28,7 @@
 | F005 | 项目文件保存 / 打开 | Opening, Closing and Backing Up the Origin Project File | P0 | 已完成 | serde_json（.scproj）；以后换成带二进制块的压缩格式 | 保存→打开→逐字段比较 |
 | F006 | 自动备份与崩溃恢复 | Opening, Closing and Backing Up the Origin Project File | P1 | 未开始 | 定时写临时文件 | 强制退出后恢复 |
 | F007 | 最近打开的文件 | Recent Origin Files | P1 | 未开始 | 配置文件记录 | 手动操作 |
-| F008 | 撤销 / 重做 | — | P0 | 已完成 | 项目快照；连续编辑合并；100 步 / 300 MiB 上限 | 核心历史、命令与无头界面回归测试 |
+| F008 | 撤销 / 重做 | — | P0 | 已完成 | 显式修改标记与编辑事务；100 步 / 300 MiB 上限 | 十万行事务复用、空闲帧、真实编辑控件回归测试 |
 | F009 | 命令注册表（菜单、工具栏、脚本共用同一套命令） | — | P0 | 原型 | 参照 PhotoCraft：每个操作是一个命令 | 每个菜单项都有对应命令 |
 | F010 | 结果日志（分析结果记录） | Analysis Results: The Results Log | P1 | 未开始 | 停靠面板 + 结构化记录 | 手动操作 |
 | F011 | Notes 文本窗口 / Markdown 报告 | Notes Window | P2 | 未开始 | egui_commonmark | 手动操作 |
@@ -122,7 +122,7 @@
 |---|---|---|---|---|---|---|
 | F080 | 按选列自动配对 X / Y 绘图 | Creating Graphs from Graph Templates | P0 | 已完成 | plot_from_selection | 单元测试 |
 | F081 | 按选区（部分行）绘图 | Creating Graphs from Graph Templates | P0 | 原型 | 网页原型已做 | 手动操作 |
-| F082 | 页面-图层-曲线 三层结构 | The Page-Layer-Plot Hierarchy | P0 | 已完成 | Graph → Page → Layer → PlotSpec；v0/v1 自动迁移 | 迁移、往返和 SVG 版面回归测试 |
+| F082 | 页面-图层-曲线 三层结构 | The Page-Layer-Plot Hierarchy | P0 | 已完成 | Graph → Page → Layer → PlotSpec；v0–v2 迁移与显式图层访问 | 迁移、往返和 SVG 版面回归测试 |
 | F083 | 往图层添加 / 移除曲线 | Adding or Swapping Data Plots in the Graph Layer | P0 | 未开始 | 图层内容对话框 | 手动操作 |
 | F084 | 多图层图形 | Creating Multi-Layer Graphs | P0 | 原型 | 多图层增删、各层属性与独立裁剪；分析与缩放跟随所选图层 | 跨工作簿、裁剪、保存与撤销测试；Origin 目视对照待做 |
 | F085 | 函数绘图（y = f(x)） | Plotting Mathematical Functions | P1 | 未开始 | 复用公式解析器 | 与解析值比较 |
@@ -149,13 +149,13 @@
 | F106 | 误差棒 | Adding Error Bars to Your Graph | P0 | 未开始 | 需先有误差列 | 与 Origin 比较 |
 | F107 | 插入图片 / 表格到图中 | Inserting Image into Graph | P2 | 未开始 | — | 目视检查 |
 | F108 | 合并多张图 / 拆分图层 | The Merge Graph Dialog Box | P1 | 未开始 | — | 目视检查 |
-| F109 | 图层排列（行列网格、间距） | The Arrange Layers Dialog Box | P0 | 原型 | 可设置列数的等宽网格；独立间距待做 | 多图层裁剪测试；Origin 目视对照待做 |
+| F109 | 图层排列（行列网格、间距） | The Arrange Layers Dialog Box | P0 | 原型 | 网格与自定义图层矩形、叠放；独立网格间距待做 | 布局、命中、透明背景、迁移与撤销测试；Origin 目视对照待做 |
 | F110 | 布局页（多图拼版） | Using the Layout Page Window | P1 | 未开始 | — | 目视检查 |
 | F111 | 曲线颜色、线型、符号递增 | Customizing Data Plot Colors | P0 | 已完成 | Origin 默认颜色 / 符号顺序 | 目视比较 |
 | F112 | 按数据集控制颜色 / 大小（颜色映射） | Using a Dataset to Control Plot Color | P1 | 未开始 | — | 目视比较 |
 | F113 | 绘图属性对话框（Plot Details） | Plot Details Controls | P0 | 原型 | 基础项已做，分页完整版待做 | 手动操作 |
 | F114 | 显示范围（只画部分行） | Editing the Plots Display Range | P1 | 原型 | — | 手动操作 |
-| F115 | 页面尺寸、背景、边距 | The (Plot Details) Print/Dimensions Tab | P0 | 原型 | 毫米尺寸和 SVG 毫米单位；背景、边距待做 | SVG 尺寸和项目往返测试 |
+| F115 | 页面尺寸、背景、边距 | The (Plot Details) Print/Dimensions Tab | P0 | 原型 | 毫米尺寸、统一逻辑画布与图层背景；页面配色、边距待做 | 显示缩放比例、SVG 尺寸和项目往返测试 |
 
 ## 图形探索与小工具
 
@@ -345,8 +345,8 @@
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
 |---|---|---|---|---|---|---|
 | F254 | 折线图 | Line Graph | P0 | 已完成 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F255 | 水平阶梯图 | Horizontal Step Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F256 | 垂直阶梯图 | Vertical Step Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
+| F255 | 水平阶梯图 | Horizontal Step Graph | P1 | 原型 | 阶梯折线图元 + SVG 共享排版 | 拐点几何、拟合线与项目往返测试；Origin 目视对照待做 |
+| F256 | 垂直阶梯图 | Vertical Step Graph | P1 | 原型 | 阶梯折线图元 + SVG 共享排版 | 拐点几何、拟合线与项目往返测试；Origin 目视对照待做 |
 | F257 | Y 偏移堆叠线图 | Stacked Lines by Y Offsets Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F258 | 棒棒糖图 | Lollipop Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F259 | 颜色映射线系列 | Colormapped Line Series | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |

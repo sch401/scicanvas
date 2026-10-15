@@ -138,10 +138,12 @@ impl Default for LayerRect {
 impl LayerRect {
     pub fn validate(self) -> Result<(), String> {
         if [self.x, self.y, self.width, self.height].iter().any(|v| !v.is_finite())
-            || self.x < 0.0
-            || self.y < 0.0
-            || self.width <= 0.0
-            || self.height <= 0.0
+            || !(0.0..1.0).contains(&self.x)
+            || !(0.0..1.0).contains(&self.y)
+            || !(0.0..=1.0).contains(&self.width)
+            || !(0.0..=1.0).contains(&self.height)
+            || self.width == 0.0
+            || self.height == 0.0
             || self.x + self.width > 1.0 + 1e-12
             || self.y + self.height > 1.0 + 1e-12
         {

@@ -21,6 +21,18 @@ fn wrap(body: &str) -> String {
 /// (名称, SVG 主体)
 fn sources() -> Vec<(&'static str, String)> {
     vec![
+        (
+            "steph",
+            wrap(&format!(
+                r##"{AX}<path d="M6 16h5V11h4V6h5" stroke="IC_R" stroke-width="1.9"/>"##
+            )),
+        ),
+        (
+            "stepv",
+            wrap(&format!(
+                r##"{AX}<path d="M6 16v-5h5V6h9" stroke="IC_R" stroke-width="1.9"/>"##
+            )),
+        ),
         ("undo", wrap(r#"<path d="M9 5L4 10l5 5M4 10h9a6 6 0 0 1 0 12"/>"#)),
         ("redo", wrap(r#"<path d="M15 5l5 5-5 5M20 10h-9a6 6 0 0 0 0 12"/>"#)),
         (
