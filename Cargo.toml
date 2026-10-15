@@ -14,3 +14,11 @@ opt-level = 3
 # 让调试构建里的依赖也开优化，界面会流畅很多
 [profile.dev.package."*"]
 opt-level = 2
+
+# CI 只验收正确性；关闭依赖优化和调试信息，降低 Windows 冷构建成本。
+[profile.ci]
+inherits = "dev"
+debug = 0
+
+[profile.ci.package."*"]
+opt-level = 0
