@@ -368,6 +368,28 @@ fn build() -> Vec<Command> {
             |a| a.plot(PlotType::FloatingBar),
         )
         .modifies(),
+        c(
+            "plot.horizontal_bar",
+            "条形图",
+            "bar",
+            "",
+            "绘图",
+            "horizontal bar 条形",
+            need_data,
+            |a| a.plot(PlotType::HorizontalBar),
+        )
+        .modifies(),
+        c(
+            "plot.area",
+            "面积图",
+            "line",
+            "",
+            "绘图",
+            "area fill 面积",
+            need_data,
+            |a| a.plot(PlotType::Area),
+        )
+        .modifies(),
         // 图形
         c(
             "plot.step_horizontal",

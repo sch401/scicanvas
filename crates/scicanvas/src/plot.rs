@@ -310,6 +310,15 @@ pub fn paint(ui: &egui::Ui, rect: Rect, sc: &Scene) {
                 let pts: Vec<Pos2> = pts.iter().map(|q| at(q[0], q[1])).collect();
                 p.add(Shape::line(pts, Stroke::new(*width as f32 * scale, rgb(*color))));
             }
+            Prim::Triangles { pts, color, opacity } => {
+                let mut mesh = egui::Mesh::default();
+                let color = rgb(*color).gamma_multiply(*opacity as f32);
+                for q in pts {
+                    mesh.colored_vertex(at(q[0], q[1]), color);
+                }
+                mesh.indices.extend(0..pts.len() as u32);
+                p.add(Shape::mesh(mesh));
+            }
             Prim::Symbols { sym, pts, r, color } => {
                 let c = rgb(*color);
                 for q in pts {
@@ -446,6 +455,49 @@ mod tests {
         let states = ctx.data(|d| d.get_temp::<Vec<Option<Saved>>>(view_id(2))).unwrap();
         assert!(states[0].is_some());
         assert!(states[1].is_none());
+    }
+
+    #[test]
+    fn area_mesh_scales_vertices_alpha_and_clips_with_the_page() {
+        let mut p = Project::sample();
+        p.graphs[0]
+            .first_layer_mut()
+            .set_plot_type(scicanvas_core::PlotType::Area)
+            .unwrap();
+        p.graphs[0].first_layer_mut().y_keys = vec!["B".into()];
+        p.graphs[0].first_layer_mut().area_opacity = 0.5;
+        let sc = scene::layout_page(&p.graphs[0], &p, &[]);
+        let pts = sc
+            .items
+            .iter()
+            .find_map(|it| match &it.prim {
+                Prim::Triangles { pts, .. } => Some(pts),
+                _ => None,
+            })
+            .unwrap();
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        for scale in [0.5, 1.0, 2.0] {
+            let rect = Rect::from_min_size(pos2(20.0, 25.0), vec2(sc.w as f32, sc.h as f32) * scale);
+            let output = ctx.run(egui::RawInput::default(), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| paint(ui, rect, &sc));
+            });
+            let (mesh, clip) = output
+                .shapes
+                .iter()
+                .find_map(|s| match &s.shape {
+                    Shape::Mesh(m) if m.vertices.len() == pts.len() => Some((m, s.clip_rect)),
+                    _ => None,
+                })
+                .unwrap();
+            let tf = page_transform(rect, [sc.w, sc.h]);
+            for (vertex, point) in mesh.vertices.iter().zip(pts) {
+                assert!(vertex.pos.distance(tf * pos2(point[0] as f32, point[1] as f32)) < 1e-4);
+                assert_eq!(vertex.color.a(), 128);
+            }
+            assert_eq!(mesh.indices.len(), pts.len());
+            assert!(rect.contains_rect(clip));
+        }
     }
 
     #[test]

@@ -53,6 +53,12 @@ pub enum Prim {
     },
     /// 折线。
     Polyline { pts: Vec<[f64; 2]>, color: Rgb, width: f64 },
+    /// 每三个顶点组成一个填充三角形，屏幕与 SVG 使用同一份剖分。
+    Triangles {
+        pts: Vec<[f64; 2]>,
+        color: Rgb,
+        opacity: f64,
+    },
     /// 一组数据符号，r 为半径。
     Symbols {
         sym: Symbol,
@@ -325,7 +331,7 @@ fn translate(prim: &mut Prim, dx: f64, dy: f64) {
             *x += dx;
             *y += dy;
         }
-        Prim::Polyline { pts, .. } | Prim::Symbols { pts, .. } => {
+        Prim::Polyline { pts, .. } | Prim::Symbols { pts, .. } | Prim::Triangles { pts, .. } => {
             for p in pts {
                 p[0] += dx;
                 p[1] += dy;
@@ -342,13 +348,44 @@ fn translate(prim: &mut Prim, dx: f64, dy: f64) {
     }
 }
 
+fn area_triangles(points: &[[f64; 2]], base: f64) -> Vec<[f64; 2]> {
+    let mut out = Vec::new();
+    for pair in points.windows(2) {
+        let (a, b) = (pair[0], pair[1]);
+        if a[0] == b[0] || (a[1] == base && b[1] == base) {
+            continue;
+        }
+        if (a[1] < base && b[1] > base) || (a[1] > base && b[1] < base) {
+            let cross = [a[0] + (b[0] - a[0]) * ((base - a[1]) / (b[1] - a[1])), base];
+            out.extend([a, cross, [a[0], base], b, [b[0], base], cross]);
+        } else {
+            out.extend([a, b, [b[0], base], a, [b[0], base], [a[0], base]]);
+        }
+    }
+    out
+}
+
 fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View>) -> Scene {
+    let horizontal = g.plot_type == PlotType::HorizontalBar;
     // 数据（对数轴去掉非正值）
     let (_, mut series) = match book {
         Some(b) => g.series(b),
         None => (None, Vec::new()),
     };
+    if horizontal {
+        for s in &mut series {
+            for p in &mut s.points {
+                p.swap(0, 1);
+            }
+            for e in &mut s.errors {
+                e.swap(0, 1);
+            }
+        }
+    }
     for s in &mut series {
+        if g.plot_type == PlotType::Area && g.transform == crate::plotspec::Transform::Mean && !s.line_only {
+            s.rows = (0..s.points.len()).collect();
+        }
         let keep: Vec<_> = s
             .points
             .iter()
@@ -371,7 +408,7 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
     }
     let mut all_x: Vec<f64> = series.iter().flat_map(|s| s.points.iter().map(|p| p[0])).collect();
     let mut all_y: Vec<f64> = series.iter().flat_map(|s| s.points.iter().map(|p| p[1])).collect();
-    if g.plot_type.is_bar() && g.plot_type != PlotType::Bar {
+    if g.plot_type.is_bar() && g.plot_type != PlotType::Bar && !horizontal {
         all_y.extend(
             series
                 .iter()
@@ -409,7 +446,7 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
     let data_x: Vec<f64> = series
         .iter()
         .filter(|s| !s.line_only)
-        .flat_map(|s| s.points.iter().map(|p| p[0]))
+        .flat_map(|s| s.points.iter().map(|p| p[usize::from(horizontal)]))
         .collect();
     let dx = min_spacing(&data_x);
 
@@ -419,24 +456,28 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
             axis(&[], false, v.y.0, v.y.1, g.y_log, false),
         ),
         None => {
-            let xa = if is_bar && g.x_auto && !g.x_log && !all_x.is_empty() {
+            let xa = if is_bar && !horizontal && g.x_auto && !g.x_log && !all_x.is_empty() {
                 let lo = all_x.iter().copied().fold(f64::INFINITY, f64::min);
                 let hi = all_x.iter().copied().fold(f64::NEG_INFINITY, f64::max);
                 axis(&[lo - dx * 0.6, hi + dx * 0.6], true, 0.0, 0.0, false, false)
             } else {
-                axis(&all_x, g.x_auto, g.x_min, g.x_max, g.x_log, false)
+                axis(&all_x, g.x_auto, g.x_min, g.x_max, g.x_log, horizontal)
             };
-            (
-                xa,
+            let ya = if horizontal && g.y_auto && !g.y_log && !all_y.is_empty() {
+                let lo = all_y.iter().copied().fold(f64::INFINITY, f64::min);
+                let hi = all_y.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                axis(&[lo - dx * 0.6, hi + dx * 0.6], true, 0.0, 0.0, false, false)
+            } else {
                 axis(
                     &all_y,
                     g.y_auto,
                     g.y_min,
                     g.y_max,
                     g.y_log,
-                    is_bar && g.plot_type != PlotType::FloatingBar,
-                ),
-            )
+                    (is_bar && !horizontal && g.plot_type != PlotType::FloatingBar) || g.plot_type == PlotType::Area,
+                )
+            };
+            (xa, ya)
         }
     };
 
@@ -538,25 +579,67 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
             let index = if st.kind.is_stacked() { 0 } else { st.bar_index };
             let bw = gw / count as f64;
             for (p, base) in s.points.iter().zip(&s.bases) {
-                let x1 = px((p[0] - gw / 2.0 + index as f64 * bw).max(if xa.log { xa.lo } else { f64::NEG_INFINITY }));
-                let x2 = px((p[0] - gw / 2.0 + (index as f64 + 1.0) * bw).max(if xa.log {
-                    xa.lo
+                let (category, value, ca, va) = if horizontal {
+                    (p[1], p[0], &ya, &xa)
                 } else {
-                    f64::NEG_INFINITY
-                }));
-                let y0 = py(base.clamp(ya.lo, ya.hi));
-                let yy = py(if ya.log { p[1].max(ya.lo) } else { p[1] });
+                    (p[0], p[1], &xa, &ya)
+                };
+                let start = category - gw / 2.0 + index as f64 * bw;
+                let end = category - gw / 2.0 + (index as f64 + 1.0) * bw;
+                let category = |v: f64| if ca.log { v.max(ca.lo) } else { v };
+                let base = base.clamp(va.lo, va.hi);
+                let value = if va.log { value.max(va.lo) } else { value };
+                let (a, b) = if horizontal {
+                    ([px(base), py(category(start))], [px(value), py(category(end))])
+                } else {
+                    ([px(category(start)), py(base)], [px(category(end)), py(value)])
+                };
                 push(
                     Prim::Rect {
-                        x: x1.min(x2),
-                        y: yy.min(y0),
-                        w: (x2 - x1).abs(),
-                        h: (y0 - yy).abs(),
+                        x: a[0].min(b[0]),
+                        y: a[1].min(b[1]),
+                        w: (b[0] - a[0]).abs(),
+                        h: (a[1] - b[1]).abs(),
                         fill: Some((color, 1.0)),
                         stroke: Some((INK, 0.8)),
                     },
                     true,
                 );
+            }
+            continue;
+        }
+        if st.kind == PlotType::Area {
+            let base = py(if ya.log { ya.lo } else { 0.0f64.clamp(ya.lo, ya.hi) });
+            let mut start = 0;
+            while start < s.points.len() {
+                let mut end = start + 1;
+                while end < s.points.len() && s.rows[end] == s.rows[end - 1] + 1 {
+                    end += 1;
+                }
+                let mut pts: Vec<_> = s.points[start..end].iter().map(|p| [px(p[0]), py(p[1])]).collect();
+                pts.sort_by(|a, b| a[0].total_cmp(&b[0]));
+                let triangles = area_triangles(&pts, base);
+                if !triangles.is_empty() {
+                    push(
+                        Prim::Triangles {
+                            pts: triangles,
+                            color,
+                            opacity: f64::from(g.area_opacity),
+                        },
+                        true,
+                    );
+                }
+                if pts.len() > 1 {
+                    push(
+                        Prim::Polyline {
+                            pts,
+                            color,
+                            width: f64::from(g.line_width),
+                        },
+                        true,
+                    );
+                }
+                start = end;
             }
             continue;
         }
@@ -611,11 +694,15 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
             };
             let cap = f64::from(g.error_bars.cap) / 2.0;
             for (p, errors) in s.points.iter().zip(&s.errors) {
-                let x = p[0] + offset;
+                let (x, y) = if horizontal {
+                    (p[0], p[1] + offset)
+                } else {
+                    (p[0] + offset, p[1])
+                };
                 if let Some(e) = errors[0] {
                     let ends = [x - e, x + e];
-                    let yy = py(p[1]);
-                    if (!ya.log || p[1] > 0.0) && ends[1] >= xa.lo && ends[0] <= xa.hi {
+                    let yy = py(y);
+                    if (!ya.log || y > 0.0) && ends[1] >= xa.lo && ends[0] <= xa.hi {
                         segs.push([px(ends[0].clamp(xa.lo, xa.hi)), yy, px(ends[1].clamp(xa.lo, xa.hi)), yy]);
                         for end in ends {
                             if (xa.lo..=xa.hi).contains(&end) {
@@ -626,7 +713,7 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
                     }
                 }
                 if let Some(e) = errors[1] {
-                    let ends = [p[1] - e, p[1] + e];
+                    let ends = [y - e, y + e];
                     let xx = px(x);
                     if (xa.lo..=xa.hi).contains(&x) && ends[1] >= ya.lo && ends[0] <= ya.hi {
                         segs.push([xx, py(ends[0].clamp(ya.lo, ya.hi)), xx, py(ends[1].clamp(ya.lo, ya.hi))]);
@@ -820,14 +907,21 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
             let color = st.color.rgb();
             let cy = ly + 2.0 + lh * i as f64 + lh / 2.0;
             let x0 = lx + 4.0;
-            if st.kind.is_bar() {
+            if st.kind.is_bar() || st.kind == PlotType::Area {
                 push(
                     Prim::Rect {
                         x: x0 + 5.0,
                         y: cy - 5.5,
                         w: sw - 10.0,
                         h: 11.0,
-                        fill: Some((color, 1.0)),
+                        fill: Some((
+                            color,
+                            if st.kind == PlotType::Area {
+                                f64::from(g.area_opacity)
+                            } else {
+                                1.0
+                            },
+                        )),
                         stroke: Some((INK, 0.8)),
                     },
                     false,

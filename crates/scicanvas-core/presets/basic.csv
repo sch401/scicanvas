@@ -6,5 +6,7 @@ bar,柱状图,Bar
 stacked-bar,堆叠柱图,StackedBar
 percent-stacked-bar,百分比堆叠柱图,PercentStackedBar
 floating-bar,浮动柱图,FloatingBar
+horizontal-bar,条形图,HorizontalBar
+area,面积图,Area
 step-horizontal,水平阶梯图,StepHorizontal
 step-vertical,垂直阶梯图,StepVertical

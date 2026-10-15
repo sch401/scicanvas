@@ -23,6 +23,8 @@ pub fn all() -> Vec<Preset> {
                 "StackedBar" => PlotType::StackedBar,
                 "PercentStackedBar" => PlotType::PercentStackedBar,
                 "FloatingBar" => PlotType::FloatingBar,
+                "HorizontalBar" => PlotType::HorizontalBar,
+                "Area" => PlotType::Area,
                 "StepHorizontal" => PlotType::StepHorizontal,
                 "StepVertical" => PlotType::StepVertical,
                 _ => unreachable!("内置预设使用已实现的图元"),

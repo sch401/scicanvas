@@ -1647,6 +1647,8 @@ impl SciApp {
                                                 ("plot.stacked_bar", "堆叠柱图"),
                                                 ("plot.percent_stacked_bar", "百分比堆叠柱图"),
                                                 ("plot.floating_bar", "浮动柱图"),
+                                                ("plot.horizontal_bar", "条形图"),
+                                                ("plot.area", "面积图"),
                                                 ("plot.step_horizontal", "水平阶梯图"),
                                                 ("plot.step_vertical", "垂直阶梯图"),
                                             ] {
@@ -1901,6 +1903,8 @@ impl SciApp {
                 ColAction::Plot(PlotType::StackedBar) => "plot.stacked_bar",
                 ColAction::Plot(PlotType::PercentStackedBar) => "plot.percent_stacked_bar",
                 ColAction::Plot(PlotType::FloatingBar) => "plot.floating_bar",
+                ColAction::Plot(PlotType::HorizontalBar) => "plot.horizontal_bar",
+                ColAction::Plot(PlotType::Area) => "plot.area",
                 ColAction::Plot(PlotType::StepHorizontal) => "plot.step_horizontal",
                 ColAction::Plot(PlotType::StepVertical) => "plot.step_vertical",
             };
@@ -2339,6 +2343,11 @@ impl SciApp {
                             });
                         ui.end_row();
 
+                        if g.plot_type == PlotType::HorizontalBar {
+                            ui.label("条形方向");
+                            ui.label("X 列为纵向位置，Y 列为横向数值");
+                            ui.end_row();
+                        }
                         ui.label("统计变换");
                         egui::ComboBox::from_id_salt("props-transform")
                             .selected_text(if g.transform == scicanvas_core::plotspec::Transform::Mean {
@@ -2456,6 +2465,14 @@ impl SciApp {
                             history_group,
                         );
                         ui.end_row();
+                        if g.plot_type == PlotType::Area {
+                            ui.label("填充透明度");
+                            edit_group(
+                                &ui.add(egui::Slider::new(&mut g.area_opacity, 0.0..=1.0).text("面积填充")),
+                                history_group,
+                            );
+                            ui.end_row();
+                        }
                         ui.label("显示");
                         ui.horizontal(|ui| {
                             ui.checkbox(&mut g.grid, "网格线");
@@ -2668,6 +2685,8 @@ mod history_tests {
             "plot.bar",
             "plot.stacked_bar",
             "plot.percent_stacked_bar",
+            "plot.horizontal_bar",
+            "plot.area",
             "plot.step_horizontal",
             "plot.step_vertical",
             "col.setXError",
@@ -3006,7 +3025,13 @@ mod history_tests {
 
     #[test]
     fn bar_variant_commands_preserve_layer_targets_pairing_and_history() {
-        for command in ["plot.stacked_bar", "plot.percent_stacked_bar", "plot.floating_bar"] {
+        for command in [
+            "plot.stacked_bar",
+            "plot.percent_stacked_bar",
+            "plot.floating_bar",
+            "plot.horizontal_bar",
+            "plot.area",
+        ] {
             let mut app = app();
             app.active = Some(1);
             app.selection.insert(1, vec!["B".into(), "C".into()]);
@@ -3099,6 +3124,54 @@ mod history_tests {
                 .map(String::as_str),
             Some("A")
         );
+        roundtrip(&mut app, &before);
+    }
+
+    #[test]
+    fn area_opacity_slider_is_an_undoable_property_edit() {
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["B".into()]);
+        app.run_command("plot.area");
+        let id = app.active.unwrap();
+        app.props_for = Some(id);
+        editor_frame(&mut app, &ctx, vec![], true);
+        let output = editor_frame(&mut app, &ctx, vec![], true);
+        let y = output
+            .shapes
+            .iter()
+            .find_map(|s| match &s.shape {
+                egui::Shape::Text(t) if t.galley.job.text == "面积填充" => Some(t.pos.y + t.galley.size().y / 2.0),
+                _ => None,
+            })
+            .unwrap();
+        let at = output
+            .shapes
+            .iter()
+            .find_map(|s| match &s.shape {
+                egui::Shape::Circle(c) if (c.center.y - y).abs() < 3.0 => Some(c.center),
+                _ => None,
+            })
+            .unwrap();
+        let before = app.project.clone();
+        let click = |pos, pressed| egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        editor_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(at), click(at, true)],
+            true,
+        );
+        let end = at + egui::vec2(20.0, 0.0);
+        editor_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)], true);
+        editor_frame(&mut app, &ctx, vec![click(end, false)], true);
+        assert!(app.project.graph(id).unwrap().first_layer().area_opacity > 0.35);
         roundtrip(&mut app, &before);
     }
 

@@ -275,7 +275,7 @@ fn v5_persists_all_bar_types_and_v4_defaults_to_no_baseline_mapping() {
         .unwrap()
         .remove("base_by_y");
     let loaded = project_file::from_json(&v.to_string()).unwrap();
-    assert_eq!(loaded.version, 5);
+    assert_eq!(loaded.version, project_file::CURRENT_VERSION);
     assert!(loaded.graph(id).unwrap().first_layer().base_by_y.is_empty());
     assert_eq!(series(&loaded, id), series(&p, id));
     let spec = PlotSpec::from_selection(p.book(1).unwrap(), &[], PlotType::FloatingBar).unwrap();

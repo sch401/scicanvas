@@ -96,6 +96,21 @@ fn prim(out: &mut String, p: &Prim) {
                 hex(*color)
             );
         }
+        Prim::Triangles { pts, color, opacity } => {
+            let mut d = String::new();
+            for triangle in pts.chunks_exact(3) {
+                let _ = write!(
+                    d,
+                    "M{:.2},{:.2}L{:.2},{:.2}L{:.2},{:.2}Z",
+                    triangle[0][0], triangle[0][1], triangle[1][0], triangle[1][1], triangle[2][0], triangle[2][1]
+                );
+            }
+            let _ = write!(
+                out,
+                r#"<path d="{d}" fill="{}" fill-opacity="{opacity}" stroke="none"/>"#,
+                hex(*color)
+            );
+        }
         Prim::Symbols { sym, pts, r, color } => {
             if pts.is_empty() {
                 return;

@@ -289,12 +289,14 @@ pub enum PlotType {
     StackedBar,
     PercentStackedBar,
     FloatingBar,
+    HorizontalBar,
+    Area,
     StepHorizontal,
     StepVertical,
 }
 
 impl PlotType {
-    pub const ALL: [PlotType; 9] = [
+    pub const ALL: [PlotType; 11] = [
         PlotType::Line,
         PlotType::Scatter,
         PlotType::LineSymbol,
@@ -302,6 +304,8 @@ impl PlotType {
         PlotType::StackedBar,
         PlotType::PercentStackedBar,
         PlotType::FloatingBar,
+        PlotType::HorizontalBar,
+        PlotType::Area,
         PlotType::StepHorizontal,
         PlotType::StepVertical,
     ];
@@ -315,6 +319,8 @@ impl PlotType {
             PlotType::StackedBar => "堆叠柱图",
             PlotType::PercentStackedBar => "百分比堆叠柱图",
             PlotType::FloatingBar => "浮动柱图",
+            PlotType::HorizontalBar => "条形图",
+            PlotType::Area => "面积图",
             PlotType::StepHorizontal => "水平阶梯图",
             PlotType::StepVertical => "垂直阶梯图",
         }
@@ -323,14 +329,14 @@ impl PlotType {
     pub fn has_line(self) -> bool {
         matches!(
             self,
-            PlotType::Line | PlotType::LineSymbol | PlotType::StepHorizontal | PlotType::StepVertical
+            PlotType::Line | PlotType::LineSymbol | PlotType::StepHorizontal | PlotType::StepVertical | PlotType::Area
         )
     }
 
     pub fn is_bar(self) -> bool {
         matches!(
             self,
-            Self::Bar | Self::StackedBar | Self::PercentStackedBar | Self::FloatingBar
+            Self::Bar | Self::StackedBar | Self::PercentStackedBar | Self::FloatingBar | Self::HorizontalBar
         )
     }
 
@@ -533,7 +539,7 @@ pub struct Project {
 impl Default for Project {
     fn default() -> Self {
         Project {
-            version: 5,
+            version: 6,
             books: Vec::new(),
             graphs: Vec::new(),
             next_id: 1,

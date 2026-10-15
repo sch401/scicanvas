@@ -89,6 +89,8 @@ pub struct Layer {
     pub y_log: bool,
     pub line_width: f32,
     pub symbol_size: f32,
+    #[cfg_attr(feature = "serde", serde(default = "default_area_opacity"))]
+    pub area_opacity: f32,
     #[cfg_attr(feature = "serde", serde(default))]
     pub error_bars: ErrorBars,
     pub grid: bool,
@@ -113,11 +115,16 @@ impl Default for Layer {
             y_log: false,
             line_width: 1.5,
             symbol_size: 6.0,
+            area_opacity: default_area_opacity(),
             error_bars: Default::default(),
             grid: false,
             legend: true,
         }
     }
+}
+
+fn default_area_opacity() -> f32 {
+    0.35
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -188,6 +195,12 @@ impl Layer {
         if !self.x_title.trim().is_empty() {
             return self.x_title.clone();
         }
+        if self.plot_type == crate::PlotType::HorizontalBar {
+            return book
+                .and_then(|b| self.y_keys.first().and_then(|k| b.column(k)))
+                .map(|c| c.axis_label())
+                .unwrap_or_default();
+        }
         book.and_then(|b| self.x_key.as_deref().and_then(|k| b.column(k)))
             .map(|c| c.axis_label())
             .unwrap_or_else(|| "行号".to_string())
@@ -196,6 +209,12 @@ impl Layer {
     pub fn y_axis_title(&self, book: Option<&Book>) -> String {
         if !self.y_title.trim().is_empty() {
             return self.y_title.clone();
+        }
+        if self.plot_type == crate::PlotType::HorizontalBar {
+            return book
+                .and_then(|b| self.x_key.as_deref().and_then(|k| b.column(k)))
+                .map(|c| c.axis_label())
+                .unwrap_or_else(|| "行号".into());
         }
         if self.plot_type == crate::PlotType::PercentStackedBar {
             return "百分比 (%)".into();
