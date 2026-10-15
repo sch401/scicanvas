@@ -16,6 +16,7 @@ pub mod presets;
 #[cfg(feature = "serde")]
 pub mod project_file;
 pub mod scene;
+pub mod spline;
 pub mod svg;
 pub mod ticks;
 

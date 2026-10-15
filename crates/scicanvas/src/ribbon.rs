@@ -89,6 +89,9 @@ pub static TABS: &[Tab] = &[
                         "plot.floating_bar",
                         "plot.horizontal_bar",
                         "plot.area",
+                        "plot.spline",
+                        "plot.spline_symbol",
+                        "plot.vertical_drop",
                         "plot.step_horizontal",
                         "plot.step_vertical",
                     ]),
@@ -170,6 +173,7 @@ pub static TABS: &[Tab] = &[
                     Smalls(&["plot.bar", "plot.step_horizontal", "plot.step_vertical"]),
                     Smalls(&["plot.stacked_bar", "plot.percent_stacked_bar", "plot.floating_bar"]),
                     Smalls(&["plot.horizontal_bar", "plot.area"]),
+                    Smalls(&["plot.spline", "plot.spline_symbol", "plot.vertical_drop"]),
                 ],
             },
             Group {
@@ -178,7 +182,7 @@ pub static TABS: &[Tab] = &[
             },
             Group {
                 label: "图例",
-                items: &[Big("graph.legend")],
+                items: &[Big("graph.legend"), Big("graph.labels")],
             },
             Group {
                 label: "设置",

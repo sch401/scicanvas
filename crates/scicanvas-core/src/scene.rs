@@ -365,6 +365,39 @@ fn area_triangles(points: &[[f64; 2]], base: f64) -> Vec<[f64; 2]> {
     out
 }
 
+fn data_runs(s: &crate::Series) -> Vec<Vec<[f64; 2]>> {
+    let mut out = Vec::new();
+    let mut start = 0;
+    while start < s.points.len() {
+        let mut end = start + 1;
+        while end < s.points.len() && s.rows[end] == s.rows[end - 1] + 1 {
+            end += 1;
+        }
+        let mut run = s.points[start..end].to_vec();
+        run.sort_by(|a, b| a[0].total_cmp(&b[0]));
+        out.push(run);
+        start = end;
+    }
+    out
+}
+
+fn spline_paths(s: &crate::Series) -> Vec<Vec<[f64; 2]>> {
+    let mut out = Vec::new();
+    for run in data_runs(s) {
+        let mut start = 0;
+        while start < run.len() {
+            let mut end = start + 1;
+            while end < run.len() && run[end][0] > run[end - 1][0] {
+                end += 1;
+            }
+            // ponytail: 每区间固定 16 段采样；大数据绘图后续改为按页面误差自适应采样。
+            out.push(crate::spline::natural(&run[start..end], 16).unwrap_or_else(|_| run[start..end].to_vec()));
+            start = end;
+        }
+    }
+    out
+}
+
 fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View>) -> Scene {
     let horizontal = g.plot_type == PlotType::HorizontalBar;
     // 数据（对数轴去掉非正值）
@@ -383,7 +416,10 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
         }
     }
     for s in &mut series {
-        if g.plot_type == PlotType::Area && g.transform == crate::plotspec::Transform::Mean && !s.line_only {
+        if (g.plot_type == PlotType::Area || g.plot_type.is_spline())
+            && g.transform == crate::plotspec::Transform::Mean
+            && !s.line_only
+        {
             s.rows = (0..s.points.len()).collect();
         }
         let keep: Vec<_> = s
@@ -408,6 +444,24 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
     }
     let mut all_x: Vec<f64> = series.iter().flat_map(|s| s.points.iter().map(|p| p[0])).collect();
     let mut all_y: Vec<f64> = series.iter().flat_map(|s| s.points.iter().map(|p| p[1])).collect();
+    let splines: Vec<_> = series
+        .iter()
+        .map(|s| {
+            if g.plot_type.is_spline() && !s.line_only {
+                spline_paths(s)
+            } else {
+                Vec::new()
+            }
+        })
+        .collect();
+    all_y.extend(
+        splines
+            .iter()
+            .flatten()
+            .flatten()
+            .map(|p| p[1])
+            .filter(|v| !g.y_log || *v > 0.0),
+    );
     if g.plot_type.is_bar() && g.plot_type != PlotType::Bar && !horizontal {
         all_y.extend(
             series
@@ -474,7 +528,8 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
                     g.y_min,
                     g.y_max,
                     g.y_log,
-                    (is_bar && !horizontal && g.plot_type != PlotType::FloatingBar) || g.plot_type == PlotType::Area,
+                    (is_bar && !horizontal && g.plot_type != PlotType::FloatingBar)
+                        || matches!(g.plot_type, PlotType::Area | PlotType::VerticalDrop),
                 )
             };
             (xa, ya)
@@ -571,7 +626,7 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
         );
     }
     let mut symbols: Vec<Prim> = Vec::new();
-    for (s, st) in series.iter().zip(&styles) {
+    for ((s, st), paths) in series.iter().zip(&styles).zip(&splines) {
         let color = st.color.rgb();
         if st.kind.is_bar() {
             let gw = dx * 0.7;
@@ -610,14 +665,8 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
         }
         if st.kind == PlotType::Area {
             let base = py(if ya.log { ya.lo } else { 0.0f64.clamp(ya.lo, ya.hi) });
-            let mut start = 0;
-            while start < s.points.len() {
-                let mut end = start + 1;
-                while end < s.points.len() && s.rows[end] == s.rows[end - 1] + 1 {
-                    end += 1;
-                }
-                let mut pts: Vec<_> = s.points[start..end].iter().map(|p| [px(p[0]), py(p[1])]).collect();
-                pts.sort_by(|a, b| a[0].total_cmp(&b[0]));
+            for run in data_runs(s) {
+                let pts: Vec<_> = run.iter().map(|p| [px(p[0]), py(p[1])]).collect();
                 let triangles = area_triangles(&pts, base);
                 if !triangles.is_empty() {
                     push(
@@ -639,11 +688,37 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
                         true,
                     );
                 }
-                start = end;
             }
             continue;
         }
-        if st.kind.has_line() && s.points.len() > 1 {
+        if st.kind == PlotType::VerticalDrop {
+            let base = py(if ya.log { ya.lo } else { 0.0f64.clamp(ya.lo, ya.hi) });
+            push(
+                Prim::Segments {
+                    segs: s.points.iter().map(|p| [px(p[0]), base, px(p[0]), py(p[1])]).collect(),
+                    color,
+                    width: f64::from(g.line_width),
+                    dashed: false,
+                },
+                true,
+            );
+        }
+        if st.kind.is_spline() {
+            for path in paths {
+                for run in path.split(|p| (g.x_log && p[0] <= 0.0) || (g.y_log && p[1] <= 0.0)) {
+                    if run.len() > 1 {
+                        push(
+                            Prim::Polyline {
+                                pts: run.iter().map(|p| [px(p[0]), py(p[1])]).collect(),
+                                color,
+                                width: f64::from(g.line_width),
+                            },
+                            true,
+                        );
+                    }
+                }
+            }
+        } else if st.kind.has_line() && s.points.len() > 1 {
             let pts = if matches!(st.kind, PlotType::StepHorizontal | PlotType::StepVertical) {
                 let first = s.points[0];
                 let mut pts = vec![[px(first[0]), py(first[1])]];
@@ -741,6 +816,103 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
     }
     for s in symbols {
         push(s, false);
+    }
+
+    if g.labels.visible {
+        use crate::page::LabelSource;
+        for (s, st) in series.iter().zip(&styles).filter(|(s, _)| !s.line_only) {
+            let offset = if st.kind.is_bar() && !st.kind.is_stacked() {
+                dx * 0.7 * ((st.bar_index as f64 + 0.5) / st.bar_count.max(1) as f64 - 0.5)
+            } else {
+                0.0
+            };
+            for (i, p) in s.points.iter().enumerate() {
+                let (x, y) = if horizontal {
+                    (p[0], p[1] + offset)
+                } else {
+                    (p[0] + offset, p[1])
+                };
+                if !inside_x(px(x)) || !inside_y(py(y)) {
+                    continue;
+                }
+                let value = if horizontal {
+                    p[0]
+                } else if st.kind.is_stacked() {
+                    p[1] - s.bases[i]
+                } else {
+                    p[1]
+                };
+                let value_text = format!(
+                    "{}{}",
+                    crate::fmt_num(value),
+                    if st.kind == PlotType::PercentStackedBar {
+                        "%"
+                    } else {
+                        ""
+                    }
+                );
+                let label = match g.labels.source {
+                    LabelSource::Value => value_text,
+                    LabelSource::XY => format!(
+                        "({}, {})",
+                        crate::fmt_num(if horizontal { p[1] } else { p[0] }),
+                        value_text
+                    ),
+                    LabelSource::Row if g.transform == crate::plotspec::Transform::Identity => {
+                        (s.rows[i] + 1).to_string()
+                    }
+                    LabelSource::Column if g.transform == crate::plotspec::Transform::Identity => g
+                        .labels
+                        .column
+                        .as_deref()
+                        .and_then(|k| book.and_then(|b| b.column(k)))
+                        .and_then(|c| c.data.get(s.rows[i]))
+                        .cloned()
+                        .unwrap_or_default(),
+                    _ => String::new(),
+                };
+                let label = label.replace(['\r', '\n'], " ");
+                if label.trim().is_empty() {
+                    continue;
+                }
+                let positive = if st.kind == PlotType::FloatingBar {
+                    value >= s.bases[i]
+                } else {
+                    value >= 0.0
+                };
+                let delta = f64::from(g.labels.offset) + f64::from(g.labels.size) / 2.0;
+                let (xx, yy, anchor) = if horizontal {
+                    (
+                        px(x) + if positive { delta } else { -delta },
+                        py(y),
+                        if positive { Anchor::Start } else { Anchor::End },
+                    )
+                } else {
+                    (px(x), py(y) + if positive { -delta } else { delta }, Anchor::Middle)
+                };
+                let width = text_width(&label, f64::from(g.labels.size)).min(pw);
+                let xx = match anchor {
+                    Anchor::Middle => xx.clamp(left + width / 2.0, (left + pw - width / 2.0).max(left + width / 2.0)),
+                    Anchor::Start => xx.clamp(left, left + pw - width),
+                    Anchor::End => xx.clamp(left + width, left + pw),
+                };
+                let half = (f64::from(g.labels.size) / 2.0).min(ph / 2.0);
+                let yy = yy.clamp(top + half, top + ph - half);
+                push(
+                    Prim::Text {
+                        x: xx,
+                        y: yy,
+                        text: label,
+                        size: f64::from(g.labels.size),
+                        anchor,
+                        vertical: false,
+                        bold: false,
+                        color: st.color.rgb(),
+                    },
+                    true,
+                );
+            }
+        }
     }
 
     // 坐标框：四边闭合

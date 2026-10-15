@@ -390,6 +390,51 @@ fn build() -> Vec<Command> {
             |a| a.plot(PlotType::Area),
         )
         .modifies(),
+        c(
+            "plot.spline",
+            "样条曲线图",
+            "line",
+            "",
+            "绘图",
+            "spline cubic 样条",
+            need_data,
+            |a| a.plot(PlotType::Spline),
+        )
+        .modifies(),
+        c(
+            "plot.spline_symbol",
+            "样条点线图",
+            "linesym",
+            "",
+            "绘图",
+            "spline symbol 样条点线",
+            need_data,
+            |a| a.plot(PlotType::SplineSymbol),
+        )
+        .modifies(),
+        c(
+            "plot.vertical_drop",
+            "垂线图",
+            "bar",
+            "",
+            "绘图",
+            "vertical drop stem 垂线",
+            need_data,
+            |a| a.plot(PlotType::VerticalDrop),
+        )
+        .modifies(),
+        c(
+            "graph.labels",
+            "数据标签",
+            "props",
+            "",
+            "图形",
+            "data labels 数据标签",
+            need_graph,
+            |a| a.toggle_graph(|g| &mut g.labels.visible, "数据标签"),
+        )
+        .modifies()
+        .checked(|a| graph_flag(a, |g| g.labels.visible)),
         // 图形
         c(
             "plot.step_horizontal",

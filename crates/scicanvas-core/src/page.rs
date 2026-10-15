@@ -93,6 +93,8 @@ pub struct Layer {
     pub area_opacity: f32,
     #[cfg_attr(feature = "serde", serde(default))]
     pub error_bars: ErrorBars,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub labels: DataLabels,
     pub grid: bool,
     pub legend: bool,
 }
@@ -117,6 +119,7 @@ impl Default for Layer {
             symbol_size: 6.0,
             area_opacity: default_area_opacity(),
             error_bars: Default::default(),
+            labels: Default::default(),
             grid: false,
             legend: true,
         }
@@ -125,6 +128,36 @@ impl Default for Layer {
 
 fn default_area_opacity() -> f32 {
     0.35
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum LabelSource {
+    #[default]
+    Value,
+    XY,
+    Row,
+    Column,
+}
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize), serde(default))]
+pub struct DataLabels {
+    pub visible: bool,
+    pub source: LabelSource,
+    pub column: Option<String>,
+    pub size: f32,
+    pub offset: f32,
+}
+impl Default for DataLabels {
+    fn default() -> Self {
+        Self {
+            visible: false,
+            source: LabelSource::Value,
+            column: None,
+            size: 11.0,
+            offset: 6.0,
+        }
+    }
 }
 
 #[derive(Clone, Debug, PartialEq)]

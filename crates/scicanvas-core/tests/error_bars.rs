@@ -120,10 +120,11 @@ fn autoscale_svg_and_all_basic_chart_types_share_error_segments() {
         assert!(sc.xa.lo <= 0.8 && sc.xa.hi >= 3.4);
         assert!(sc.ya.lo <= 8.0 && sc.ya.hi >= 34.0);
         let groups = errors(&sc);
-        assert_eq!(groups.len(), 1);
-        assert_eq!(groups[0].len(), 18);
+        assert_eq!(groups.len(), if kind == PlotType::VerticalDrop { 2 } else { 1 });
+        let group = groups.last().unwrap();
+        assert_eq!(group.len(), 18);
         let svg = svg::render_page(g, &p);
-        for [x1, y1, x2, y2] in groups[0] {
+        for [x1, y1, x2, y2] in *group {
             assert!(svg.contains(&format!("M{x1:.2},{y1:.2}L{x2:.2},{y2:.2}")));
         }
         assert!(svg.contains(&format!("clip-path=\"url(#clip{gid})\"")));

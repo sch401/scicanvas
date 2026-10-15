@@ -10,7 +10,8 @@
 | v3 | `version: 3`；图层增加 `placement` 和 `transparent` | 默认网格、不透明背景 |
 | v4 | `version: 4`；列增加 `XError` / `YError`、`error_for`；图层增加 `error_bars` | 旧文件默认显示误差棒、端帽 6、线宽 1 |
 | v5 | `version: 5`；新增 `StackedBar` / `PercentStackedBar` / `FloatingBar`，`PlotSpec.base_by_y` | 旧文件默认没有浮动柱下端映射 |
-| v6 | `version: 6`；新增 `HorizontalBar` / `Area`，`Layer.area_opacity` | 当前格式；旧文件填充透明度默认 0.35 |
+| v6 | `version: 6`；新增 `HorizontalBar` / `Area`，`Layer.area_opacity` | 旧文件填充透明度默认 0.35 |
+| v7 | `version: 7`；新增 `Spline` / `SplineSymbol` / `VerticalDrop`，`Layer.labels` | 当前格式；旧文件默认关闭数据标签 |
 
 `Layer` 的列映射来自展平序列化的 `PlotSpec`，仅保存一份。X/Y 引用、曲线独立 X 列、派生线、行范围、样式和对数轴设置随迁移保留。新添的变换和配色默认采用原始数据与 Origin 颜色。
 
@@ -33,3 +34,7 @@
 保存前完成校验和序列化，再写同目录唯一临时文件、同步、关闭，并替换目标文件。失败时清理临时文件；已有文件保持原内容。历史记录、窗口位置和选区仍由内存中的会话管理。
 
 `tests/project_files.rs` 验证迁移、往返、损坏输入和保存失败。`tests/fixtures/legacy-*.svg` 是重构前实际生成的四种图，包含拟合曲线与选定行范围，按字符串逐字比较版面；新增图元时另加样例，保留这些兼容基线。
+
+`Spline` / `SplineSymbol` 使用自然三次样条，两端二阶导数为零。连续原始行分段、段内按 X 排序，重复 X 处分开；均值视图按聚合后的 X 序列分段。每区间固定 16 段采样，采样值参与自动范围，非正对数片段断开。数值超出可表示范围的段使用原始折线；派生线独立绘制。大数据采样后续改为页面误差自适应。`VerticalDrop` 从原始点连接到零基线，对数轴使用显示下界。
+
+`labels` 保存 `visible`、`source`（`Value` / `XY` / `Row` / `Column`）、`column`、`size` 和 `offset`。默认关闭、字号 11、偏移 6；字号应为有限正数，偏移为有限非负数。行号和指定列文本按原始行读取，均值视图使用数值或 X/Y，派生线不加标签。删除标签列会清除引用，复用列标识也保持解除。柱段显示各段值，百分比添加 `%`，标签向坐标框内定位并裁剪，指定列换行转为空格。`tests/spline_labels.rs` 用解析值及本机 SciPy 1.17.1 `CubicSpline(..., bc_type="natural")` 参考值验证样条，并覆盖垂线、标签、SVG、撤销及版本迁移。

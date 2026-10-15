@@ -293,10 +293,13 @@ pub enum PlotType {
     Area,
     StepHorizontal,
     StepVertical,
+    Spline,
+    SplineSymbol,
+    VerticalDrop,
 }
 
 impl PlotType {
-    pub const ALL: [PlotType; 11] = [
+    pub const ALL: [PlotType; 14] = [
         PlotType::Line,
         PlotType::Scatter,
         PlotType::LineSymbol,
@@ -308,6 +311,9 @@ impl PlotType {
         PlotType::Area,
         PlotType::StepHorizontal,
         PlotType::StepVertical,
+        PlotType::Spline,
+        PlotType::SplineSymbol,
+        PlotType::VerticalDrop,
     ];
 
     pub fn label(self) -> &'static str {
@@ -323,13 +329,22 @@ impl PlotType {
             PlotType::Area => "面积图",
             PlotType::StepHorizontal => "水平阶梯图",
             PlotType::StepVertical => "垂直阶梯图",
+            PlotType::Spline => "样条曲线图",
+            PlotType::SplineSymbol => "样条点线图",
+            PlotType::VerticalDrop => "垂线图",
         }
     }
 
     pub fn has_line(self) -> bool {
         matches!(
             self,
-            PlotType::Line | PlotType::LineSymbol | PlotType::StepHorizontal | PlotType::StepVertical | PlotType::Area
+            PlotType::Line
+                | PlotType::LineSymbol
+                | PlotType::StepHorizontal
+                | PlotType::StepVertical
+                | PlotType::Area
+                | PlotType::Spline
+                | PlotType::SplineSymbol
         )
     }
 
@@ -345,7 +360,13 @@ impl PlotType {
     }
 
     pub fn has_symbol(self) -> bool {
-        matches!(self, PlotType::Scatter | PlotType::LineSymbol)
+        matches!(
+            self,
+            PlotType::Scatter | PlotType::LineSymbol | PlotType::SplineSymbol | PlotType::VerticalDrop
+        )
+    }
+    pub fn is_spline(self) -> bool {
+        matches!(self, Self::Spline | Self::SplineSymbol)
     }
 }
 
@@ -539,7 +560,7 @@ pub struct Project {
 impl Default for Project {
     fn default() -> Self {
         Project {
-            version: 6,
+            version: 7,
             books: Vec::new(),
             graphs: Vec::new(),
             next_id: 1,
@@ -633,6 +654,9 @@ impl Project {
                     layer.x_by_y.retain(|y, x| !keys.contains(y) && !keys.contains(x));
                     // 保留缺失下端的映射，避免删除后把浮动柱静默改成从零开始。
                     layer.base_by_y.retain(|y, _| !keys.contains(y));
+                    if layer.labels.column.as_ref().is_some_and(|k| keys.contains(k)) {
+                        layer.labels.column = None;
+                    }
                     for base in layer.base_by_y.values_mut() {
                         if keys.contains(base) {
                             base.clear();

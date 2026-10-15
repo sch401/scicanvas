@@ -155,6 +155,7 @@ fn estimated_bytes(p: &Project) -> usize {
                 .map(|s| s.capacity())
                 .sum::<usize>();
             bytes += layer.x_key.as_ref().map_or(0, String::capacity);
+            bytes += layer.labels.column.as_ref().map_or(0, String::capacity);
             for keys in [&layer.y_keys, &layer.line_only] {
                 bytes += keys.capacity() * size_of::<String>() + keys.iter().map(String::capacity).sum::<usize>();
             }

@@ -1649,6 +1649,9 @@ impl SciApp {
                                                 ("plot.floating_bar", "浮动柱图"),
                                                 ("plot.horizontal_bar", "条形图"),
                                                 ("plot.area", "面积图"),
+                                                ("plot.spline", "样条曲线图"),
+                                                ("plot.spline_symbol", "样条点线图"),
+                                                ("plot.vertical_drop", "垂线图"),
                                                 ("plot.step_horizontal", "水平阶梯图"),
                                                 ("plot.step_vertical", "垂直阶梯图"),
                                             ] {
@@ -1905,6 +1908,9 @@ impl SciApp {
                 ColAction::Plot(PlotType::FloatingBar) => "plot.floating_bar",
                 ColAction::Plot(PlotType::HorizontalBar) => "plot.horizontal_bar",
                 ColAction::Plot(PlotType::Area) => "plot.area",
+                ColAction::Plot(PlotType::Spline) => "plot.spline",
+                ColAction::Plot(PlotType::SplineSymbol) => "plot.spline_symbol",
+                ColAction::Plot(PlotType::VerticalDrop) => "plot.vertical_drop",
                 ColAction::Plot(PlotType::StepHorizontal) => "plot.step_horizontal",
                 ColAction::Plot(PlotType::StepVertical) => "plot.step_vertical",
             };
@@ -2221,6 +2227,7 @@ impl SciApp {
             .collapsible(false)
             .resizable(false)
             .default_width(360.0)
+            .vscroll(true)
             .show(ctx, |ui| {
                 let Some(graph) = project.graph_mut(gid) else { return };
                 ui.horizontal(|ui| {
@@ -2477,8 +2484,59 @@ impl SciApp {
                         ui.horizontal(|ui| {
                             ui.checkbox(&mut g.grid, "网格线");
                             ui.checkbox(&mut g.legend, "图例");
+                            ui.checkbox(&mut g.labels.visible, "数据标签");
                         });
                         ui.end_row();
+                        if g.labels.visible {
+                            ui.label("标签来源");
+                            use scicanvas_core::page::LabelSource;
+                            egui::ComboBox::from_id_salt("label-source")
+                                .selected_text(match g.labels.source {
+                                    LabelSource::Value => "Y 数值",
+                                    LabelSource::XY => "X / Y",
+                                    LabelSource::Row => "原始行号",
+                                    LabelSource::Column => "指定列文本",
+                                })
+                                .show_ui(ui, |ui| {
+                                    for (value, label) in [
+                                        (LabelSource::Value, "Y 数值"),
+                                        (LabelSource::XY, "X / Y"),
+                                        (LabelSource::Row, "原始行号"),
+                                        (LabelSource::Column, "指定列文本"),
+                                    ] {
+                                        ui.selectable_value(&mut g.labels.source, value, label);
+                                    }
+                                });
+                            ui.end_row();
+                            if g.labels.source == LabelSource::Column {
+                                ui.label("标签列");
+                                egui::ComboBox::from_id_salt("label-column")
+                                    .selected_text(g.labels.column.as_deref().unwrap_or("请选择"))
+                                    .show_ui(ui, |ui| {
+                                        for (k, name) in &cols {
+                                            ui.selectable_value(&mut g.labels.column, Some(k.clone()), name);
+                                        }
+                                    });
+                                ui.end_row();
+                            }
+                            if g.transform == scicanvas_core::plotspec::Transform::Mean {
+                                ui.label("均值视图");
+                                ui.label("使用数值或 X/Y 标签");
+                                ui.end_row();
+                            }
+                            ui.label("标签字号");
+                            edit_group(
+                                &ui.add(egui::Slider::new(&mut g.labels.size, 6.0..=32.0)),
+                                history_group,
+                            );
+                            ui.end_row();
+                            ui.label("标签偏移");
+                            edit_group(
+                                &ui.add(egui::Slider::new(&mut g.labels.offset, 0.0..=40.0)),
+                                history_group,
+                            );
+                            ui.end_row();
+                        }
                         ui.label("误差棒");
                         ui.checkbox(&mut g.error_bars.visible, "显示 X / Y 误差");
                         ui.end_row();
@@ -2687,6 +2745,9 @@ mod history_tests {
             "plot.percent_stacked_bar",
             "plot.horizontal_bar",
             "plot.area",
+            "plot.spline",
+            "plot.spline_symbol",
+            "plot.vertical_drop",
             "plot.step_horizontal",
             "plot.step_vertical",
             "col.setXError",
@@ -3172,6 +3233,48 @@ mod history_tests {
         editor_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)], true);
         editor_frame(&mut app, &ctx, vec![click(end, false)], true);
         assert!(app.project.graph(id).unwrap().first_layer().area_opacity > 0.35);
+        roundtrip(&mut app, &before);
+    }
+
+    #[test]
+    fn data_label_command_and_actual_checkbox_are_undoable() {
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        let mut app = app();
+        app.active = Some(2);
+        let before = app.project.clone();
+        app.run_command("graph.labels");
+        assert!(app.project.graph(2).unwrap().first_layer().labels.visible);
+        roundtrip(&mut app, &before);
+        app.props_for = Some(2);
+        editor_frame(&mut app, &ctx, vec![], true);
+        let output = editor_frame(&mut app, &ctx, vec![], true);
+        let at = output
+            .shapes
+            .iter()
+            .find_map(|s| match &s.shape {
+                egui::Shape::Text(t) if t.galley.job.text == "数据标签" => Some(t.pos + egui::vec2(3.0, 4.0)),
+                _ => None,
+            })
+            .unwrap();
+        let before = app.project.clone();
+        for pressed in [true, false] {
+            editor_frame(
+                &mut app,
+                &ctx,
+                vec![
+                    egui::Event::PointerMoved(at),
+                    egui::Event::PointerButton {
+                        pos: at,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+                true,
+            );
+        }
+        assert!(!app.project.graph(2).unwrap().first_layer().labels.visible);
         roundtrip(&mut app, &before);
     }
 

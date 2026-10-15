@@ -139,7 +139,7 @@ add(M, "色阶条（Color Scale）", "Color Scales", "P1", TODO, "", "目视检�
 add(M, "文字标签（上下标、希腊字母、富文本）", "Creating Text Labels", "P0", TODO, "迷你标记语言 + cosmic-text 排版", "目视比较")
 add(M, "LaTeX 公式", "Creating Text Labels", "P1", TODO, "评估 typst 或 MathJax 转 SVG", "目视比较")
 add(M, "绘图对象（直线、箭头、矩形、圆）", "Creating and Editing Drawing Objects", "P1", TODO, "", "手动操作")
-add(M, "数据标签", "Adding Labels to Plots", "P1", TODO, "", "目视检查")
+add(M, "数据标签", "Adding Labels to Plots", "P1", PROTO, "数值/X-Y/行号/指定列文本，字号/偏移与 scene/SVG", "行对齐、文本转义、柱段值、图层与撤销回归；Origin 目视对照待做")
 add(M, "误差棒", "Adding Error Bars to Your Graph", "P0", PROTO, "对称 X/Y 误差列、稳定关联、端帽/线宽、共享 scene 与 SVG", "行对齐、对数裁剪、分组柱、项目往返和撤销回归；Origin 目视对照待做")
 add(M, "插入图片 / 表格到图中", "Inserting Image into Graph", "P2", TODO, "", "目视检查")
 add(M, "合并多张图 / 拆分图层", "The Merge Graph Dialog Box", "P1", TODO, "", "目视检查")
@@ -455,6 +455,7 @@ PROTO_GRAPHS = {"Horizontal Step Graph", "Vertical Step Graph"}
 ERROR_GRAPHS = {"Y Error Bar Graph", "XY Error Bar Graph"}
 BAR_GRAPHS = {"Stacked Column Graph", "100% Stacked Column Graph", "Floating Column Graph"}
 FILL_GRAPHS = {"Bar Graph", "Area Graph"}
+SPLINE_GRAPHS = {"Spline Graph", "Spline Connected Graph", "Vertical Drop Line", "Column + Label Graph"}
 DONE_GRAPHS = {"Line Graph", "2D Scatter Graph", "Line+Symbol Graph", "Column Graph"}
 P1_3D = {"Color Map Surface", "3D Scatter Graph"}
 
@@ -514,7 +515,7 @@ for cat, (cn_cat, table) in GT.items():
             cn, p = table.get(en, (en, "P2"))
         else:
             cn, p = THREE_D.get(en, en), ("P1" if en in P1_3D else "P2")
-        status = DONE if en in DONE_GRAPHS else PROTO if en in PROTO_GRAPHS | ERROR_GRAPHS | BAR_GRAPHS | FILL_GRAPHS else TODO
+        status = DONE if en in DONE_GRAPHS else PROTO if en in PROTO_GRAPHS | ERROR_GRAPHS | BAR_GRAPHS | FILL_GRAPHS | SPLINE_GRAPHS else TODO
         how, verify = graph_how(cat, en), "与 Origin 同数据出图目视比较"
         if en in PROTO_GRAPHS:
             how, verify = "阶梯折线图元 + SVG 共享排版", "拐点几何、拟合线与项目往返测试；Origin 目视对照待做"
@@ -524,6 +525,8 @@ for cat, (cn_cat, table) in GT.items():
             how, verify = "正负堆叠/百分比归一化/上下端配对 + scene/SVG", "缺失行、正负值、上下端、矩形几何、误差棒和撤销回归；Origin 目视对照待做"
         elif en in FILL_GRAPHS:
             how, verify = "条形方向与误差换向 / 分段面积填充 + scene/SVG", "轴方向、跨零面积、缺口、透明度、SVG 和撤销回归；Origin 目视对照待做"
+        elif en in SPLINE_GRAPHS:
+            how, verify = "自然三次样条 / 零基线垂线 / 数据标签 + scene/SVG", "SciPy 数值对照、分段、SVG、标签和撤销回归；Origin 目视对照待做"
         add("图类型 · " + cn_cat, cn, en, p, status, how, verify)
 
 # 网页原型已实现、Rust 版待移植的条目

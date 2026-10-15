@@ -8,7 +8,7 @@ use serde_json::Value;
 
 use crate::Project;
 
-pub const CURRENT_VERSION: u32 = 6;
+pub const CURRENT_VERSION: u32 = 7;
 
 /// 无版本号为 v0；显式未知版本拒绝打开，保留源文件。
 pub fn migrate(mut value: Value) -> Result<Value, String> {
@@ -123,6 +123,13 @@ fn validate(project: &Project) -> Result<(), String> {
             }
             if !layer.area_opacity.is_finite() || !(0.0..=1.0).contains(&layer.area_opacity) {
                 return Err("面积填充透明度应在 0 与 1 之间".into());
+            }
+            if !layer.labels.size.is_finite()
+                || layer.labels.size <= 0.0
+                || !layer.labels.offset.is_finite()
+                || layer.labels.offset < 0.0
+            {
+                return Err("数据标签字号应为有限正数，偏移应为有限非负数".into());
             }
             if layer.rows.is_some_and(|(a, b)| a > b || b == usize::MAX) {
                 return Err("图层行范围无效".into());

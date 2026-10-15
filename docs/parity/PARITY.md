@@ -4,7 +4,7 @@
 本清单只记录功能点，不包含 Origin 文档正文。实现时按公开说明和观察到的行为编写，不复制 Origin 的代码、文字或图片。
 
 共 488 项：P0 87 项，P1 136 项，P2 254 项，不做 11 项。
-状态：已完成 26 项，原型 36 项，未开始 415 项，不做 11 项。
+状态：已完成 26 项，原型 41 项，未开始 410 项，不做 11 项。
 
 - **P0 / M1 日常够用**：一个人做日常数据处理和论文作图需要的最小集合。
 - **P1 / M2 论文全流程**：拟合报告、统计检验、多面板、信号处理等，覆盖大部分论文工作。
@@ -145,7 +145,7 @@
 | F102 | 文字标签（上下标、希腊字母、富文本） | Creating Text Labels | P0 | 未开始 | 迷你标记语言 + cosmic-text 排版 | 目视比较 |
 | F103 | LaTeX 公式 | Creating Text Labels | P1 | 未开始 | 评估 typst 或 MathJax 转 SVG | 目视比较 |
 | F104 | 绘图对象（直线、箭头、矩形、圆） | Creating and Editing Drawing Objects | P1 | 未开始 | — | 手动操作 |
-| F105 | 数据标签 | Adding Labels to Plots | P1 | 未开始 | — | 目视检查 |
+| F105 | 数据标签 | Adding Labels to Plots | P1 | 原型 | 数值/X-Y/行号/指定列文本，字号/偏移与 scene/SVG | 行对齐、文本转义、柱段值、图层与撤销回归；Origin 目视对照待做 |
 | F106 | 误差棒 | Adding Error Bars to Your Graph | P0 | 原型 | 对称 X/Y 误差列、稳定关联、端帽/线宽、共享 scene 与 SVG | 行对齐、对数裁剪、分组柱、项目往返和撤销回归；Origin 目视对照待做 |
 | F107 | 插入图片 / 表格到图中 | Inserting Image into Graph | P2 | 未开始 | — | 目视检查 |
 | F108 | 合并多张图 / 拆分图层 | The Merge Graph Dialog Box | P1 | 未开始 | — | 目视检查 |
@@ -350,7 +350,7 @@
 | F257 | Y 偏移堆叠线图 | Stacked Lines by Y Offsets Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F258 | 棒棒糖图 | Lollipop Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F259 | 颜色映射线系列 | Colormapped Line Series | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F260 | 样条曲线图 | Spline Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
+| F260 | 样条曲线图 | Spline Graph | P1 | 原型 | 自然三次样条 / 零基线垂线 / 数据标签 + scene/SVG | SciPy 数值对照、分段、SVG、标签和撤销回归；Origin 目视对照待做 |
 
 ## 图类型 · 2D 散点图
 
@@ -362,7 +362,7 @@
 | F264 | Y 误差棒图 | Y Error Bar Graph | P0 | 原型 | 对称误差列自动关联 + scene/SVG 共享图元 | 关联、端点几何、裁剪和撤销回归；Origin 目视对照待做 |
 | F265 | XY 误差棒图 | XY Error Bar Graph | P0 | 原型 | 对称误差列自动关联 + scene/SVG 共享图元 | 关联、端点几何、裁剪和撤销回归；Origin 目视对照待做 |
 | F266 | 散点 + 地毯图 | Scatter+Rug Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F267 | 垂线图 | Vertical Drop Line | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
+| F267 | 垂线图 | Vertical Drop Line | P1 | 原型 | 自然三次样条 / 零基线垂线 / 数据标签 + scene/SVG | SciPy 数值对照、分段、SVG、标签和撤销回归；Origin 目视对照待做 |
 | F268 | 气泡图 | Indexed Size Bubble Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F269 | 颜色映射散点图 | Color Mapped Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F270 | 气泡 + 颜色映射图 | Indexed Size (Bubble) and Color Map Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
@@ -378,7 +378,7 @@
 | F275 | 线系列图 | Line Series Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F276 | 两点线段图 | 2 Point Segment Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F277 | 三点线段图 | 3 Point Segment Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F278 | 样条连接点线图 | Spline Connected Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
+| F278 | 样条连接点线图 | Spline Connected Graph | P1 | 原型 | 自然三次样条 / 零基线垂线 / 数据标签 + scene/SVG | SciPy 数值对照、分段、SVG、标签和撤销回归；Origin 目视对照待做 |
 | F279 | 按行绘图 | Row Wise Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F280 | 前后对比图 | Before and After Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 
@@ -387,7 +387,7 @@
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
 |---|---|---|---|---|---|---|
 | F281 | 柱状图 | Column Graph | P0 | 已完成 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F282 | 带标签柱状图 | Column + Label Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
+| F282 | 带标签柱状图 | Column + Label Graph | P1 | 原型 | 自然三次样条 / 零基线垂线 / 数据标签 + scene/SVG | SciPy 数值对照、分段、SVG、标签和撤销回归；Origin 目视对照待做 |
 | F283 | 条形图 | Bar Graph | P0 | 原型 | 条形方向与误差换向 / 分段面积填充 + scene/SVG | 轴方向、跨零面积、缺口、透明度、SVG 和撤销回归；Origin 目视对照待做 |
 | F284 | 堆叠柱状图 | Stacked Column Graph | P1 | 原型 | 正负堆叠/百分比归一化/上下端配对 + scene/SVG | 缺失行、正负值、上下端、矩形几何、误差棒和撤销回归；Origin 目视对照待做 |
 | F285 | 浮动条形图 | Floating Bar Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
