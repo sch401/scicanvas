@@ -112,26 +112,16 @@ fn c(
         kw,
         when,
         run,
-        modifies: matches!(
-            id,
-            "book.new"
-                | "file.import"
-                | "edit.clear"
-                | "fit.linear"
-                | "math.diff"
-                | "math.integ"
-                | "stats.columns"
-                | "sort.asc"
-                | "sort.desc"
-        ) || id.starts_with("plot.")
-            || id.starts_with("layer.")
-            || id.starts_with("col.")
-            || matches!(id, "graph.logx" | "graph.logy" | "graph.grid" | "graph.legend"),
+        modifies: false,
         checked: None,
     }
 }
 
 impl Command {
+    fn modifies(mut self) -> Self {
+        self.modifies = true;
+        self
+    }
     fn checked(mut self, f: fn(&SciApp) -> bool) -> Self {
         self.checked = Some(f);
         self
@@ -150,7 +140,8 @@ fn build() -> Vec<Command> {
             "new workbook sheet",
             always,
             |a| a.new_book(),
-        ),
+        )
+        .modifies(),
         c(
             "file.import",
             "导入数据",
@@ -160,7 +151,8 @@ fn build() -> Vec<Command> {
             "import csv txt excel",
             always,
             |a| a.import_csv(),
-        ),
+        )
+        .modifies(),
         c(
             "file.open",
             "打开项目",
@@ -275,7 +267,8 @@ fn build() -> Vec<Command> {
             "clear cells delete",
             need_range,
             |a| a.clear_range(),
-        ),
+        )
+        .modifies(),
         // 绘图
         c(
             "plot.builder",
@@ -296,7 +289,8 @@ fn build() -> Vec<Command> {
             "plot spec",
             need_plot_draft,
             |a| a.apply_plot_spec(),
-        ),
+        )
+        .modifies(),
         c(
             "plot.line",
             "折线图",
@@ -306,7 +300,8 @@ fn build() -> Vec<Command> {
             "plot line",
             need_data,
             |a| a.plot(PlotType::Line),
-        ),
+        )
+        .modifies(),
         c(
             "plot.scatter",
             "散点图",
@@ -316,7 +311,8 @@ fn build() -> Vec<Command> {
             "plot scatter",
             need_data,
             |a| a.plot(PlotType::Scatter),
-        ),
+        )
+        .modifies(),
         c(
             "plot.linesym",
             "点线图",
@@ -326,7 +322,8 @@ fn build() -> Vec<Command> {
             "plot line symbol",
             need_data,
             |a| a.plot(PlotType::LineSymbol),
-        ),
+        )
+        .modifies(),
         c(
             "plot.bar",
             "柱状图",
@@ -336,7 +333,8 @@ fn build() -> Vec<Command> {
             "plot bar column",
             need_data,
             |a| a.plot(PlotType::Bar),
-        ),
+        )
+        .modifies(),
         // 图形
         c(
             "layer.add",
@@ -347,7 +345,8 @@ fn build() -> Vec<Command> {
             "layer panel subplot 添加图层",
             need_graph,
             |a| a.add_layer(),
-        ),
+        )
+        .modifies(),
         c(
             "layer.remove",
             "删除图层",
@@ -357,7 +356,8 @@ fn build() -> Vec<Command> {
             "layer remove 删除图层",
             need_multi_layer,
             |a| a.remove_layer(),
-        ),
+        )
+        .modifies(),
         c(
             "graph.props",
             "绘图属性",
@@ -378,6 +378,7 @@ fn build() -> Vec<Command> {
             need_graph,
             |a| a.toggle_graph(|g| &mut g.x_log, "X 轴对数刻度"),
         )
+        .modifies()
         .checked(|a| graph_flag(a, |g| g.x_log)),
         c(
             "graph.logy",
@@ -389,6 +390,7 @@ fn build() -> Vec<Command> {
             need_graph,
             |a| a.toggle_graph(|g| &mut g.y_log, "Y 轴对数刻度"),
         )
+        .modifies()
         .checked(|a| graph_flag(a, |g| g.y_log)),
         c(
             "graph.grid",
@@ -400,6 +402,7 @@ fn build() -> Vec<Command> {
             need_graph,
             |a| a.toggle_graph(|g| &mut g.grid, "网格线"),
         )
+        .modifies()
         .checked(|a| graph_flag(a, |g| g.grid)),
         c(
             "graph.legend",
@@ -411,6 +414,7 @@ fn build() -> Vec<Command> {
             need_graph,
             |a| a.toggle_graph(|g| &mut g.legend, "图例"),
         )
+        .modifies()
         .checked(|a| graph_flag(a, |g| g.legend)),
         // 列与工作表
         c(
@@ -422,7 +426,8 @@ fn build() -> Vec<Command> {
             "set x column",
             need_cols,
             |a| a.set_role(Role::X),
-        ),
+        )
+        .modifies(),
         c(
             "col.setY",
             "设为 Y",
@@ -432,7 +437,8 @@ fn build() -> Vec<Command> {
             "set y column",
             need_cols,
             |a| a.set_role(Role::Y),
-        ),
+        )
+        .modifies(),
         c(
             "col.setIgnore",
             "设为忽略",
@@ -442,7 +448,8 @@ fn build() -> Vec<Command> {
             "disregard",
             need_cols,
             |a| a.set_role(Role::Ignore),
-        ),
+        )
+        .modifies(),
         c(
             "col.insert",
             "插入列",
@@ -452,7 +459,8 @@ fn build() -> Vec<Command> {
             "add column",
             need_book,
             |a| a.add_column(),
-        ),
+        )
+        .modifies(),
         c(
             "col.delete",
             "删除列",
@@ -462,7 +470,8 @@ fn build() -> Vec<Command> {
             "delete column",
             need_cols,
             |a| a.delete_columns(),
-        ),
+        )
+        .modifies(),
         c(
             "col.clear",
             "清空列",
@@ -472,7 +481,8 @@ fn build() -> Vec<Command> {
             "clear column",
             need_cols,
             |a| a.clear_columns(),
-        ),
+        )
+        .modifies(),
         c(
             "sort.asc",
             "升序排序",
@@ -482,7 +492,8 @@ fn build() -> Vec<Command> {
             "sort ascending",
             need_sortable,
             |a| a.sort_active(true),
-        ),
+        )
+        .modifies(),
         c(
             "sort.desc",
             "降序排序",
@@ -492,7 +503,8 @@ fn build() -> Vec<Command> {
             "sort descending",
             need_sortable,
             |a| a.sort_active(false),
-        ),
+        )
+        .modifies(),
         // 分析
         c(
             "fit.linear",
@@ -503,7 +515,8 @@ fn build() -> Vec<Command> {
             "linear fit regression",
             need_data,
             |a| a.fit(1),
-        ),
+        )
+        .modifies(),
         c(
             "fit.poly",
             "多项式拟合",
@@ -533,7 +546,8 @@ fn build() -> Vec<Command> {
             "derivative differentiate",
             need_data,
             |a| a.differentiate(),
-        ),
+        )
+        .modifies(),
         c(
             "math.integ",
             "积分",
@@ -543,7 +557,8 @@ fn build() -> Vec<Command> {
             "integrate area",
             need_data,
             |a| a.integrate(),
-        ),
+        )
+        .modifies(),
         c(
             "math.norm",
             "归一化",
@@ -563,7 +578,8 @@ fn build() -> Vec<Command> {
             "descriptive statistics mean sd",
             need_data,
             |a| a.stats_on_columns(),
-        ),
+        )
+        .modifies(),
         // 视图
         c(
             "view.explorer",

@@ -86,6 +86,14 @@ fn win_id(id: u64) -> egui::Id {
     egui::Id::new(("scicanvas-window", id))
 }
 
+fn header_field(column: &mut scicanvas_core::Column, row: usize) -> &mut String {
+    match row {
+        0 => &mut column.long_name,
+        1 => &mut column.units,
+        _ => &mut column.comment,
+    }
+}
+
 /// 同一文字框焦点周期或一次鼠标拖动共享一个历史记录。
 fn edit_group(response: &egui::Response, group: &mut Option<egui::Id>) {
     let text_focus = response.has_focus() && egui::TextEdit::load_state(&response.ctx, response.id).is_some();
@@ -106,7 +114,7 @@ impl SciApp {
     fn initial(pal: Palette) -> Self {
         let mut app = SciApp {
             project: Project::default(),
-            history: History::new(&Project::default()),
+            history: History::default(),
             history_group: None,
             last_history_group: None,
             open: HashMap::new(),
@@ -140,7 +148,7 @@ impl SciApp {
     fn load_project(&mut self, project: Project, path: Option<PathBuf>) {
         self.active_layers.clear();
         self.plot_draft = None;
-        self.history = History::new(&project);
+        self.history = History::default();
         self.history_group = None;
         self.last_history_group = None;
         self.open.clear();
@@ -369,6 +377,7 @@ impl SciApp {
     }
 
     fn delete_item(&mut self, id: u64) {
+        self.begin_edit("删除对象");
         self.active_layers.remove(&id);
         let name = self.project.name_of(id).unwrap_or("").to_string();
         self.project.remove(id);
@@ -382,6 +391,7 @@ impl SciApp {
         }
         self.sheets.remove(&id);
         self.status = format!("已删除 {}", name);
+        self.history.changed();
     }
 
     pub(crate) fn import_csv(&mut self) {
@@ -496,8 +506,7 @@ impl SciApp {
     /// 执行一条命令（功能区、快捷键、命令面板都走这里）。不能执行时在状态栏说明原因。
     pub(crate) fn run_command(&mut self, id: &str) {
         let Some(c) = commands::find(id) else { return };
-        self.record_changes("编辑项目", self.history_group);
-        self.last_history_group = None;
+        self.finish_edit();
         match (c.when)(self) {
             Ok(()) => {
                 let label = if matches!(id, "col.delete" | "col.clear") {
@@ -509,27 +518,54 @@ impl SciApp {
                 } else {
                     c.label.to_string()
                 };
+                if c.modifies {
+                    self.begin_edit(&label);
+                }
                 (c.run)(self);
                 if c.modifies {
-                    self.record_changes(&label, None);
+                    self.history.changed();
+                    self.finish_edit();
                 }
             }
             Err(why) => self.status = why.to_string(),
         }
     }
 
-    /// 收集命令之外的实际修改；空操作保留重做，文本输入和拖动合并成一步。
-    fn record_changes(&mut self, label: &str, group: Option<egui::Id>) {
-        let merge = group.is_some() && self.last_history_group == group;
-        if self.history.record(&self.project, label, merge) {
+    fn begin_edit(&mut self, label: &str) {
+        self.history.begin(&self.project, label);
+    }
+
+    fn finish_edit(&mut self) {
+        self.history.commit(&self.project);
+        self.last_history_group = None;
+    }
+
+    fn finish_frame_edit(&mut self, group: Option<egui::Id>) {
+        if group.is_none() {
+            self.finish_edit();
+        } else {
             self.last_history_group = group;
-        } else if self.last_history_group != group {
-            self.last_history_group = None;
         }
     }
 
+    fn track_headers(&mut self, id: u64, edits: &[(usize, usize, String, String)]) {
+        if edits.is_empty() {
+            return;
+        }
+        if !self.history.is_pending() {
+            for (col, row, before, _) in edits {
+                *header_field(&mut self.project.book_mut(id).unwrap().columns[*col], *row) = before.clone();
+            }
+            self.begin_edit("修改列属性");
+            for (col, row, _, after) in edits {
+                *header_field(&mut self.project.book_mut(id).unwrap().columns[*col], *row) = after.clone();
+            }
+        }
+        self.history.changed();
+    }
+
     pub(crate) fn undo(&mut self) {
-        self.record_changes("编辑项目", self.history_group);
+        self.finish_edit();
         let label = self.history.undo_label().unwrap_or("").to_string();
         if let Some(project) = self.history.undo(&self.project) {
             self.restore_history(project);
@@ -538,7 +574,7 @@ impl SciApp {
     }
 
     pub(crate) fn redo(&mut self) {
-        self.record_changes("编辑项目", self.history_group);
+        self.finish_edit();
         let label = self.history.redo_label().unwrap_or("").to_string();
         if let Some(project) = self.history.redo(&self.project) {
             self.restore_history(project);
@@ -958,22 +994,28 @@ impl SciApp {
             dialogs::Action::None => {}
             dialogs::Action::Close => self.dialog = None,
             dialogs::Action::Fit(order) => {
-                self.record_changes("编辑项目", self.history_group);
+                self.finish_edit();
+                self.begin_edit("多项式拟合");
                 self.dialog = None;
                 self.fit(order);
-                self.record_changes("多项式拟合", None);
+                self.history.changed();
+                self.finish_edit();
             }
             dialogs::Action::Smooth(m, w) => {
-                self.record_changes("编辑项目", self.history_group);
+                self.finish_edit();
+                self.begin_edit("平滑");
                 self.dialog = None;
                 self.smooth(m, w);
-                self.record_changes("平滑", None);
+                self.history.changed();
+                self.finish_edit();
             }
             dialogs::Action::Normalize(m) => {
-                self.record_changes("编辑项目", self.history_group);
+                self.finish_edit();
+                self.begin_edit("归一化");
                 self.dialog = None;
                 self.normalize(m);
-                self.record_changes("归一化", None);
+                self.history.changed();
+                self.finish_edit();
             }
         }
     }
@@ -1080,6 +1122,7 @@ impl SciApp {
     }
 
     fn explorer(&mut self, ui: &mut egui::Ui) {
+        let mut renamed = Vec::new();
         ui.add_space(4.0);
         ui.label(RichText::new("项目管理器").strong());
         ui.separator();
@@ -1129,7 +1172,11 @@ impl SciApp {
                             ui.horizontal(|ui| {
                                 ui.label("名称");
                                 if let Some(n) = self.project.name_of_mut(id) {
+                                    let before = n.clone();
                                     let response = ui.text_edit_singleline(n);
+                                    if response.changed() {
+                                        renamed.push((id, before, n.clone()));
+                                    }
                                     edit_group(&response, &mut self.history_group);
                                 }
                             });
@@ -1142,6 +1189,18 @@ impl SciApp {
                     }
                 });
         });
+        if !renamed.is_empty() {
+            if !self.history.is_pending() {
+                for (id, before, _) in &renamed {
+                    *self.project.name_of_mut(*id).unwrap() = before.clone();
+                }
+                self.begin_edit("重命名");
+                for (id, _, after) in renamed {
+                    *self.project.name_of_mut(id).unwrap() = after;
+                }
+            }
+            self.history.changed();
+        }
     }
 
     fn child_windows(&mut self, ctx: &egui::Context) {
@@ -1312,6 +1371,7 @@ impl SciApp {
         let mut menu_cmd: Option<&'static str> = None;
         let mut edit_end: Option<(bool, i64, i64)> = None;
         let mut autoscrolled = false;
+        let mut metadata_edits = Vec::new();
         let dragging_cells = matches!(drag, Some(Drag::Cells | Drag::Rows)) && down;
         // 可见的表格区域（拖到上下边缘时自动滚动）
         let view = ui.clip_rect();
@@ -1410,17 +1470,17 @@ impl SciApp {
                                                 [rect.right_top(), rect.right_bottom()],
                                                 egui::Stroke::new(1.0_f32, pal.window),
                                             );
-                                            let field = match ri {
-                                                0 => &mut col.long_name,
-                                                1 => &mut col.units,
-                                                _ => &mut col.comment,
-                                            };
+                                            let field = header_field(col, ri);
+                                            let before = field.clone();
                                             let response = ui.add(
                                                 egui::TextEdit::singleline(field)
                                                     .frame(false)
                                                     .margin(egui::vec2(5.0, 3.0))
                                                     .desired_width(f32::INFINITY),
                                             );
+                                            if response.changed() {
+                                                metadata_edits.push((ci, ri, before, field.clone()));
+                                            }
                                             edit_group(&response, &mut self.history_group);
                                         });
                                     }
@@ -1490,6 +1550,7 @@ impl SciApp {
                                                 resp.request_focus();
                                                 e.focused = true;
                                             }
+                                            edit_group(&resp, &mut self.history_group);
                                             // Tab、上下方向键由表格处理（结束编辑并移动），不让 egui 切换焦点
                                             ui.memory_mut(|m| {
                                                 m.set_focus_lock_filter(
@@ -1624,13 +1685,20 @@ impl SciApp {
         });
 
         // ---- 处理这一帧的鼠标和编辑结果
+        self.track_headers(id, &metadata_edits);
+        if edit_end.is_some_and(|(ok, _, _)| ok) || (press.is_some() && edit.is_some()) {
+            self.begin_edit("编辑单元格");
+        }
+        let book = self.project.book_mut(id).unwrap();
         let last_col = ncols.saturating_sub(1);
         let mut status: Option<String> = None;
         let mut clear_cols = false;
         let mut new_cols: Option<(usize, usize)> = None;
         let mut want_focus = false;
-        let commit = |book: &mut scicanvas_core::Book, e: &Edit| {
+        let mut cell_changed = false;
+        let mut commit = |book: &mut scicanvas_core::Book, e: &Edit| {
             if let Some(col) = book.columns.get_mut(e.cell.c) {
+                cell_changed = true;
                 col.set(e.cell.r, e.buf.clone());
             }
         };
@@ -1746,6 +1814,9 @@ impl SciApp {
             }
         }
         st.edit = edit;
+        if cell_changed {
+            self.history.changed();
+        }
         self.sheets.insert(id, st);
 
         if want_focus || dbl_cell.is_some() || right_cell.is_some() || press.is_some() {
@@ -1832,7 +1903,7 @@ impl SciApp {
     /// Delete 清除、Ctrl+C / Ctrl+X / Ctrl+V、Ctrl+A 全选、Esc 取消选区、F2 或直接打字开始编辑。
     fn sheet_keys(&mut self, ctx: &egui::Context, id: u64, st: &mut SheetState) {
         use egui::{Event, Key};
-        let Some(book) = self.project.book_mut(id) else { return };
+        let Some(book) = self.project.book(id) else { return };
         if book.columns.is_empty() {
             return;
         }
@@ -1879,6 +1950,21 @@ impl SciApp {
         if events.is_empty() {
             return;
         }
+        let writes = events.iter().any(|e| {
+            matches!(
+                e,
+                Event::Cut
+                    | Event::Paste(_)
+                    | Event::Key {
+                        key: Key::Delete | Key::Backspace,
+                        ..
+                    }
+            )
+        });
+        if writes {
+            self.begin_edit("编辑工作表");
+        }
+        let book = self.project.book_mut(id).unwrap();
 
         let mut status: Option<String> = None;
         let mut start_edit: Option<String> = None;
@@ -2002,6 +2088,9 @@ impl SciApp {
         if let Some(s) = status {
             self.status = s;
         }
+        if writes {
+            self.history.changed();
+        }
     }
 
     fn graph_ui(&mut self, ui: &mut egui::Ui, id: u64) {
@@ -2078,6 +2167,7 @@ impl SciApp {
             self.props_for = None;
             return;
         };
+        let graph_before = g0.clone();
         let column_options: HashMap<u64, Vec<(String, String)>> = self
             .project
             .books
@@ -2300,6 +2390,14 @@ impl SciApp {
                     }
                 });
             });
+        if self.project.graph(gid).unwrap() != &graph_before {
+            if !self.history.is_pending() {
+                let after = std::mem::replace(self.project.graph_mut(gid).unwrap(), graph_before);
+                self.begin_edit("绘图属性");
+                *self.project.graph_mut(gid).unwrap() = after;
+            }
+            self.history.changed();
+        }
         if props_layer != self.layer_index(gid) {
             self.select_layer(gid, props_layer);
         }
@@ -2345,10 +2443,10 @@ impl SciApp {
             });
         match decision {
             Some(true) => {
-                self.record_changes("编辑项目", self.history_group);
+                self.finish_edit();
                 self.confirm_delete = None;
                 self.delete_item(id);
-                self.record_changes(&format!("删除 {name}"), None);
+                self.finish_edit();
             }
             Some(false) => self.confirm_delete = None,
             None => {}
@@ -2364,6 +2462,16 @@ impl eframe::App for SciApp {
 
 impl SciApp {
     fn ui_frame(&mut self, ctx: &egui::Context) {
+        if self.last_history_group.is_some()
+            && ctx.input(|i| {
+                i.pointer.any_pressed()
+                    || i.key_pressed(egui::Key::Tab)
+                    || i.key_pressed(egui::Key::Enter)
+                    || i.key_pressed(egui::Key::Escape)
+            })
+        {
+            self.finish_edit();
+        }
         self.history_group = None;
         if let Some(pref) = self.pending_theme.take() {
             ctx.set_theme(pref);
@@ -2426,7 +2534,7 @@ impl SciApp {
         if crate::builder::show(ctx, &self.project, &mut self.plot_draft) {
             self.run_command("plot.apply_spec");
         }
-        self.record_changes("编辑项目", self.history_group);
+        self.finish_frame_edit(self.history_group);
 
         if self.quit {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -2470,7 +2578,7 @@ mod history_tests {
         app.active = Some(1);
         app.sheets.insert(1, SheetState::default());
         app.delete_item(1);
-        app.record_changes("删除工作簿", None);
+        app.finish_edit();
         app.run_command("edit.undo");
         assert_eq!(app.project, before);
         assert_eq!(app.open.get(&1), Some(&true));
@@ -2514,7 +2622,7 @@ mod history_tests {
                 ..Default::default()
             };
             let _ = ctx.run(input, |ctx| app.sheet_keys(ctx, 1, &mut sheet));
-            app.record_changes("编辑工作表", None);
+            app.finish_edit();
             roundtrip(&mut app, &before);
         }
     }
@@ -2556,7 +2664,7 @@ mod history_tests {
                     egui::CentralPanel::default().show(ctx, |ui| app.book_ui(ui, 1));
                 },
             );
-            app.record_changes("编辑单元格", None);
+            app.finish_edit();
         }
         assert_eq!(app.project.books[0].columns[0].data[0], "123");
         roundtrip(&mut app, &before);
@@ -2595,10 +2703,13 @@ mod history_tests {
         let mut app = app();
         let before = app.project.clone();
         let group = Some(egui::Id::new("名称"));
+        app.begin_edit("修改长名称");
         app.project.books[0].columns[0].long_name = "时".into();
-        app.record_changes("修改长名称", group);
+        app.history.changed();
+        app.finish_frame_edit(group);
         app.project.books[0].columns[0].long_name = "时间轴".into();
-        app.record_changes("修改长名称", group);
+        app.history.changed();
+        app.finish_frame_edit(group);
         roundtrip(&mut app, &before);
         app.run_command("edit.undo");
         assert!(app.history.undo_label().is_none());
@@ -2616,6 +2727,8 @@ mod history_tests {
         let initial = app.project.clone();
         let mut rect = egui::Rect::NOTHING;
         let mut frame = |app: &mut SciApp, events: Vec<egui::Event>| {
+            app.begin_edit("线宽");
+            let before = app.project.graphs[0].line_width;
             app.history_group = None;
             let _ = ctx.run(
                 egui::RawInput {
@@ -2631,7 +2744,10 @@ mod history_tests {
                     });
                 },
             );
-            app.record_changes("线宽", app.history_group);
+            if app.project.graphs[0].line_width != before {
+                app.history.changed();
+            }
+            app.finish_frame_edit(app.history_group);
             rect
         };
         let r = frame(&mut app, vec![]);
@@ -2669,8 +2785,10 @@ mod history_tests {
         app.run_command("fit.poly");
         assert!(app.history.undo_label().is_none());
         app.dialog = None;
+        app.begin_edit("多项式拟合");
         app.fit(2);
-        app.record_changes("多项式拟合", None);
+        app.history.changed();
+        app.finish_edit();
         roundtrip(&mut app, &before);
     }
 
@@ -2732,10 +2850,10 @@ mod history_tests {
     fn selecting_layer_is_session_state_and_commands_follow_that_layer() {
         let mut app = app();
         app.run_command("layer.add");
-        app.history = History::new(&app.project);
+        app.history = History::default();
         app.select_layer(2, 0);
         app.select_layer(2, 1);
-        app.record_changes("选择图层", None);
+        app.finish_edit();
         assert!(app.history.undo_label().is_none());
         assert_eq!(app.analysis_source(), Some(Source::Layer { graph_id: 2, index: 1 }));
         let before = app.project.clone();
@@ -2750,5 +2868,113 @@ mod history_tests {
         assert_eq!(app.layer_index(2), 0);
         app.run_command("edit.undo");
         assert_eq!(app.project.graphs[0].page.layers().len(), 2);
+    }
+
+    fn editor_frame(app: &mut SciApp, ctx: &egui::Context, events: Vec<egui::Event>, props: bool) -> egui::FullOutput {
+        app.history_group = None;
+        let output = ctx.run(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1000.0, 900.0))),
+                events,
+                ..Default::default()
+            },
+            |ctx| {
+                if props {
+                    app.props_window(ctx);
+                } else {
+                    egui::CentralPanel::default().show(ctx, |ui| app.book_ui(ui, 1));
+                }
+            },
+        );
+        app.finish_frame_edit(app.history_group);
+        output
+    }
+
+    #[test]
+    fn actual_header_and_property_text_edits_form_one_transaction_each() {
+        for props in [false, true] {
+            let ctx = egui::Context::default();
+            crate::fonts::setup(&ctx);
+            let mut app = app();
+            let mut p = Project::sample();
+            p.graphs[0].title = "原图".into();
+            app.load_project(p, None);
+            app.active = Some(1);
+            if props {
+                app.props_for = Some(2);
+            }
+            let before = app.project.clone();
+            editor_frame(&mut app, &ctx, vec![], props);
+            let output = editor_frame(&mut app, &ctx, vec![], props);
+            assert!(!app.history.is_pending());
+            let text = if props { "原图" } else { "时间" };
+            let at = output
+                .shapes
+                .iter()
+                .find_map(|s| match &s.shape {
+                    egui::Shape::Text(t) if t.galley.job.text == text => Some(t.pos + egui::vec2(3.0, 4.0)),
+                    _ => None,
+                })
+                .unwrap_or_else(|| {
+                    panic!(
+                        "未找到 {text}，当前文字：{:?}",
+                        output
+                            .shapes
+                            .iter()
+                            .filter_map(|s| match &s.shape {
+                                egui::Shape::Text(t) => Some(t.galley.job.text.clone()),
+                                _ => None,
+                            })
+                            .collect::<Vec<_>>()
+                    )
+                });
+            let button = |pressed| egui::Event::PointerButton {
+                pos: at,
+                button: egui::PointerButton::Primary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            };
+            editor_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(at), button(true)], props);
+            editor_frame(&mut app, &ctx, vec![button(false)], props);
+            editor_frame(
+                &mut app,
+                &ctx,
+                vec![egui::Event::Key {
+                    key: egui::Key::A,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers::COMMAND,
+                }],
+                props,
+            );
+            for text in ["a", "b", "c"] {
+                editor_frame(&mut app, &ctx, vec![egui::Event::Text(text.into())], props);
+            }
+            assert!(app.history.is_pending());
+            if props {
+                assert_eq!(app.project.graphs[0].title, "abc");
+            } else {
+                assert_eq!(app.project.books[0].columns[0].long_name, "abc");
+            }
+            roundtrip(&mut app, &before);
+            app.run_command("edit.undo");
+            assert!(app.history.undo_label().is_none());
+        }
+    }
+
+    #[test]
+    fn idle_large_book_opens_no_history_transaction() {
+        let ctx = egui::Context::default();
+        let mut app = app();
+        let mut p = Project::sample();
+        p.books[0].columns[0].data = vec!["1".into(); 100_000];
+        app.load_project(p, None);
+        app.active = Some(1);
+        for _ in 0..10 {
+            editor_frame(&mut app, &ctx, vec![], false);
+            assert!(!app.history.is_pending());
+        }
+        assert!(app.history.undo_label().is_none());
     }
 }
