@@ -401,7 +401,7 @@ pub fn series_styles(series: &[Series], plot_type: PlotType) -> Vec<SeriesStyle>
     out
 }
 
-/// 图形窗口：页面包含图层；现有命令和分析默认操作第一个图层。
+/// 图形窗口：页面包含图层；兼容字段访问指向第一图层，图层操作显式指定序号。
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Graph {

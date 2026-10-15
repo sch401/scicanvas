@@ -918,7 +918,7 @@
   "ref": "Creating Multi-Layer Graphs",
   "pri": "P0",
   "status": "原型",
-  "how": "多图层增删、各层属性与独立裁剪；分析与缩放目前操作第一层",
+  "how": "多图层增删、各层属性与独立裁剪；分析与缩放跟随所选图层",
   "verify": "跨工作簿、裁剪、保存与撤销测试；Origin 目视对照待做",
   "id": "F084",
   "milestone": "M1 日常够用"

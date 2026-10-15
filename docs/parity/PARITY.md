@@ -124,7 +124,7 @@
 | F081 | 按选区（部分行）绘图 | Creating Graphs from Graph Templates | P0 | 原型 | 网页原型已做 | 手动操作 |
 | F082 | 页面-图层-曲线 三层结构 | The Page-Layer-Plot Hierarchy | P0 | 已完成 | Graph → Page → Layer → PlotSpec；v0/v1 自动迁移 | 迁移、往返和 SVG 版面回归测试 |
 | F083 | 往图层添加 / 移除曲线 | Adding or Swapping Data Plots in the Graph Layer | P0 | 未开始 | 图层内容对话框 | 手动操作 |
-| F084 | 多图层图形 | Creating Multi-Layer Graphs | P0 | 原型 | 多图层增删、各层属性与独立裁剪；分析与缩放目前操作第一层 | 跨工作簿、裁剪、保存与撤销测试；Origin 目视对照待做 |
+| F084 | 多图层图形 | Creating Multi-Layer Graphs | P0 | 原型 | 多图层增删、各层属性与独立裁剪；分析与缩放跟随所选图层 | 跨工作簿、裁剪、保存与撤销测试；Origin 目视对照待做 |
 | F085 | 函数绘图（y = f(x)） | Plotting Mathematical Functions | P1 | 未开始 | 复用公式解析器 | 与解析值比较 |
 | F086 | 分组绘图（按分类列分组） | Plotting Data by Groups | P1 | 未开始 | — | 与 Origin 比较 |
 | F087 | 图形缩放、平移 | Zooming on the Graph Page and inside Layer | P0 | 已完成 | egui_plot | 手动操作 |

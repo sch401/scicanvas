@@ -98,6 +98,37 @@ pub struct Scene {
     pub ya: Axis,
     pub items: Vec<Item>,
     pub layer_plots: Vec<[f64; 4]>,
+    pub layers: Vec<LayerView>,
+}
+
+/// 各图层的版面与坐标轴，用于定位鼠标和独立视图交互。
+#[derive(Clone, Debug, PartialEq)]
+pub struct LayerView {
+    pub bounds: [f64; 4],
+    pub plot: [f64; 4],
+    pub xa: Axis,
+    pub ya: Axis,
+}
+impl LayerView {
+    pub fn contains(&self, x: f64, y: f64) -> bool {
+        let [l, t, w, h] = self.plot;
+        x >= l && x <= l + w && y >= t && y <= t + h
+    }
+    pub fn data_at(&self, x: f64, y: f64) -> (f64, f64) {
+        let [x, y] = Cartesian {
+            x: &self.xa,
+            y: &self.ya,
+            rect: self.plot,
+        }
+        .unproject([x, y]);
+        (x, y)
+    }
+    pub fn view(&self) -> View {
+        View {
+            x: (self.xa.lo, self.xa.hi),
+            y: (self.ya.lo, self.ya.hi),
+        }
+    }
 }
 
 impl Scene {
@@ -192,15 +223,19 @@ fn text(x: f64, y: f64, s: impl Into<String>, size: f64, anchor: Anchor) -> Prim
 
 /// 排版整张图。`book` 为 None 时是一张提示“没有关联数据”的空图。
 pub fn build(g: &Graph, book: Option<&Book>, w: f64, h: f64, view: Option<View>) -> Scene {
-    compose(g, |id| book.filter(|b| b.id == id), w, h, view)
+    compose(g, |id| book.filter(|b| b.id == id), w, h, &[view])
 }
 
 /// 页面各图层独立解析工作簿；屏幕与整页导出使用同一入口。
 pub fn build_page(g: &Graph, project: &crate::Project, w: f64, h: f64, view: Option<View>) -> Scene {
-    compose(g, |id| project.book(id), w, h, view)
+    compose(g, |id| project.book(id), w, h, &[view])
 }
 
-fn compose<'a>(g: &Graph, book: impl Fn(u64) -> Option<&'a Book>, w: f64, h: f64, view: Option<View>) -> Scene {
+pub fn build_page_views(g: &Graph, project: &crate::Project, w: f64, h: f64, views: &[Option<View>]) -> Scene {
+    compose(g, |id| project.book(id), w, h, views)
+}
+
+fn compose<'a>(g: &Graph, book: impl Fn(u64) -> Option<&'a Book>, w: f64, h: f64, views: &[Option<View>]) -> Scene {
     let cols = g.page.columns.max(1);
     let rows = g.page.layers().len().div_ceil(cols).max(1);
     let (cw, ch) = (w / cols as f64, h / rows as f64);
@@ -210,7 +245,7 @@ fn compose<'a>(g: &Graph, book: impl Fn(u64) -> Option<&'a Book>, w: f64, h: f64
             layer.book_id.and_then(&book),
             cw,
             ch,
-            if i == 0 { view } else { None },
+            views.get(i).copied().flatten(),
         );
         let (dx, dy) = ((i % cols) as f64 * cw, (i / cols) as f64 * ch);
         for item in &mut sc.items {
@@ -222,6 +257,8 @@ fn compose<'a>(g: &Graph, book: impl Fn(u64) -> Option<&'a Book>, w: f64, h: f64
         }
         sc.plot[0] += dx;
         sc.plot[1] += dy;
+        sc.layers[0].plot = sc.plot;
+        sc.layers[0].bounds = [dx, dy, cw, ch];
         sc
     });
     let mut page = scenes
@@ -248,6 +285,7 @@ fn compose<'a>(g: &Graph, book: impl Fn(u64) -> Option<&'a Book>, w: f64, h: f64
     page.layer_plots = vec![page.plot];
     for sc in scenes {
         page.layer_plots.push(sc.plot);
+        page.layers.extend(sc.layers);
         page.items.extend(sc.items);
     }
     page
@@ -677,6 +715,12 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
         w,
         h,
         plot: [left, top, pw, ph],
+        layers: vec![LayerView {
+            bounds: [0.0, 0.0, w, h],
+            plot: [left, top, pw, ph],
+            xa: xa.clone(),
+            ya: ya.clone(),
+        }],
         xa,
         ya,
         items,

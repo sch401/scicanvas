@@ -118,7 +118,7 @@ add(M, "按选列自动配对 X / Y 绘图", "Creating Graphs from Graph Templat
 add(M, "按选区（部分行）绘图", "Creating Graphs from Graph Templates", "P0", PROTO, "网页原型已做", "手动操作")
 add(M, "页面-图层-曲线 三层结构", "The Page-Layer-Plot Hierarchy", "P0", DONE, "Graph → Page → Layer → PlotSpec；v0/v1 自动迁移", "迁移、往返和 SVG 版面回归测试")
 add(M, "往图层添加 / 移除曲线", "Adding or Swapping Data Plots in the Graph Layer", "P0", TODO, "图层内容对话框", "手动操作")
-add(M, "多图层图形", "Creating Multi-Layer Graphs", "P0", PROTO, "多图层增删、各层属性与独立裁剪；分析与缩放目前操作第一层", "跨工作簿、裁剪、保存与撤销测试；Origin 目视对照待做")
+add(M, "多图层图形", "Creating Multi-Layer Graphs", "P0", PROTO, "多图层增删、各层属性与独立裁剪；分析与缩放跟随所选图层", "跨工作簿、裁剪、保存与撤销测试；Origin 目视对照待做")
 add(M, "函数绘图（y = f(x)）", "Plotting Mathematical Functions", "P1", TODO, "复用公式解析器", "与解析值比较")
 add(M, "分组绘图（按分类列分组）", "Plotting Data by Groups", "P1", TODO, "", "与 Origin 比较")
 add(M, "图形缩放、平移", "Zooming on the Graph Page and inside Layer", "P0", DONE, "egui_plot", "手动操作")

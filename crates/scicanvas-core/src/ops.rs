@@ -9,6 +9,8 @@ use crate::model::{fmt_num, parse_num, Book, Column, Graph, PlotType, Project, R
 pub enum Source {
     /// 当前图形里的数据曲线（不含拟合、平滑等结果曲线）。
     Graph(u64),
+    /// 指定页面中的图层；Graph 保留为第一图层的兼容入口。
+    Layer { graph_id: u64, index: usize },
     /// 工作簿里选中的列；什么都没选时用全部 Y 列。`rows` 为选区覆盖的行。
     Book {
         id: u64,
@@ -28,6 +30,7 @@ pub struct Item {
 pub struct Resolved {
     pub book_id: u64,
     pub graph_id: Option<u64>,
+    pub layer_index: usize,
     pub items: Vec<Item>,
 }
 
@@ -99,8 +102,13 @@ impl Project {
     /// 把分析输入解析成具体的数据组。
     pub fn resolve(&self, src: &Source) -> Result<Resolved, String> {
         match src {
-            Source::Graph(gid) => {
-                let g = self.graph(*gid).ok_or("找不到图形")?;
+            Source::Graph(gid) | Source::Layer { graph_id: gid, .. } => {
+                let layer_index = match src {
+                    Source::Layer { index, .. } => *index,
+                    _ => 0,
+                };
+                let graph = self.graph(*gid).ok_or("找不到图形")?;
+                let g = graph.page.layers().get(layer_index).ok_or("找不到图层")?;
                 if g.transform != crate::plotspec::Transform::Identity {
                     return Err("统计变换图层的分析请从工作簿选择原始数据执行".into());
                 }
@@ -122,6 +130,7 @@ impl Project {
                 Ok(Resolved {
                     book_id: bid,
                     graph_id: Some(*gid),
+                    layer_index,
                     items,
                 })
             }
@@ -152,6 +161,7 @@ impl Project {
                 Ok(Resolved {
                     book_id: *id,
                     graph_id: None,
+                    layer_index: 0,
                     items,
                 })
             }
@@ -176,16 +186,18 @@ impl Project {
     }
 
     /// 结果曲线要加到哪张图：分析的来源图；否则已打开的、含这条 Y 的图；都没有就新建散点图。
-    fn graph_for_result(&mut self, r: &Resolved, item: &Item) -> u64 {
+    fn graph_for_result(&mut self, r: &Resolved, item: &Item) -> (u64, usize) {
         if let Some(g) = r.graph_id {
-            return g;
+            return (g, r.layer_index);
         }
-        if let Some(g) = self
-            .graphs
-            .iter()
-            .find(|g| g.book_id == Some(r.book_id) && g.y_keys.contains(&item.y))
-        {
-            return g.id;
+        for graph in &self.graphs {
+            if let Some(index) = graph.page.layers().iter().position(|g| {
+                g.book_id == Some(r.book_id)
+                    && g.y_keys.contains(&item.y)
+                    && g.transform == crate::plotspec::Transform::Identity
+            }) {
+                return (graph.id, index);
+            }
         }
         let id = self.alloc_id();
         let mut g = Graph::new(id, self.unique_name("Graph"));
@@ -195,7 +207,7 @@ impl Project {
         g.plot_type = PlotType::Scatter;
         g.rows = item.rows;
         self.graphs.push(g);
-        id
+        (id, 0)
     }
 
     /// 多项式拟合（阶数 1 即线性拟合）。每条数据新增“拟合 X”和拟合值两列（200 个等间距点），
@@ -241,8 +253,8 @@ impl Project {
             cy.data = fx.iter().map(|x| fmt_num(fit.eval(*x))).collect();
             let kx = self.insert_result_column(r.book_id, &item.y, cx).unwrap();
             let ky = self.insert_result_column(r.book_id, &item.y, cy).unwrap();
-            let gid = self.graph_for_result(&r, item);
-            let g = self.graph_mut(gid).unwrap();
+            let (gid, index) = self.graph_for_result(&r, item);
+            let g = &mut self.graph_mut(gid).unwrap().page.layers_mut()[index];
             if !g.y_keys.contains(&item.y) {
                 g.y_keys.push(item.y.clone());
             }
@@ -318,7 +330,7 @@ impl Project {
             )
         })?;
         if let Some(gid) = r.graph_id {
-            let g = self.graph_mut(gid).unwrap();
+            let g = &mut self.graph_mut(gid).unwrap().page.layers_mut()[r.layer_index];
             for (item, key) in &made {
                 g.y_keys.push(key.clone());
                 g.line_only.push(key.clone());
@@ -409,7 +421,7 @@ impl Project {
     /// 来源是工作簿时统计选中的列（任意列属性），没选时统计全部 Y 列。
     pub fn stats_on_columns(&mut self, src: &Source) -> Result<u64, String> {
         let (book_id, keys, rows): (u64, Vec<String>, Option<(usize, usize)>) = match src {
-            Source::Graph(_) => {
+            Source::Graph(_) | Source::Layer { .. } => {
                 let r = self.resolve(src)?;
                 (
                     r.book_id,

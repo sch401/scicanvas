@@ -8,7 +8,7 @@ use egui_extras::{Column as TCol, TableBuilder};
 use scicanvas_core::analysis::{NormalizeMethod, SmoothMethod};
 use scicanvas_core::history::History;
 use scicanvas_core::ops::Source;
-use scicanvas_core::{csv, round_sig, svg, Graph, PlotType, Project, Role};
+use scicanvas_core::{csv, round_sig, svg, PlotType, Project, Role};
 
 use crate::commands;
 use crate::dialogs::{self, Dialog};
@@ -43,7 +43,7 @@ pub struct SciApp {
     pub(crate) active: Option<u64>,
     /// 正在编辑属性的图形。
     pub(crate) props_for: Option<u64>,
-    props_layer: usize,
+    active_layers: HashMap<u64, usize>,
     pub(crate) plot_draft: Option<scicanvas_core::plotspec::PlotSpec>,
     pub(crate) status: String,
     pub(crate) show_explorer: bool,
@@ -113,7 +113,7 @@ impl SciApp {
             selection: HashMap::new(),
             active: None,
             props_for: None,
-            props_layer: 0,
+            active_layers: HashMap::new(),
             plot_draft: None,
             status: String::new(),
             show_explorer: true,
@@ -138,6 +138,7 @@ impl SciApp {
     }
 
     fn load_project(&mut self, project: Project, path: Option<PathBuf>) {
+        self.active_layers.clear();
         self.plot_draft = None;
         self.history = History::new(&project);
         self.history_group = None;
@@ -277,8 +278,9 @@ impl SciApp {
 
     pub(crate) fn plot(&mut self, t: PlotType) {
         if let Some(id) = self.active {
+            let index = self.layer_index(id);
             if let Some(g) = self.project.graph_mut(id) {
-                g.plot_type = t;
+                g.page.layers_mut()[index].plot_type = t;
                 self.status = format!("{} 已改为{}", g.name, t.label());
                 return;
             }
@@ -367,6 +369,7 @@ impl SciApp {
     }
 
     fn delete_item(&mut self, id: u64) {
+        self.active_layers.remove(&id);
         let name = self.project.name_of(id).unwrap_or("").to_string();
         self.project.remove(id);
         self.open.remove(&id);
@@ -550,6 +553,14 @@ impl SciApp {
 
     fn restore_history(&mut self, project: Project) {
         self.project = project;
+        self.active_layers.retain(|id, index| {
+            if let Some(graph) = self.project.graph(*id) {
+                *index = (*index).min(graph.page.layers().len() - 1);
+                true
+            } else {
+                false
+            }
+        });
         let ids = self.all_ids();
         self.open.retain(|id, _| ids.contains(id));
         self.geoms.retain(|id, _| ids.contains(id));
@@ -598,6 +609,31 @@ impl SciApp {
         self.active.filter(|id| self.project.graph(*id).is_some())
     }
 
+    pub(crate) fn layer_index(&self, id: u64) -> usize {
+        self.project
+            .graph(id)
+            .map(|g| {
+                self.active_layers
+                    .get(&id)
+                    .copied()
+                    .unwrap_or(0)
+                    .min(g.page.layers().len() - 1)
+            })
+            .unwrap_or(0)
+    }
+
+    pub(crate) fn active_layer(&self) -> Option<&scicanvas_core::page::Layer> {
+        let id = self.active_graph_id()?;
+        self.project.graph(id)?.page.layers().get(self.layer_index(id))
+    }
+
+    fn select_layer(&mut self, id: u64, index: usize) {
+        if self.project.graph(id).is_some_and(|g| index < g.page.layers().len()) {
+            self.active_layers.insert(id, index);
+            self.active = Some(id);
+        }
+    }
+
     /// 当前窗口是工作簿还是图形，决定显示哪个上下文选项卡。
     pub(crate) fn active_ctx(&self) -> Option<Ctx> {
         if self.active_book_id().is_some() {
@@ -632,7 +668,13 @@ impl SciApp {
     /// 分析的输入：当前图形里的数据曲线，或当前工作簿里选中的列。
     pub(crate) fn analysis_source(&self) -> Option<Source> {
         if let Some(g) = self.active_graph_id() {
-            return self.project.graph(g).and_then(|g| g.book_id).map(|_| Source::Graph(g));
+            return self
+                .active_layer()
+                .and_then(|layer| layer.book_id)
+                .map(|_| Source::Layer {
+                    graph_id: g,
+                    index: self.layer_index(g),
+                });
         }
         self.active_book_id().map(|id| {
             let (selected, rows) = self.picked(id);
@@ -660,22 +702,20 @@ impl SciApp {
 
     pub(crate) fn open_props(&mut self) {
         if let Some(g) = self.any_open_graph() {
-            if self.props_for != Some(g) {
-                self.props_layer = 0;
-            }
             self.props_for = Some(g);
         }
     }
 
     pub(crate) fn add_layer(&mut self) {
         let Some(id) = self.active_graph_id() else { return };
+        let index = self.layer_index(id);
         let graph = self.project.graph_mut(id).unwrap();
-        let layer = graph.page.layers()[0].clone();
+        let layer = graph.page.layers()[index].clone();
         graph.page.add_layer(layer);
         let n = graph.page.layers().len();
         graph.page.columns = (n as f64).sqrt().ceil() as usize;
         self.props_for = Some(id);
-        self.props_layer = n - 1;
+        self.active_layers.insert(id, n - 1);
         self.status = "已添加图层，可在绘图属性中选择各图层的数据和样式".into();
     }
 
@@ -694,7 +734,11 @@ impl SciApp {
                 Err(e) => self.status = e,
             }
         } else if let Some(id) = self.active_graph_id() {
-            self.plot_draft = Some(self.project.graph(id).unwrap().spec.clone());
+            self.plot_draft = Some(
+                self.project.graph(id).unwrap().page.layers()[self.layer_index(id)]
+                    .spec
+                    .clone(),
+            );
         }
     }
 
@@ -712,25 +756,22 @@ impl SciApp {
 
     pub(crate) fn remove_layer(&mut self) {
         let Some(id) = self.active_graph_id() else { return };
+        let index = self.layer_index(id);
         let graph = self.project.graph_mut(id).unwrap();
-        let index = if self.props_for == Some(id) {
-            self.props_layer.min(graph.page.layers().len() - 1)
-        } else {
-            graph.page.layers().len() - 1
-        };
         match graph.page.remove_layer(index) {
             Ok(_) => {
-                self.props_layer = index.min(graph.page.layers().len() - 1);
+                self.active_layers.insert(id, index.min(graph.page.layers().len() - 1));
                 self.status = "已删除图层".into();
             }
             Err(e) => self.status = e,
         }
     }
 
-    pub(crate) fn toggle_graph(&mut self, field: fn(&mut Graph) -> &mut bool, label: &str) {
+    pub(crate) fn toggle_graph(&mut self, field: fn(&mut scicanvas_core::page::Layer) -> &mut bool, label: &str) {
         let Some(gid) = self.active_graph_id() else { return };
+        let index = self.layer_index(gid);
         if let Some(g) = self.project.graph_mut(gid) {
-            let v = field(g);
+            let v = field(&mut g.page.layers_mut()[index]);
             *v = !*v;
             self.status = format!("{}：{}", label, if *v { "开" } else { "关" });
         }
@@ -1972,12 +2013,20 @@ impl SciApp {
         let Some(g) = self.project.graph(id) else {
             return;
         };
-        let out = plot::show(ui, g, &self.project);
+        let out = plot::show(ui, g, &self.project, self.layer_index(id));
+        if let Some(index) = out.selected_layer {
+            self.select_layer(id, index);
+        }
         let rect = out.response.rect;
 
         // 右下角显示鼠标处的坐标
         if let Some((x, y)) = out.hover {
-            let text = format!("x = {}   y = {}", round_sig(x, 4), round_sig(y, 4));
+            let text = format!(
+                "图层 {} · x = {}   y = {}",
+                out.hover_layer.unwrap_or(0) + 1,
+                round_sig(x, 4),
+                round_sig(y, 4)
+            );
             ui.painter().text(
                 rect.right_bottom() + egui::vec2(-8.0, -6.0),
                 egui::Align2::RIGHT_BOTTOM,
@@ -2018,7 +2067,7 @@ impl SciApp {
             }
             ui.separator();
             if ui.button("恢复原始范围").clicked() {
-                plot::reset_view(ui.ctx(), id);
+                plot::reset_view(ui.ctx(), id, self.layer_index(id));
                 ui.close_menu();
             }
         });
@@ -2055,7 +2104,7 @@ impl SciApp {
                 )
             })
             .collect();
-        let mut props_layer = self.props_layer.min(g0.page.layers().len() - 1);
+        let mut props_layer = self.layer_index(gid);
         let title = format!("绘图属性 — {}", g0.name);
         let history_group = &mut self.history_group;
         let project = &mut self.project;
@@ -2256,7 +2305,9 @@ impl SciApp {
                     }
                 });
             });
-        self.props_layer = props_layer;
+        if props_layer != self.layer_index(gid) {
+            self.select_layer(gid, props_layer);
+        }
         if !open || close {
             self.props_for = None;
         }
@@ -2680,5 +2731,29 @@ mod history_tests {
         roundtrip(&mut app, &before);
         let text = scicanvas_core::project_file::to_json(&app.project).unwrap();
         assert_eq!(scicanvas_core::project_file::from_json(&text).unwrap(), app.project);
+    }
+
+    #[test]
+    fn selecting_layer_is_session_state_and_commands_follow_that_layer() {
+        let mut app = app();
+        app.run_command("layer.add");
+        app.history = History::new(&app.project);
+        app.select_layer(2, 0);
+        app.select_layer(2, 1);
+        app.record_changes("选择图层", None);
+        assert!(app.history.undo_label().is_none());
+        assert_eq!(app.analysis_source(), Some(Source::Layer { graph_id: 2, index: 1 }));
+        let before = app.project.clone();
+        app.run_command("graph.grid");
+        assert!(!app.project.graphs[0].page.layers()[0].grid);
+        assert!(app.project.graphs[0].page.layers()[1].grid);
+        roundtrip(&mut app, &before);
+        app.run_command("plot.bar");
+        assert_eq!(app.project.graphs[0].page.layers()[0].plot_type, PlotType::LineSymbol);
+        assert_eq!(app.project.graphs[0].page.layers()[1].plot_type, PlotType::Bar);
+        app.run_command("layer.remove");
+        assert_eq!(app.layer_index(2), 0);
+        app.run_command("edit.undo");
+        assert_eq!(app.project.graphs[0].page.layers().len(), 2);
     }
 }

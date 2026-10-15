@@ -7,6 +7,7 @@
 use std::f32::consts::FRAC_PI_2;
 
 use eframe::egui::{self, pos2, vec2, Color32, Pos2, Rect, Sense, Shape, Stroke};
+use scicanvas_core::page::Layer;
 use scicanvas_core::scene::{self, Anchor, Prim, Rgb, Scene, View};
 use scicanvas_core::{Graph, Project};
 
@@ -14,13 +15,14 @@ use crate::fonts::plot_font;
 
 /// 缩放平移后的视图，按图形保存在 egui 的临时内存里。
 /// 记下当时的坐标轴设置，在“绘图属性”里改了范围或对数轴后自动作废。
-#[derive(Clone, Copy)]
+#[derive(Clone)]
 struct Saved {
     view: View,
     key: [f64; 8],
+    spec: scicanvas_core::plotspec::PlotSpec,
 }
 
-fn axis_key(g: &Graph) -> [f64; 8] {
+fn axis_key(g: &Layer) -> [f64; 8] {
     let b = |v: bool| if v { 1.0 } else { 0.0 };
     [
         b(g.x_auto),
@@ -39,8 +41,15 @@ fn view_id(graph: u64) -> egui::Id {
 }
 
 /// 恢复原始范围（例如改了坐标轴设置之后）。
-pub fn reset_view(ctx: &egui::Context, graph: u64) {
-    ctx.data_mut(|d| d.remove::<Saved>(view_id(graph)));
+pub fn reset_view(ctx: &egui::Context, graph: u64, index: usize) {
+    ctx.data_mut(|d| {
+        if let Some(mut saved) = d.get_temp::<Vec<Option<Saved>>>(view_id(graph)) {
+            if let Some(view) = saved.get_mut(index) {
+                *view = None;
+            }
+            d.insert_temp(view_id(graph), saved);
+        }
+    });
 }
 
 pub struct PlotOutput {
@@ -49,6 +58,8 @@ pub struct PlotOutput {
     pub hover: Option<(f64, f64)>,
     /// 当前是否处于缩放 / 平移后的视图。
     pub zoomed: bool,
+    pub selected_layer: Option<usize>,
+    pub hover_layer: Option<usize>,
 }
 
 fn rgb(c: Rgb) -> Color32 {
@@ -87,7 +98,7 @@ fn adjust(r: (f64, f64), log: bool, shift: f64, zoom: f64, center: f64) -> (f64,
     }
 }
 
-pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project) -> PlotOutput {
+pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize) -> PlotOutput {
     let id = view_id(g.id);
     let available = ui.available_size().max(vec2(120.0, 90.0));
     let aspect = (g.page.width_mm / g.page.height_mm) as f32;
@@ -98,96 +109,130 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project) -> PlotOutput {
     };
     let (rect, response) = ui.allocate_exact_size(size, Sense::click_and_drag());
     let (w, h) = (rect.width() as f64, rect.height() as f64);
-
-    let mut saved: Option<Saved> = ui.data(|d| d.get_temp::<Saved>(id)).filter(|s| s.key == axis_key(g));
-    let mut sc = scene::build_page(g, project, w, h, saved.map(|s| s.view));
     let local = |p: Pos2| ((p.x - rect.left()) as f64, (p.y - rect.top()) as f64);
-
-    // 交互
-    let mut changed = false;
-    if response.double_clicked() {
-        saved = None;
-        changed = true;
-    } else {
-        let mut v = sc.view();
-        let pw = sc.plot[2];
-        let ph = sc.plot[3];
-        if response.dragged_by(egui::PointerButton::Primary)
-            && response.interact_pointer_pos().is_some_and(|p| {
-                let (x, y) = local(p);
-                sc.contains(x, y)
-            })
+    // ponytail: 视图按图层序号缓存；增删时清空，支持重排时改用稳定图层编号。
+    let mut saved = ui.data(|d| d.get_temp::<Vec<Option<Saved>>>(id)).unwrap_or_default();
+    if saved.len() != g.page.layers().len() {
+        saved = vec![None; g.page.layers().len()];
+    }
+    for (state, layer) in saved.iter_mut().zip(g.page.layers()) {
+        if state
+            .as_ref()
+            .is_some_and(|s| s.key != axis_key(layer) || s.spec != layer.spec)
         {
-            let d = response.drag_delta();
-            if d != egui::Vec2::ZERO {
-                v.x = adjust(v.x, g.x_log, -d.x as f64 / pw, 1.0, 0.5);
-                v.y = adjust(v.y, g.y_log, d.y as f64 / ph, 1.0, 0.5);
-                changed = true;
-            }
+            *state = None;
         }
-        if let Some(p) = response.hover_pos().filter(|p| {
-            let (x, y) = local(*p);
-            sc.contains(x, y)
-        }) {
-            let (scroll, zoom_delta, alt) = ui.input(|i| (i.smooth_scroll_delta, i.zoom_delta(), i.modifiers.alt));
-            // Shift+滚轮在 egui 里会变成水平滚动
-            let (mut zx, mut zy) = (1.0, 1.0);
-            if scroll.y != 0.0 {
-                let z = (-scroll.y as f64 * 0.0025).exp();
-                if alt {
-                    zy = z;
-                } else {
-                    zx = z;
-                    zy = z;
+    }
+    let views = |saved: &[Option<Saved>]| saved.iter().map(|s| s.as_ref().map(|s| s.view)).collect::<Vec<_>>();
+    let mut sc = scene::build_page_views(g, project, w, h, &views(&saved));
+    let hovered = response.hover_pos().and_then(|p| {
+        let (x, y) = local(p);
+        sc.layers.iter().position(|layer| layer.contains(x, y))
+    });
+    let selected_layer = if response.contains_pointer() && ui.input(|i| i.pointer.any_pressed()) {
+        response.interact_pointer_pos().and_then(|p| {
+            let (x, y) = local(p);
+            sc.layers.iter().position(|layer| {
+                let [l, t, w, h] = layer.bounds;
+                x >= l && x <= l + w && y >= t && y <= t + h
+            })
+        })
+    } else {
+        None
+    };
+    // 拖动锁定按下时的图层，越过其他图层也继续操作原图层。
+    let dragging = if response.dragged_by(egui::PointerButton::Primary) {
+        ui.input(|i| i.pointer.press_origin()).and_then(|p| {
+            let (x, y) = local(p);
+            sc.layers.iter().position(|layer| layer.contains(x, y))
+        })
+    } else {
+        None
+    };
+    let mut changed = false;
+    if let Some(index) = dragging.or(hovered) {
+        let layer = &g.page.layers()[index];
+        let layout = &sc.layers[index];
+        if response.double_clicked() {
+            saved[index] = None;
+            changed = true;
+        } else {
+            let mut view = layout.view();
+            if dragging.is_some() {
+                let d = response.drag_delta();
+                if d != egui::Vec2::ZERO {
+                    view.x = adjust(view.x, layer.x_log, -d.x as f64 / layout.plot[2], 1.0, 0.5);
+                    view.y = adjust(view.y, layer.y_log, d.y as f64 / layout.plot[3], 1.0, 0.5);
+                    changed = true;
                 }
-            } else if scroll.x != 0.0 {
-                zx = (-scroll.x as f64 * 0.0025).exp();
+            } else if let Some(p) = response.hover_pos() {
+                let (scroll, zoom_delta, alt) = ui.input(|i| (i.smooth_scroll_delta, i.zoom_delta(), i.modifiers.alt));
+                let (mut zx, mut zy) = (1.0, 1.0);
+                if scroll.y != 0.0 {
+                    let z = (-scroll.y as f64 * 0.0025).exp();
+                    zy = z;
+                    if !alt {
+                        zx = z;
+                    }
+                } else if scroll.x != 0.0 {
+                    zx = (-scroll.x as f64 * 0.0025).exp();
+                }
+                if zoom_delta != 1.0 {
+                    zx /= zoom_delta as f64;
+                    zy /= zoom_delta as f64;
+                }
+                if zx != 1.0 || zy != 1.0 {
+                    let (x, y) = local(p);
+                    let fx = ((x - layout.plot[0]) / layout.plot[2]).clamp(0.0, 1.0);
+                    let fy = ((layout.plot[1] + layout.plot[3] - y) / layout.plot[3]).clamp(0.0, 1.0);
+                    view.x = adjust(view.x, layer.x_log, 0.0, zx, fx);
+                    view.y = adjust(view.y, layer.y_log, 0.0, zy, fy);
+                    changed = true;
+                }
             }
-            if zoom_delta != 1.0 {
-                zx /= zoom_delta as f64;
-                zy /= zoom_delta as f64;
+            if changed {
+                saved[index] = Some(Saved {
+                    view,
+                    key: axis_key(layer),
+                    spec: layer.spec.clone(),
+                });
             }
-            if zx != 1.0 || zy != 1.0 {
-                let (lx, ly) = local(p);
-                let fx = ((lx - sc.plot[0]) / pw).clamp(0.0, 1.0);
-                let fy = ((sc.plot[1] + ph - ly) / ph).clamp(0.0, 1.0);
-                v.x = adjust(v.x, g.x_log, 0.0, zx, fx);
-                v.y = adjust(v.y, g.y_log, 0.0, zy, fy);
-                changed = true;
-            }
-        }
-        if changed {
-            saved = Some(Saved {
-                view: v,
-                key: axis_key(g),
-            });
         }
     }
     if changed {
-        ui.data_mut(|d| match saved {
-            Some(s) => d.insert_temp(id, s),
-            None => d.remove::<Saved>(id),
-        });
-        sc = scene::build_page(g, project, w, h, saved.map(|s| s.view));
+        sc = scene::build_page_views(g, project, w, h, &views(&saved));
     }
-
     paint(ui, rect, &sc);
-
-    let hover = response
-        .hover_pos()
-        .map(local)
-        .filter(|(x, y)| sc.contains(*x, *y))
-        .map(|(x, y)| sc.data_at(x, y));
+    if sc.layers.len() > 1 {
+        let index = selected_layer.unwrap_or(selected).min(sc.layers.len() - 1);
+        let [x, y, w, h] = sc.layers[index].plot;
+        let outline = Rect::from_min_size(rect.min + vec2(x as f32, y as f32), vec2(w as f32, h as f32));
+        ui.painter().rect_stroke(
+            outline.expand(3.0),
+            0.0,
+            Stroke::new(1.0_f32, ui.visuals().selection.bg_fill),
+        );
+    }
+    let hover = hovered.and_then(|index| {
+        response.hover_pos().map(|p| {
+            let (x, y) = local(p);
+            sc.layers[index].data_at(x, y)
+        })
+    });
     if hover.is_some() && !response.dragged() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
     }
-    if response.dragged() {
+    if dragging.is_some() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
     }
+    let zoomed = saved.iter().any(Option::is_some);
+    ui.data_mut(|d| d.insert_temp(id, saved));
     PlotOutput {
         response,
         hover,
-        zoomed: saved.is_some(),
+        zoomed,
+        selected_layer,
+        hover_layer: hovered,
     }
 }
 
@@ -284,5 +329,111 @@ pub fn paint(ui: &egui::Ui, rect: Rect, sc: &Scene) {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn project() -> Project {
+        let mut p = Project::sample();
+        let mut layer = p.graphs[0].page.layers()[0].clone();
+        layer.y_keys = vec!["C".into()];
+        p.graphs[0].page.add_layer(layer);
+        p.graphs[0].page.columns = 2;
+        p
+    }
+
+    fn frame(ctx: &egui::Context, p: &Project, events: Vec<egui::Event>) -> PlotOutput {
+        let mut output = None;
+        let input = egui::RawInput {
+            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1000.0, 700.0))),
+            events,
+            ..Default::default()
+        };
+        let _ = ctx.run(input, |ctx| {
+            egui::CentralPanel::default().show(ctx, |ui| {
+                output = Some(show(ui, &p.graphs[0], p, 0));
+            });
+        });
+        output.unwrap()
+    }
+
+    fn button(pos: Pos2, pressed: bool) -> egui::Event {
+        egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        }
+    }
+
+    fn point(rect: Rect, view: &scene::LayerView) -> Pos2 {
+        let [x, y, w, h] = view.plot;
+        rect.min + vec2((x + w / 2.0) as f32, (y + h / 2.0) as f32)
+    }
+
+    #[test]
+    fn click_and_wheel_target_second_layer_and_reset_keeps_other_view() {
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        let p = project();
+        let initial = frame(&ctx, &p, vec![]);
+        let sc = scene::build_page(
+            &p.graphs[0],
+            &p,
+            initial.response.rect.width() as f64,
+            initial.response.rect.height() as f64,
+            None,
+        );
+        let at = point(initial.response.rect, &sc.layers[1]);
+        let output = frame(&ctx, &p, vec![egui::Event::PointerMoved(at), button(at, true)]);
+        assert_eq!(output.selected_layer, Some(1));
+        frame(&ctx, &p, vec![button(at, false)]);
+        let wheel = |at| {
+            vec![
+                egui::Event::PointerMoved(at),
+                egui::Event::MouseWheel {
+                    unit: egui::MouseWheelUnit::Point,
+                    delta: vec2(0.0, 120.0),
+                    modifiers: egui::Modifiers::NONE,
+                },
+            ]
+        };
+        let output = frame(&ctx, &p, wheel(at));
+        assert_eq!(output.hover_layer, Some(1));
+        let states = ctx.data(|d| d.get_temp::<Vec<Option<Saved>>>(view_id(2))).unwrap();
+        assert!(states[0].is_none());
+        assert!(states[1].is_some());
+        let first = point(initial.response.rect, &sc.layers[0]);
+        frame(&ctx, &p, wheel(first));
+        reset_view(&ctx, 2, 1);
+        let states = ctx.data(|d| d.get_temp::<Vec<Option<Saved>>>(view_id(2))).unwrap();
+        assert!(states[0].is_some());
+        assert!(states[1].is_none());
+    }
+
+    #[test]
+    fn pan_stays_on_press_layer_when_pointer_crosses_into_next_panel() {
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        let p = project();
+        let initial = frame(&ctx, &p, vec![]);
+        let sc = scene::build_page(
+            &p.graphs[0],
+            &p,
+            initial.response.rect.width() as f64,
+            initial.response.rect.height() as f64,
+            None,
+        );
+        let start = point(initial.response.rect, &sc.layers[0]);
+        let end = point(initial.response.rect, &sc.layers[1]);
+        frame(&ctx, &p, vec![egui::Event::PointerMoved(start), button(start, true)]);
+        frame(&ctx, &p, vec![egui::Event::PointerMoved(start + vec2(12.0, 0.0))]);
+        frame(&ctx, &p, vec![egui::Event::PointerMoved(end)]);
+        let states = ctx.data(|d| d.get_temp::<Vec<Option<Saved>>>(view_id(2))).unwrap();
+        assert!(states[0].is_some());
+        assert!(states[1].is_none());
     }
 }

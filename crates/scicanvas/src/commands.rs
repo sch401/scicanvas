@@ -88,11 +88,8 @@ fn need_sortable(a: &SciApp) -> Result<(), &'static str> {
     let id = a.active_book_id().ok_or("请先单击一个工作簿窗口")?;
     a.sort_column(id).map(|_| ()).ok_or("请先选中一列，或单击一个单元格")
 }
-fn graph_flag(a: &SciApp, f: fn(&scicanvas_core::Graph) -> bool) -> bool {
-    a.active_graph_id()
-        .and_then(|id| a.project.graph(id))
-        .map(f)
-        .unwrap_or(false)
+fn graph_flag(a: &SciApp, f: fn(&scicanvas_core::page::Layer) -> bool) -> bool {
+    a.active_layer().map(f).unwrap_or(false)
 }
 
 #[allow(clippy::too_many_arguments)]
