@@ -26,7 +26,7 @@ jobs:
           rustup toolchain install stable --profile minimal --component rustfmt --component clippy
           rustup default stable
       - name: 恢复依赖与测试构建缓存
-        uses: actions/cache@v6
+        uses: actions/cache/restore@v6
         with:
           path: |
             ~/.cargo/registry
@@ -39,3 +39,13 @@ jobs:
       - run: cargo test --profile ci --workspace --all-features --locked
       - run: cargo test --profile ci -p scicanvas-core --no-default-features --locked
       - run: cargo clippy --profile ci --workspace --all-targets --all-features --locked -- -D warnings
+      - name: 保存构建缓存
+        uses: actions/cache/save@v6
+        timeout-minutes: 2
+        continue-on-error: true
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target/ci
+          key: ${{ runner.os }}-ci-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}-${{ github.sha }}
