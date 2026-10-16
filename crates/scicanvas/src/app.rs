@@ -20,6 +20,9 @@ use crate::theme::{self, Palette};
 
 const META_ROWS: [&str; 3] = ["长名称", "单位", "注释"];
 
+#[derive(Clone, Copy)]
+struct ProjectDrag(u64);
+
 /// 列标题右键菜单里的操作。
 #[derive(Clone, Copy)]
 enum ColAction {
@@ -44,6 +47,9 @@ pub struct SciApp {
     pub(crate) explorer_target: Option<u64>,
     pub(crate) folder_destination: Option<u64>,
     pub(crate) project_name: String,
+    explorer_click: Option<(u64, f64)>,
+    /// Object ID and whether the inline name field needs initial focus.
+    explorer_rename: Option<(u64, bool)>,
     /// 正在编辑属性的图形。
     pub(crate) props_for: Option<u64>,
     active_layers: HashMap<u64, usize>,
@@ -126,6 +132,8 @@ impl SciApp {
             explorer_target: None,
             folder_destination: None,
             project_name: String::new(),
+            explorer_click: None,
+            explorer_rename: None,
             props_for: None,
             active_layers: HashMap::new(),
             plot_draft: None,
@@ -175,6 +183,8 @@ impl SciApp {
         self.explorer_target = self.active;
         self.folder_destination = None;
         self.project_name.clear();
+        self.explorer_click = None;
+        self.explorer_rename = None;
         self.project_path = path;
         self.props_for = None;
         self.sheets.clear();
@@ -722,6 +732,8 @@ impl SciApp {
             self.props_for = None;
         }
         self.confirm_delete = None;
+        self.explorer_click = None;
+        self.explorer_rename = None;
         self.project_name = self
             .project_target()
             .and_then(|id| self.project.name_of(id))
@@ -1299,6 +1311,134 @@ impl SciApp {
         }
     }
 
+    fn start_explorer_rename(&mut self, id: u64) {
+        self.explorer_target = Some(id);
+        self.project_name = self.project.name_of(id).unwrap_or("").into();
+        self.explorer_click = None;
+        self.explorer_rename = Some((id, true));
+    }
+
+    fn finish_explorer_rename(&mut self, cancel: bool) {
+        if let Some((id, _)) = self.explorer_rename.take() {
+            if !cancel {
+                self.explorer_target = Some(id);
+                self.run_command("project.rename");
+            }
+            self.project_name = self.project.name_of(id).unwrap_or("").into();
+        }
+    }
+
+    fn explorer_label(&mut self, ui: &mut egui::Ui, id: u64, text: RichText) -> egui::Response {
+        if let Some((editing, focus)) = self.explorer_rename {
+            if editing == id {
+                let mut output = egui::TextEdit::singleline(&mut self.project_name)
+                    .id_salt(("project-rename", id))
+                    .desired_width(ui.available_width())
+                    .show(ui);
+                if focus {
+                    output.response.request_focus();
+                    output.state.cursor.set_char_range(Some(egui::text::CCursorRange::two(
+                        egui::text::CCursor::new(0),
+                        egui::text::CCursor::new(self.project_name.chars().count()),
+                    )));
+                    output.state.store(ui.ctx(), output.response.id);
+                    self.explorer_rename = Some((id, false));
+                } else if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+                    self.finish_explorer_rename(true);
+                } else if output.response.lost_focus() || ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                    self.finish_explorer_rename(false);
+                }
+                return output.response;
+            }
+        }
+        let response = ui.add(
+            egui::Button::new(text)
+                .frame(false)
+                .selected(self.explorer_target == Some(id))
+                .sense(egui::Sense::click_and_drag()),
+        );
+        response.dnd_set_drag_payload(ProjectDrag(id));
+        if response.drag_started() {
+            self.finish_explorer_rename(false);
+            self.explorer_target = Some(id);
+            self.project_name = self.project.name_of(id).unwrap_or("").into();
+            self.explorer_click = None;
+        }
+        if response.clicked() {
+            self.finish_explorer_rename(false);
+            let now = ui.input(|i| i.time);
+            let slow_second_click = self.explorer_target == Some(id)
+                && self
+                    .explorer_click
+                    .is_some_and(|(last, time)| last == id && (0.5..=2.0).contains(&(now - time)));
+            self.explorer_target = Some(id);
+            self.project_name = self.project.name_of(id).unwrap_or("").into();
+            if self.project.folder(id).is_none() {
+                self.run_command("project.show");
+            }
+            if slow_second_click {
+                self.start_explorer_rename(id);
+            } else {
+                self.explorer_click = Some((id, now));
+            }
+        }
+        if response.secondary_clicked() {
+            self.finish_explorer_rename(false);
+            self.explorer_click = None;
+            self.project_name = self.project.name_of(id).unwrap_or("").into();
+            self.folder_destination = self
+                .project
+                .folder(id)
+                .map_or_else(|| self.project.folder_of(id), |f| f.parent);
+        }
+        response.context_menu(|ui| self.project_item_menu(ui, id));
+        response.on_hover_text("拖到文件夹或项目根目录移动；选中后隔 0.5–2 秒再单击名称重命名，也可按 F2")
+    }
+
+    fn explorer_drop(&mut self, ui: &mut egui::Ui, response: &egui::Response, destination: Option<u64>) {
+        if let Some(payload) = response.dnd_hover_payload::<ProjectDrag>() {
+            let mut ancestor = destination;
+            let mut valid = true;
+            while let Some(id) = ancestor {
+                if id == payload.0 {
+                    valid = false;
+                    break;
+                }
+                ancestor = self.project.folder(id).and_then(|f| f.parent);
+            }
+            ui.ctx().set_cursor_icon(if valid {
+                egui::CursorIcon::Grabbing
+            } else {
+                egui::CursorIcon::NotAllowed
+            });
+            ui.painter()
+                .rect_stroke(response.rect.expand(2.0), 3.0, ui.visuals().selection.stroke);
+        }
+        if let Some(payload) = response.dnd_release_payload::<ProjectDrag>() {
+            self.finish_explorer_rename(false);
+            self.explorer_click = None;
+            let source = payload.0;
+            let current = self
+                .project
+                .folder(source)
+                .map_or_else(|| self.project.folder_of(source), |f| f.parent);
+            if current != destination {
+                self.explorer_target = Some(source);
+                self.folder_destination = destination;
+                self.run_command("project.move");
+                if let Some(id) = destination {
+                    let mut state = egui::collapsing_header::CollapsingState::load_with_default_open(
+                        ui.ctx(),
+                        egui::Id::new(("project-folder", id)),
+                        true,
+                    );
+                    state.set_open(true);
+                    state.store(ui.ctx());
+                }
+            }
+        }
+    }
+
     fn explorer_folder(&mut self, ui: &mut egui::Ui, parent: Option<u64>) {
         let folders: Vec<_> = self
             .project
@@ -1308,24 +1448,17 @@ impl SciApp {
             .map(|f| (f.id, f.name.clone()))
             .collect();
         for (id, name) in folders {
-            let response = egui::CollapsingHeader::new(if self.explorer_target == Some(id) {
-                RichText::new(&name).strong()
-            } else {
-                RichText::new(&name)
-            })
-            .id_salt(("project-folder", id))
-            .default_open(true)
-            .show(ui, |ui| self.explorer_folder(ui, Some(id)))
-            .header_response;
-            if response.clicked() {
-                self.explorer_target = Some(id);
-                self.project_name = self.project.name_of(id).unwrap_or("").to_string();
+            let (arrow, header, _) = egui::collapsing_header::CollapsingState::load_with_default_open(
+                ui.ctx(),
+                egui::Id::new(("project-folder", id)),
+                true,
+            )
+            .show_header(ui, |ui| self.explorer_label(ui, id, RichText::new(name)))
+            .body(|ui| self.explorer_folder(ui, Some(id)));
+            if arrow.clicked() {
+                self.explorer_click = None;
             }
-            if response.secondary_clicked() {
-                self.project_name = name;
-                self.folder_destination = self.project.folder(id).and_then(|f| f.parent);
-            }
-            response.context_menu(|ui| self.project_item_menu(ui, id));
+            self.explorer_drop(ui, &header.inner.union(arrow), Some(id));
         }
         let items: Vec<_> = self
             .project
@@ -1337,34 +1470,23 @@ impl SciApp {
             .collect();
         for (id, is_book, name) in items {
             let shown = self.open.get(&id).copied().unwrap_or(false);
-            let response = ui
-                .horizontal(|ui| {
-                    ui.label(
-                        RichText::new(if is_book { "表" } else { "图" })
-                            .small()
-                            .strong()
-                            .color(if is_book { self.pal.book } else { self.pal.graph }),
-                    );
-                    ui.selectable_label(
-                        self.explorer_target == Some(id),
-                        if shown {
-                            RichText::new(&name)
-                        } else {
-                            RichText::new(&name).weak()
-                        },
-                    )
-                })
-                .inner
-                .on_hover_text("单击显示窗口；右键组织、重命名或隐藏");
-            if response.clicked() {
-                self.explorer_target = Some(id);
-                self.run_command("project.show");
-            }
-            if response.secondary_clicked() {
-                self.project_name = name;
-                self.folder_destination = parent;
-            }
-            response.context_menu(|ui| self.project_item_menu(ui, id));
+            ui.horizontal(|ui| {
+                ui.label(
+                    RichText::new(if is_book { "表" } else { "图" })
+                        .small()
+                        .strong()
+                        .color(if is_book { self.pal.book } else { self.pal.graph }),
+                );
+                self.explorer_label(
+                    ui,
+                    id,
+                    if shown {
+                        RichText::new(&name)
+                    } else {
+                        RichText::new(&name).weak()
+                    },
+                )
+            });
         }
     }
 
@@ -1372,14 +1494,23 @@ impl SciApp {
         ui.add_space(4.0);
         ui.label(RichText::new("项目管理器").strong());
         ui.horizontal(|ui| {
-            if ui.button("项目根目录").clicked() {
+            let root = ui.button("项目根目录");
+            if root.clicked() {
+                self.finish_explorer_rename(false);
                 self.explorer_target = None;
                 self.project_name.clear();
+                self.explorer_click = None;
             }
+            self.explorer_drop(ui, &root, None);
             if ui.button("新建文件夹").clicked() {
                 self.run_command("project.folder.new");
             }
         });
+        if self.explorer_rename.is_none() && ui.input(|i| i.key_pressed(egui::Key::F2)) {
+            if let Some(id) = self.project_target() {
+                self.start_explorer_rename(id);
+            }
+        }
         ui.separator();
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
@@ -2927,6 +3058,199 @@ mod history_tests {
         assert_eq!(&app.project, before);
         app.run_command("edit.redo");
         assert_eq!(app.project, after);
+    }
+
+    struct ExplorerUi {
+        ctx: egui::Context,
+        time: f64,
+    }
+
+    impl ExplorerUi {
+        fn new() -> Self {
+            let ctx = egui::Context::default();
+            crate::fonts::setup(&ctx);
+            ctx.style_mut(|s| s.animation_time = 0.0);
+            Self { ctx, time: 0.0 }
+        }
+
+        fn frame(&mut self, app: &mut SciApp, events: Vec<egui::Event>) -> egui::FullOutput {
+            self.time += 0.02;
+            self.ctx.run(
+                egui::RawInput {
+                    time: Some(self.time),
+                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(400.0, 600.0))),
+                    events,
+                    ..Default::default()
+                },
+                |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| app.explorer(ui));
+                },
+            )
+        }
+
+        fn at(&mut self, app: &mut SciApp, name: &str) -> egui::Pos2 {
+            self.frame(app, vec![]);
+            self.frame(app, vec![])
+                .shapes
+                .iter()
+                .find_map(|shape| match &shape.shape {
+                    egui::Shape::Text(t) if t.galley.job.text == name => Some(t.pos + egui::vec2(4.0, 4.0)),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("Missing explorer label: {name}"))
+        }
+
+        fn button(&mut self, app: &mut SciApp, pos: egui::Pos2, pressed: bool) {
+            self.frame(
+                app,
+                vec![
+                    egui::Event::PointerMoved(pos),
+                    egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+            );
+        }
+
+        fn click(&mut self, app: &mut SciApp, pos: egui::Pos2) {
+            self.button(app, pos, true);
+            self.button(app, pos, false);
+        }
+
+        fn key(&mut self, app: &mut SciApp, key: egui::Key) {
+            self.frame(
+                app,
+                vec![egui::Event::Key {
+                    key,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+            );
+            self.frame(
+                app,
+                vec![egui::Event::Key {
+                    key,
+                    physical_key: None,
+                    pressed: false,
+                    repeat: false,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+            );
+        }
+
+        fn drag(&mut self, app: &mut SciApp, source: &str, destination: &str) {
+            let from = self.at(app, source);
+            let to = self.at(app, destination);
+            self.frame(app, vec![egui::Event::PointerMoved(from)]);
+            self.button(app, from, true);
+            self.frame(app, vec![egui::Event::PointerMoved(from + egui::vec2(12.0, 0.0))]);
+            self.frame(app, vec![egui::Event::PointerMoved(to)]);
+            self.button(app, to, false);
+            self.frame(app, vec![]);
+        }
+    }
+
+    #[test]
+    fn explorer_slow_second_click_renames_folders_books_and_graphs_with_history() {
+        for id in [1, 2, 3] {
+            let mut app = app();
+            assert_eq!(app.project.add_folder(None).unwrap(), 3);
+            let before = app.project.clone();
+            let name = app.project.name_of(id).unwrap().to_owned();
+            let mut ui = ExplorerUi::new();
+            let at = ui.at(&mut app, &name);
+            ui.click(&mut app, at);
+            ui.time += 0.7;
+            ui.click(&mut app, at);
+            assert_eq!(app.explorer_rename.map(|r| r.0), Some(id));
+            ui.frame(&mut app, vec![]);
+            ui.frame(&mut app, vec![egui::Event::Text("重命名 α".into())]);
+            ui.key(&mut app, egui::Key::Enter);
+            assert_eq!(app.project.name_of(id), Some("重命名 α"));
+            assert!(app.explorer_rename.is_none());
+            roundtrip(&mut app, &before);
+        }
+    }
+
+    #[test]
+    fn explorer_fast_double_click_escape_and_focus_commit_have_distinct_behavior() {
+        let mut app = app();
+        let before = app.project.clone();
+        let mut ui = ExplorerUi::new();
+        let at = ui.at(&mut app, "Book1");
+        ui.click(&mut app, at);
+        ui.click(&mut app, at);
+        assert!(app.explorer_rename.is_none());
+        ui.key(&mut app, egui::Key::F2);
+        ui.frame(&mut app, vec![egui::Event::Text("取消的名称".into())]);
+        ui.key(&mut app, egui::Key::Escape);
+        assert_eq!(app.project, before);
+        assert!(app.history.undo_label().is_none());
+        ui.key(&mut app, egui::Key::F2);
+        ui.key(&mut app, egui::Key::Backspace);
+        ui.key(&mut app, egui::Key::Enter);
+        assert_eq!(app.project, before);
+        assert!(app.history.undo_label().is_none());
+        ui.key(&mut app, egui::Key::F2);
+        ui.frame(&mut app, vec![egui::Event::Text("失焦提交".into())]);
+        let root = ui.at(&mut app, "项目根目录");
+        ui.click(&mut app, root);
+        assert_eq!(app.project.name_of(1), Some("失焦提交"));
+        assert_eq!(app.explorer_target, None);
+        roundtrip(&mut app, &before);
+    }
+
+    #[test]
+    fn explorer_drag_moves_all_object_types_to_folders_and_root_with_history() {
+        for id in [1, 2, 3] {
+            let mut app = app();
+            assert_eq!(app.project.add_folder(None).unwrap(), 3);
+            let destination = app.project.add_folder(None).unwrap();
+            app.project.rename_project_item(destination, "目标").unwrap();
+            let source = app.project.name_of(id).unwrap().to_owned();
+            let before = app.project.clone();
+            let mut ui = ExplorerUi::new();
+            ui.drag(&mut app, &source, "目标");
+            let parent = if id == 3 {
+                app.project.folder(id).unwrap().parent
+            } else {
+                app.project.folder_of(id)
+            };
+            assert_eq!(parent, Some(destination));
+            roundtrip(&mut app, &before);
+            ui.drag(&mut app, &source, "项目根目录");
+            assert_eq!(app.project, before);
+            app.run_command("edit.undo");
+            let parent = if id == 3 {
+                app.project.folder(id).unwrap().parent
+            } else {
+                app.project.folder_of(id)
+            };
+            assert_eq!(parent, Some(destination));
+        }
+    }
+
+    #[test]
+    fn explorer_invalid_folder_drop_and_same_parent_drop_leave_history_unchanged() {
+        let mut app = app();
+        let parent = app.project.add_folder(None).unwrap();
+        let child = app.project.add_folder(Some(parent)).unwrap();
+        app.project.rename_project_item(parent, "上级").unwrap();
+        app.project.rename_project_item(child, "下级").unwrap();
+        let before = app.project.clone();
+        let mut ui = ExplorerUi::new();
+        ui.drag(&mut app, "上级", "下级");
+        assert_eq!(app.project, before);
+        assert!(app.history.undo_label().is_none());
+        ui.drag(&mut app, "上级", "上级");
+        ui.drag(&mut app, "Book1", "项目根目录");
+        assert_eq!(app.project, before);
+        assert!(app.history.undo_label().is_none());
     }
 
     #[test]

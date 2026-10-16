@@ -17,6 +17,9 @@
 
 统一检查入口为 `python tools/check.py`，调用依赖审计、清单同步/数据校验、Python 与 Node 子项回归，以及 Windows CI 的格式、完整测试、无默认特性测试和 Clippy。现有 Windows CI 自动运行新增 golden 测试。基线更新命令和审阅要求见 `crates/scicanvas-core/tests/golden/README.md`。
 
+
+项目树交互补齐：F003 已接入拖放移动与慢速双击/F2 就地重命名，Enter/失焦提交、Esc 取消，复用移动与重命名事务。新增 4 项真实 egui 输入回归；完整 Rust 测试现为 138 项，另有 7 项清单回归。清单现为完成 27、待验收 25、部分实现 16、未开始 435、不做 11，Windows 人工交互继续验收。
+
 后续按 A1 类型化列与 v9 迁移 → A3 可组合图型 → A2 同层多曲线/多轴 → A6 字体与出版导出推进。本文列出的 v9–v12 均为规划版本；当前项目格式保持 v8。
 
 ---
