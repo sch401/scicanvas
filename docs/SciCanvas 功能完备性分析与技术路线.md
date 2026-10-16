@@ -11,13 +11,13 @@
 | 任务 | 状态 | 本轮结果与剩余验收 |
 | --- | --- | --- |
 | T0.1 SVG 回归基线 | 已实现待验收 | 14 种预设 + X/Y 误差棒 + X/Y 标签 + 透明插图 + 双面板，共 18 份字节基线；正常测试只读，显式忽略测试更新；人工图像审阅与 Origin 对照另行执行 |
-| T0.2 cargo deny | 未开始 | 依赖许可与安全检查待接入，不标为已完成 |
-| T0.3 清单新增项与子项进度 | 未开始 | 先保留已有 488 条和重新核对后的状态；新增条目另行实现 |
+| T0.2 cargo deny | 已完成 | 固定 cargo-deny 0.20.2 与安装包 SHA-256；Windows 完整特性依赖审计接入本地和 CI；现有许可与停止维护通知的限定例外见 docs/DEPENDENCIES.md |
+| T0.3 清单新增项与子项进度 | 已完成 | 保留 F001–F488 原编号和状态，新增 F489–F514；9 条目加入子项计数、范围和来源备注；JSON、Markdown、模板、页面与桌面副本同步并有回归 |
 | T0.4 性能基准 | 部分实现 | benches/data_pipeline.rs 已测十万/百万行十列的导入、单曲线排版、整表排序；docs/perf.md 记录结果；完整首帧与峰值内存验收待补 |
 
-统一检查入口为 `python tools/check.py`，调用 Windows CI 的格式、完整测试、无默认特性测试和 Clippy。现有 Windows CI 自动运行新增 golden 测试。基线更新命令和审阅要求见 `crates/scicanvas-core/tests/golden/README.md`。
+统一检查入口为 `python tools/check.py`，调用依赖审计、清单同步/数据校验、Python 与 Node 子项回归，以及 Windows CI 的格式、完整测试、无默认特性测试和 Clippy。现有 Windows CI 自动运行新增 golden 测试。基线更新命令和审阅要求见 `crates/scicanvas-core/tests/golden/README.md`。
 
-后续按 T0.2 / T0.3 → A1 类型化列与 v9 迁移 → A3 可组合图型 → A2 同层多曲线/多轴 → A6 字体与出版导出推进。本文列出的 v9–v12 均为规划版本；当前项目格式保持 v8。
+后续按 A1 类型化列与 v9 迁移 → A3 可组合图型 → A2 同层多曲线/多轴 → A6 字体与出版导出推进。本文列出的 v9–v12 均为规划版本；当前项目格式保持 v8。
 
 ---
 

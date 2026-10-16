@@ -7,7 +7,7 @@
 :root{
   --bg:#f6f7f9; --paper:#ffffff; --ink:#18202b; --muted:#5f6b7a; --line:#dde2e8; --line2:#eceff3;
   --accent:#2563c9; --accent-soft:#e3ecfb;
-  --done:#1f8a4c; --done-soft:#e1f3e8; --proto:#b26a00; --proto-soft:#fdf0d9; --todo:#5f6b7a; --todo-soft:#eef1f4; --skip:#9aa3ae;
+  --done:#1f8a4c; --done-soft:#e1f3e8; --partial:#b26a00; --partial-soft:#fdf0d9; --review:#2563c9; --review-soft:#e3ecfb; --todo:#5f6b7a; --todo-soft:#eef1f4; --skip:#9aa3ae;
   --p0:#c2362b; --p1:#2563c9; --p2:#6b5bb5;
   --sans:"Noto Sans SC","PingFang SC","Microsoft YaHei",system-ui,sans-serif;
   --serif:"Noto Serif SC","Songti SC","SimSun",serif;
@@ -16,12 +16,12 @@
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
   --bg:#14171c; --paper:#1c2027; --ink:#e4e8ee; --muted:#9aa4b1; --line:#323843; --line2:#272c34;
   --accent:#6ea8ff; --accent-soft:#22324d;
-  --done:#5ccf8b; --done-soft:#17352a; --proto:#f0b45a; --proto-soft:#3a2d17; --todo:#a4adb9; --todo-soft:#2a2f37; --skip:#6b7480;
+  --done:#5ccf8b; --done-soft:#17352a; --partial:#f0b45a; --partial-soft:#3a2d17; --review:#6ea8ff; --review-soft:#22324d; --todo:#a4adb9; --todo-soft:#2a2f37; --skip:#6b7480;
   --p0:#ff7b70; --p1:#6ea8ff; --p2:#b3a6f2; color-scheme:dark}}
 :root[data-theme="dark"]{
   --bg:#14171c; --paper:#1c2027; --ink:#e4e8ee; --muted:#9aa4b1; --line:#323843; --line2:#272c34;
   --accent:#6ea8ff; --accent-soft:#22324d;
-  --done:#5ccf8b; --done-soft:#17352a; --proto:#f0b45a; --proto-soft:#3a2d17; --todo:#a4adb9; --todo-soft:#2a2f37; --skip:#6b7480;
+  --done:#5ccf8b; --done-soft:#17352a; --partial:#f0b45a; --partial-soft:#3a2d17; --review:#6ea8ff; --review-soft:#22324d; --todo:#a4adb9; --todo-soft:#2a2f37; --skip:#6b7480;
   --p0:#ff7b70; --p1:#6ea8ff; --p2:#b3a6f2; color-scheme:dark}
 *{box-sizing:border-box}
 body{background:var(--bg);color:var(--ink);font:14px/1.6 var(--sans);
@@ -43,7 +43,7 @@ h1{font:700 clamp(24px,3.4vw,34px)/1.2 var(--serif);margin:0;text-wrap:balance}
 .mile .desc{font-size:12.5px;color:var(--muted)}
 .bar{height:6px;border-radius:3px;background:var(--line2);overflow:hidden;display:flex}
 .bar i{display:block;height:100%}
-.bar .d{background:var(--done)} .bar .p{background:var(--proto)}
+.bar .d{background:var(--done)} .bar .p{background:var(--partial)} .bar .r{background:var(--review)}
 .tools{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-block:10px;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;border-bottom:1px solid var(--line)}
 .tools input[type=search]{flex:1 1 220px;min-width:0;height:34px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);padding:0 10px;font:inherit}
 .tools select{height:34px;border:1px solid var(--line);border-radius:6px;background:var(--paper);color:var(--ink);padding:0 8px;font:inherit;max-width:100%}
@@ -62,6 +62,9 @@ tr.group .gcount{font:400 12px var(--mono);color:var(--muted);margin-left:8px}
 td.id{font:12px var(--mono);color:var(--muted);white-space:nowrap}
 .feat{font-weight:500}
 .ref{display:block;font:12px var(--mono);color:var(--muted);margin-top:2px;overflow-wrap:anywhere}
+.subitems{display:block;margin-top:7px;font-size:12px;color:var(--muted);max-width:420px}
+.subitems .bar{margin:4px 0;max-width:240px}
+.subitems small{display:block;line-height:1.5}
 td.small{font-size:13px;color:var(--muted);min-width:0}
 .pri{font:500 12px var(--mono);padding:1px 7px;border-radius:4px;border:1px solid currentColor;white-space:nowrap}
 .pri.P0{color:var(--p0)} .pri.P1{color:var(--p1)} .pri.P2{color:var(--p2)} .pri.skip{color:var(--skip)}
@@ -71,7 +74,8 @@ td.small{font-size:13px;color:var(--muted);min-width:0}
   background-position:calc(100% - 12px) 55%,calc(100% - 8px) 55%;background-size:4px 4px;background-repeat:no-repeat}
 .st:disabled{cursor:default;background-image:none;padding-right:9px;opacity:1}
 .st.s-done{color:var(--done);background-color:var(--done-soft)}
-.st.s-proto{color:var(--proto);background-color:var(--proto-soft)}
+.st.s-partial{color:var(--partial);background-color:var(--partial-soft)}
+.st.s-review{color:var(--review);background-color:var(--review-soft)}
 .st.s-todo{color:var(--todo);background-color:var(--todo-soft)}
 .st.s-skip{color:var(--skip);background-color:transparent;border-color:var(--line)}
 tr.skip .feat{color:var(--skip);text-decoration:line-through;text-decoration-color:var(--line)}
@@ -100,6 +104,8 @@ footer{font-size:12.5px;color:var(--muted);max-width:80ch}
     <h1>SciCanvas 对照清单</h1>
     <p class="lead">按 Origin 帮助文档目录整理的 <b id="total"></b> 个功能点，每项标了优先级、当前状态、Rust 实现方案和验证方法。“Origin 参考”是对应的帮助章节标题，可以回原文档查阅。改状态会保存下来，其他打开此页的人也能看到。</p>
     <p class="lead">安装包体积估算：全部功能完成后约 <b>100–130 MB</b>，其中软件本体约 20–40 MB，内置 Python 运行时及 numpy、scipy、pandas 约 60–90 MB（均为压缩后）。</p>
+    <p class="lead">状态按当前 Rust 桌面版核对：<b>部分实现</b>＝仍缺明确功能；<b>已实现待验收</b>＝功能已接通，剩人工/参考对照；<b>已完成</b>＝完成当前条目既定验证。旧网页演示单独说明。</p>
+    <p class="lead">子项分别统计已完成、待验收与未开始；条目状态调整后，子项仍按代码核对结果显示。参考目录与规划数量在备注中注明，重叠目录分别查看。</p>
   </header>
 
   <section class="miles" id="miles" aria-label="里程碑进度"></section>
@@ -114,7 +120,7 @@ footer{font-size:12.5px;color:var(--muted);max-width:80ch}
 
   <div class="tablewrap">
     <table>
-      <thead><tr><th style="width:62px">编号</th><th>功能 / Origin 参考</th><th style="width:118px">优先级</th><th style="width:104px">状态</th><th>实现方案</th><th>验证方法</th></tr></thead>
+      <thead><tr><th style="width:62px">编号</th><th>功能 / Origin 参考</th><th style="width:118px">优先级</th><th style="width:154px">状态</th><th>实现方案</th><th>验证方法</th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
     <div class="empty" id="empty" hidden>没有符合筛选条件的功能。</div>
@@ -126,7 +132,7 @@ footer{font-size:12.5px;color:var(--muted);max-width:80ch}
 <script>
 "use strict";
 const BASE = __DATA__;
-const STATUSES=[["已完成","s-done","var(--done)"],["原型","s-proto","var(--proto)"],["未开始","s-todo","var(--todo)"],["不做","s-skip","var(--skip)"]];
+const STATUSES=[["已完成","s-done","var(--done)"],["已实现待验收","s-review","var(--review)"],["部分实现","s-partial","var(--partial)"],["未开始","s-todo","var(--todo)"],["不做","s-skip","var(--skip)"]];
 const ST_CLASS=Object.fromEntries(STATUSES.map(s=>[s[0],s[1]]));
 const MILES=[
   ["M1 日常够用","P0","日常数据处理与论文作图的最小集合"],
@@ -138,16 +144,21 @@ let db=null, canWrite=false;
 const state={q:"",status:new Set(),mod:"",mile:""};
 const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
-const statusOf=r=>overrides.get(r.id)||r.status;
+function normalizeStatus(id,value){
+  // 旧共享记录只在显示时按本地审计迁移，保留远端原记录。
+  if(value==="原型")return BASE.find(r=>r.id===id)?.status||null;
+  return STATUSES.some(s=>s[0]===value)?value:null;
+}
+const statusOf=r=>normalizeStatus(r.id,overrides.get(r.id))||r.status;
 
 function renderMiles(){
   $("#miles").innerHTML=MILES.map(([name,pri,desc])=>{
-    const rs=BASE.filter(r=>r.pri===pri);const d=rs.filter(r=>statusOf(r)==="已完成").length,p=rs.filter(r=>statusOf(r)==="原型").length;
+    const rs=BASE.filter(r=>r.pri===pri);const d=rs.filter(r=>statusOf(r)==="已完成").length,p=rs.filter(r=>statusOf(r)==="部分实现").length,v=rs.filter(r=>statusOf(r)==="已实现待验收").length;
     const pct=n=>(rs.length?n/rs.length*100:0).toFixed(1)+"%";
     return `<button type="button" class="mile" data-mile="${pri}" aria-pressed="${state.mile===pri}">
       <span class="k"><span class="name">${name}</span><span class="num">${d} / ${rs.length}</span></span>
-      <span class="bar" aria-hidden="true"><i class="d" style="width:${pct(d)}"></i><i class="p" style="width:${pct(p)}"></i></span>
-      <span class="desc">${desc} · 已完成 ${d}，原型 ${p}</span></button>`;}).join("");
+      <span class="bar" aria-hidden="true"><i class="d" style="width:${pct(d)}"></i><i class="r" style="width:${pct(v)}"></i><i class="p" style="width:${pct(p)}"></i></span>
+      <span class="desc">${desc} · 已完成 ${d}，待验收 ${v}，部分实现 ${p}</span></button>`;}).join("");
   $("#miles").querySelectorAll(".mile").forEach(b=>b.onclick=()=>{state.mile=state.mile===b.dataset.mile?"":b.dataset.mile;renderMiles();renderRows();});
 }
 function renderChips(){
@@ -163,7 +174,7 @@ function matches(r){
   if(state.mile&&r.pri!==state.mile)return false;
   if(state.mod&&r.module!==state.mod)return false;
   if(state.status.size&&!state.status.has(statusOf(r)))return false;
-  if(state.q){const q=state.q.toLowerCase();if(![r.id,r.feature,r.ref,r.how,r.verify,r.module].some(x=>String(x).toLowerCase().includes(q)))return false;}
+  if(state.q){const q=state.q.toLowerCase();if(![r.id,r.feature,r.ref,r.how,r.verify,r.module,...Object.entries(r.sub_items||{}).flatMap(([name,p])=>[name,p.note])].some(x=>String(x).toLowerCase().includes(q)))return false;}
   return true;
 }
 function statusCell(r){
@@ -171,15 +182,24 @@ function statusCell(r){
   const opts=STATUSES.map(([v])=>`<option${v===s?" selected":""}>${v}</option>`).join("");
   return `<select class="st ${ST_CLASS[s]}" data-id="${r.id}" aria-label="${esc(r.id)} 状态"${canWrite?"":" disabled"}>${opts}</select>`;
 }
+function subItems(r){
+  return Object.entries(r.sub_items||{}).map(([name,p])=>{
+    const review=p.review||0,partial=p.partial||0,todo=p.total-p.done-review-partial;
+    const label=`${name}：已完成 ${p.done} / ${p.total}，待验收 ${review}，部分实现 ${partial}，未开始 ${todo}`;
+    const pct=n=>(p.total?n/p.total*100:0).toFixed(1)+"%";
+    return `<span class="subitems"><span>${esc(label)}</span><span class="bar" role="img" aria-label="${esc(label)}"><i class="d" style="width:${pct(p.done)}"></i><i class="r" style="width:${pct(review)}"></i><i class="p" style="width:${pct(partial)}"></i></span><small>${esc(p.note)}</small></span>`;
+  }).join("");
+}
 function renderRows(){
-  const rs=BASE.filter(matches);let html="",cur=null;
+  const modules=[...new Set(BASE.map(r=>r.module))];
+  const rs=BASE.filter(matches).sort((a,b)=>modules.indexOf(a.module)-modules.indexOf(b.module));let html="",cur=null;
   const groupCount={};rs.forEach(r=>groupCount[r.module]=(groupCount[r.module]||0)+1);
   for(const r of rs){
     if(r.module!==cur){cur=r.module;html+=`<tr class="group"><td colspan="6">${esc(cur)}<span class="gcount">${groupCount[cur]} 项</span></td></tr>`;}
     const s=statusOf(r);
     html+=`<tr class="${s==="不做"?"skip":""}">
       <td class="id">${r.id}</td>
-      <td class="featcell"><span class="feat">${esc(r.feature)}</span><span class="ref">${esc(r.ref)}</span></td>
+      <td class="featcell"><span class="feat">${esc(r.feature)}</span><span class="ref">${esc(r.ref)}</span>${subItems(r)}</td>
       <td class="pricell"><span class="pri ${r.pri==="不做"?"skip":r.pri}">${esc(r.pri)}</span><span class="ms">${esc(r.milestone)}</span></td>
       <td class="stcell">${statusCell(r)}</td>
       <td class="small" data-label="实现">${esc(r.how)}</td>
@@ -207,7 +227,7 @@ renderMiles();renderChips();renderModules();renderRows();
   canWrite=true;$("#sync").textContent="状态已同步";renderRows();
   db.collection("status").limit(1000).onSnapshot(snap=>{
     overrides.clear();
-    snap.docs.forEach(d=>{const v=d.data()?.status;if(typeof v==="string"&&ST_CLASS[v])overrides.set(d.id,v);});
+    snap.docs.forEach(d=>{const v=normalizeStatus(d.id,d.data()?.status);if(v)overrides.set(d.id,v);});
     renderMiles();renderRows();
   },err=>{$("#sync").textContent="状态同步中断，刷新页面可重新连接";});
 })();

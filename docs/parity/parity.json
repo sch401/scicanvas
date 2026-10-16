@@ -1152,7 +1152,15 @@
   "how": "数值/X-Y/原始行号/指定列文本，字号/偏移、边缘定位、屏幕/SVG 和撤销均已接入",
   "verify": "行对齐、文本转义、柱段值、图层与真实开关回归已通过；密集标签与 Origin 目视验收待做",
   "id": "F105",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "sub_items": {
+   "标签来源": {
+    "total": 4,
+    "done": 0,
+    "review": 4,
+    "note": "数值、X/Y、行号、指定列；自动化回归已通过，Origin 对照待验收"
+   }
+  }
  },
  {
   "module": "绘图基础",
@@ -1438,7 +1446,15 @@
   "how": "X 标准化后的正规方程与高斯–约当求逆；2–6 阶拟合、参数标准误、R²、曲线及撤销已接入",
   "verify": "解析/仿真回归已通过；NIST Wampler、Origin 及高阶数值稳定性验收待做",
   "id": "F131",
-  "milestone": "M1 日常够用"
+  "milestone": "M1 日常够用",
+  "sub_items": {
+   "多项式阶次": {
+    "total": 5,
+    "done": 0,
+    "review": 5,
+    "note": "2–6 阶；认证数据与稳定性验收待完成"
+   }
+  }
  },
  {
   "module": "回归与拟合",
@@ -1570,7 +1586,15 @@
   "how": "正交距离回归",
   "verify": "与 Origin 比较",
   "id": "F143",
-  "milestone": "M3 高级功能"
+  "milestone": "M3 高级功能",
+  "sub_items": {
+   "隐函数": {
+    "total": 5,
+    "done": 0,
+    "review": 0,
+    "note": "第三阶段路线参考数量，目录待逐项核对"
+   }
+  }
  },
  {
   "module": "回归与拟合",
@@ -1581,7 +1605,15 @@
   "how": "",
   "verify": "与 Origin 比较",
   "id": "F144",
-  "milestone": "M3 高级功能"
+  "milestone": "M3 高级功能",
+  "sub_items": {
+   "曲面函数": {
+    "total": 22,
+    "done": 0,
+    "review": 0,
+    "note": "第三阶段路线参考数量，目录待逐项核对"
+   }
+  }
  },
  {
   "module": "回归与拟合",
@@ -1724,7 +1756,15 @@
   "how": "",
   "verify": "与 Origin 比较",
   "id": "F157",
-  "milestone": "M3 高级功能"
+  "milestone": "M3 高级功能",
+  "sub_items": {
+   "寻峰函数": {
+    "total": 7,
+    "done": 0,
+    "review": 0,
+    "note": "第三阶段路线参考数量，目录待逐项核对"
+   }
+  }
  },
  {
   "module": "数学运算",
@@ -2208,7 +2248,15 @@
   "how": "移动平均与二阶 Savitzky–Golay 已接入；FFT 平滑与 LOWESS 待做",
   "verify": "已有算法、窗口边界、写回与撤销回归已通过；补齐其余方法后验收",
   "id": "F201",
-  "milestone": "M1 日常够用"
+  "milestone": "M1 日常够用",
+  "sub_items": {
+   "平滑方法": {
+    "total": 4,
+    "done": 0,
+    "review": 2,
+    "note": "移动平均、Savitzky–Golay 已实现待验收；FFT、LOWESS 未开始"
+   }
+  }
  },
  {
   "module": "信号处理",
@@ -5366,5 +5414,315 @@
   "verify": "与 Origin 同数据出图目视比较",
   "id": "F488",
   "milestone": "M3 高级功能"
+ },
+ {
+  "id": "F489",
+  "module": "分析工作流",
+  "feature": "分析报告表与重算（自动 / 手动 / 不重算）",
+  "ref": "Recalculating Analysis Results",
+  "pri": "P0",
+  "status": "未开始",
+  "how": "A5 Operation 与源数据依赖；变更后更新报告表",
+  "verify": "源数据改动、三种重算模式、报告往返和撤销回归",
+  "milestone": "M1 日常够用"
+ },
+ {
+  "id": "F490",
+  "module": "分析工作流",
+  "feature": "分析主题与对话框设置保存",
+  "ref": "Analysis Themes",
+  "pri": "P1",
+  "status": "未开始",
+  "how": "A5 保存分析参数主题，按操作恢复设置",
+  "verify": "跨会话恢复参数并验证默认值",
+  "milestone": "M2 论文全流程"
+ },
+ {
+  "id": "F491",
+  "module": "分析工作流",
+  "feature": "分析模板批处理多个数据集",
+  "ref": "Batch Processing",
+  "pri": "P1",
+  "status": "未开始",
+  "how": "A5 模板输入映射、批量执行与错误报告",
+  "verify": "多文件运行、部分失败、结果关联",
+  "milestone": "M2 论文全流程"
+ },
+ {
+  "id": "F492",
+  "module": "作图核心",
+  "feature": "参考线（水平 / 垂直）",
+  "ref": "Graphing / Axes / Reference Lines",
+  "pri": "P0",
+  "status": "未开始",
+  "how": "A2/A7 按轴值定位，属性与导出共用场景",
+  "verify": "轴变化、对数轴、SVG 和撤销",
+  "milestone": "M1 日常够用"
+ },
+ {
+  "id": "F493",
+  "module": "作图核心",
+  "feature": "坐标轴断点",
+  "ref": "Graphing / Axes / Axis Break",
+  "pri": "P1",
+  "status": "未开始",
+  "how": "A2 分段坐标映射、断点标记与拾取逆变换",
+  "verify": "断点两侧几何、导出与交互",
+  "milestone": "M2 论文全流程"
+ },
+ {
+  "id": "F494",
+  "module": "作图核心",
+  "feature": "附着坐标轴的对象",
+  "ref": "Graphing / Axes / Objects",
+  "pri": "P1",
+  "status": "未开始",
+  "how": "A7 对象锚点引用轴与数值位置",
+  "verify": "缩放后定位、保存和撤销",
+  "milestone": "M2 论文全流程"
+ },
+ {
+  "id": "F495",
+  "module": "作图核心",
+  "feature": "同一图层每条曲线独立图类型（柱 / 线 / 散点混合）",
+  "ref": "Plot Details / Plot Type",
+  "pri": "P0",
+  "status": "未开始",
+  "how": "A2 Layer 包含多个 Plot，每条曲线单独指定类型",
+  "verify": "同层柱线散点混合、删除与撤销、SVG",
+  "milestone": "M1 日常够用"
+ },
+ {
+  "id": "F496",
+  "module": "作图核心",
+  "feature": "曲线填充图案",
+  "ref": "Plot Details / Pattern",
+  "pri": "P1",
+  "status": "未开始",
+  "how": "A3 共用填充图元，区分实色与图案",
+  "verify": "屏幕与 SVG 图案一致、保存和撤销",
+  "milestone": "M2 论文全流程"
+ },
+ {
+  "id": "F497",
+  "module": "作图核心",
+  "feature": "符号边框与内部填充独立设置",
+  "ref": "Plot Details / Symbol",
+  "pri": "P0",
+  "status": "未开始",
+  "how": "A2/A3 每条曲线边框颜色、宽度和填充",
+  "verify": "空心/实心符号、导出与撤销",
+  "milestone": "M1 日常够用"
+ },
+ {
+  "id": "F498",
+  "module": "作图核心",
+  "feature": "曲线连接方式（直线 / 样条 / B 样条 / 阶梯 / Bezier）",
+  "ref": "Plot Details / Line / Connect",
+  "pri": "P0",
+  "status": "部分实现",
+  "how": "已有直线、自然样条、水平/垂直阶梯；B 样条与 Bezier 待实现",
+  "verify": "现有连接方式已有几何和 SVG 回归；补齐其余方式后对照验收",
+  "milestone": "M1 日常够用",
+  "sub_items": {
+   "连接方式": {
+    "total": 6,
+    "done": 0,
+    "review": 4,
+    "note": "直线、自然样条、水平/垂直阶梯待验收；B 样条、Bezier 未开始"
+   }
+  }
+ },
+ {
+  "id": "F499",
+  "module": "作图核心",
+  "feature": "按列映射曲线或符号颜色",
+  "ref": "Plot Details / Modifiers / Color",
+  "pri": "P0",
+  "status": "未开始",
+  "how": "A2 按数据列解析逐点颜色，兼容图例",
+  "verify": "缺失值、色阶、SVG 和撤销",
+  "milestone": "M1 日常够用"
+ },
+ {
+  "id": "F500",
+  "module": "作图核心",
+  "feature": "按列映射符号大小",
+  "ref": "Plot Details / Modifiers / Size",
+  "pri": "P0",
+  "status": "未开始",
+  "how": "A2 按数据列映射逐点尺寸与范围",
+  "verify": "无效值、极端值、导出和撤销",
+  "milestone": "M1 日常够用"
+ },
+ {
+  "id": "F501",
+  "module": "作图核心",
+  "feature": "按列映射符号形状",
+  "ref": "Plot Details / Modifiers / Shape",
+  "pri": "P0",
+  "status": "未开始",
+  "how": "A2 按分类列映射符号形状",
+  "verify": "类别排序、图例、导出和撤销",
+  "milestone": "M1 日常够用"
+ },
+ {
+  "id": "F502",
+  "module": "图形探索与小工具",
+  "feature": "图形数据切片器",
+  "ref": "Graph Exploration / Graph Data Slicer",
+  "pri": "P2",
+  "status": "未开始",
+  "how": "A1 数据筛选视图驱动图形和分析",
+  "verify": "筛选、复位、源数据更新与保存",
+  "milestone": "M3 高级功能"
+ },
+ {
+  "id": "F503",
+  "module": "图形探索与小工具",
+  "feature": "带浏览面板的图形",
+  "ref": "Graph Exploration / Browser Graph",
+  "pri": "P2",
+  "status": "未开始",
+  "how": "图形浏览面板切换数据集与范围",
+  "verify": "数据切换、图形状态和保存",
+  "milestone": "M3 高级功能"
+ },
+ {
+  "id": "F504",
+  "module": "图形探索与小工具",
+  "feature": "图像曲线数字化与数据提取",
+  "ref": "Gadgets / Digitizer",
+  "pri": "P2",
+  "status": "未开始",
+  "how": "导入图片、坐标标定、点选与曲线采样",
+  "verify": "已知坐标图片的恢复误差和输出",
+  "milestone": "M3 高级功能"
+ },
+ {
+  "id": "F505",
+  "module": "统计",
+  "feature": "图形摘要报告",
+  "ref": "Statistics / Graphical Summary",
+  "pri": "P1",
+  "status": "未开始",
+  "how": "描述统计与分布图组合报告",
+  "verify": "参考统计值与图形、报告往返",
+  "milestone": "M2 论文全流程"
+ },
+ {
+  "id": "F506",
+  "module": "统计",
+  "feature": "并排统计比较",
+  "ref": "Statistics / Side-by-Side Statistics",
+  "pri": "P1",
+  "status": "未开始",
+  "how": "多组数据统计与并列结果",
+  "verify": "SciPy/R 数值对照与缺失值处理",
+  "milestone": "M2 论文全流程"
+ },
+ {
+  "id": "F507",
+  "module": "统计",
+  "feature": "双样本 Kolmogorov–Smirnov 检验",
+  "ref": "Statistics / Two-Sample KS Test",
+  "pri": "P1",
+  "status": "未开始",
+  "how": "A8 双样本统计量与 p 值",
+  "verify": "SciPy/R 对照、重复值和小样本",
+  "milestone": "M2 论文全流程"
+ },
+ {
+  "id": "F508",
+  "module": "统计",
+  "feature": "滑动窗口非参数检验",
+  "ref": "Statistics / Running Nonparametric Tests",
+  "pri": "P1",
+  "status": "未开始",
+  "how": "A8 窗口范围、方法选择和结果列",
+  "verify": "窗口边界、缺失值、SciPy/R 对照",
+  "milestone": "M2 论文全流程"
+ },
+ {
+  "id": "F509",
+  "module": "数学运算",
+  "feature": "列公式函数库",
+  "ref": "Set Column Values / Functions",
+  "pri": "P0",
+  "status": "未开始",
+  "how": "A4 目标 120 个函数，分批登记定义与参考值",
+  "verify": "逐函数参考值、向量/缺失值和依赖重算",
+  "milestone": "M1 日常够用",
+  "sub_items": {
+   "规划函数": {
+    "total": 120,
+    "done": 0,
+    "review": 0,
+    "note": "SciCanvas 首批目标 120，不代表 Origin 约 300 个函数的完整覆盖"
+   }
+  }
+ },
+ {
+  "id": "F510",
+  "module": "工作表",
+  "feature": "日期时间列",
+  "ref": "Worksheet / Column Properties / Date and Time",
+  "pri": "P0",
+  "status": "未开始",
+  "how": "A1 UTC 毫秒存储与日期时间解析、显示和排序",
+  "verify": "格式、时区、缺失值、v9 迁移和往返",
+  "milestone": "M1 日常够用"
+ },
+ {
+  "id": "F511",
+  "module": "工作表",
+  "feature": "分类列及类别排序",
+  "ref": "Worksheet / Column Properties / Categorical",
+  "pri": "P0",
+  "status": "未开始",
+  "how": "A1 类别编码、显式类别顺序和稳定排序",
+  "verify": "缺失类别、重排、保存与图形轴顺序",
+  "milestone": "M1 日常够用"
+ },
+ {
+  "id": "F512",
+  "module": "工作区与项目",
+  "feature": "项目附加文件",
+  "ref": "Project / Attach File",
+  "pri": "P2",
+  "status": "未开始",
+  "how": "原生项目附件索引和导入/导出",
+  "verify": "附件往返、重名与损坏输入",
+  "milestone": "M3 高级功能"
+ },
+ {
+  "id": "F513",
+  "module": "工作区与项目",
+  "feature": "扩展包打包与分发（OPX 用途对照）",
+  "ref": "Project / OPX Packaging",
+  "pri": "P2",
+  "status": "未开始",
+  "how": "SciCanvas 原生扩展包与资源清单；Origin OPX 二进制兼容不在范围内",
+  "verify": "安装/卸载、包版本、资源完整性",
+  "milestone": "M3 高级功能"
+ },
+ {
+  "id": "F514",
+  "module": "回归与拟合",
+  "feature": "内置拟合函数库总览",
+  "ref": "Fitting Function Library",
+  "pri": "P1",
+  "status": "未开始",
+  "how": "汇总 F148–F156；239 为第三阶段路线参考基数，函数目录待逐项核对",
+  "verify": "逐函数测试与认证数据对照；现有线性/多项式回归单独计数",
+  "milestone": "M2 论文全流程",
+  "sub_items": {
+   "显函数参考目录": {
+    "total": 239,
+    "done": 0,
+    "review": 0,
+    "note": "第三阶段路线参考数量；与 F148–F156 重叠，不能相加；当前通用回归不计入内置库"
+   }
+  }
  }
 ]

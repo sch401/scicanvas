@@ -1,674 +1,708 @@
 # SciCanvas 功能对照清单
 
-条目按 Origin 帮助文档的目录整理，“Origin 参考”一列是对应的帮助章节标题，方便查阅原文档。
-本清单只记录功能点，不包含 Origin 文档正文。实现时按公开说明和观察到的行为编写，不复制 Origin 的代码、文字或图片。
+条目按 Origin 帮助文档的目录整理，只引用章节标题；实现按公开说明和观察到的行为编写。
+数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
-共 488 项：P0 87 项，P1 136 项，P2 254 项，不做 11 项。
-状态：已完成 27 项，已实现待验收 24 项，部分实现 16 项，未开始 410 项，不做 11 项。
+共 514 项：P0 98 项，P1 146 项，P2 259 项，不做 11 项。
+状态：已完成 27 项，已实现待验收 24 项，部分实现 17 项，未开始 435 项，不做 11 项。
 
-- **P0 / M1 日常够用**：一个人做日常数据处理和论文作图需要的最小集合。
-- **P1 / M2 论文全流程**：拟合报告、统计检验、多面板、信号处理等，覆盖大部分论文工作。
-- **P2 / M3 高级功能**：3D、专业图、Pro 版统计、图像处理等。
-- **不做**：脚本兼容（LabTalk、Origin C、X-Function）、Origin 私有工程格式、与特定外部软件的连接。
-- **部分实现**：Rust 桌面版已有部分能力，本条仍有明确功能缺口；实现方案中列出待补内容。
-- **已实现待验收**：本条所列功能范围已接入桌面工作流，现有自动化检查已覆盖，仍需完成列出的人工、参考软件或专项验收。
-- **已完成**：按当前条目范围完成实现与既定验证；后续发现问题继续修复。
-- **未开始**：当前桌面版尚无可用实现；旧网页演示单独说明，不计作桌面完成度。
+- **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
+- **P1 / M2 论文全流程**：统计、多面板、信号处理等。
+- **P2 / M3 高级功能**：3D、专业图与高级分析。
+- **部分实现**：范围内仍有明确缺口；**已实现待验收**：已接入工作流，专项或参考对照待完成。
+- **已完成**：完成当前条目的实现与既定验证；**未开始**按桌面代码判断，旧网页演示单独说明。
+- **子项**：`sub_items` 按名称记录 `total`、`done`、可选 `review` / `partial`、`note`。已完成与待验收分别计数；未开始为总数减去以上计数。
+- 子项独立于共享存储中的条目状态，修改条目状态不会自动增加子项完成数。规划目标与路线参考基数在备注中标明；重叠目录分别查看，避免重复加总。
+- F489 起补充第三阶段需求。F514 为 F148–F156 的目录总览，239 是路线参考数；当前通用线性/多项式回归单独计数。
+- Origin 私有格式与脚本兼容保留原范围；扩展包采用 SciCanvas 自有格式。
 
-验证原则：分析结果与 Origin 及 NIST StRD 认证数据集、SciPy / R 交叉比对；图形与 Origin 同数据出图目视比较。
-
-安装包体积估算：全部功能完成后约 100–130 MB。其中软件本体（含 3D、PDF / Excel、图像处理、模板与帮助）压缩后约 20–40 MB，内置 Python 运行时及 numpy、scipy、pandas 压缩后约 60–90 MB。
-
+验证原则：分析与 Origin、NIST StRD、SciPy / R 对照；图形与 Origin 同数据出图比较。
 
 ## 工作区与项目
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F001 | 多文档子窗口（拖动、缩放、最小化、最大化） | Basic Child Window Operations | P0 | 已完成 | 自绘 MDI；拖动/缩放、最小化换行、最大化/还原与统一窗口命令 | 真实 egui 拖动、缩放、窗口按钮与几何恢复回归 |
-| F002 | 项目管理器（文件夹树、显示 / 隐藏窗口） | Project Explorer | P0 | 已完成 | 真实多级文件夹树；新建/重命名/菜单移动/删除保留内容；显示与隐藏窗口 | 层级、循环拦截、目录继承、保存迁移和撤销回归 |
-| F003 | 项目管理器多级文件夹、拖动整理 | Using Project Explorer to Manage Child Windows | P1 | 部分实现 | 真实多级目录、新建/重命名/菜单移动/删除保留内容已实现；拖放整理待做 | 项目树与移动命令回归已通过；补齐拖放后验收 |
-| F004 | 窗口排列：层叠 / 平铺 | Arrange Windows | P1 | 已实现待验收 | app.rs 已接入层叠/平铺命令，按工作区尺寸排列可见窗口并恢复普通状态 | 窗口基础回归已通过；不同窗口数、窄工作区与显示缩放的人工验收待做 |
-| F005 | 项目文件保存 / 打开 | Opening, Closing and Backing Up the Origin Project File | P0 | 已完成 | v8 .scproj、v0–v7 迁移、文件夹校验、同目录临时文件替换 | 项目/文件夹往返、损坏引用、旧文件迁移与保存失败回归 |
-| F006 | 自动备份与崩溃恢复 | Opening, Closing and Backing Up the Origin Project File | P1 | 未开始 | 定时写临时文件 | 强制退出后恢复 |
-| F007 | 最近打开的文件 | Recent Origin Files | P1 | 未开始 | 配置文件记录 | 手动操作 |
-| F008 | 撤销 / 重做 | — | P0 | 已完成 | 编辑事务；100 步 / 300 MiB；文件夹新建/重命名/移动/删除均可撤销 | 项目快照、真实编辑控件与文件夹事务回归 |
-| F009 | 命令注册表（菜单、工具栏、脚本共用同一套命令） | — | P0 | 已完成 | 统一命令注册表、可用条件、开关状态与修改标记；菜单/按钮/程序调用共用入口，供后续脚本集成复用 | 命令 ID 唯一、状态条件、窗口/文件夹命令与事务回归 |
-| F010 | 结果日志（分析结果记录） | Analysis Results: The Results Log | P1 | 未开始 | 停靠面板 + 结构化记录 | 手动操作 |
-| F011 | Notes 文本窗口 / Markdown 报告 | Notes Window | P2 | 未开始 | egui_commonmark | 手动操作 |
-| F012 | 命令窗口（交互式脚本） | The Origin Command Window and Script Window | P1 | 未开始 | 嵌入 Python（PyO3） | 执行脚本修改工作表 |
-| F013 | 深色模式 | Dark Mode | P0 | 已完成 | 浅色、深色、跟随系统三种选择；统一主题命令 | 主题切换命令与项目数据不变回归 |
-| F014 | 快捷键与自定义快捷键 | Hotkeys | P1 | 部分实现 | 固定快捷键与命令面板已实现；用户自定义快捷键与冲突配置待做 | 固定快捷键、文字框撤销回归已通过；自定义部分待实现 |
-| F015 | 全文搜索（在项目中查找） | Finding in Origin Project | P2 | 未开始 | 遍历项目数据 | 手动操作 |
-| F016 | 工程保护（密码） | Protecting Origin Projects | P2 | 未开始 | age / chacha20poly1305 加密 | 加密→解密往返 |
-| F017 | 中文界面 | — | P0 | 已完成 | 简体中文界面，Windows 系统中文字体回退 | 中文菜单与项目树控件回归 |
-| F018 | 多语言界面（中 / 英） | — | P1 | 未开始 | fluent 或简单字符串表 | 切换语言检查 |
-| F019 | 选项 / 偏好设置对话框 | Setting Your Preferences with the Options Dialog Box | P1 | 未开始 | 配置文件 + 设置面板 | 手动操作 |
-| F020 | 自定义菜单与工具栏 | Custom Menus | P2 | 未开始 | 基于命令注册表 | 手动操作 |
-| F021 | 模板中心 / 应用中心 | Template Center | 不做 | 不做 | — | — |
-| F022 | 读取 Origin 工程文件 OPJU / OPJ | The Origin Project File | 不做 | 不做 | 私有格式无公开规范；旧 OPJ 可评估 liborigin | — |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F001 | 多文档子窗口（拖动、缩放、最小化、最大化） | Basic Child Window Operations | P0 | 已完成 | 自绘 MDI；拖动/缩放、最小化换行、最大化/还原与统一窗口命令 | 真实 egui 拖动、缩放、窗口按钮与几何恢复回归 | — |
+| F002 | 项目管理器（文件夹树、显示 / 隐藏窗口） | Project Explorer | P0 | 已完成 | 真实多级文件夹树；新建/重命名/菜单移动/删除保留内容；显示与隐藏窗口 | 层级、循环拦截、目录继承、保存迁移和撤销回归 | — |
+| F003 | 项目管理器多级文件夹、拖动整理 | Using Project Explorer to Manage Child Windows | P1 | 部分实现 | 真实多级目录、新建/重命名/菜单移动/删除保留内容已实现；拖放整理待做 | 项目树与移动命令回归已通过；补齐拖放后验收 | — |
+| F004 | 窗口排列：层叠 / 平铺 | Arrange Windows | P1 | 已实现待验收 | app.rs 已接入层叠/平铺命令，按工作区尺寸排列可见窗口并恢复普通状态 | 窗口基础回归已通过；不同窗口数、窄工作区与显示缩放的人工验收待做 | — |
+| F005 | 项目文件保存 / 打开 | Opening, Closing and Backing Up the Origin Project File | P0 | 已完成 | v8 .scproj、v0–v7 迁移、文件夹校验、同目录临时文件替换 | 项目/文件夹往返、损坏引用、旧文件迁移与保存失败回归 | — |
+| F006 | 自动备份与崩溃恢复 | Opening, Closing and Backing Up the Origin Project File | P1 | 未开始 | 定时写临时文件 | 强制退出后恢复 | — |
+| F007 | 最近打开的文件 | Recent Origin Files | P1 | 未开始 | 配置文件记录 | 手动操作 | — |
+| F008 | 撤销 / 重做 | — | P0 | 已完成 | 编辑事务；100 步 / 300 MiB；文件夹新建/重命名/移动/删除均可撤销 | 项目快照、真实编辑控件与文件夹事务回归 | — |
+| F009 | 命令注册表（菜单、工具栏、脚本共用同一套命令） | — | P0 | 已完成 | 统一命令注册表、可用条件、开关状态与修改标记；菜单/按钮/程序调用共用入口，供后续脚本集成复用 | 命令 ID 唯一、状态条件、窗口/文件夹命令与事务回归 | — |
+| F010 | 结果日志（分析结果记录） | Analysis Results: The Results Log | P1 | 未开始 | 停靠面板 + 结构化记录 | 手动操作 | — |
+| F011 | Notes 文本窗口 / Markdown 报告 | Notes Window | P2 | 未开始 | egui_commonmark | 手动操作 | — |
+| F012 | 命令窗口（交互式脚本） | The Origin Command Window and Script Window | P1 | 未开始 | 嵌入 Python（PyO3） | 执行脚本修改工作表 | — |
+| F013 | 深色模式 | Dark Mode | P0 | 已完成 | 浅色、深色、跟随系统三种选择；统一主题命令 | 主题切换命令与项目数据不变回归 | — |
+| F014 | 快捷键与自定义快捷键 | Hotkeys | P1 | 部分实现 | 固定快捷键与命令面板已实现；用户自定义快捷键与冲突配置待做 | 固定快捷键、文字框撤销回归已通过；自定义部分待实现 | — |
+| F015 | 全文搜索（在项目中查找） | Finding in Origin Project | P2 | 未开始 | 遍历项目数据 | 手动操作 | — |
+| F016 | 工程保护（密码） | Protecting Origin Projects | P2 | 未开始 | age / chacha20poly1305 加密 | 加密→解密往返 | — |
+| F017 | 中文界面 | — | P0 | 已完成 | 简体中文界面，Windows 系统中文字体回退 | 中文菜单与项目树控件回归 | — |
+| F018 | 多语言界面（中 / 英） | — | P1 | 未开始 | fluent 或简单字符串表 | 切换语言检查 | — |
+| F019 | 选项 / 偏好设置对话框 | Setting Your Preferences with the Options Dialog Box | P1 | 未开始 | 配置文件 + 设置面板 | 手动操作 | — |
+| F020 | 自定义菜单与工具栏 | Custom Menus | P2 | 未开始 | 基于命令注册表 | 手动操作 | — |
+| F021 | 模板中心 / 应用中心 | Template Center | 不做 | 不做 | — | — | — |
+| F022 | 读取 Origin 工程文件 OPJU / OPJ | The Origin Project File | 不做 | 不做 | 私有格式无公开规范；旧 OPJ 可评估 liborigin | — | — |
+| F512 | 项目附加文件 | Project / Attach File | P2 | 未开始 | 原生项目附件索引和导入/导出 | 附件往返、重名与损坏输入 | — |
+| F513 | 扩展包打包与分发（OPX 用途对照） | Project / OPX Packaging | P2 | 未开始 | SciCanvas 原生扩展包与资源清单；Origin OPX 二进制兼容不在范围内 | 安装/卸载、包版本、资源完整性 | — |
 
 ## 工作表
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F023 | 单元格输入与编辑 | Basic Operations on Worksheet | P0 | 已完成 | egui_extras TableBuilder | 手动操作 |
-| F024 | 长名称 / 单位 / 注释表头行 | Displaying Supporting Data in Worksheet Header Rows | P0 | 已完成 | 列元数据 | 轴标题自动取“长名称 (单位)” |
-| F025 | 自定义表头行（参数、采样间隔、迷你图等） | Displaying Supporting Data in Worksheet Header Rows | P1 | 未开始 | 可扩展的表头行定义 | 手动操作 |
-| F026 | 列属性：X / Y / Z / X误差 / Y误差 / 标签 / 忽略 | Setting Column Designation | P0 | 部分实现 | X/Y/X误差/Y误差/忽略及误差自动关联已实现；Z 与专用标签列角色待做 | 误差关联、删除/插列与撤销回归已通过；补齐其余角色后验收 |
-| F027 | 插入 / 删除 / 移动列 | Arranging the Worksheet: Columns and Rows | P0 | 部分实现 | 列插入、删除、清空与稳定列标识已实现；移动列待做 | 列操作、引用清理与撤销回归已通过；列移动待实现 |
-| F028 | 插入 / 删除行 | Arranging the Worksheet: Columns and Rows | P0 | 未开始 | — | 手动操作 |
-| F029 | 从 Excel 复制粘贴（多单元格） | Copying and Pasting Worksheet Data | P0 | 已完成 | 制表符解析 | 单元测试 |
-| F030 | 鼠标拖动框选单元格、Shift 扩展、复制选区 | Scrolling and Simple Data Selection in the Worksheet | P0 | 已实现待验收 | Rust app.rs/sheet.rs 已接入拖动框选、Shift 扩展、复制/剪切/粘贴与清空选区 | 选区边界、键盘、剪贴板及撤销回归已通过；真实鼠标与长表人工验收待做 |
-| F031 | 查找与替换 | Finding and Replacing Worksheet Data | P1 | 未开始 | — | 手动操作 |
-| F032 | 数值显示格式（小数位、科学计数、工程单位） | Controlling How Numeric Data Display in the Worksheet Column | P0 | 未开始 | 列格式属性 | 单元测试 |
-| F033 | 日期时间列与计算 | Dates and Times in the Worksheet | P1 | 未开始 | chrono / jiff | 单元测试 |
-| F034 | 文本列与分类数据 | Setting Column Designation | P1 | 未开始 | 列数据类型 | 分类轴绘图 |
-| F035 | 设置列值（公式列） | Using Formulae to Set or Transform Worksheet Column Values | P0 | 未开始 | 自写表达式解析器（col(A)*2+sin(col(B))） | 与 Origin 同公式结果逐行比较 |
-| F036 | 单元格公式（=A1+B1） | Using a Formula to Set Cell Values | P2 | 未开始 | 依赖图 + 增量重算 | 单元测试 |
-| F037 | 生成数据序列（等差、随机数、正态分布） | Generating Simple Worksheet Datasets | P1 | 未开始 | rand / rand_distr | 统计检验分布 |
-| F038 | 排序（列、工作表、按多列） | Sorting Worksheet Data | P0 | 部分实现 | 按一列稳定排序整张工作表，同行联动，数值/文本/空值规则已实现；独立列排序与多关键字排序待做 | sort_book 行对齐、升降序与撤销回归已通过；其余排序模式待实现 |
-| F039 | 数据筛选 | Data Filter | P1 | 未开始 | — | 手动操作 |
-| F040 | 条件格式（按值着色） | Conditional Formatting | P2 | 未开始 | — | 目视检查 |
-| F041 | 转置 | Transposing Worksheets | P1 | 未开始 | — | 单元测试 |
-| F042 | 堆叠 / 拆分列 | Stacking and Unstacking Worksheet Columns | P1 | 未开始 | — | 与 Origin 结果比较 |
-| F043 | 合并工作表（按列、按标签） | Join Multiple Sheets by Column | P2 | 未开始 | polars join | 与 Origin 结果比较 |
-| F044 | 数据精简（隔行抽取、平均合并） | Data Reduction | P1 | 未开始 | — | 与 Origin 结果比较 |
-| F045 | 删除重复行 | Reduce Duplicated Rows | P2 | 未开始 | — | 单元测试 |
-| F046 | 数据透视表 | Pivot Table | P2 | 未开始 | polars pivot | 与 Origin 结果比较 |
-| F047 | 工作表查询（条件提取） | Worksheet Query - Quick Start | P2 | 未开始 | — | 与 Origin 结果比较 |
-| F048 | 冻结行列 | Freeze Rows Columns | P1 | 未开始 | — | 手动操作 |
-| F049 | 多工作表（一个工作簿多张表） | Workbooks | P0 | 未开始 | Book → Sheet → Column 三层模型 | 手动操作 |
-| F050 | 工作簿模板 | What is Saved with the Workbook Template (*.OTW or *.OTWU) File? | P1 | 未开始 | 保存列定义与格式 | 套模板后结构一致 |
-| F051 | 选中数据的状态栏统计 | Scrolling and Simple Data Selection in the Worksheet | P0 | 已完成 | — | 与手算比较 |
-| F052 | 单元格内嵌图片 / 迷你图 | Inserting Graphs Images and Other Objects into Worksheet Cells | P2 | 未开始 | — | 目视检查 |
-| F053 | 大数据量（百万行流畅滚动） | Origin Limitations | P0 | 部分实现 | 虚拟化表格与十万行编辑事务回归已有；百万行性能目标、数值列式存储和绘图抽点待落实 | 十万行事务复用/空闲帧测试已通过；百万行滚动帧率及内存验收待做 |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F023 | 单元格输入与编辑 | Basic Operations on Worksheet | P0 | 已完成 | egui_extras TableBuilder | 手动操作 | — |
+| F024 | 长名称 / 单位 / 注释表头行 | Displaying Supporting Data in Worksheet Header Rows | P0 | 已完成 | 列元数据 | 轴标题自动取“长名称 (单位)” | — |
+| F025 | 自定义表头行（参数、采样间隔、迷你图等） | Displaying Supporting Data in Worksheet Header Rows | P1 | 未开始 | 可扩展的表头行定义 | 手动操作 | — |
+| F026 | 列属性：X / Y / Z / X误差 / Y误差 / 标签 / 忽略 | Setting Column Designation | P0 | 部分实现 | X/Y/X误差/Y误差/忽略及误差自动关联已实现；Z 与专用标签列角色待做 | 误差关联、删除/插列与撤销回归已通过；补齐其余角色后验收 | — |
+| F027 | 插入 / 删除 / 移动列 | Arranging the Worksheet: Columns and Rows | P0 | 部分实现 | 列插入、删除、清空与稳定列标识已实现；移动列待做 | 列操作、引用清理与撤销回归已通过；列移动待实现 | — |
+| F028 | 插入 / 删除行 | Arranging the Worksheet: Columns and Rows | P0 | 未开始 | — | 手动操作 | — |
+| F029 | 从 Excel 复制粘贴（多单元格） | Copying and Pasting Worksheet Data | P0 | 已完成 | 制表符解析 | 单元测试 | — |
+| F030 | 鼠标拖动框选单元格、Shift 扩展、复制选区 | Scrolling and Simple Data Selection in the Worksheet | P0 | 已实现待验收 | Rust app.rs/sheet.rs 已接入拖动框选、Shift 扩展、复制/剪切/粘贴与清空选区 | 选区边界、键盘、剪贴板及撤销回归已通过；真实鼠标与长表人工验收待做 | — |
+| F031 | 查找与替换 | Finding and Replacing Worksheet Data | P1 | 未开始 | — | 手动操作 | — |
+| F032 | 数值显示格式（小数位、科学计数、工程单位） | Controlling How Numeric Data Display in the Worksheet Column | P0 | 未开始 | 列格式属性 | 单元测试 | — |
+| F033 | 日期时间列与计算 | Dates and Times in the Worksheet | P1 | 未开始 | chrono / jiff | 单元测试 | — |
+| F034 | 文本列与分类数据 | Setting Column Designation | P1 | 未开始 | 列数据类型 | 分类轴绘图 | — |
+| F035 | 设置列值（公式列） | Using Formulae to Set or Transform Worksheet Column Values | P0 | 未开始 | 自写表达式解析器（col(A)*2+sin(col(B))） | 与 Origin 同公式结果逐行比较 | — |
+| F036 | 单元格公式（=A1+B1） | Using a Formula to Set Cell Values | P2 | 未开始 | 依赖图 + 增量重算 | 单元测试 | — |
+| F037 | 生成数据序列（等差、随机数、正态分布） | Generating Simple Worksheet Datasets | P1 | 未开始 | rand / rand_distr | 统计检验分布 | — |
+| F038 | 排序（列、工作表、按多列） | Sorting Worksheet Data | P0 | 部分实现 | 按一列稳定排序整张工作表，同行联动，数值/文本/空值规则已实现；独立列排序与多关键字排序待做 | sort_book 行对齐、升降序与撤销回归已通过；其余排序模式待实现 | — |
+| F039 | 数据筛选 | Data Filter | P1 | 未开始 | — | 手动操作 | — |
+| F040 | 条件格式（按值着色） | Conditional Formatting | P2 | 未开始 | — | 目视检查 | — |
+| F041 | 转置 | Transposing Worksheets | P1 | 未开始 | — | 单元测试 | — |
+| F042 | 堆叠 / 拆分列 | Stacking and Unstacking Worksheet Columns | P1 | 未开始 | — | 与 Origin 结果比较 | — |
+| F043 | 合并工作表（按列、按标签） | Join Multiple Sheets by Column | P2 | 未开始 | polars join | 与 Origin 结果比较 | — |
+| F044 | 数据精简（隔行抽取、平均合并） | Data Reduction | P1 | 未开始 | — | 与 Origin 结果比较 | — |
+| F045 | 删除重复行 | Reduce Duplicated Rows | P2 | 未开始 | — | 单元测试 | — |
+| F046 | 数据透视表 | Pivot Table | P2 | 未开始 | polars pivot | 与 Origin 结果比较 | — |
+| F047 | 工作表查询（条件提取） | Worksheet Query - Quick Start | P2 | 未开始 | — | 与 Origin 结果比较 | — |
+| F048 | 冻结行列 | Freeze Rows Columns | P1 | 未开始 | — | 手动操作 | — |
+| F049 | 多工作表（一个工作簿多张表） | Workbooks | P0 | 未开始 | Book → Sheet → Column 三层模型 | 手动操作 | — |
+| F050 | 工作簿模板 | What is Saved with the Workbook Template (*.OTW or *.OTWU) File? | P1 | 未开始 | 保存列定义与格式 | 套模板后结构一致 | — |
+| F051 | 选中数据的状态栏统计 | Scrolling and Simple Data Selection in the Worksheet | P0 | 已完成 | — | 与手算比较 | — |
+| F052 | 单元格内嵌图片 / 迷你图 | Inserting Graphs Images and Other Objects into Worksheet Cells | P2 | 未开始 | — | 目视检查 | — |
+| F053 | 大数据量（百万行流畅滚动） | Origin Limitations | P0 | 部分实现 | 虚拟化表格与十万行编辑事务回归已有；百万行性能目标、数值列式存储和绘图抽点待落实 | 十万行事务复用/空闲帧测试已通过；百万行滚动帧率及内存验收待做 | — |
+| F510 | 日期时间列 | Worksheet / Column Properties / Date and Time | P0 | 未开始 | A1 UTC 毫秒存储与日期时间解析、显示和排序 | 格式、时区、缺失值、v9 迁移和往返 | — |
+| F511 | 分类列及类别排序 | Worksheet / Column Properties / Categorical | P0 | 未开始 | A1 类别编码、显式类别顺序和稳定排序 | 缺失类别、重排、保存与图形轴顺序 | — |
 
 ## 矩阵
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F054 | 矩阵窗口（二维网格数据） | Basic Matrixbook and Matrixsheet Operations | P1 | 未开始 | ndarray | 手动操作 |
-| F055 | 矩阵 XY 坐标映射 | Matrixsheet Dimensions and XY Coordinates | P1 | 未开始 | — | 与 Origin 比较 |
-| F056 | 设置矩阵值（公式） | Setting Matrix Values | P1 | 未开始 | 复用公式解析器 | 与 Origin 比较 |
-| F057 | 矩阵转置、旋转、翻转、缩放 | Manipulating Matrix Data | P2 | 未开始 | — | 单元测试 |
-| F058 | 工作表直接转矩阵 | Direct Worksheet to Matrix Conversion | P1 | 未开始 | — | 单元测试 |
-| F059 | XYZ 网格化：规则数据 | Gridding of Regularly Spaced Data | P1 | 未开始 | — | 与 Origin 比较 |
-| F060 | XYZ 网格化：随机点（Delaunay 插值、克里金、Renka-Cline） | Gridding Methods for Randomly Spaced Data | P1 | 未开始 | spade（Delaunay）+ 自写克里金 | 与 Origin 网格结果比较 |
-| F061 | 虚拟矩阵 | Managing Virtual Matrix | P2 | 未开始 | — | — |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F054 | 矩阵窗口（二维网格数据） | Basic Matrixbook and Matrixsheet Operations | P1 | 未开始 | ndarray | 手动操作 | — |
+| F055 | 矩阵 XY 坐标映射 | Matrixsheet Dimensions and XY Coordinates | P1 | 未开始 | — | 与 Origin 比较 | — |
+| F056 | 设置矩阵值（公式） | Setting Matrix Values | P1 | 未开始 | 复用公式解析器 | 与 Origin 比较 | — |
+| F057 | 矩阵转置、旋转、翻转、缩放 | Manipulating Matrix Data | P2 | 未开始 | — | 单元测试 | — |
+| F058 | 工作表直接转矩阵 | Direct Worksheet to Matrix Conversion | P1 | 未开始 | — | 单元测试 | — |
+| F059 | XYZ 网格化：规则数据 | Gridding of Regularly Spaced Data | P1 | 未开始 | — | 与 Origin 比较 | — |
+| F060 | XYZ 网格化：随机点（Delaunay 插值、克里金、Renka-Cline） | Gridding Methods for Randomly Spaced Data | P1 | 未开始 | spade（Delaunay）+ 自写克里金 | 与 Origin 网格结果比较 | — |
+| F061 | 虚拟矩阵 | Managing Virtual Matrix | P2 | 未开始 | — | — | — |
 
 ## 导入导出
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F062 | CSV / TXT 导入（自动识别分隔符） | Importing Simple ASCII Data Files | P0 | 已完成 | csv.rs | 单元测试 |
-| F063 | GBK / UTF-8 编码识别 | Customizing the ASCII Import Options | P0 | 已完成 | encoding_rs | 单元测试 |
-| F064 | 表头自动拆分长名称与单位 | Customizing the ASCII Import Options | P0 | 已完成 | — | 单元测试 |
-| F065 | 导入向导（跳过表头行、指定分隔符、预览） | The Import Wizard | P0 | 未开始 | 预览对话框 | 手动操作 |
-| F066 | 导入 Excel（.xlsx / .xls） | Importing from Excel | P0 | 未开始 | calamine | 与原表逐格比较 |
-| F067 | 导出 Excel | Exporting Worksheets and Matrices | P1 | 未开始 | rust_xlsxwriter | 用 Excel 打开检查 |
-| F068 | 导出 CSV | Exporting Worksheets and Matrices | P0 | 未开始 | — | 往返测试 |
-| F069 | 拖放文件导入 | Importing Data by Drag-and-Drop | P0 | 未开始 | eframe dropped_files | 手动操作 |
-| F070 | 批量导入多个文件 | Importing Simple ASCII Data Files | P1 | 未开始 | — | 手动操作 |
-| F071 | 从文件名和表头提取变量 | Extracting Variables from the File Name and Header | P2 | 未开始 | — | 单元测试 |
-| F072 | 二进制数据导入 | Importing Simple Binary Files with the Import Wizard | P2 | 未开始 | — | 单元测试 |
-| F073 | 第三方格式：MATLAB .mat | Importing Third Party Files | P2 | 未开始 | matfile | 与 MATLAB 比较 |
-| F074 | 第三方格式：HDF5 / NetCDF | Importing Third Party Files | P2 | 未开始 | hdf5 / netcdf（需 C 库） | 与 h5py 比较 |
-| F075 | 第三方格式：仪器数据（SPC、JCAMP-DX 等） | Importing Third Party Files | P2 | 未开始 | 逐个格式实现 | 与 Origin 导入结果比较 |
-| F076 | Parquet / Arrow | — | P2 | 未开始 | polars | 往返测试 |
-| F077 | 数据库导入（SQL 查询） | Importing Data from a Database | P2 | 未开始 | sqlx / duckdb | 手动操作 |
-| F078 | 数据连接器（文件更新后自动重新导入） | Data Connector | P2 | 未开始 | notify 监听文件 | 改文件后检查 |
-| F079 | 导入 Origin 工程中的工作表 | Importing from Origin Project | 不做 | 不做 | 私有格式 | — |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F062 | CSV / TXT 导入（自动识别分隔符） | Importing Simple ASCII Data Files | P0 | 已完成 | csv.rs | 单元测试 | — |
+| F063 | GBK / UTF-8 编码识别 | Customizing the ASCII Import Options | P0 | 已完成 | encoding_rs | 单元测试 | — |
+| F064 | 表头自动拆分长名称与单位 | Customizing the ASCII Import Options | P0 | 已完成 | — | 单元测试 | — |
+| F065 | 导入向导（跳过表头行、指定分隔符、预览） | The Import Wizard | P0 | 未开始 | 预览对话框 | 手动操作 | — |
+| F066 | 导入 Excel（.xlsx / .xls） | Importing from Excel | P0 | 未开始 | calamine | 与原表逐格比较 | — |
+| F067 | 导出 Excel | Exporting Worksheets and Matrices | P1 | 未开始 | rust_xlsxwriter | 用 Excel 打开检查 | — |
+| F068 | 导出 CSV | Exporting Worksheets and Matrices | P0 | 未开始 | — | 往返测试 | — |
+| F069 | 拖放文件导入 | Importing Data by Drag-and-Drop | P0 | 未开始 | eframe dropped_files | 手动操作 | — |
+| F070 | 批量导入多个文件 | Importing Simple ASCII Data Files | P1 | 未开始 | — | 手动操作 | — |
+| F071 | 从文件名和表头提取变量 | Extracting Variables from the File Name and Header | P2 | 未开始 | — | 单元测试 | — |
+| F072 | 二进制数据导入 | Importing Simple Binary Files with the Import Wizard | P2 | 未开始 | — | 单元测试 | — |
+| F073 | 第三方格式：MATLAB .mat | Importing Third Party Files | P2 | 未开始 | matfile | 与 MATLAB 比较 | — |
+| F074 | 第三方格式：HDF5 / NetCDF | Importing Third Party Files | P2 | 未开始 | hdf5 / netcdf（需 C 库） | 与 h5py 比较 | — |
+| F075 | 第三方格式：仪器数据（SPC、JCAMP-DX 等） | Importing Third Party Files | P2 | 未开始 | 逐个格式实现 | 与 Origin 导入结果比较 | — |
+| F076 | Parquet / Arrow | — | P2 | 未开始 | polars | 往返测试 | — |
+| F077 | 数据库导入（SQL 查询） | Importing Data from a Database | P2 | 未开始 | sqlx / duckdb | 手动操作 | — |
+| F078 | 数据连接器（文件更新后自动重新导入） | Data Connector | P2 | 未开始 | notify 监听文件 | 改文件后检查 | — |
+| F079 | 导入 Origin 工程中的工作表 | Importing from Origin Project | 不做 | 不做 | 私有格式 | — | — |
 
 ## 绘图基础
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F080 | 按选列自动配对 X / Y 绘图 | Creating Graphs from Graph Templates | P0 | 已完成 | plot_from_selection | 单元测试 |
-| F081 | 按选区（部分行）绘图 | Creating Graphs from Graph Templates | P0 | 已实现待验收 | 工作表矩形选区经 picked/PlotSpec.rows 接入作图、图库与保存，按原始行截取 | 选区行范围、无效行、项目往返与 SVG 回归已通过；Origin 同数据人工对照待做 |
-| F082 | 页面-图层-曲线 三层结构 | The Page-Layer-Plot Hierarchy | P0 | 已完成 | Graph → Page → Layer → PlotSpec；v0–v2 迁移与显式图层访问 | 迁移、往返和 SVG 版面回归测试 |
-| F083 | 往图层添加 / 移除曲线 | Adding or Swapping Data Plots in the Graph Layer | P0 | 未开始 | 图层内容对话框 | 手动操作 |
-| F084 | 多图层图形 | Creating Multi-Layer Graphs | P0 | 已实现待验收 | 多图层增删、跨工作簿数据、独立属性/裁剪/视图、分析写回目标层已实现 | 跨工作簿、布局、裁剪、视图、保存与撤销回归已通过；Origin 多层图人工对照待做 |
-| F085 | 函数绘图（y = f(x)） | Plotting Mathematical Functions | P1 | 未开始 | 复用公式解析器 | 与解析值比较 |
-| F086 | 分组绘图（按分类列分组） | Plotting Data by Groups | P1 | 未开始 | — | 与 Origin 比较 |
-| F087 | 图形缩放、平移 | Zooming on the Graph Page and inside Layer | P0 | 已完成 | egui_plot | 手动操作 |
-| F088 | 批量绘图（同一模板换数据） | Batch Plotting | P1 | 未开始 | — | 手动操作 |
-| F089 | 图形模板（保存样式，换数据一键出图） | Creating Graphs from Graph Templates | P0 | 未开始 | 图形样式与数据引用分离 | 套模板后版式一致 |
-| F090 | 格式复制粘贴 | Copying and Pasting Formats | P1 | 未开始 | — | 手动操作 |
-| F091 | 主题（图形样式主题） | Graph Formats and Themes | P1 | 未开始 | — | 目视检查 |
-| F092 | 坐标轴范围与刻度 | Controlling the Graph Axis Display Range | P0 | 已完成 | ticks.rs（1/2/5 步长） | 与 Origin 自动刻度比较 |
-| F093 | 对数轴 | Axes Dialog Reference | P0 | 已完成 | — | 与 Origin 比较 |
-| F094 | 其他坐标类型：倒数、概率、log2、ln、Logit | Axes Dialog Reference | P1 | 未开始 | — | 与 Origin 比较 |
-| F095 | 坐标轴断点 | Axes Dialog Reference | P1 | 未开始 | — | 目视比较 |
-| F096 | 刻度标签格式（科学计数、日期、自定义） | Axes Dialog Reference | P0 | 部分实现 | ticks.rs 已实现普通数值、a×10ⁿ 科学计数及对数刻度；日期与用户自定义格式待做 | 刻度边界与标签测试已通过；日期/自定义格式待实现 |
-| F097 | 次刻度、刻度方向、四边框线 | Axes Dialog Reference | P0 | 部分实现 | 屏幕/SVG 共用主次刻度与四边框，当前固定朝内；独立刻度方向设置待做 | 共享 scene、刻度与显示比例回归已通过；方向配置及人工目视验收待做 |
-| F098 | 网格线 | Axes Dialog Reference | P0 | 已完成 | — | 目视检查 |
-| F099 | 图例（自动更新） | Graph Legends | P0 | 已完成 | — | 目视检查 |
-| F100 | 图例手动编辑与位置拖动 | Manual Control of the Graph Legend | P1 | 未开始 | — | 手动操作 |
-| F101 | 色阶条（Color Scale） | Color Scales | P1 | 未开始 | — | 目视检查 |
-| F102 | 文字标签（上下标、希腊字母、富文本） | Creating Text Labels | P0 | 未开始 | 迷你标记语言 + cosmic-text 排版 | 目视比较 |
-| F103 | LaTeX 公式 | Creating Text Labels | P1 | 未开始 | 评估 typst 或 MathJax 转 SVG | 目视比较 |
-| F104 | 绘图对象（直线、箭头、矩形、圆） | Creating and Editing Drawing Objects | P1 | 未开始 | — | 手动操作 |
-| F105 | 数据标签 | Adding Labels to Plots | P1 | 已实现待验收 | 数值/X-Y/原始行号/指定列文本，字号/偏移、边缘定位、屏幕/SVG 和撤销均已接入 | 行对齐、文本转义、柱段值、图层与真实开关回归已通过；密集标签与 Origin 目视验收待做 |
-| F106 | 误差棒 | Adding Error Bars to Your Graph | P0 | 已实现待验收 | 对称 X/Y 误差列、稳定自动关联、端帽/线宽、分组定位与屏幕/SVG 已实现；本条当前范围为对称误差 | 行对齐、对数裁剪、分组柱、往返与撤销回归已通过；Origin 对称误差图目视验收待做 |
-| F107 | 插入图片 / 表格到图中 | Inserting Image into Graph | P2 | 未开始 | — | 目视检查 |
-| F108 | 合并多张图 / 拆分图层 | The Merge Graph Dialog Box | P1 | 未开始 | — | 目视检查 |
-| F109 | 图层排列（行列网格、间距） | The Arrange Layers Dialog Box | P0 | 部分实现 | 网格列数、页面尺寸、自由矩形与透明叠放已实现；独立网格间距/对齐配置待做 | 布局、命中、透明背景、迁移与撤销回归已通过；间距配置待实现 |
-| F110 | 布局页（多图拼版） | Using the Layout Page Window | P1 | 未开始 | — | 目视检查 |
-| F111 | 曲线颜色、线型、符号递增 | Customizing Data Plot Colors | P0 | 已完成 | Origin 默认颜色 / 符号顺序 | 目视比较 |
-| F112 | 按数据集控制颜色 / 大小（颜色映射） | Using a Dataset to Control Plot Color | P1 | 未开始 | — | 目视比较 |
-| F113 | 绘图属性对话框（Plot Details） | Plot Details Controls | P0 | 部分实现 | 图层级图型、列映射、轴范围、线宽/符号、误差/标签等属性已接入；逐曲线样式和完整分页待做 | 真实属性控件与撤销回归已通过；完整 Plot Details 范围待补齐 |
-| F114 | 显示范围（只画部分行） | Editing the Plots Display Range | P1 | 部分实现 | 从工作表选区创建并保存部分行绘图已实现；图形中的独立行范围编辑入口待做 | PlotSpec.rows 截取/保存回归已通过；补齐独立编辑入口后验收 |
-| F115 | 页面尺寸、背景、边距 | The (Plot Details) Print/Dimensions Tab | P0 | 部分实现 | 页面毫米尺寸、固定逻辑画布、图层透明背景已实现；页面配色与可调边距待做 | 屏幕缩放、SVG 尺寸与项目往返已通过；配色/边距配置待实现 |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F080 | 按选列自动配对 X / Y 绘图 | Creating Graphs from Graph Templates | P0 | 已完成 | plot_from_selection | 单元测试 | — |
+| F081 | 按选区（部分行）绘图 | Creating Graphs from Graph Templates | P0 | 已实现待验收 | 工作表矩形选区经 picked/PlotSpec.rows 接入作图、图库与保存，按原始行截取 | 选区行范围、无效行、项目往返与 SVG 回归已通过；Origin 同数据人工对照待做 | — |
+| F082 | 页面-图层-曲线 三层结构 | The Page-Layer-Plot Hierarchy | P0 | 已完成 | Graph → Page → Layer → PlotSpec；v0–v2 迁移与显式图层访问 | 迁移、往返和 SVG 版面回归测试 | — |
+| F083 | 往图层添加 / 移除曲线 | Adding or Swapping Data Plots in the Graph Layer | P0 | 未开始 | 图层内容对话框 | 手动操作 | — |
+| F084 | 多图层图形 | Creating Multi-Layer Graphs | P0 | 已实现待验收 | 多图层增删、跨工作簿数据、独立属性/裁剪/视图、分析写回目标层已实现 | 跨工作簿、布局、裁剪、视图、保存与撤销回归已通过；Origin 多层图人工对照待做 | — |
+| F085 | 函数绘图（y = f(x)） | Plotting Mathematical Functions | P1 | 未开始 | 复用公式解析器 | 与解析值比较 | — |
+| F086 | 分组绘图（按分类列分组） | Plotting Data by Groups | P1 | 未开始 | — | 与 Origin 比较 | — |
+| F087 | 图形缩放、平移 | Zooming on the Graph Page and inside Layer | P0 | 已完成 | egui_plot | 手动操作 | — |
+| F088 | 批量绘图（同一模板换数据） | Batch Plotting | P1 | 未开始 | — | 手动操作 | — |
+| F089 | 图形模板（保存样式，换数据一键出图） | Creating Graphs from Graph Templates | P0 | 未开始 | 图形样式与数据引用分离 | 套模板后版式一致 | — |
+| F090 | 格式复制粘贴 | Copying and Pasting Formats | P1 | 未开始 | — | 手动操作 | — |
+| F091 | 主题（图形样式主题） | Graph Formats and Themes | P1 | 未开始 | — | 目视检查 | — |
+| F092 | 坐标轴范围与刻度 | Controlling the Graph Axis Display Range | P0 | 已完成 | ticks.rs（1/2/5 步长） | 与 Origin 自动刻度比较 | — |
+| F093 | 对数轴 | Axes Dialog Reference | P0 | 已完成 | — | 与 Origin 比较 | — |
+| F094 | 其他坐标类型：倒数、概率、log2、ln、Logit | Axes Dialog Reference | P1 | 未开始 | — | 与 Origin 比较 | — |
+| F095 | 坐标轴断点 | Axes Dialog Reference | P1 | 未开始 | — | 目视比较 | — |
+| F096 | 刻度标签格式（科学计数、日期、自定义） | Axes Dialog Reference | P0 | 部分实现 | ticks.rs 已实现普通数值、a×10ⁿ 科学计数及对数刻度；日期与用户自定义格式待做 | 刻度边界与标签测试已通过；日期/自定义格式待实现 | — |
+| F097 | 次刻度、刻度方向、四边框线 | Axes Dialog Reference | P0 | 部分实现 | 屏幕/SVG 共用主次刻度与四边框，当前固定朝内；独立刻度方向设置待做 | 共享 scene、刻度与显示比例回归已通过；方向配置及人工目视验收待做 | — |
+| F098 | 网格线 | Axes Dialog Reference | P0 | 已完成 | — | 目视检查 | — |
+| F099 | 图例（自动更新） | Graph Legends | P0 | 已完成 | — | 目视检查 | — |
+| F100 | 图例手动编辑与位置拖动 | Manual Control of the Graph Legend | P1 | 未开始 | — | 手动操作 | — |
+| F101 | 色阶条（Color Scale） | Color Scales | P1 | 未开始 | — | 目视检查 | — |
+| F102 | 文字标签（上下标、希腊字母、富文本） | Creating Text Labels | P0 | 未开始 | 迷你标记语言 + cosmic-text 排版 | 目视比较 | — |
+| F103 | LaTeX 公式 | Creating Text Labels | P1 | 未开始 | 评估 typst 或 MathJax 转 SVG | 目视比较 | — |
+| F104 | 绘图对象（直线、箭头、矩形、圆） | Creating and Editing Drawing Objects | P1 | 未开始 | — | 手动操作 | — |
+| F105 | 数据标签 | Adding Labels to Plots | P1 | 已实现待验收 | 数值/X-Y/原始行号/指定列文本，字号/偏移、边缘定位、屏幕/SVG 和撤销均已接入 | 行对齐、文本转义、柱段值、图层与真实开关回归已通过；密集标签与 Origin 目视验收待做 | 标签来源：已完成 0/4，待验收 4，部分实现 0；数值、X/Y、行号、指定列；自动化回归已通过，Origin 对照待验收 |
+| F106 | 误差棒 | Adding Error Bars to Your Graph | P0 | 已实现待验收 | 对称 X/Y 误差列、稳定自动关联、端帽/线宽、分组定位与屏幕/SVG 已实现；本条当前范围为对称误差 | 行对齐、对数裁剪、分组柱、往返与撤销回归已通过；Origin 对称误差图目视验收待做 | — |
+| F107 | 插入图片 / 表格到图中 | Inserting Image into Graph | P2 | 未开始 | — | 目视检查 | — |
+| F108 | 合并多张图 / 拆分图层 | The Merge Graph Dialog Box | P1 | 未开始 | — | 目视检查 | — |
+| F109 | 图层排列（行列网格、间距） | The Arrange Layers Dialog Box | P0 | 部分实现 | 网格列数、页面尺寸、自由矩形与透明叠放已实现；独立网格间距/对齐配置待做 | 布局、命中、透明背景、迁移与撤销回归已通过；间距配置待实现 | — |
+| F110 | 布局页（多图拼版） | Using the Layout Page Window | P1 | 未开始 | — | 目视检查 | — |
+| F111 | 曲线颜色、线型、符号递增 | Customizing Data Plot Colors | P0 | 已完成 | Origin 默认颜色 / 符号顺序 | 目视比较 | — |
+| F112 | 按数据集控制颜色 / 大小（颜色映射） | Using a Dataset to Control Plot Color | P1 | 未开始 | — | 目视比较 | — |
+| F113 | 绘图属性对话框（Plot Details） | Plot Details Controls | P0 | 部分实现 | 图层级图型、列映射、轴范围、线宽/符号、误差/标签等属性已接入；逐曲线样式和完整分页待做 | 真实属性控件与撤销回归已通过；完整 Plot Details 范围待补齐 | — |
+| F114 | 显示范围（只画部分行） | Editing the Plots Display Range | P1 | 部分实现 | 从工作表选区创建并保存部分行绘图已实现；图形中的独立行范围编辑入口待做 | PlotSpec.rows 截取/保存回归已通过；补齐独立编辑入口后验收 | — |
+| F115 | 页面尺寸、背景、边距 | The (Plot Details) Print/Dimensions Tab | P0 | 部分实现 | 页面毫米尺寸、固定逻辑画布、图层透明背景已实现；页面配色与可调边距待做 | 屏幕缩放、SVG 尺寸与项目往返已通过；配色/边距配置待实现 | — |
 
 ## 图形探索与小工具
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F116 | 读取坐标 / 数据点提示 | Reading Coordinate Values in the Graph | P0 | 部分实现 | 自绘 plot.rs 已实现悬停坐标、十字光标与图层定位；最近数据点吸附及点信息提示待做 | 坐标逆变换、图层命中与缩放回归已通过；数据点提示待实现 |
-| F117 | 数据高亮联动（图 ↔ 工作表） | Data Highlighter: Selecting Points in both Graph and Source Worksheet | P1 | 未开始 | — | 手动操作 |
-| F118 | 屏蔽数据点（Mask） | Masking Data Points in the Graph or Worksheet | P1 | 未开始 | 掩码位图 | 屏蔽后拟合结果与 Origin 比较 |
-| F119 | 框选 / 删除 / 移动数据点 | Drawing or Moving, or Deleting Data Points | P2 | 未开始 | — | 手动操作 |
-| F120 | 异常值检测 | Detecting Outliers | P2 | 未开始 | — | 与 Origin 比较 |
-| F121 | 局部放大视图 | Magnifying or Zooming In on a Portion of the Graph | P2 | 未开始 | — | 手动操作 |
-| F122 | 快速拟合小工具（框选范围实时拟合） | The Quick Fit Gadget | P1 | 未开始 | 复用拟合引擎 | 与 Origin 比较 |
-| F123 | 快速寻峰小工具 | The Quick Peaks Gadget | P1 | 未开始 | — | 与 Origin 比较 |
-| F124 | 积分 / 微分 / 插值小工具 | The Integrate Gadget | P1 | 未开始 | — | 与 Origin 比较 |
-| F125 | 交点小工具 | The Intersect Gadget | P2 | 未开始 | — | 与 Origin 比较 |
-| F126 | FFT 小工具 | The FFT Gadget | P2 | 未开始 | — | 与 Origin 比较 |
-| F127 | 统计小工具 | The Statistics Gadget | P2 | 未开始 | — | 与 Origin 比较 |
-| F128 | 垂直游标 | The Vertical Cursor Gadget | P2 | 未开始 | — | 手动操作 |
-| F129 | 曲线数字化（从图片取点） | Digitizer | P1 | 未开始 | image + 坐标标定 | 用已知图片检验 |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F116 | 读取坐标 / 数据点提示 | Reading Coordinate Values in the Graph | P0 | 部分实现 | 自绘 plot.rs 已实现悬停坐标、十字光标与图层定位；最近数据点吸附及点信息提示待做 | 坐标逆变换、图层命中与缩放回归已通过；数据点提示待实现 | — |
+| F117 | 数据高亮联动（图 ↔ 工作表） | Data Highlighter: Selecting Points in both Graph and Source Worksheet | P1 | 未开始 | — | 手动操作 | — |
+| F118 | 屏蔽数据点（Mask） | Masking Data Points in the Graph or Worksheet | P1 | 未开始 | 掩码位图 | 屏蔽后拟合结果与 Origin 比较 | — |
+| F119 | 框选 / 删除 / 移动数据点 | Drawing or Moving, or Deleting Data Points | P2 | 未开始 | — | 手动操作 | — |
+| F120 | 异常值检测 | Detecting Outliers | P2 | 未开始 | — | 与 Origin 比较 | — |
+| F121 | 局部放大视图 | Magnifying or Zooming In on a Portion of the Graph | P2 | 未开始 | — | 手动操作 | — |
+| F122 | 快速拟合小工具（框选范围实时拟合） | The Quick Fit Gadget | P1 | 未开始 | 复用拟合引擎 | 与 Origin 比较 | — |
+| F123 | 快速寻峰小工具 | The Quick Peaks Gadget | P1 | 未开始 | — | 与 Origin 比较 | — |
+| F124 | 积分 / 微分 / 插值小工具 | The Integrate Gadget | P1 | 未开始 | — | 与 Origin 比较 | — |
+| F125 | 交点小工具 | The Intersect Gadget | P2 | 未开始 | — | 与 Origin 比较 | — |
+| F126 | FFT 小工具 | The FFT Gadget | P2 | 未开始 | — | 与 Origin 比较 | — |
+| F127 | 统计小工具 | The Statistics Gadget | P2 | 未开始 | — | 与 Origin 比较 | — |
+| F128 | 垂直游标 | The Vertical Cursor Gadget | P2 | 未开始 | — | 手动操作 | — |
+| F129 | 曲线数字化（从图片取点） | Digitizer | P1 | 未开始 | image + 坐标标定 | 用已知图片检验 | — |
+| F502 | 图形数据切片器 | Graph Exploration / Graph Data Slicer | P2 | 未开始 | A1 数据筛选视图驱动图形和分析 | 筛选、复位、源数据更新与保存 | — |
+| F503 | 带浏览面板的图形 | Graph Exploration / Browser Graph | P2 | 未开始 | 图形浏览面板切换数据集与范围 | 数据切换、图形状态和保存 | — |
+| F504 | 图像曲线数字化与数据提取 | Gadgets / Digitizer | P2 | 未开始 | 导入图片、坐标标定、点选与曲线采样 | 已知坐标图片的恢复误差和输出 | — |
 
 ## 回归与拟合
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F130 | 线性回归（斜率、截距、标准误、R²、残差） | The Linear Regression Dialog Box | P0 | 部分实现 | 已实现斜率/截距、标准误、R²、残差平方和及报告；逐点残差输出/残差图待做 | 教材参考值与拟合写回回归已通过；补齐残差输出后做 NIST/Origin 对照 |
-| F131 | 多项式回归 | The Polynomial Regression Dialog Box | P0 | 已实现待验收 | X 标准化后的正规方程与高斯–约当求逆；2–6 阶拟合、参数标准误、R²、曲线及撤销已接入 | 解析/仿真回归已通过；NIST Wampler、Origin 及高阶数值稳定性验收待做 |
-| F132 | 多元线性回归 | The Multiple Linear Regression Dialog Box | P1 | 未开始 | — | NIST StRD（Longley） |
-| F133 | 含 X 误差的线性拟合（York 法） | The Linear Fit with X Error Dialog (Pro Only) | P2 | 未开始 | — | 与 Origin 比较 |
-| F134 | 非线性拟合引擎（Levenberg–Marquardt） | Theory of Nonlinear Curve Fitting | P0 | 未开始 | 自写 LM 或 levenberg-marquardt crate | NIST StRD 非线性数据集（27 组，含高难度） |
-| F135 | 参数初值自动估计 | Fitting Functions | P0 | 未开始 | 每个内置函数配初值估计 | 与 Origin 收敛结果比较 |
-| F136 | 参数固定、上下界、线性约束 | Parameters,Bounds,Constraints and Weighting | P0 | 未开始 | — | 与 Origin 比较 |
-| F137 | 加权拟合（误差列权重等） | Parameters,Bounds,Constraints and Weighting | P1 | 未开始 | — | 与 Origin 比较 |
-| F138 | 拟合报告（参数表、ANOVA、置信带、预测带） | Interpreting Regression Results | P0 | 未开始 | statrs 计算 t / F 分布 | 参数、标准误、R² 与 Origin 差 < 1e-6 |
-| F139 | 残差图（残差-自变量、正态概率图） | Residual Plot Analysis | P1 | 未开始 | — | 与 Origin 比较 |
-| F140 | 多峰拟合 | Multiple Curves/Multiple Peaks | P1 | 未开始 | — | 与 Origin 比较 |
-| F141 | 全局拟合（多组数据共享参数） | Multiple Curves/Multiple Peaks | P1 | 未开始 | — | 与 Origin 比较 |
-| F142 | 用户自定义拟合函数 | Fitting Functions | P0 | 未开始 | 复用公式解析器，自动求导用数值差分或自动微分 | 与 Origin 比较 |
-| F143 | 隐函数拟合（圆、椭圆等 5 个） | Nonlinear Implicit Curve Fitting | P2 | 未开始 | 正交距离回归 | 与 Origin 比较 |
-| F144 | 曲面拟合（22 个内置函数） | Non-linear Surface Fitting | P2 | 未开始 | — | 与 Origin 比较 |
-| F145 | 拟合比较（F 检验、AIC、BIC） | Fit Comparison | P1 | 未开始 | — | 与 Origin 比较 |
-| F146 | 标准曲线反查 X / Y | Finding Y/X from X/Y Standard Curves | P1 | 未开始 | — | 与 Origin 比较 |
-| F147 | 快速拟合（菜单一键） | Quick Fit | P0 | 已实现待验收 | 线性拟合一键命令、多项式阶数对话框、报告和结果写回已接入 | 命令、对话框确认/取消、目标图层与撤销回归已通过；完整人工工作流验收待做 |
-| F148 | 内置拟合函数：峰函数（Gauss、Lorentz、Voigt、PsdVoigt、LogNormal 等） | Curve Fitting Functions（共 239 个） | P0 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 |
-| F149 | 内置拟合函数：指数类（ExpDec1-3、ExpGrow、ExpAssoc 等） | Curve Fitting Functions（共 239 个） | P0 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 |
-| F150 | 内置拟合函数：S 形与生长（Boltzmann、Logistic、DoseResp、Hill、Gompertz 等） | Curve Fitting Functions（共 239 个） | P0 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 |
-| F151 | 内置拟合函数：幂函数与对数（Power、Allometric、Log 等） | Curve Fitting Functions（共 239 个） | P0 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 |
-| F152 | 内置拟合函数：多项式与有理函数（Poly、Rational 等） | Curve Fitting Functions（共 239 个） | P0 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 |
-| F153 | 内置拟合函数：波形（Sine、SineDamp、Pulse、SquareWave 等） | Curve Fitting Functions（共 239 个） | P1 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 |
-| F154 | 内置拟合函数：酶动力学（MichaelisMenten、各类抑制模型等） | Curve Fitting Functions（共 239 个） | P1 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 |
-| F155 | 内置拟合函数：吸附与结合（Langmuir、Freundlich、BET、OneSiteBind 等） | Curve Fitting Functions（共 239 个） | P1 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 |
-| F156 | 内置拟合函数：其余专业函数（流变、热力学、统计分布等） | Curve Fitting Functions（共 239 个） | P2 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 |
-| F157 | 寻峰分析专用函数（Bigaussian、FraserSuzuki 等 7 个） | Peak Analyzer Functions | P2 | 未开始 | — | 与 Origin 比较 |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F130 | 线性回归（斜率、截距、标准误、R²、残差） | The Linear Regression Dialog Box | P0 | 部分实现 | 已实现斜率/截距、标准误、R²、残差平方和及报告；逐点残差输出/残差图待做 | 教材参考值与拟合写回回归已通过；补齐残差输出后做 NIST/Origin 对照 | — |
+| F131 | 多项式回归 | The Polynomial Regression Dialog Box | P0 | 已实现待验收 | X 标准化后的正规方程与高斯–约当求逆；2–6 阶拟合、参数标准误、R²、曲线及撤销已接入 | 解析/仿真回归已通过；NIST Wampler、Origin 及高阶数值稳定性验收待做 | 多项式阶次：已完成 0/5，待验收 5，部分实现 0；2–6 阶；认证数据与稳定性验收待完成 |
+| F132 | 多元线性回归 | The Multiple Linear Regression Dialog Box | P1 | 未开始 | — | NIST StRD（Longley） | — |
+| F133 | 含 X 误差的线性拟合（York 法） | The Linear Fit with X Error Dialog (Pro Only) | P2 | 未开始 | — | 与 Origin 比较 | — |
+| F134 | 非线性拟合引擎（Levenberg–Marquardt） | Theory of Nonlinear Curve Fitting | P0 | 未开始 | 自写 LM 或 levenberg-marquardt crate | NIST StRD 非线性数据集（27 组，含高难度） | — |
+| F135 | 参数初值自动估计 | Fitting Functions | P0 | 未开始 | 每个内置函数配初值估计 | 与 Origin 收敛结果比较 | — |
+| F136 | 参数固定、上下界、线性约束 | Parameters,Bounds,Constraints and Weighting | P0 | 未开始 | — | 与 Origin 比较 | — |
+| F137 | 加权拟合（误差列权重等） | Parameters,Bounds,Constraints and Weighting | P1 | 未开始 | — | 与 Origin 比较 | — |
+| F138 | 拟合报告（参数表、ANOVA、置信带、预测带） | Interpreting Regression Results | P0 | 未开始 | statrs 计算 t / F 分布 | 参数、标准误、R² 与 Origin 差 < 1e-6 | — |
+| F139 | 残差图（残差-自变量、正态概率图） | Residual Plot Analysis | P1 | 未开始 | — | 与 Origin 比较 | — |
+| F140 | 多峰拟合 | Multiple Curves/Multiple Peaks | P1 | 未开始 | — | 与 Origin 比较 | — |
+| F141 | 全局拟合（多组数据共享参数） | Multiple Curves/Multiple Peaks | P1 | 未开始 | — | 与 Origin 比较 | — |
+| F142 | 用户自定义拟合函数 | Fitting Functions | P0 | 未开始 | 复用公式解析器，自动求导用数值差分或自动微分 | 与 Origin 比较 | — |
+| F143 | 隐函数拟合（圆、椭圆等 5 个） | Nonlinear Implicit Curve Fitting | P2 | 未开始 | 正交距离回归 | 与 Origin 比较 | 隐函数：已完成 0/5，待验收 0，部分实现 0；第三阶段路线参考数量，目录待逐项核对 |
+| F144 | 曲面拟合（22 个内置函数） | Non-linear Surface Fitting | P2 | 未开始 | — | 与 Origin 比较 | 曲面函数：已完成 0/22，待验收 0，部分实现 0；第三阶段路线参考数量，目录待逐项核对 |
+| F145 | 拟合比较（F 检验、AIC、BIC） | Fit Comparison | P1 | 未开始 | — | 与 Origin 比较 | — |
+| F146 | 标准曲线反查 X / Y | Finding Y/X from X/Y Standard Curves | P1 | 未开始 | — | 与 Origin 比较 | — |
+| F147 | 快速拟合（菜单一键） | Quick Fit | P0 | 已实现待验收 | 线性拟合一键命令、多项式阶数对话框、报告和结果写回已接入 | 命令、对话框确认/取消、目标图层与撤销回归已通过；完整人工工作流验收待做 | — |
+| F148 | 内置拟合函数：峰函数（Gauss、Lorentz、Voigt、PsdVoigt、LogNormal 等） | Curve Fitting Functions（共 239 个） | P0 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 | — |
+| F149 | 内置拟合函数：指数类（ExpDec1-3、ExpGrow、ExpAssoc 等） | Curve Fitting Functions（共 239 个） | P0 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 | — |
+| F150 | 内置拟合函数：S 形与生长（Boltzmann、Logistic、DoseResp、Hill、Gompertz 等） | Curve Fitting Functions（共 239 个） | P0 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 | — |
+| F151 | 内置拟合函数：幂函数与对数（Power、Allometric、Log 等） | Curve Fitting Functions（共 239 个） | P0 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 | — |
+| F152 | 内置拟合函数：多项式与有理函数（Poly、Rational 等） | Curve Fitting Functions（共 239 个） | P0 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 | — |
+| F153 | 内置拟合函数：波形（Sine、SineDamp、Pulse、SquareWave 等） | Curve Fitting Functions（共 239 个） | P1 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 | — |
+| F154 | 内置拟合函数：酶动力学（MichaelisMenten、各类抑制模型等） | Curve Fitting Functions（共 239 个） | P1 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 | — |
+| F155 | 内置拟合函数：吸附与结合（Langmuir、Freundlich、BET、OneSiteBind 等） | Curve Fitting Functions（共 239 个） | P1 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 | — |
+| F156 | 内置拟合函数：其余专业函数（流变、热力学、统计分布等） | Curve Fitting Functions（共 239 个） | P2 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 | — |
+| F157 | 寻峰分析专用函数（Bigaussian、FraserSuzuki 等 7 个） | Peak Analyzer Functions | P2 | 未开始 | — | 与 Origin 比较 | 寻峰函数：已完成 0/7，待验收 0，部分实现 0；第三阶段路线参考数量，目录待逐项核对 |
+| F514 | 内置拟合函数库总览 | Fitting Function Library | P1 | 未开始 | 汇总 F148–F156；239 为第三阶段路线参考基数，函数目录待逐项核对 | 逐函数测试与认证数据对照；现有线性/多项式回归单独计数 | 显函数参考目录：已完成 0/239，待验收 0，部分实现 0；第三阶段路线参考数量；与 F148–F156 重叠，不能相加；当前通用回归不计入内置库 |
 
 ## 数学运算
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F158 | 插值 / 外推（线性、三次样条、Akima） | Interpolate/Extrapolate | P0 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 |
-| F159 | 按 X 求 Y 插值 | Interpolate/Extrapolate Y from X | P1 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 |
-| F160 | 轨迹插值 | Trace Interpolation | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 |
-| F161 | XYZ 轨迹插值 | XYZ Trace Interpolation | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 |
-| F162 | 二维插值 | 2D Interpolate/Extrapolate | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 |
-| F163 | 三维插值 | 3D Interpolation | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 |
-| F164 | 数值积分（梯形法、曲线下面积） | Integrate | P0 | 已实现待验收 | analysis.rs/ops.rs 已实现梯形积分、累计积分结果与绝对面积选项 | 解析积分、行对齐与结果写回回归已通过；Origin/SciPy 多组参考对照待做 |
-| F165 | 二维体积积分 | 2D Volume Integrate (Pro Only) | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 |
-| F166 | 数值微分（含 Savitzky-Golay 平滑求导） | Differentiate | P0 | 部分实现 | 有限差分微分和独立 Savitzky–Golay 平滑已实现；直接 SG 平滑求导入口待做 | 解析函数微分与结果列回归已通过；组合求导功能待补齐 |
-| F167 | 多条曲线平均 / 合并 | Average/Merge Multiple Curves | P1 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 |
-| F168 | 简单列运算（加减乘除、两曲线相减） | Simple Column/Curve Math | P0 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 |
-| F169 | 归一化（最大值、Z 分数、区间缩放） | Normalize | P0 | 已实现待验收 | 已接入除以最大值、Z 分数、区间缩放，结果写入派生列并支持撤销 | 算法参考值、写回及撤销回归已通过；Origin/SciPy 多组数值验收待做 |
-| F170 | 多边形面积 | Polygon Area | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 |
-| F171 | 反函数（交换 X、Y 求逆） | Inverse | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 |
-| F172 | 自定义滤波 / 中值滤波 | Median Filter | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 |
-| F173 | 扣除直线基线 | Subtract Straight Line | P1 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F158 | 插值 / 外推（线性、三次样条、Akima） | Interpolate/Extrapolate | P0 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
+| F159 | 按 X 求 Y 插值 | Interpolate/Extrapolate Y from X | P1 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
+| F160 | 轨迹插值 | Trace Interpolation | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
+| F161 | XYZ 轨迹插值 | XYZ Trace Interpolation | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
+| F162 | 二维插值 | 2D Interpolate/Extrapolate | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
+| F163 | 三维插值 | 3D Interpolation | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
+| F164 | 数值积分（梯形法、曲线下面积） | Integrate | P0 | 已实现待验收 | analysis.rs/ops.rs 已实现梯形积分、累计积分结果与绝对面积选项 | 解析积分、行对齐与结果写回回归已通过；Origin/SciPy 多组参考对照待做 | — |
+| F165 | 二维体积积分 | 2D Volume Integrate (Pro Only) | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
+| F166 | 数值微分（含 Savitzky-Golay 平滑求导） | Differentiate | P0 | 部分实现 | 有限差分微分和独立 Savitzky–Golay 平滑已实现；直接 SG 平滑求导入口待做 | 解析函数微分与结果列回归已通过；组合求导功能待补齐 | — |
+| F167 | 多条曲线平均 / 合并 | Average/Merge Multiple Curves | P1 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
+| F168 | 简单列运算（加减乘除、两曲线相减） | Simple Column/Curve Math | P0 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
+| F169 | 归一化（最大值、Z 分数、区间缩放） | Normalize | P0 | 已实现待验收 | 已接入除以最大值、Z 分数、区间缩放，结果写入派生列并支持撤销 | 算法参考值、写回及撤销回归已通过；Origin/SciPy 多组数值验收待做 | — |
+| F170 | 多边形面积 | Polygon Area | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
+| F171 | 反函数（交换 X、Y 求逆） | Inverse | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
+| F172 | 自定义滤波 / 中值滤波 | Median Filter | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
+| F173 | 扣除直线基线 | Subtract Straight Line | P1 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
+| F509 | 列公式函数库 | Set Column Values / Functions | P0 | 未开始 | A4 目标 120 个函数，分批登记定义与参考值 | 逐函数参考值、向量/缺失值和依赖重算 | 规划函数：已完成 0/120，待验收 0，部分实现 0；SciCanvas 首批目标 120，不代表 Origin 约 300 个函数的完整覆盖 |
 
 ## 统计
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F174 | 列统计（均值、标准差、中位数、分位数等） | Statistics on Columns | P0 | 已实现待验收 | 已接入 N、均值、样本标准差、标准误、中位数、线性插值分位数、极值与总和，生成结果工作簿 | 描述统计与结果表回归已通过；Origin/SciPy/R 整组参考值对照待做 |
-| F175 | 行统计 | Statistics on Rows | P1 | 未开始 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
-| F176 | 整表统计 | Statistics on Whole Sheet | P1 | 未开始 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
-| F177 | 频数统计 / 分箱 | Frequency Counts | P0 | 未开始 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
-| F178 | 二维频数统计 | 2D Frequency Counts/Binning | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
-| F179 | 正态性检验（Shapiro-Wilk、KS、Anderson-Darling 等） | Normality Test | P1 | 未开始 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
-| F180 | 相关系数（Pearson、Spearman、Kendall） | Correlation Coefficient (Pro Only) | P1 | 未开始 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
-| F181 | 偏相关系数 | Partial Correlation Coefficient (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
-| F182 | 分布拟合 | Distribution Fit (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
-| F183 | 列联表与卡方检验 | Cross Tabulation and Chi-square (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
-| F184 | Grubbs / Dixon Q 异常值检验 | Grubbs' Test | P1 | 未开始 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
-| F185 | 单样本 t 检验 | One-Sample T-Test | P0 | 未开始 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
-| F186 | 双样本 t 检验（含 Welch） | Two-Sample T-Test | P0 | 未开始 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
-| F187 | 配对 t 检验 | Pair-Sample T-Test | P0 | 未开始 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
-| F188 | 方差检验（单样本、F 检验） | Two Sample Test for Variances (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
-| F189 | 比例检验、泊松率检验 | One-Sample Proportion Test (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
-| F190 | 单因素 / 双因素 / 三因素方差分析（含多重比较） | One, Two, and Three Way ANOVA | P1 | 未开始 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
-| F191 | 重复测量方差分析 | Repeated Measure ANOVA (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
-| F192 | 非参数检验（Wilcoxon、Mann-Whitney、Kruskal-Wallis、Friedman 等） | Nonparametric Tests (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
-| F193 | 生存分析（Kaplan-Meier、Cox 回归、Weibull） | Survival Analysis (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
-| F194 | 主成分分析 PCA | Principal Component Analysis | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
-| F195 | 偏最小二乘 PLS | Partial Least Squares | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
-| F196 | 聚类分析 | Cluster Analysis | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
-| F197 | 判别分析 | Discriminant Analysis | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
-| F198 | 机器学习（分类、回归） | Machine Learning (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
-| F199 | 功效与样本量计算 | Power and Sample Size (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
-| F200 | ROC 曲线 | ROC Curve (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F174 | 列统计（均值、标准差、中位数、分位数等） | Statistics on Columns | P0 | 已实现待验收 | 已接入 N、均值、样本标准差、标准误、中位数、线性插值分位数、极值与总和，生成结果工作簿 | 描述统计与结果表回归已通过；Origin/SciPy/R 整组参考值对照待做 | — |
+| F175 | 行统计 | Statistics on Rows | P1 | 未开始 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
+| F176 | 整表统计 | Statistics on Whole Sheet | P1 | 未开始 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
+| F177 | 频数统计 / 分箱 | Frequency Counts | P0 | 未开始 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
+| F178 | 二维频数统计 | 2D Frequency Counts/Binning | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
+| F179 | 正态性检验（Shapiro-Wilk、KS、Anderson-Darling 等） | Normality Test | P1 | 未开始 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
+| F180 | 相关系数（Pearson、Spearman、Kendall） | Correlation Coefficient (Pro Only) | P1 | 未开始 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
+| F181 | 偏相关系数 | Partial Correlation Coefficient (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
+| F182 | 分布拟合 | Distribution Fit (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
+| F183 | 列联表与卡方检验 | Cross Tabulation and Chi-square (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
+| F184 | Grubbs / Dixon Q 异常值检验 | Grubbs' Test | P1 | 未开始 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
+| F185 | 单样本 t 检验 | One-Sample T-Test | P0 | 未开始 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
+| F186 | 双样本 t 检验（含 Welch） | Two-Sample T-Test | P0 | 未开始 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
+| F187 | 配对 t 检验 | Pair-Sample T-Test | P0 | 未开始 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
+| F188 | 方差检验（单样本、F 检验） | Two Sample Test for Variances (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
+| F189 | 比例检验、泊松率检验 | One-Sample Proportion Test (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
+| F190 | 单因素 / 双因素 / 三因素方差分析（含多重比较） | One, Two, and Three Way ANOVA | P1 | 未开始 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
+| F191 | 重复测量方差分析 | Repeated Measure ANOVA (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
+| F192 | 非参数检验（Wilcoxon、Mann-Whitney、Kruskal-Wallis、Friedman 等） | Nonparametric Tests (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
+| F193 | 生存分析（Kaplan-Meier、Cox 回归、Weibull） | Survival Analysis (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
+| F194 | 主成分分析 PCA | Principal Component Analysis | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
+| F195 | 偏最小二乘 PLS | Partial Least Squares | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
+| F196 | 聚类分析 | Cluster Analysis | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
+| F197 | 判别分析 | Discriminant Analysis | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
+| F198 | 机器学习（分类、回归） | Machine Learning (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
+| F199 | 功效与样本量计算 | Power and Sample Size (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
+| F200 | ROC 曲线 | ROC Curve (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
+| F505 | 图形摘要报告 | Statistics / Graphical Summary | P1 | 未开始 | 描述统计与分布图组合报告 | 参考统计值与图形、报告往返 | — |
+| F506 | 并排统计比较 | Statistics / Side-by-Side Statistics | P1 | 未开始 | 多组数据统计与并列结果 | SciPy/R 数值对照与缺失值处理 | — |
+| F507 | 双样本 Kolmogorov–Smirnov 检验 | Statistics / Two-Sample KS Test | P1 | 未开始 | A8 双样本统计量与 p 值 | SciPy/R 对照、重复值和小样本 | — |
+| F508 | 滑动窗口非参数检验 | Statistics / Running Nonparametric Tests | P1 | 未开始 | A8 窗口范围、方法选择和结果列 | 窗口边界、缺失值、SciPy/R 对照 | — |
 
 ## 信号处理
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F201 | 平滑（移动平均、Savitzky-Golay、FFT 平滑、LOWESS） | Smoothing | P0 | 部分实现 | 移动平均与二阶 Savitzky–Golay 已接入；FFT 平滑与 LOWESS 待做 | 已有算法、窗口边界、写回与撤销回归已通过；补齐其余方法后验收 |
-| F202 | FFT 滤波（低通、高通、带通、带阻） | FFT Filters | P1 | 未开始 | rustfft / realfft | 与 Origin 及 SciPy.signal 结果比较 |
-| F203 | IIR 滤波（巴特沃斯、切比雪夫等） | IIR Filters (Pro Only) | P2 | 未开始 | 自写或 biquad | 与 Origin 及 SciPy.signal 结果比较 |
-| F204 | 傅里叶变换 FFT / IFFT（幅值、相位、功率谱、窗函数） | Fast Fourier Transform (FFT) | P0 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 |
-| F205 | 短时傅里叶变换 STFT | Short-Time Fourier Transform (Pro Only) | P2 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 |
-| F206 | 卷积 / 反卷积 | Convolution | P1 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 |
-| F207 | 相关（自相关、互相关） | Correlation | P1 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 |
-| F208 | 相干性 | Coherence (Pro Only) | P2 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 |
-| F209 | 希尔伯特变换、包络 | Hilbert Transform (Pro Only) | P2 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 |
-| F210 | 二维 FFT 与二维 FFT 滤波 | 2D Fourier Transform (Pro Only) | P2 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 |
-| F211 | 小波变换（连续、分解、重构、去噪） | Wavelet Transforms (Pro Only) | P2 | 未开始 | 自写 | 与 Origin 及 SciPy.signal 结果比较 |
-| F212 | 二维小波 | 2D Wavelet Transforms | P2 | 未开始 | 自写 | 与 Origin 及 SciPy.signal 结果比较 |
-| F213 | 二维相关 | 2D Correlation (Pro Only) | P2 | 未开始 | 自写 | 与 Origin 及 SciPy.signal 结果比较 |
-| F214 | 矩阵平滑 | Matrix Smoothing | P2 | 未开始 | 自写 | 与 Origin 及 SciPy.signal 结果比较 |
-| F215 | 抽取 / 降采样 | Decimation (Pro Only) | P2 | 未开始 | 自写 | 与 Origin 及 SciPy.signal 结果比较 |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F201 | 平滑（移动平均、Savitzky-Golay、FFT 平滑、LOWESS） | Smoothing | P0 | 部分实现 | 移动平均与二阶 Savitzky–Golay 已接入；FFT 平滑与 LOWESS 待做 | 已有算法、窗口边界、写回与撤销回归已通过；补齐其余方法后验收 | 平滑方法：已完成 0/4，待验收 2，部分实现 0；移动平均、Savitzky–Golay 已实现待验收；FFT、LOWESS 未开始 |
+| F202 | FFT 滤波（低通、高通、带通、带阻） | FFT Filters | P1 | 未开始 | rustfft / realfft | 与 Origin 及 SciPy.signal 结果比较 | — |
+| F203 | IIR 滤波（巴特沃斯、切比雪夫等） | IIR Filters (Pro Only) | P2 | 未开始 | 自写或 biquad | 与 Origin 及 SciPy.signal 结果比较 | — |
+| F204 | 傅里叶变换 FFT / IFFT（幅值、相位、功率谱、窗函数） | Fast Fourier Transform (FFT) | P0 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 | — |
+| F205 | 短时傅里叶变换 STFT | Short-Time Fourier Transform (Pro Only) | P2 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 | — |
+| F206 | 卷积 / 反卷积 | Convolution | P1 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 | — |
+| F207 | 相关（自相关、互相关） | Correlation | P1 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 | — |
+| F208 | 相干性 | Coherence (Pro Only) | P2 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 | — |
+| F209 | 希尔伯特变换、包络 | Hilbert Transform (Pro Only) | P2 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 | — |
+| F210 | 二维 FFT 与二维 FFT 滤波 | 2D Fourier Transform (Pro Only) | P2 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 | — |
+| F211 | 小波变换（连续、分解、重构、去噪） | Wavelet Transforms (Pro Only) | P2 | 未开始 | 自写 | 与 Origin 及 SciPy.signal 结果比较 | — |
+| F212 | 二维小波 | 2D Wavelet Transforms | P2 | 未开始 | 自写 | 与 Origin 及 SciPy.signal 结果比较 | — |
+| F213 | 二维相关 | 2D Correlation (Pro Only) | P2 | 未开始 | 自写 | 与 Origin 及 SciPy.signal 结果比较 | — |
+| F214 | 矩阵平滑 | Matrix Smoothing | P2 | 未开始 | 自写 | 与 Origin 及 SciPy.signal 结果比较 | — |
+| F215 | 抽取 / 降采样 | Decimation (Pro Only) | P2 | 未开始 | 自写 | 与 Origin 及 SciPy.signal 结果比较 | — |
 
 ## 峰分析
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F216 | 基线：锚点法、自动基线（ALS、多项式等） | Peak Analyzer | P1 | 未开始 | 复用拟合引擎 | 与 Origin Peak Analyzer 结果比较 |
-| F217 | 扣除基线 | Peak Analyzer | P1 | 未开始 | 复用拟合引擎 | 与 Origin Peak Analyzer 结果比较 |
-| F218 | 寻峰（局部极值、导数法、阈值） | Peak Analyzer | P1 | 未开始 | 复用拟合引擎 | 与 Origin Peak Analyzer 结果比较 |
-| F219 | 峰积分（面积、半峰宽、质心） | Peak Analyzer | P1 | 未开始 | 复用拟合引擎 | 与 Origin Peak Analyzer 结果比较 |
-| F220 | 多峰拟合（重叠峰分峰） | Peak Analyzer | P1 | 未开始 | 复用拟合引擎 | 与 Origin Peak Analyzer 结果比较 |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F216 | 基线：锚点法、自动基线（ALS、多项式等） | Peak Analyzer | P1 | 未开始 | 复用拟合引擎 | 与 Origin Peak Analyzer 结果比较 | — |
+| F217 | 扣除基线 | Peak Analyzer | P1 | 未开始 | 复用拟合引擎 | 与 Origin Peak Analyzer 结果比较 | — |
+| F218 | 寻峰（局部极值、导数法、阈值） | Peak Analyzer | P1 | 未开始 | 复用拟合引擎 | 与 Origin Peak Analyzer 结果比较 | — |
+| F219 | 峰积分（面积、半峰宽、质心） | Peak Analyzer | P1 | 未开始 | 复用拟合引擎 | 与 Origin Peak Analyzer 结果比较 | — |
+| F220 | 多峰拟合（重叠峰分峰） | Peak Analyzer | P1 | 未开始 | 复用拟合引擎 | 与 Origin Peak Analyzer 结果比较 | — |
 
 ## 图像处理
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F221 | 导入图片到矩阵 | Importing Images and Videos | P2 | 未开始 | image | 手动操作 |
-| F222 | 图像调整（亮度、对比度、伽马） | Image Adjustment | P2 | 未开始 | image / imageproc | 与 Origin 比较 |
-| F223 | 几何变换（旋转、裁剪、缩放） | Geometric Transformations | P2 | 未开始 | imageproc | 与 Origin 比较 |
-| F224 | 空间滤波（边缘检测、锐化等） | Spatial Filters | P2 | 未开始 | imageproc | 与 Origin 比较 |
-| F225 | 图像分析（粒子计数、剖面） | Image Analysis | P2 | 未开始 | imageproc | 与 Origin 比较 |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F221 | 导入图片到矩阵 | Importing Images and Videos | P2 | 未开始 | image | 手动操作 | — |
+| F222 | 图像调整（亮度、对比度、伽马） | Image Adjustment | P2 | 未开始 | image / imageproc | 与 Origin 比较 | — |
+| F223 | 几何变换（旋转、裁剪、缩放） | Geometric Transformations | P2 | 未开始 | imageproc | 与 Origin 比较 | — |
+| F224 | 空间滤波（边缘检测、锐化等） | Spatial Filters | P2 | 未开始 | imageproc | 与 Origin 比较 | — |
+| F225 | 图像分析（粒子计数、剖面） | Image Analysis | P2 | 未开始 | imageproc | 与 Origin 比较 | — |
 
 ## 导出与发布
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F226 | 导出 SVG | Exporting Your Graph or Layout Page to an Image File | P0 | 已完成 | svg.rs | 目视比较 Origin 导出图 |
-| F227 | 导出 PNG（指定 DPI） | The Export Graph as Image Dialog Box | P0 | 未开始 | 当前 Rust 桌面版只有 SVG 导出入口；PNG 栅格化、指定 DPI 和保存流程待实现，旧网页演示不计桌面功能 | 实现后核对毫米尺寸/DPI 对应的像素尺寸与透明度 |
-| F228 | 导出 PDF（矢量，嵌入字体） | Which Export Format Should I Choose | P0 | 未开始 | svg2pdf / krilla | 用 PDF 阅读器检查 |
-| F229 | 导出 EPS | Which Export Format Should I Choose | P1 | 未开始 | 自写 PostScript 输出 | LaTeX 编译检查 |
-| F230 | 导出 TIFF（期刊要求） | Which Export Format Should I Choose | P1 | 未开始 | image | 尺寸与 DPI 检查 |
-| F231 | 复制图形到剪贴板（粘贴到 Word / PPT） | Pasting or Embedding Graphs in Other Applications | P0 | 未开始 | arboard（位图）；矢量 EMF 待评估 | 粘贴到 Word 检查 |
-| F232 | 导出 EMF（Office 可编辑矢量） | Which Export Format Should I Choose | P1 | 未开始 | 自写 EMF 写出器 | 插入 Word 检查 |
-| F233 | 批量导出多张图 | The Export Graph Dialog Box | P1 | 未开始 | — | 手动操作 |
-| F234 | 打印 | Printing Graphs, Layout Pages, and Analytical Results | P2 | 未开始 | 导出 PDF 后交给系统打印 | 手动操作 |
-| F235 | 图形动画（导出视频 / GIF） | Creating Graph Animation | P2 | 未开始 | gif / ffmpeg | 手动操作 |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F226 | 导出 SVG | Exporting Your Graph or Layout Page to an Image File | P0 | 已完成 | svg.rs | 目视比较 Origin 导出图 | — |
+| F227 | 导出 PNG（指定 DPI） | The Export Graph as Image Dialog Box | P0 | 未开始 | 当前 Rust 桌面版只有 SVG 导出入口；PNG 栅格化、指定 DPI 和保存流程待实现，旧网页演示不计桌面功能 | 实现后核对毫米尺寸/DPI 对应的像素尺寸与透明度 | — |
+| F228 | 导出 PDF（矢量，嵌入字体） | Which Export Format Should I Choose | P0 | 未开始 | svg2pdf / krilla | 用 PDF 阅读器检查 | — |
+| F229 | 导出 EPS | Which Export Format Should I Choose | P1 | 未开始 | 自写 PostScript 输出 | LaTeX 编译检查 | — |
+| F230 | 导出 TIFF（期刊要求） | Which Export Format Should I Choose | P1 | 未开始 | image | 尺寸与 DPI 检查 | — |
+| F231 | 复制图形到剪贴板（粘贴到 Word / PPT） | Pasting or Embedding Graphs in Other Applications | P0 | 未开始 | arboard（位图）；矢量 EMF 待评估 | 粘贴到 Word 检查 | — |
+| F232 | 导出 EMF（Office 可编辑矢量） | Which Export Format Should I Choose | P1 | 未开始 | 自写 EMF 写出器 | 插入 Word 检查 | — |
+| F233 | 批量导出多张图 | The Export Graph Dialog Box | P1 | 未开始 | — | 手动操作 | — |
+| F234 | 打印 | Printing Graphs, Layout Pages, and Analytical Results | P2 | 未开始 | 导出 PDF 后交给系统打印 | 手动操作 | — |
+| F235 | 图形动画（导出视频 / GIF） | Creating Graph Animation | P2 | 未开始 | gif / ffmpeg | 手动操作 | — |
 
 ## 自动化与编程
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F236 | 内置 Python 运行时（预装 numpy、scipy、pandas） | Python Console | P1 | 未开始 | Windows 用官方嵌入版，macOS / Linux 用 python-build-standalone，随安装包分发；脚本在独立进程中运行，崩溃不影响软件 | 在没装 Python 的干净系统上安装后运行全部示例脚本 |
-| F237 | scicanvas Python 包（连接运行中的软件；离线模式直接调用核心库） | Python Packages | P1 | 未开始 | 本机控制通道（带令牌）+ Arrow 批量传数据；离线模式用 PyO3 编译核心库 | 脚本示例回归测试，与界面操作结果比较 |
-| F238 | 脚本窗口（编辑器、运行 / 停止、输出面板、报错行高亮） | The Origin Command Window and Script Window | P1 | 未开始 | egui 代码编辑面板，调用内置 python.exe 子进程，实时显示输出 | 运行、中途停止、报错定位到行 |
-| F239 | 操作录制（把界面操作生成 Python 脚本，可回放） | Batch Processing | P1 | 未开始 | 命令注册表记录命令序列，翻译成 scicanvas Python 调用 | 录制 → 回放，结果与手动操作一致 |
-| F240 | Python 包管理（装包到内置环境，可切换到系统 Python / conda） | Python Packages | P1 | 未开始 | 调用内置 pip；设置里选择解释器，脚本窗口标题显示当前环境 | 安装、卸载、切换环境后运行示例 |
-| F241 | 命令行批处理（无界面） | Batch Processing | P1 | 未开始 | scicanvas-cli，调用核心库 | 脚本示例回归测试 |
-| F242 | 分析模板（换数据自动重算） | Analysis Templates | P1 | 未开始 | 分析操作记录为命令序列 | 与 Origin 比较 |
-| F243 | MCP 服务器（让 AI 代理驱动软件） | — | P1 | 未开始 | 参照 PhotoCraft：命令注册表暴露为 MCP 工具 | 代理完成示例任务 |
-| F244 | 插件系统 | Apps | P2 | 未开始 | WebAssembly 插件（wasmtime）沙盒运行 | 示例插件 |
-| F245 | R 控制台 | R Console and Rserve Console | P2 | 未开始 | — | — |
-| F246 | MATLAB 控制台 | MATLAB Console | 不做 | 不做 | — | — |
-| F247 | LabTalk 脚本兼容 | LabTalk Programming（1,018 页） | 不做 | 不做 | 改用 Python | — |
-| F248 | Origin C 兼容 | Origin C（3,862 页） | 不做 | 不做 | 改用 Python / Rust 插件 | — |
-| F249 | X-Function 兼容（约 680 个） | X-Function Reference | 不做 | 不做 | 功能按需在核心库实现，不做接口兼容 | — |
-| F250 | COM 自动化服务器 | Automation Server | 不做 | 不做 | — | — |
-| F251 | LabVIEW 虚拟仪器 | Using Origin from LabVIEW | 不做 | 不做 | — | — |
-| F252 | Mathematica Link | Mathematica Link | 不做 | 不做 | — | — |
-| F253 | Code Builder 集成开发环境 | The Code Builder | 不做 | 不做 | — | — |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F236 | 内置 Python 运行时（预装 numpy、scipy、pandas） | Python Console | P1 | 未开始 | Windows 用官方嵌入版，macOS / Linux 用 python-build-standalone，随安装包分发；脚本在独立进程中运行，崩溃不影响软件 | 在没装 Python 的干净系统上安装后运行全部示例脚本 | — |
+| F237 | scicanvas Python 包（连接运行中的软件；离线模式直接调用核心库） | Python Packages | P1 | 未开始 | 本机控制通道（带令牌）+ Arrow 批量传数据；离线模式用 PyO3 编译核心库 | 脚本示例回归测试，与界面操作结果比较 | — |
+| F238 | 脚本窗口（编辑器、运行 / 停止、输出面板、报错行高亮） | The Origin Command Window and Script Window | P1 | 未开始 | egui 代码编辑面板，调用内置 python.exe 子进程，实时显示输出 | 运行、中途停止、报错定位到行 | — |
+| F239 | 操作录制（把界面操作生成 Python 脚本，可回放） | Batch Processing | P1 | 未开始 | 命令注册表记录命令序列，翻译成 scicanvas Python 调用 | 录制 → 回放，结果与手动操作一致 | — |
+| F240 | Python 包管理（装包到内置环境，可切换到系统 Python / conda） | Python Packages | P1 | 未开始 | 调用内置 pip；设置里选择解释器，脚本窗口标题显示当前环境 | 安装、卸载、切换环境后运行示例 | — |
+| F241 | 命令行批处理（无界面） | Batch Processing | P1 | 未开始 | scicanvas-cli，调用核心库 | 脚本示例回归测试 | — |
+| F242 | 分析模板（换数据自动重算） | Analysis Templates | P1 | 未开始 | 分析操作记录为命令序列 | 与 Origin 比较 | — |
+| F243 | MCP 服务器（让 AI 代理驱动软件） | — | P1 | 未开始 | 参照 PhotoCraft：命令注册表暴露为 MCP 工具 | 代理完成示例任务 | — |
+| F244 | 插件系统 | Apps | P2 | 未开始 | WebAssembly 插件（wasmtime）沙盒运行 | 示例插件 | — |
+| F245 | R 控制台 | R Console and Rserve Console | P2 | 未开始 | — | — | — |
+| F246 | MATLAB 控制台 | MATLAB Console | 不做 | 不做 | — | — | — |
+| F247 | LabTalk 脚本兼容 | LabTalk Programming（1,018 页） | 不做 | 不做 | 改用 Python | — | — |
+| F248 | Origin C 兼容 | Origin C（3,862 页） | 不做 | 不做 | 改用 Python / Rust 插件 | — | — |
+| F249 | X-Function 兼容（约 680 个） | X-Function Reference | 不做 | 不做 | 功能按需在核心库实现，不做接口兼容 | — | — |
+| F250 | COM 自动化服务器 | Automation Server | 不做 | 不做 | — | — | — |
+| F251 | LabVIEW 虚拟仪器 | Using Origin from LabVIEW | 不做 | 不做 | — | — | — |
+| F252 | Mathematica Link | Mathematica Link | 不做 | 不做 | — | — | — |
+| F253 | Code Builder 集成开发环境 | The Code Builder | 不做 | 不做 | — | — | — |
 
 ## 图类型 · 2D 线图
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F254 | 折线图 | Line Graph | P0 | 已完成 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F255 | 水平阶梯图 | Horizontal Step Graph | P1 | 已实现待验收 | 水平阶梯：先横后竖，共享折线图元与 SVG | 拐点几何、拟合线、保存与撤销回归已通过；Origin 同数据目视验收待做 |
-| F256 | 垂直阶梯图 | Vertical Step Graph | P1 | 已实现待验收 | 垂直阶梯：先竖后横，共享折线图元与 SVG | 拐点几何、拟合线、保存与撤销回归已通过；Origin 同数据目视验收待做 |
-| F257 | Y 偏移堆叠线图 | Stacked Lines by Y Offsets Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F258 | 棒棒糖图 | Lollipop Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F259 | 颜色映射线系列 | Colormapped Line Series | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F260 | 样条曲线图 | Spline Graph | P1 | 已实现待验收 | 自然三次样条、缺失/重复 X 分段、自动范围与共享折线图元 | 解析值和 SciPy 1.17.1 自然边界对照、分段及 SVG 回归已通过；Origin 同数据目视验收待做 |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F254 | 折线图 | Line Graph | P0 | 已完成 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F255 | 水平阶梯图 | Horizontal Step Graph | P1 | 已实现待验收 | 水平阶梯：先横后竖，共享折线图元与 SVG | 拐点几何、拟合线、保存与撤销回归已通过；Origin 同数据目视验收待做 | — |
+| F256 | 垂直阶梯图 | Vertical Step Graph | P1 | 已实现待验收 | 垂直阶梯：先竖后横，共享折线图元与 SVG | 拐点几何、拟合线、保存与撤销回归已通过；Origin 同数据目视验收待做 | — |
+| F257 | Y 偏移堆叠线图 | Stacked Lines by Y Offsets Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F258 | 棒棒糖图 | Lollipop Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F259 | 颜色映射线系列 | Colormapped Line Series | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F260 | 样条曲线图 | Spline Graph | P1 | 已实现待验收 | 自然三次样条、缺失/重复 X 分段、自动范围与共享折线图元 | 解析值和 SciPy 1.17.1 自然边界对照、分段及 SVG 回归已通过；Origin 同数据目视验收待做 | — |
 
 ## 图类型 · 2D 散点图
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F261 | 散点图 | 2D Scatter Graph | P0 | 已完成 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F262 | 中心坐标散点图 | 2D Scatter Central Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F263 | 列散点图 | Column Scatter | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F264 | Y 误差棒图 | Y Error Bar Graph | P0 | 已实现待验收 | Y 对称误差列自动关联、端帽/线宽、裁剪与共享线段图元 | 端点几何、无效值、保存与撤销回归已通过；Origin 同数据目视验收待做 |
-| F265 | XY 误差棒图 | XY Error Bar Graph | P0 | 已实现待验收 | 对称 X/Y 误差列自动关联、方向转换、端帽/线宽与共享图元 | 关联、端点几何、裁剪及撤销回归已通过；Origin 同数据目视验收待做 |
-| F266 | 散点 + 地毯图 | Scatter+Rug Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F267 | 垂线图 | Vertical Drop Line | P1 | 已实现待验收 | 原始点到零基线的垂线，对数轴使用显示下界；符号/线宽与 SVG 共用 | 正负值、对数基线、SVG 线段和撤销回归已通过；Origin 同数据目视验收待做 |
-| F268 | 气泡图 | Indexed Size Bubble Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F269 | 颜色映射散点图 | Color Mapped Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F270 | 气泡 + 颜色映射图 | Indexed Size (Bubble) and Color Map Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F271 | 误差带图 | Error Band Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F272 | 密度点图 | Density Dots | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F273 | 彩色点图 | Color Dots | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F261 | 散点图 | 2D Scatter Graph | P0 | 已完成 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F262 | 中心坐标散点图 | 2D Scatter Central Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F263 | 列散点图 | Column Scatter | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F264 | Y 误差棒图 | Y Error Bar Graph | P0 | 已实现待验收 | Y 对称误差列自动关联、端帽/线宽、裁剪与共享线段图元 | 端点几何、无效值、保存与撤销回归已通过；Origin 同数据目视验收待做 | — |
+| F265 | XY 误差棒图 | XY Error Bar Graph | P0 | 已实现待验收 | 对称 X/Y 误差列自动关联、方向转换、端帽/线宽与共享图元 | 关联、端点几何、裁剪及撤销回归已通过；Origin 同数据目视验收待做 | — |
+| F266 | 散点 + 地毯图 | Scatter+Rug Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F267 | 垂线图 | Vertical Drop Line | P1 | 已实现待验收 | 原始点到零基线的垂线，对数轴使用显示下界；符号/线宽与 SVG 共用 | 正负值、对数基线、SVG 线段和撤销回归已通过；Origin 同数据目视验收待做 | — |
+| F268 | 气泡图 | Indexed Size Bubble Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F269 | 颜色映射散点图 | Color Mapped Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F270 | 气泡 + 颜色映射图 | Indexed Size (Bubble) and Color Map Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F271 | 误差带图 | Error Band Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F272 | 密度点图 | Density Dots | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F273 | 彩色点图 | Color Dots | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 
 ## 图类型 · 2D 点线图
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F274 | 点线图 | Line+Symbol Graph | P0 | 已完成 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F275 | 线系列图 | Line Series Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F276 | 两点线段图 | 2 Point Segment Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F277 | 三点线段图 | 3 Point Segment Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F278 | 样条连接点线图 | Spline Connected Graph | P1 | 已实现待验收 | 自然三次样条连接，符号与误差保持原始点；派生线独立绘制 | SciPy 数值、符号数、分段、自动范围及撤销回归已通过；Origin 同数据目视验收待做 |
-| F279 | 按行绘图 | Row Wise Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F280 | 前后对比图 | Before and After Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F274 | 点线图 | Line+Symbol Graph | P0 | 已完成 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F275 | 线系列图 | Line Series Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F276 | 两点线段图 | 2 Point Segment Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F277 | 三点线段图 | 3 Point Segment Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F278 | 样条连接点线图 | Spline Connected Graph | P1 | 已实现待验收 | 自然三次样条连接，符号与误差保持原始点；派生线独立绘制 | SciPy 数值、符号数、分段、自动范围及撤销回归已通过；Origin 同数据目视验收待做 | — |
+| F279 | 按行绘图 | Row Wise Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F280 | 前后对比图 | Before and After Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 
 ## 图类型 · 2D 柱状图与条形图
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F281 | 柱状图 | Column Graph | P0 | 已完成 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F282 | 带标签柱状图 | Column + Label Graph | P1 | 已实现待验收 | 柱图配合数值/X-Y/行号/指定列数据标签，字号与偏移可调 | 标签行对齐、段值、边缘定位、SVG 与撤销回归已通过；Origin 同数据目视验收待做 |
-| F283 | 条形图 | Bar Graph | P0 | 已实现待验收 | 数值型条形图、并排分组、误差换向、物理轴范围与共享矩形 | 轴方向、正负值、分组误差、SVG 与撤销回归已通过；Origin 同数据目视验收待做 |
-| F284 | 堆叠柱状图 | Stacked Column Graph | P1 | 已实现待验收 | 按原始行与 X 对齐，正负柱段分别累加，共享矩形与 SVG | 缺失行、正负值、段几何、误差与撤销回归已通过；Origin 同数据目视验收待做 |
-| F285 | 浮动条形图 | Floating Bar Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F286 | 堆叠条形图 | Stacked Bar Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F287 | 百分比堆叠柱状图 | 100% Stacked Column Graph | P1 | 已实现待验收 | 按行正负组分别归一至 ±100%，零总量与极端尺度处理，共享 SVG | 归一化参考值、极端数值、误差缩放及撤销回归已通过；Origin 同数据目视验收待做 |
-| F288 | 百分比堆叠条形图 | 100% Stacked Bar Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F289 | 浮动柱状图 | Floating Column Graph | P2 | 已实现待验收 | 上下端列稳定配对、完整行过滤、反向区间、多组排列与共享 SVG | 配对、删列/复用、矩形、对数裁剪与撤销回归已通过；Origin 同数据目视验收待做 |
-| F290 | 百分比丝带图 | 100% Ribbon Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F291 | 丝带图 | Ribbon Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F292 | 圆堆积图 | Circular Packing Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F293 | 螺旋条形图 | Spiral Bar Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F294 | 频数图 | Frequency Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F281 | 柱状图 | Column Graph | P0 | 已完成 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F282 | 带标签柱状图 | Column + Label Graph | P1 | 已实现待验收 | 柱图配合数值/X-Y/行号/指定列数据标签，字号与偏移可调 | 标签行对齐、段值、边缘定位、SVG 与撤销回归已通过；Origin 同数据目视验收待做 | — |
+| F283 | 条形图 | Bar Graph | P0 | 已实现待验收 | 数值型条形图、并排分组、误差换向、物理轴范围与共享矩形 | 轴方向、正负值、分组误差、SVG 与撤销回归已通过；Origin 同数据目视验收待做 | — |
+| F284 | 堆叠柱状图 | Stacked Column Graph | P1 | 已实现待验收 | 按原始行与 X 对齐，正负柱段分别累加，共享矩形与 SVG | 缺失行、正负值、段几何、误差与撤销回归已通过；Origin 同数据目视验收待做 | — |
+| F285 | 浮动条形图 | Floating Bar Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F286 | 堆叠条形图 | Stacked Bar Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F287 | 百分比堆叠柱状图 | 100% Stacked Column Graph | P1 | 已实现待验收 | 按行正负组分别归一至 ±100%，零总量与极端尺度处理，共享 SVG | 归一化参考值、极端数值、误差缩放及撤销回归已通过；Origin 同数据目视验收待做 | — |
+| F288 | 百分比堆叠条形图 | 100% Stacked Bar Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F289 | 浮动柱状图 | Floating Column Graph | P2 | 已实现待验收 | 上下端列稳定配对、完整行过滤、反向区间、多组排列与共享 SVG | 配对、删列/复用、矩形、对数裁剪与撤销回归已通过；Origin 同数据目视验收待做 | — |
+| F290 | 百分比丝带图 | 100% Ribbon Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F291 | 丝带图 | Ribbon Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F292 | 圆堆积图 | Circular Packing Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F293 | 螺旋条形图 | Spiral Bar Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F294 | 频数图 | Frequency Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 
 ## 图类型 · 饼图
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F295 | 2D 饼图 | 2D Color Pie Chart | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F296 | 3D 饼图 | 3D Color Pie Chart | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F297 | 环形图 | Doughnut Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F298 | 复合饼图 | Pie Of Pie Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F299 | 复合条饼图 | Bar Of Pie Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F300 | 复合环形图 | Doughnut Of Pie | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F301 | 百分比环形图 | Doughnut with Total Wedges = 100 | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F302 | 不等半径饼图 | Pie with Different Radius Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F303 | 不等半径环形图 | Doughnut with Different Radius Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F304 | 旭日图 | Sunburst Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F295 | 2D 饼图 | 2D Color Pie Chart | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F296 | 3D 饼图 | 3D Color Pie Chart | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F297 | 环形图 | Doughnut Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F298 | 复合饼图 | Pie Of Pie Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F299 | 复合条饼图 | Bar Of Pie Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F300 | 复合环形图 | Doughnut Of Pie | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F301 | 百分比环形图 | Doughnut with Total Wedges = 100 | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F302 | 不等半径饼图 | Pie with Different Radius Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F303 | 不等半径环形图 | Doughnut with Different Radius Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F304 | 旭日图 | Sunburst Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 
 ## 图类型 · 多轴图
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F305 | 双 Y 轴图 | Double Y Graph | P0 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F306 | 双 Y 轴柱状图 | Double-Y Column Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F307 | 双 Y 轴柱状 + 点线图 | Double-Y Column Line+Symbol Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F308 | 双 X 轴独立图 | Double X - Independent XY Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F309 | 双 X 轴公式换算图 | Double X - Custom Formula Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F310 | 共享 Y 的双 X 轴图 | Y-Shared Double X Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F311 | 阿伦尼乌斯双 X 轴图 | Double X - Arrhenius Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F312 | 2Ys Y-Y 图 | 2Ys Y-Y Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F313 | 2Ys 柱状图 | 2Ys Column | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F314 | 2Ys 柱状-点线图 | 2Ys Column-Line Symbol | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F315 | 3Ys Y-YY 图 | 3Ys Y-YY | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F316 | 3Ys Y-Y-Y 图 | 3Ys Y-Y-Y | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F317 | 4Ys Y-YYY 图 | 4Ys Y-YYY | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F318 | 4Ys YY-YY 图 | 4Ys YY-YY | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F319 | 多 Y 轴图 | Multiple Y Axes Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F320 | 放大图 | Zoom Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F305 | 双 Y 轴图 | Double Y Graph | P0 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F306 | 双 Y 轴柱状图 | Double-Y Column Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F307 | 双 Y 轴柱状 + 点线图 | Double-Y Column Line+Symbol Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F308 | 双 X 轴独立图 | Double X - Independent XY Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F309 | 双 X 轴公式换算图 | Double X - Custom Formula Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F310 | 共享 Y 的双 X 轴图 | Y-Shared Double X Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F311 | 阿伦尼乌斯双 X 轴图 | Double X - Arrhenius Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F312 | 2Ys Y-Y 图 | 2Ys Y-Y Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F313 | 2Ys 柱状图 | 2Ys Column | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F314 | 2Ys 柱状-点线图 | 2Ys Column-Line Symbol | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F315 | 3Ys Y-YY 图 | 3Ys Y-YY | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F316 | 3Ys Y-Y-Y 图 | 3Ys Y-Y-Y | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F317 | 4Ys Y-YYY 图 | 4Ys Y-YYY | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F318 | 4Ys YY-YY 图 | 4Ys YY-YY | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F319 | 多 Y 轴图 | Multiple Y Axes Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F320 | 放大图 | Zoom Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 
 ## 图类型 · 多面板图
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F321 | 上下两面板图 | Vertical 2 Panel Graph | P0 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F322 | 左右两面板图 | Horizontal 2 Panel Graph | P0 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F323 | 四面板图 | 4 Panel Graph | P0 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F324 | 九面板图 | 9 Panel Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F325 | 堆叠面板图 | Stack Panels Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F326 | 多面板图 | Multiple Panels Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F327 | 插图（图中图） | Inset Plot | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F328 | 网格分面图 | Trellis | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F329 | 双 Y 网格分面图 | Trellis Double Y | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F330 | 簇图 | Cluster Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F321 | 上下两面板图 | Vertical 2 Panel Graph | P0 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F322 | 左右两面板图 | Horizontal 2 Panel Graph | P0 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F323 | 四面板图 | 4 Panel Graph | P0 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F324 | 九面板图 | 9 Panel Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F325 | 堆叠面板图 | Stack Panels Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F326 | 多面板图 | Multiple Panels Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F327 | 插图（图中图） | Inset Plot | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F328 | 网格分面图 | Trellis | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F329 | 双 Y 网格分面图 | Trellis Double Y | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F330 | 簇图 | Cluster Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 
 ## 图类型 · 瀑布图
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F331 | 2D 瀑布图 | 2D Waterfall Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F332 | 2D 瀑布图（Y 颜色映射） | 2D Waterfall Y Color Mapping | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F333 | 2D 瀑布图（Z 颜色映射） | 2D Waterfall Z Color Mapping | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F334 | 3D 瀑布图 | 3D Waterfall Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F335 | 3D 瀑布图（Y 颜色映射） | 3D Waterfall Y:Color Mapping | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F336 | 3D 瀑布图（Z 颜色映射） | 3D Waterfall Z:Color Mapping | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F331 | 2D 瀑布图 | 2D Waterfall Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F332 | 2D 瀑布图（Y 颜色映射） | 2D Waterfall Y Color Mapping | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F333 | 2D 瀑布图（Z 颜色映射） | 2D Waterfall Z Color Mapping | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F334 | 3D 瀑布图 | 3D Waterfall Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F335 | 3D 瀑布图（Y 颜色映射） | 3D Waterfall Y:Color Mapping | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F336 | 3D 瀑布图（Z 颜色映射） | 3D Waterfall Z:Color Mapping | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
 
 ## 图类型 · 统计图
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F337 | 二维核密度图 | 2D Kernel Density Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F338 | 均值条形图 | Bar Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F339 | 蜂群图 | Beeswarm Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F340 | Bland-Altman 图 | Bland-Altman Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F341 | 箱线图 | Box Chart Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F342 | 双 Y 箱线图 | 2Ys Box Chart Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F343 | 直方图 / 分布图 | Histogram/Distribution Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F344 | 概率直方图 | Histogram Probabilities Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F345 | 直方图 + 地毯图 | Histogram + Rug/Distribution + Rug Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F346 | 区间图 | Interval Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F347 | 多面板直方图 | Multi-Panel Histogram Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F348 | 平行索引图 | Parallel Index Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F349 | 平行坐标图 | Parallel Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F350 | 平行集图 | Parallel Sets Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F351 | 帕累托图（分箱数据） | Pareto Chart - Binned Data | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F352 | 帕累托图（原始数据） | Pareto Chart - Raw Data | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F353 | 人口金字塔图（龙卷风图） | Population Pyramid Graph(Tornado Chart) | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F354 | 概率图 | Probability Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F355 | Q-Q 图 | Q-Q Plot | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F356 | 质量控制图（X̄-R） | QC(x bar R) Chart Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F357 | 点图 | Dot Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F358 | 堆叠点图 | Stacked Dot Plots | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F359 | 散点矩阵图 | Scatter Matrix Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F360 | 堆叠直方图 | Stacked Histograms Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F361 | 多变异图 | Multi-Vari Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F362 | 变异性图 | Variability Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F363 | 小提琴图 | Violin Plot | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F364 | 桑基图 | Sankey Diagrams | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F365 | 冲积图 | Alluvial Diagrams | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F366 | 网络图 | Network Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F367 | 和弦图 | Chord Diagram/Chord Diagram with Ratio Layout | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F368 | 层次边捆绑图 | Hierarchical Edge Bundling Diagram | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F369 | 边际箱线图 | Marginal Box Charts | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F370 | 边际直方图 | Marginal Histograms Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F371 | 边际图 | Marginal Plots | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F372 | 山脊图 | Ridgeline Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F373 | 对称图 | Symmetry Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F374 | 运行图 | Run Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F375 | 累积分布图 | CDF Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F376 | 交互作用图 | Interaction Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F377 | 主效应图 | Main Effects Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F378 | 因果图（鱼骨图） | Cause-and-Effect Diagram | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F337 | 二维核密度图 | 2D Kernel Density Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F338 | 均值条形图 | Bar Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F339 | 蜂群图 | Beeswarm Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F340 | Bland-Altman 图 | Bland-Altman Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F341 | 箱线图 | Box Chart Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F342 | 双 Y 箱线图 | 2Ys Box Chart Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F343 | 直方图 / 分布图 | Histogram/Distribution Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F344 | 概率直方图 | Histogram Probabilities Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F345 | 直方图 + 地毯图 | Histogram + Rug/Distribution + Rug Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F346 | 区间图 | Interval Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F347 | 多面板直方图 | Multi-Panel Histogram Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F348 | 平行索引图 | Parallel Index Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F349 | 平行坐标图 | Parallel Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F350 | 平行集图 | Parallel Sets Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F351 | 帕累托图（分箱数据） | Pareto Chart - Binned Data | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F352 | 帕累托图（原始数据） | Pareto Chart - Raw Data | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F353 | 人口金字塔图（龙卷风图） | Population Pyramid Graph(Tornado Chart) | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F354 | 概率图 | Probability Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F355 | Q-Q 图 | Q-Q Plot | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F356 | 质量控制图（X̄-R） | QC(x bar R) Chart Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F357 | 点图 | Dot Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F358 | 堆叠点图 | Stacked Dot Plots | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F359 | 散点矩阵图 | Scatter Matrix Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F360 | 堆叠直方图 | Stacked Histograms Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F361 | 多变异图 | Multi-Vari Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F362 | 变异性图 | Variability Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F363 | 小提琴图 | Violin Plot | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F364 | 桑基图 | Sankey Diagrams | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F365 | 冲积图 | Alluvial Diagrams | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F366 | 网络图 | Network Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F367 | 和弦图 | Chord Diagram/Chord Diagram with Ratio Layout | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F368 | 层次边捆绑图 | Hierarchical Edge Bundling Diagram | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F369 | 边际箱线图 | Marginal Box Charts | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F370 | 边际直方图 | Marginal Histograms Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F371 | 边际图 | Marginal Plots | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F372 | 山脊图 | Ridgeline Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F373 | 对称图 | Symmetry Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F374 | 运行图 | Run Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F375 | 累积分布图 | CDF Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F376 | 交互作用图 | Interaction Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F377 | 主效应图 | Main Effects Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F378 | 因果图（鱼骨图） | Cause-and-Effect Diagram | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 
 ## 图类型 · 分组图
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F379 | 分组散点图 | Grouped Scatter | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F380 | 分组柱状图 | Grouped Columns | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F381 | 分组直方图 | Grouped Histogram | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F382 | 分组箱线图（索引数据） | Grouped Box Charts-Indexed Data | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F383 | 分组箱线图（原始数据） | Grouped Box Charts-Raw Data | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F384 | 分组列散点图 | Grouped Column Scatter-Indexed Data | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F385 | 分组区间图 | Grouped Interval Plot-Indexed Data | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F386 | 分组均值条形图 | Grouped Mean Bar-Indexed Data | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F387 | 分组点图 | Grouped Dot Plots | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F388 | 分组堆叠点图 | Grouped Stacked Dot Plots | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F389 | 分组小提琴图 | Grouped Violin-Indexed Data | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F390 | 分组半小提琴图 | Grouped Half Violin-Indexed Data | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F391 | 分组半箱线图 | Grouped Half Box-Indexed Data | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F392 | 分组浮动条形图 | Grouped Floating Bar | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F379 | 分组散点图 | Grouped Scatter | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F380 | 分组柱状图 | Grouped Columns | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F381 | 分组直方图 | Grouped Histogram | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F382 | 分组箱线图（索引数据） | Grouped Box Charts-Indexed Data | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F383 | 分组箱线图（原始数据） | Grouped Box Charts-Raw Data | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F384 | 分组列散点图 | Grouped Column Scatter-Indexed Data | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F385 | 分组区间图 | Grouped Interval Plot-Indexed Data | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F386 | 分组均值条形图 | Grouped Mean Bar-Indexed Data | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F387 | 分组点图 | Grouped Dot Plots | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F388 | 分组堆叠点图 | Grouped Stacked Dot Plots | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F389 | 分组小提琴图 | Grouped Violin-Indexed Data | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F390 | 分组半小提琴图 | Grouped Half Violin-Indexed Data | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F391 | 分组半箱线图 | Grouped Half Box-Indexed Data | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F392 | 分组浮动条形图 | Grouped Floating Bar | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 
 ## 图类型 · 地图
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F393 | 条形地图 | Bar Map | P2 | 未开始 | geojson / shapefile | 与 Origin 同数据出图目视比较 |
-| F394 | 饼图地图 | Pie Map Chart | P2 | 未开始 | geojson / shapefile | 与 Origin 同数据出图目视比较 |
-| F395 | 方格地图 | Tile Grid Map | P2 | 未开始 | geojson / shapefile | 与 Origin 同数据出图目视比较 |
-| F396 | 桑基地图 | Sankey Map | P2 | 未开始 | geojson / shapefile | 与 Origin 同数据出图目视比较 |
-| F397 | Stiff 地图 | Stiff Map Diagram | P2 | 未开始 | geojson / shapefile | 与 Origin 同数据出图目视比较 |
-| F398 | 矩形树图 | Treemap | P2 | 未开始 | geojson / shapefile | 与 Origin 同数据出图目视比较 |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F393 | 条形地图 | Bar Map | P2 | 未开始 | geojson / shapefile | 与 Origin 同数据出图目视比较 | — |
+| F394 | 饼图地图 | Pie Map Chart | P2 | 未开始 | geojson / shapefile | 与 Origin 同数据出图目视比较 | — |
+| F395 | 方格地图 | Tile Grid Map | P2 | 未开始 | geojson / shapefile | 与 Origin 同数据出图目视比较 | — |
+| F396 | 桑基地图 | Sankey Map | P2 | 未开始 | geojson / shapefile | 与 Origin 同数据出图目视比较 | — |
+| F397 | Stiff 地图 | Stiff Map Diagram | P2 | 未开始 | geojson / shapefile | 与 Origin 同数据出图目视比较 | — |
+| F398 | 矩形树图 | Treemap | P2 | 未开始 | geojson / shapefile | 与 Origin 同数据出图目视比较 | — |
 
 ## 图类型 · 面积图
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F399 | 面积图 | Area Graph | P1 | 已实现待验收 | 按连续有效行分段、跨零三角剖分、透明度、边界线与共享 SVG | 面积积分、缺口、对数裁剪、网格缩放与撤销回归已通过；Origin 同数据目视验收待做 |
-| F400 | 堆叠面积图 | Stacked Area Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F401 | 百分比堆叠面积图 | 100% Stacked Area Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F402 | 填充面积图 | Fill Area Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F403 | 双色填充图 | Fill Two Colors Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F404 | 风筝图 | Kite Diagram | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F399 | 面积图 | Area Graph | P1 | 已实现待验收 | 按连续有效行分段、跨零三角剖分、透明度、边界线与共享 SVG | 面积积分、缺口、对数裁剪、网格缩放与撤销回归已通过；Origin 同数据目视验收待做 | — |
+| F400 | 堆叠面积图 | Stacked Area Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F401 | 百分比堆叠面积图 | 100% Stacked Area Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F402 | 填充面积图 | Fill Area Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F403 | 双色填充图 | Fill Two Colors Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F404 | 风筝图 | Kite Diagram | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 
 ## 图类型 · 专业图
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F405 | 窗口浏览图 | Window-view Browser Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F406 | 子弹图 | Bullet Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F407 | 极坐标等高线 + 梯度矢量 | Polar Contour + Gradient Vector | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F408 | 等高线 + 梯度矢量 | Contour Line + Gradient Vector | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F409 | 等高线 + 流线 | Contour + Streamline | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F410 | Piper 三线图 | Piper/Trilinear Diagram | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F411 | Durov 图 | Durov Diagram | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F412 | Stiff 图 | Stiff Diagram | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F413 | 极坐标图 | Polar Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F414 | 极坐标矢量图（θrθr） | Polar Vector theta r theta r graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F415 | 罗盘图 | Compass Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F416 | 极坐标矢量图（θrAM） | Polar Vector ?RAM graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F417 | 雷达图 | Radar Chart (Spider Plot) | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F418 | 径向条形图 | Radial Bar and Radial Stacked Bar Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F419 | 直角三元图 | Right-Triangle Ternary | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F420 | 史密斯圆图 | Smith Charts | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F421 | 堆叠径向图 | Stacked Radial Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F422 | 流线图 | Streamline Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F423 | 三元图 | Ternary | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F424 | 三元矢量图 | Ternary Vector | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F425 | 风玫瑰图（分箱数据） | Wind Rose-Binned Data | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F426 | 风玫瑰图（原始数据） | Wind Rose-Raw Data | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F427 | 矢量图（XY + 角度 + 大小） | X, Y, Angle, Magnitude Vector Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F428 | 矢量图（起点 XY + 终点 XY） | X, Y, X, Y Vector Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F405 | 窗口浏览图 | Window-view Browser Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F406 | 子弹图 | Bullet Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F407 | 极坐标等高线 + 梯度矢量 | Polar Contour + Gradient Vector | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F408 | 等高线 + 梯度矢量 | Contour Line + Gradient Vector | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F409 | 等高线 + 流线 | Contour + Streamline | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F410 | Piper 三线图 | Piper/Trilinear Diagram | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F411 | Durov 图 | Durov Diagram | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F412 | Stiff 图 | Stiff Diagram | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F413 | 极坐标图 | Polar Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F414 | 极坐标矢量图（θrθr） | Polar Vector theta r theta r graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F415 | 罗盘图 | Compass Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F416 | 极坐标矢量图（θrAM） | Polar Vector ?RAM graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F417 | 雷达图 | Radar Chart (Spider Plot) | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F418 | 径向条形图 | Radial Bar and Radial Stacked Bar Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F419 | 直角三元图 | Right-Triangle Ternary | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F420 | 史密斯圆图 | Smith Charts | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F421 | 堆叠径向图 | Stacked Radial Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F422 | 流线图 | Streamline Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F423 | 三元图 | Ternary | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F424 | 三元矢量图 | Ternary Vector | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F425 | 风玫瑰图（分箱数据） | Wind Rose-Binned Data | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F426 | 风玫瑰图（原始数据） | Wind Rose-Raw Data | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F427 | 矢量图（XY + 角度 + 大小） | X, Y, Angle, Magnitude Vector Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F428 | 矢量图（起点 XY + 终点 XY） | X, Y, X, Y Vector Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 
 ## 图类型 · 金融图
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F429 | 桥图（瀑布式） | Bridge Charts | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F430 | 高低收图 | High-Low-Close Charts | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F431 | K 线图 | Japanese_Candlestick | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F432 | OHLC 条形图 | OHLC Bar Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F433 | OHLC + 成交量图 | OHLC-Volume | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F434 | 股票折线图 | Line (Stock) | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F429 | 桥图（瀑布式） | Bridge Charts | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F430 | 高低收图 | High-Low-Close Charts | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F431 | K 线图 | Japanese_Candlestick | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F432 | OHLC 条形图 | OHLC Bar Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F433 | OHLC + 成交量图 | OHLC-Volume | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F434 | 股票折线图 | Line (Stock) | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 
 ## 图类型 · 3D XYY 图
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F435 | XYY 3D 柱状图 | XYY 3D Bar Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F436 | XYY 3D 百分比堆叠柱 | XYY 3D 100% Stacked Bars Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F437 | XYY 3D 并列柱 | XYY 3D Side by Side Bars | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F438 | XYY 3D 堆叠柱 | XYY 3D Stacked Bars Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F439 | XYY 3D 柱（带误差棒） | XYY 3D Bar Graph with Error Bar | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F440 | 3D 丝带图 | 3D Ribbons Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F441 | 3D 百分比堆叠墙图 | 3D 100% Stacked Wall Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F442 | 3D 堆叠墙图 | 3D Stacked Wall Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F443 | 3D 墙图 | 3D Wall Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F435 | XYY 3D 柱状图 | XYY 3D Bar Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F436 | XYY 3D 百分比堆叠柱 | XYY 3D 100% Stacked Bars Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F437 | XYY 3D 并列柱 | XYY 3D Side by Side Bars | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F438 | XYY 3D 堆叠柱 | XYY 3D Stacked Bars Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F439 | XYY 3D 柱（带误差棒） | XYY 3D Bar Graph with Error Bar | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F440 | 3D 丝带图 | 3D Ribbons Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F441 | 3D 百分比堆叠墙图 | 3D 100% Stacked Wall Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F442 | 3D 堆叠墙图 | 3D Stacked Wall Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F443 | 3D 墙图 | 3D Wall Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
 
 ## 图类型 · 3D 曲面图
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F444 | 填色曲面图 | Color Fill Surface | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F445 | X 恒定带底曲面 | X Constant with Base Surface | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F446 | Y 恒定带底曲面 | Y Constant with Base Surface | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F447 | 颜色映射曲面图 | Color Map Surface | P1 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F448 | 颜色映射曲面（带投影） | Color Map Surface with Projection | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F449 | 3D 三元颜色映射曲面 | 3D Ternary Colormap Surface | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F450 | 线框图 | Wire Frame | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F451 | 线框曲面 | Wire Surface | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F452 | 填色曲面（带误差棒） | Color Fill Surface with Error Bar | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F453 | 颜色映射曲面（带误差棒） | Colormap Surface with Error Bar | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F454 | 多个填色曲面 | Multiple Color Fill Surfaces | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F455 | 多个颜色映射曲面 | Multiple Color Map Surfaces | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F456 | 参数曲面 | Parametric Surface | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F457 | 3D 堆叠曲面 | 3D Stacked Surfaces | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F458 | 3D 堆叠热图 | 3D Stacked Heatmaps | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F444 | 填色曲面图 | Color Fill Surface | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F445 | X 恒定带底曲面 | X Constant with Base Surface | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F446 | Y 恒定带底曲面 | Y Constant with Base Surface | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F447 | 颜色映射曲面图 | Color Map Surface | P1 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F448 | 颜色映射曲面（带投影） | Color Map Surface with Projection | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F449 | 3D 三元颜色映射曲面 | 3D Ternary Colormap Surface | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F450 | 线框图 | Wire Frame | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F451 | 线框曲面 | Wire Surface | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F452 | 填色曲面（带误差棒） | Color Fill Surface with Error Bar | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F453 | 颜色映射曲面（带误差棒） | Colormap Surface with Error Bar | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F454 | 多个填色曲面 | Multiple Color Fill Surfaces | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F455 | 多个颜色映射曲面 | Multiple Color Map Surfaces | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F456 | 参数曲面 | Parametric Surface | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F457 | 3D 堆叠曲面 | 3D Stacked Surfaces | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F458 | 3D 堆叠热图 | 3D Stacked Heatmaps | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
 
 ## 图类型 · 3D 散点 / 柱 / 矢量图
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F459 | 3D 散点图 | 3D Scatter Graph | P1 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F460 | 3D 散点（Z 误差棒） | 3D Scatter with Z Error Bar Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F461 | 3D 线图 | 3D Line Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F462 | 轨迹图 | Trajectory Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F463 | 3D 柱状图 | 3D Bar Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F464 | 3D 柱状图（分类 XY） | 3D Bar Graph with Categorical/Text XY | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F465 | 3D 堆叠柱状图 | 3D Stacked Bars Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F466 | 3D 百分比堆叠柱状图 | 3D 100% Stacked Bar Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F467 | 3D 浮动柱状图 | 3D Floating Bar Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F468 | 3D 矢量（XYZ XYZ） | 3D Vector XYZ XYZ | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F469 | 3D 矢量（XYZ dXdYdZ） | 3D Vector XYZ dXdYdZ | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F470 | 3D 三元散点 | 3D Ternary Symbol | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
-| F471 | 四面体图（四元相图） | 3D Tetrahedral(Quaternary Phase Diagram) | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F459 | 3D 散点图 | 3D Scatter Graph | P1 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F460 | 3D 散点（Z 误差棒） | 3D Scatter with Z Error Bar Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F461 | 3D 线图 | 3D Line Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F462 | 轨迹图 | Trajectory Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F463 | 3D 柱状图 | 3D Bar Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F464 | 3D 柱状图（分类 XY） | 3D Bar Graph with Categorical/Text XY | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F465 | 3D 堆叠柱状图 | 3D Stacked Bars Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F466 | 3D 百分比堆叠柱状图 | 3D 100% Stacked Bar Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F467 | 3D 浮动柱状图 | 3D Floating Bar Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F468 | 3D 矢量（XYZ XYZ） | 3D Vector XYZ XYZ | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F469 | 3D 矢量（XYZ dXdYdZ） | 3D Vector XYZ dXdYdZ | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F470 | 3D 三元散点 | 3D Ternary Symbol | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
+| F471 | 四面体图（四元相图） | 3D Tetrahedral(Quaternary Phase Diagram) | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
 
 ## 图类型 · 等高线与热图
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F472 | 填色等高线图 | Color Fill Contour | P1 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 |
-| F473 | 黑白等高线图（带标签） | Black and White Lines with Labels Contour | P1 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 |
-| F474 | 灰度等高线图 | Gray Scale Map Contour | P2 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 |
-| F475 | 分类 Z 等高线图 | Contour - Categorical Z | P2 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 |
-| F476 | 热图 | Heatmap | P1 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 |
-| F477 | 极坐标热图 | Polar Heatmap | P2 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 |
-| F478 | 带标签热图 | Heatmap with Labels | P1 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 |
-| F479 | 分割热图 | Split Heatmap | P2 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 |
-| F480 | 分块热图 | Heatmap with Split Tiles | P2 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 |
-| F481 | 极坐标等高线（XYZ 数据） | Polar Contour from XYZ Data | P2 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 |
-| F482 | 极坐标等高线（矩阵数据） | Polar Contour from Matrix Data | P2 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 |
-| F483 | 三元等高线图 | Ternary Contour | P2 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 |
-| F484 | 叠加等高线图 | Overlaid Contour Plot | P2 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F472 | 填色等高线图 | Color Fill Contour | P1 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 | — |
+| F473 | 黑白等高线图（带标签） | Black and White Lines with Labels Contour | P1 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 | — |
+| F474 | 灰度等高线图 | Gray Scale Map Contour | P2 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 | — |
+| F475 | 分类 Z 等高线图 | Contour - Categorical Z | P2 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 | — |
+| F476 | 热图 | Heatmap | P1 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 | — |
+| F477 | 极坐标热图 | Polar Heatmap | P2 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 | — |
+| F478 | 带标签热图 | Heatmap with Labels | P1 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 | — |
+| F479 | 分割热图 | Split Heatmap | P2 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 | — |
+| F480 | 分块热图 | Heatmap with Split Tiles | P2 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 | — |
+| F481 | 极坐标等高线（XYZ 数据） | Polar Contour from XYZ Data | P2 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 | — |
+| F482 | 极坐标等高线（矩阵数据） | Polar Contour from Matrix Data | P2 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 | — |
+| F483 | 三元等高线图 | Ternary Contour | P2 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 | — |
+| F484 | 叠加等高线图 | Overlaid Contour Plot | P2 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 | — |
 
 ## 图类型 · 图像与剖面
 
-| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
-|---|---|---|---|---|---|---|
-| F485 | 等高线剖面图 | Contour Profiles | P2 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 |
-| F486 | 图片背景 | Image as Background | P2 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 |
-| F487 | 图像图 | Image Plot | P2 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 |
-| F488 | 图像剖面图 | Image Profiles | P2 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 |
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F485 | 等高线剖面图 | Contour Profiles | P2 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 | — |
+| F486 | 图片背景 | Image as Background | P2 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 | — |
+| F487 | 图像图 | Image Plot | P2 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 | — |
+| F488 | 图像剖面图 | Image Profiles | P2 | 未开始 | contour crate（marching squares）+ 色阶 | 与 Origin 同数据出图目视比较 | — |
+
+## 分析工作流
+
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F489 | 分析报告表与重算（自动 / 手动 / 不重算） | Recalculating Analysis Results | P0 | 未开始 | A5 Operation 与源数据依赖；变更后更新报告表 | 源数据改动、三种重算模式、报告往返和撤销回归 | — |
+| F490 | 分析主题与对话框设置保存 | Analysis Themes | P1 | 未开始 | A5 保存分析参数主题，按操作恢复设置 | 跨会话恢复参数并验证默认值 | — |
+| F491 | 分析模板批处理多个数据集 | Batch Processing | P1 | 未开始 | A5 模板输入映射、批量执行与错误报告 | 多文件运行、部分失败、结果关联 | — |
+
+## 作图核心
+
+| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
+|---|---|---|---|---|---|---|---|
+| F492 | 参考线（水平 / 垂直） | Graphing / Axes / Reference Lines | P0 | 未开始 | A2/A7 按轴值定位，属性与导出共用场景 | 轴变化、对数轴、SVG 和撤销 | — |
+| F493 | 坐标轴断点 | Graphing / Axes / Axis Break | P1 | 未开始 | A2 分段坐标映射、断点标记与拾取逆变换 | 断点两侧几何、导出与交互 | — |
+| F494 | 附着坐标轴的对象 | Graphing / Axes / Objects | P1 | 未开始 | A7 对象锚点引用轴与数值位置 | 缩放后定位、保存和撤销 | — |
+| F495 | 同一图层每条曲线独立图类型（柱 / 线 / 散点混合） | Plot Details / Plot Type | P0 | 未开始 | A2 Layer 包含多个 Plot，每条曲线单独指定类型 | 同层柱线散点混合、删除与撤销、SVG | — |
+| F496 | 曲线填充图案 | Plot Details / Pattern | P1 | 未开始 | A3 共用填充图元，区分实色与图案 | 屏幕与 SVG 图案一致、保存和撤销 | — |
+| F497 | 符号边框与内部填充独立设置 | Plot Details / Symbol | P0 | 未开始 | A2/A3 每条曲线边框颜色、宽度和填充 | 空心/实心符号、导出与撤销 | — |
+| F498 | 曲线连接方式（直线 / 样条 / B 样条 / 阶梯 / Bezier） | Plot Details / Line / Connect | P0 | 部分实现 | 已有直线、自然样条、水平/垂直阶梯；B 样条与 Bezier 待实现 | 现有连接方式已有几何和 SVG 回归；补齐其余方式后对照验收 | 连接方式：已完成 0/6，待验收 4，部分实现 0；直线、自然样条、水平/垂直阶梯待验收；B 样条、Bezier 未开始 |
+| F499 | 按列映射曲线或符号颜色 | Plot Details / Modifiers / Color | P0 | 未开始 | A2 按数据列解析逐点颜色，兼容图例 | 缺失值、色阶、SVG 和撤销 | — |
+| F500 | 按列映射符号大小 | Plot Details / Modifiers / Size | P0 | 未开始 | A2 按数据列映射逐点尺寸与范围 | 无效值、极端值、导出和撤销 | — |
+| F501 | 按列映射符号形状 | Plot Details / Modifiers / Shape | P0 | 未开始 | A2 按分类列映射符号形状 | 类别排序、图例、导出和撤销 | — |
