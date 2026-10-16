@@ -1,0 +1,2 @@
+# Golden comparisons use the exact SVG bytes on Windows and in CI.
+crates/scicanvas-core/tests/golden/*.svg text eol=lf
