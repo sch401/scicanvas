@@ -35,6 +35,18 @@ jobs:
           key: ${{ runner.os }}-ci-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}-${{ github.sha }}
           restore-keys: |
             ${{ runner.os }}-ci-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}-
+      - name: 依赖许可、安全与来源检查
+        run: |
+          python tools/install_cargo_deny.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          & ./target/tools/cargo-deny/cargo-deny.exe --locked check --hide-inclusion-graph
+      - name: 清单同步与子项显示回归
+        run: |
+          python docs/parity/build_parity.py --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s docs/parity -p "test_*.py"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          node --test docs/parity/parity.test.cjs
       - run: cargo fmt --all -- --check
       - run: cargo test --profile ci --workspace --all-features --locked
       - run: cargo test --profile ci -p scicanvas-core --no-default-features --locked
