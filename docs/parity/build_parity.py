@@ -9,7 +9,7 @@
 import json
 from pathlib import Path
 
-DONE, PROTO, TODO, SKIP = "已完成", "原型", "未开始", "不做"
+DONE, PARTIAL, REVIEW, TODO, SKIP = "已完成", "部分实现", "已实现待验收", "未开始", "不做"
 MILESTONE = {"P0": "M1 日常够用", "P1": "M2 论文全流程", "P2": "M3 高级功能", "不做": "—"}
 
 rows = []
@@ -25,8 +25,8 @@ def add(module, feature, ref, pri, status=TODO, how="", verify=""):
 M = "工作区与项目"
 add(M, "多文档子窗口（拖动、缩放、最小化、最大化）", "Basic Child Window Operations", "P0", DONE, "自绘 MDI；拖动/缩放、最小化换行、最大化/还原与统一窗口命令", "真实 egui 拖动、缩放、窗口按钮与几何恢复回归")
 add(M, "项目管理器（文件夹树、显示 / 隐藏窗口）", "Project Explorer", "P0", DONE, "真实多级文件夹树；新建/重命名/菜单移动/删除保留内容；显示与隐藏窗口", "层级、循环拦截、目录继承、保存迁移和撤销回归")
-add(M, "项目管理器多级文件夹、拖动整理", "Using Project Explorer to Manage Child Windows", "P1", PROTO, "多级文件夹与菜单移动已做；拖放整理待做", "项目树与移动命令回归；拖放验收待做")
-add(M, "窗口排列：层叠 / 平铺", "Arrange Windows", "P1", PROTO, "按工作区矩形计算位置", "手动操作")
+add(M, "项目管理器多级文件夹、拖动整理", "Using Project Explorer to Manage Child Windows", "P1", PARTIAL, "真实多级目录、新建/重命名/菜单移动/删除保留内容已实现；拖放整理待做", "项目树与移动命令回归已通过；补齐拖放后验收")
+add(M, "窗口排列：层叠 / 平铺", "Arrange Windows", "P1", REVIEW, "app.rs 已接入层叠/平铺命令，按工作区尺寸排列可见窗口并恢复普通状态", "窗口基础回归已通过；不同窗口数、窄工作区与显示缩放的人工验收待做")
 add(M, "项目文件保存 / 打开", "Opening, Closing and Backing Up the Origin Project File", "P0", DONE, "v8 .scproj、v0–v7 迁移、文件夹校验、同目录临时文件替换", "项目/文件夹往返、损坏引用、旧文件迁移与保存失败回归")
 add(M, "自动备份与崩溃恢复", "Opening, Closing and Backing Up the Origin Project File", "P1", TODO, "定时写临时文件", "强制退出后恢复")
 add(M, "最近打开的文件", "Recent Origin Files", "P1", TODO, "配置文件记录", "手动操作")
@@ -36,7 +36,7 @@ add(M, "结果日志（分析结果记录）", "Analysis Results: The Results Lo
 add(M, "Notes 文本窗口 / Markdown 报告", "Notes Window", "P2", TODO, "egui_commonmark", "手动操作")
 add(M, "命令窗口（交互式脚本）", "The Origin Command Window and Script Window", "P1", TODO, "嵌入 Python（PyO3）", "执行脚本修改工作表")
 add(M, "深色模式", "Dark Mode", "P0", DONE, "浅色、深色、跟随系统三种选择；统一主题命令", "主题切换命令与项目数据不变回归")
-add(M, "快捷键与自定义快捷键", "Hotkeys", "P1", PROTO, "固定快捷键已做，自定义待做", "手动操作")
+add(M, "快捷键与自定义快捷键", "Hotkeys", "P1", PARTIAL, "固定快捷键与命令面板已实现；用户自定义快捷键与冲突配置待做", "固定快捷键、文字框撤销回归已通过；自定义部分待实现")
 add(M, "全文搜索（在项目中查找）", "Finding in Origin Project", "P2", TODO, "遍历项目数据", "手动操作")
 add(M, "工程保护（密码）", "Protecting Origin Projects", "P2", TODO, "age / chacha20poly1305 加密", "加密→解密往返")
 add(M, "中文界面", "—", "P0", DONE, "简体中文界面，Windows 系统中文字体回退", "中文菜单与项目树控件回归")
@@ -51,11 +51,11 @@ M = "工作表"
 add(M, "单元格输入与编辑", "Basic Operations on Worksheet", "P0", DONE, "egui_extras TableBuilder", "手动操作")
 add(M, "长名称 / 单位 / 注释表头行", "Displaying Supporting Data in Worksheet Header Rows", "P0", DONE, "列元数据", "轴标题自动取“长名称 (单位)”")
 add(M, "自定义表头行（参数、采样间隔、迷你图等）", "Displaying Supporting Data in Worksheet Header Rows", "P1", TODO, "可扩展的表头行定义", "手动操作")
-add(M, "列属性：X / Y / Z / X误差 / Y误差 / 标签 / 忽略", "Setting Column Designation", "P0", PROTO, "X / Y / X误差 / Y误差 / 忽略已做；Z 和标签待做", "自动关联、插列、删除与撤销回归；Origin 目视对照待做")
-add(M, "插入 / 删除 / 移动列", "Arranging the Worksheet: Columns and Rows", "P0", PROTO, "插入、删除已做，拖动移动待做", "手动操作")
+add(M, "列属性：X / Y / Z / X误差 / Y误差 / 标签 / 忽略", "Setting Column Designation", "P0", PARTIAL, "X/Y/X误差/Y误差/忽略及误差自动关联已实现；Z 与专用标签列角色待做", "误差关联、删除/插列与撤销回归已通过；补齐其余角色后验收")
+add(M, "插入 / 删除 / 移动列", "Arranging the Worksheet: Columns and Rows", "P0", PARTIAL, "列插入、删除、清空与稳定列标识已实现；移动列待做", "列操作、引用清理与撤销回归已通过；列移动待实现")
 add(M, "插入 / 删除行", "Arranging the Worksheet: Columns and Rows", "P0", TODO, "", "手动操作")
 add(M, "从 Excel 复制粘贴（多单元格）", "Copying and Pasting Worksheet Data", "P0", DONE, "制表符解析", "单元测试")
-add(M, "鼠标拖动框选单元格、Shift 扩展、复制选区", "Scrolling and Simple Data Selection in the Worksheet", "P0", PROTO, "网页原型已做，待移植到 Rust", "手动操作")
+add(M, "鼠标拖动框选单元格、Shift 扩展、复制选区", "Scrolling and Simple Data Selection in the Worksheet", "P0", REVIEW, "Rust app.rs/sheet.rs 已接入拖动框选、Shift 扩展、复制/剪切/粘贴与清空选区", "选区边界、键盘、剪贴板及撤销回归已通过；真实鼠标与长表人工验收待做")
 add(M, "查找与替换", "Finding and Replacing Worksheet Data", "P1", TODO, "", "手动操作")
 add(M, "数值显示格式（小数位、科学计数、工程单位）", "Controlling How Numeric Data Display in the Worksheet Column", "P0", TODO, "列格式属性", "单元测试")
 add(M, "日期时间列与计算", "Dates and Times in the Worksheet", "P1", TODO, "chrono / jiff", "单元测试")
@@ -63,7 +63,7 @@ add(M, "文本列与分类数据", "Setting Column Designation", "P1", TODO, "�
 add(M, "设置列值（公式列）", "Using Formulae to Set or Transform Worksheet Column Values", "P0", TODO, "自写表达式解析器（col(A)*2+sin(col(B))）", "与 Origin 同公式结果逐行比较")
 add(M, "单元格公式（=A1+B1）", "Using a Formula to Set Cell Values", "P2", TODO, "依赖图 + 增量重算", "单元测试")
 add(M, "生成数据序列（等差、随机数、正态分布）", "Generating Simple Worksheet Datasets", "P1", TODO, "rand / rand_distr", "统计检验分布")
-add(M, "排序（列、工作表、按多列）", "Sorting Worksheet Data", "P0", PROTO, "稳定排序", "单元测试")
+add(M, "排序（列、工作表、按多列）", "Sorting Worksheet Data", "P0", PARTIAL, "按一列稳定排序整张工作表，同行联动，数值/文本/空值规则已实现；独立列排序与多关键字排序待做", "sort_book 行对齐、升降序与撤销回归已通过；其余排序模式待实现")
 add(M, "数据筛选", "Data Filter", "P1", TODO, "", "手动操作")
 add(M, "条件格式（按值着色）", "Conditional Formatting", "P2", TODO, "", "目视检查")
 add(M, "转置", "Transposing Worksheets", "P1", TODO, "", "单元测试")
@@ -78,7 +78,7 @@ add(M, "多工作表（一个工作簿多张表）", "Workbooks", "P0", TODO, "B
 add(M, "工作簿模板", "What is Saved with the Workbook Template (*.OTW or *.OTWU) File?", "P1", TODO, "保存列定义与格式", "套模板后结构一致")
 add(M, "选中数据的状态栏统计", "Scrolling and Simple Data Selection in the Worksheet", "P0", DONE, "", "与手算比较")
 add(M, "单元格内嵌图片 / 迷你图", "Inserting Graphs Images and Other Objects into Worksheet Cells", "P2", TODO, "", "目视检查")
-add(M, "大数据量（百万行流畅滚动）", "Origin Limitations", "P0", PROTO, "虚拟化表格已用；列式存储待改为 f64 数组", "1e6 行滚动帧率")
+add(M, "大数据量（百万行流畅滚动）", "Origin Limitations", "P0", PARTIAL, "虚拟化表格与十万行编辑事务回归已有；百万行性能目标、数值列式存储和绘图抽点待落实", "十万行事务复用/空闲帧测试已通过；百万行滚动帧率及内存验收待做")
 
 # ---------------------------------------------------------------- 矩阵
 M = "矩阵"
@@ -115,10 +115,10 @@ add(M, "导入 Origin 工程中的工作表", "Importing from Origin Project", "
 # ---------------------------------------------------------------- 绘图基础
 M = "绘图基础"
 add(M, "按选列自动配对 X / Y 绘图", "Creating Graphs from Graph Templates", "P0", DONE, "plot_from_selection", "单元测试")
-add(M, "按选区（部分行）绘图", "Creating Graphs from Graph Templates", "P0", PROTO, "网页原型已做", "手动操作")
+add(M, "按选区（部分行）绘图", "Creating Graphs from Graph Templates", "P0", REVIEW, "工作表矩形选区经 picked/PlotSpec.rows 接入作图、图库与保存，按原始行截取", "选区行范围、无效行、项目往返与 SVG 回归已通过；Origin 同数据人工对照待做")
 add(M, "页面-图层-曲线 三层结构", "The Page-Layer-Plot Hierarchy", "P0", DONE, "Graph → Page → Layer → PlotSpec；v0–v2 迁移与显式图层访问", "迁移、往返和 SVG 版面回归测试")
 add(M, "往图层添加 / 移除曲线", "Adding or Swapping Data Plots in the Graph Layer", "P0", TODO, "图层内容对话框", "手动操作")
-add(M, "多图层图形", "Creating Multi-Layer Graphs", "P0", PROTO, "多图层增删、各层属性与独立裁剪；分析与缩放跟随所选图层", "跨工作簿、裁剪、保存与撤销测试；Origin 目视对照待做")
+add(M, "多图层图形", "Creating Multi-Layer Graphs", "P0", REVIEW, "多图层增删、跨工作簿数据、独立属性/裁剪/视图、分析写回目标层已实现", "跨工作簿、布局、裁剪、视图、保存与撤销回归已通过；Origin 多层图人工对照待做")
 add(M, "函数绘图（y = f(x)）", "Plotting Mathematical Functions", "P1", TODO, "复用公式解析器", "与解析值比较")
 add(M, "分组绘图（按分类列分组）", "Plotting Data by Groups", "P1", TODO, "", "与 Origin 比较")
 add(M, "图形缩放、平移", "Zooming on the Graph Page and inside Layer", "P0", DONE, "egui_plot", "手动操作")
@@ -130,8 +130,8 @@ add(M, "坐标轴范围与刻度", "Controlling the Graph Axis Display Range", "
 add(M, "对数轴", "Axes Dialog Reference", "P0", DONE, "", "与 Origin 比较")
 add(M, "其他坐标类型：倒数、概率、log2、ln、Logit", "Axes Dialog Reference", "P1", TODO, "", "与 Origin 比较")
 add(M, "坐标轴断点", "Axes Dialog Reference", "P1", TODO, "", "目视比较")
-add(M, "刻度标签格式（科学计数、日期、自定义）", "Axes Dialog Reference", "P0", PROTO, "a×10ⁿ 已做", "与 Origin 比较")
-add(M, "次刻度、刻度方向、四边框线", "Axes Dialog Reference", "P0", PROTO, "SVG 导出已做，界面待做", "目视比较")
+add(M, "刻度标签格式（科学计数、日期、自定义）", "Axes Dialog Reference", "P0", PARTIAL, "ticks.rs 已实现普通数值、a×10ⁿ 科学计数及对数刻度；日期与用户自定义格式待做", "刻度边界与标签测试已通过；日期/自定义格式待实现")
+add(M, "次刻度、刻度方向、四边框线", "Axes Dialog Reference", "P0", PARTIAL, "屏幕/SVG 共用主次刻度与四边框，当前固定朝内；独立刻度方向设置待做", "共享 scene、刻度与显示比例回归已通过；方向配置及人工目视验收待做")
 add(M, "网格线", "Axes Dialog Reference", "P0", DONE, "", "目视检查")
 add(M, "图例（自动更新）", "Graph Legends", "P0", DONE, "", "目视检查")
 add(M, "图例手动编辑与位置拖动", "Manual Control of the Graph Legend", "P1", TODO, "", "手动操作")
@@ -139,21 +139,21 @@ add(M, "色阶条（Color Scale）", "Color Scales", "P1", TODO, "", "目视检�
 add(M, "文字标签（上下标、希腊字母、富文本）", "Creating Text Labels", "P0", TODO, "迷你标记语言 + cosmic-text 排版", "目视比较")
 add(M, "LaTeX 公式", "Creating Text Labels", "P1", TODO, "评估 typst 或 MathJax 转 SVG", "目视比较")
 add(M, "绘图对象（直线、箭头、矩形、圆）", "Creating and Editing Drawing Objects", "P1", TODO, "", "手动操作")
-add(M, "数据标签", "Adding Labels to Plots", "P1", PROTO, "数值/X-Y/行号/指定列文本，字号/偏移与 scene/SVG", "行对齐、文本转义、柱段值、图层与撤销回归；Origin 目视对照待做")
-add(M, "误差棒", "Adding Error Bars to Your Graph", "P0", PROTO, "对称 X/Y 误差列、稳定关联、端帽/线宽、共享 scene 与 SVG", "行对齐、对数裁剪、分组柱、项目往返和撤销回归；Origin 目视对照待做")
+add(M, "数据标签", "Adding Labels to Plots", "P1", REVIEW, "数值/X-Y/原始行号/指定列文本，字号/偏移、边缘定位、屏幕/SVG 和撤销均已接入", "行对齐、文本转义、柱段值、图层与真实开关回归已通过；密集标签与 Origin 目视验收待做")
+add(M, "误差棒", "Adding Error Bars to Your Graph", "P0", REVIEW, "对称 X/Y 误差列、稳定自动关联、端帽/线宽、分组定位与屏幕/SVG 已实现；本条当前范围为对称误差", "行对齐、对数裁剪、分组柱、往返与撤销回归已通过；Origin 对称误差图目视验收待做")
 add(M, "插入图片 / 表格到图中", "Inserting Image into Graph", "P2", TODO, "", "目视检查")
 add(M, "合并多张图 / 拆分图层", "The Merge Graph Dialog Box", "P1", TODO, "", "目视检查")
-add(M, "图层排列（行列网格、间距）", "The Arrange Layers Dialog Box", "P0", PROTO, "网格与自定义图层矩形、叠放；独立网格间距待做", "布局、命中、透明背景、迁移与撤销测试；Origin 目视对照待做")
+add(M, "图层排列（行列网格、间距）", "The Arrange Layers Dialog Box", "P0", PARTIAL, "网格列数、页面尺寸、自由矩形与透明叠放已实现；独立网格间距/对齐配置待做", "布局、命中、透明背景、迁移与撤销回归已通过；间距配置待实现")
 add(M, "布局页（多图拼版）", "Using the Layout Page Window", "P1", TODO, "", "目视检查")
 add(M, "曲线颜色、线型、符号递增", "Customizing Data Plot Colors", "P0", DONE, "Origin 默认颜色 / 符号顺序", "目视比较")
 add(M, "按数据集控制颜色 / 大小（颜色映射）", "Using a Dataset to Control Plot Color", "P1", TODO, "", "目视比较")
-add(M, "绘图属性对话框（Plot Details）", "Plot Details Controls", "P0", PROTO, "基础项已做，分页完整版待做", "手动操作")
-add(M, "显示范围（只画部分行）", "Editing the Plots Display Range", "P1", PROTO, "", "手动操作")
-add(M, "页面尺寸、背景、边距", "The (Plot Details) Print/Dimensions Tab", "P0", PROTO, "毫米尺寸、统一逻辑画布与图层背景；页面配色、边距待做", "显示缩放比例、SVG 尺寸和项目往返测试")
+add(M, "绘图属性对话框（Plot Details）", "Plot Details Controls", "P0", PARTIAL, "图层级图型、列映射、轴范围、线宽/符号、误差/标签等属性已接入；逐曲线样式和完整分页待做", "真实属性控件与撤销回归已通过；完整 Plot Details 范围待补齐")
+add(M, "显示范围（只画部分行）", "Editing the Plots Display Range", "P1", PARTIAL, "从工作表选区创建并保存部分行绘图已实现；图形中的独立行范围编辑入口待做", "PlotSpec.rows 截取/保存回归已通过；补齐独立编辑入口后验收")
+add(M, "页面尺寸、背景、边距", "The (Plot Details) Print/Dimensions Tab", "P0", PARTIAL, "页面毫米尺寸、固定逻辑画布、图层透明背景已实现；页面配色与可调边距待做", "屏幕缩放、SVG 尺寸与项目往返已通过；配色/边距配置待实现")
 
 # ---------------------------------------------------------------- 图形探索与小工具
 M = "图形探索与小工具"
-add(M, "读取坐标 / 数据点提示", "Reading Coordinate Values in the Graph", "P0", PROTO, "egui_plot 自带悬停坐标", "手动操作")
+add(M, "读取坐标 / 数据点提示", "Reading Coordinate Values in the Graph", "P0", PARTIAL, "自绘 plot.rs 已实现悬停坐标、十字光标与图层定位；最近数据点吸附及点信息提示待做", "坐标逆变换、图层命中与缩放回归已通过；数据点提示待实现")
 add(M, "数据高亮联动（图 ↔ 工作表）", "Data Highlighter: Selecting Points in both Graph and Source Worksheet", "P1", TODO, "", "手动操作")
 add(M, "屏蔽数据点（Mask）", "Masking Data Points in the Graph or Worksheet", "P1", TODO, "掩码位图", "屏蔽后拟合结果与 Origin 比较")
 add(M, "框选 / 删除 / 移动数据点", "Drawing or Moving, or Deleting Data Points", "P2", TODO, "", "手动操作")
@@ -170,8 +170,8 @@ add(M, "曲线数字化（从图片取点）", "Digitizer", "P1", TODO, "image +
 
 # ---------------------------------------------------------------- 拟合
 M = "回归与拟合"
-add(M, "线性回归（斜率、截距、标准误、R²、残差）", "The Linear Regression Dialog Box", "P0", PROTO, "faer / nalgebra 最小二乘", "NIST StRD 线性数据集 + Origin 结果")
-add(M, "多项式回归", "The Polynomial Regression Dialog Box", "P0", PROTO, "QR 分解", "NIST StRD（Wampler 系列）")
+add(M, "线性回归（斜率、截距、标准误、R²、残差）", "The Linear Regression Dialog Box", "P0", PARTIAL, "已实现斜率/截距、标准误、R²、残差平方和及报告；逐点残差输出/残差图待做", "教材参考值与拟合写回回归已通过；补齐残差输出后做 NIST/Origin 对照")
+add(M, "多项式回归", "The Polynomial Regression Dialog Box", "P0", REVIEW, "X 标准化后的正规方程与高斯–约当求逆；2–6 阶拟合、参数标准误、R²、曲线及撤销已接入", "解析/仿真回归已通过；NIST Wampler、Origin 及高阶数值稳定性验收待做")
 add(M, "多元线性回归", "The Multiple Linear Regression Dialog Box", "P1", TODO, "", "NIST StRD（Longley）")
 add(M, "含 X 误差的线性拟合（York 法）", "The Linear Fit with X Error Dialog (Pro Only)", "P2", TODO, "", "与 Origin 比较")
 add(M, "非线性拟合引擎（Levenberg–Marquardt）", "Theory of Nonlinear Curve Fitting", "P0", TODO, "自写 LM 或 levenberg-marquardt crate", "NIST StRD 非线性数据集（27 组，含高难度）")
@@ -187,7 +187,7 @@ add(M, "隐函数拟合（圆、椭圆等 5 个）", "Nonlinear Implicit Curve F
 add(M, "曲面拟合（22 个内置函数）", "Non-linear Surface Fitting", "P2", TODO, "", "与 Origin 比较")
 add(M, "拟合比较（F 检验、AIC、BIC）", "Fit Comparison", "P1", TODO, "", "与 Origin 比较")
 add(M, "标准曲线反查 X / Y", "Finding Y/X from X/Y Standard Curves", "P1", TODO, "", "与 Origin 比较")
-add(M, "快速拟合（菜单一键）", "Quick Fit", "P0", PROTO, "", "手动操作")
+add(M, "快速拟合（菜单一键）", "Quick Fit", "P0", REVIEW, "线性拟合一键命令、多项式阶数对话框、报告和结果写回已接入", "命令、对话框确认/取消、目标图层与撤销回归已通过；完整人工工作流验收待做")
 
 FIT_GROUPS = [
     ("内置拟合函数：峰函数（Gauss、Lorentz、Voigt、PsdVoigt、LogNormal 等）", "P0"),
@@ -303,7 +303,7 @@ add(M, "图像分析（粒子计数、剖面）", "Image Analysis", "P2", TODO, 
 # ---------------------------------------------------------------- 导出发布
 M = "导出与发布"
 add(M, "导出 SVG", "Exporting Your Graph or Layout Page to an Image File", "P0", DONE, "svg.rs", "目视比较 Origin 导出图")
-add(M, "导出 PNG（指定 DPI）", "The Export Graph as Image Dialog Box", "P0", PROTO, "resvg / tiny-skia 渲染 SVG；网页原型已有", "像素尺寸检查")
+add(M, "导出 PNG（指定 DPI）", "The Export Graph as Image Dialog Box", "P0", TODO, "当前 Rust 桌面版只有 SVG 导出入口；PNG 栅格化、指定 DPI 和保存流程待实现，旧网页演示不计桌面功能", "实现后核对毫米尺寸/DPI 对应的像素尺寸与透明度")
 add(M, "导出 PDF（矢量，嵌入字体）", "Which Export Format Should I Choose", "P0", TODO, "svg2pdf / krilla", "用 PDF 阅读器检查")
 add(M, "导出 EPS", "Which Export Format Should I Choose", "P1", TODO, "自写 PostScript 输出", "LaTeX 编译检查")
 add(M, "导出 TIFF（期刊要求）", "Which Export Format Should I Choose", "P1", TODO, "image", "尺寸与 DPI 检查")
@@ -451,7 +451,7 @@ THREE_D = {
     "3D 100% Stacked Bar Graph": "3D 百分比堆叠柱状图", "3D Floating Bar Graph": "3D 浮动柱状图", "3D Vector XYZ XYZ": "3D 矢量（XYZ XYZ）",
     "3D Vector XYZ dXdYdZ": "3D 矢量（XYZ dXdYdZ）", "3D Ternary Symbol": "3D 三元散点", "3D Tetrahedral(Quaternary Phase Diagram)": "四面体图（四元相图）",
 }
-PROTO_GRAPHS = {"Horizontal Step Graph", "Vertical Step Graph"}
+STEP_GRAPHS = {"Horizontal Step Graph", "Vertical Step Graph"}
 ERROR_GRAPHS = {"Y Error Bar Graph", "XY Error Bar Graph"}
 BAR_GRAPHS = {"Stacked Column Graph", "100% Stacked Column Graph", "Floating Column Graph"}
 FILL_GRAPHS = {"Bar Graph", "Area Graph"}
@@ -515,9 +515,9 @@ for cat, (cn_cat, table) in GT.items():
             cn, p = table.get(en, (en, "P2"))
         else:
             cn, p = THREE_D.get(en, en), ("P1" if en in P1_3D else "P2")
-        status = DONE if en in DONE_GRAPHS else PROTO if en in PROTO_GRAPHS | ERROR_GRAPHS | BAR_GRAPHS | FILL_GRAPHS | SPLINE_GRAPHS else TODO
+        status = DONE if en in DONE_GRAPHS else REVIEW if en in STEP_GRAPHS | ERROR_GRAPHS | BAR_GRAPHS | FILL_GRAPHS | SPLINE_GRAPHS else TODO
         how, verify = graph_how(cat, en), "与 Origin 同数据出图目视比较"
-        if en in PROTO_GRAPHS:
+        if en in STEP_GRAPHS:
             how, verify = "阶梯折线图元 + SVG 共享排版", "拐点几何、拟合线与项目往返测试；Origin 目视对照待做"
         elif en in ERROR_GRAPHS:
             how, verify = "对称误差列自动关联 + scene/SVG 共享图元", "关联、端点几何、裁剪和撤销回归；Origin 目视对照待做"
@@ -529,11 +529,101 @@ for cat, (cn_cat, table) in GT.items():
             how, verify = "自然三次样条 / 零基线垂线 / 数据标签 + scene/SVG", "SciPy 数值对照、分段、SVG、标签和撤销回归；Origin 目视对照待做"
         add("图类型 · " + cn_cat, cn, en, p, status, how, verify)
 
-# 网页原型已实现、Rust 版待移植的条目
-PROTO_FEATURES = ("数值积分", "数值微分", "归一化", "列统计", "平滑（移动平均")
+# 2026-10-16 桌面代码审计；逐条区分缺功能与待验收，不以旧网页演示计完成度。
+AUDITED_FEATURES = {
+  "数值积分（梯形法、曲线下面积）": {
+    "status": "已实现待验收",
+    "how": "analysis.rs/ops.rs 已实现梯形积分、累计积分结果与绝对面积选项",
+    "verify": "解析积分、行对齐与结果写回回归已通过；Origin/SciPy 多组参考对照待做"
+  },
+  "数值微分（含 Savitzky-Golay 平滑求导）": {
+    "status": "部分实现",
+    "how": "有限差分微分和独立 Savitzky–Golay 平滑已实现；直接 SG 平滑求导入口待做",
+    "verify": "解析函数微分与结果列回归已通过；组合求导功能待补齐"
+  },
+  "归一化（最大值、Z 分数、区间缩放）": {
+    "status": "已实现待验收",
+    "how": "已接入除以最大值、Z 分数、区间缩放，结果写入派生列并支持撤销",
+    "verify": "算法参考值、写回及撤销回归已通过；Origin/SciPy 多组数值验收待做"
+  },
+  "列统计（均值、标准差、中位数、分位数等）": {
+    "status": "已实现待验收",
+    "how": "已接入 N、均值、样本标准差、标准误、中位数、线性插值分位数、极值与总和，生成结果工作簿",
+    "verify": "描述统计与结果表回归已通过；Origin/SciPy/R 整组参考值对照待做"
+  },
+  "平滑（移动平均、Savitzky-Golay、FFT 平滑、LOWESS）": {
+    "status": "部分实现",
+    "how": "移动平均与二阶 Savitzky–Golay 已接入；FFT 平滑与 LOWESS 待做",
+    "verify": "已有算法、窗口边界、写回与撤销回归已通过；补齐其余方法后验收"
+  },
+  "水平阶梯图": {
+    "status": "已实现待验收",
+    "how": "水平阶梯：先横后竖，共享折线图元与 SVG",
+    "verify": "拐点几何、拟合线、保存与撤销回归已通过；Origin 同数据目视验收待做"
+  },
+  "垂直阶梯图": {
+    "status": "已实现待验收",
+    "how": "垂直阶梯：先竖后横，共享折线图元与 SVG",
+    "verify": "拐点几何、拟合线、保存与撤销回归已通过；Origin 同数据目视验收待做"
+  },
+  "样条曲线图": {
+    "status": "已实现待验收",
+    "how": "自然三次样条、缺失/重复 X 分段、自动范围与共享折线图元",
+    "verify": "解析值和 SciPy 1.17.1 自然边界对照、分段及 SVG 回归已通过；Origin 同数据目视验收待做"
+  },
+  "Y 误差棒图": {
+    "status": "已实现待验收",
+    "how": "Y 对称误差列自动关联、端帽/线宽、裁剪与共享线段图元",
+    "verify": "端点几何、无效值、保存与撤销回归已通过；Origin 同数据目视验收待做"
+  },
+  "XY 误差棒图": {
+    "status": "已实现待验收",
+    "how": "对称 X/Y 误差列自动关联、方向转换、端帽/线宽与共享图元",
+    "verify": "关联、端点几何、裁剪及撤销回归已通过；Origin 同数据目视验收待做"
+  },
+  "垂线图": {
+    "status": "已实现待验收",
+    "how": "原始点到零基线的垂线，对数轴使用显示下界；符号/线宽与 SVG 共用",
+    "verify": "正负值、对数基线、SVG 线段和撤销回归已通过；Origin 同数据目视验收待做"
+  },
+  "样条连接点线图": {
+    "status": "已实现待验收",
+    "how": "自然三次样条连接，符号与误差保持原始点；派生线独立绘制",
+    "verify": "SciPy 数值、符号数、分段、自动范围及撤销回归已通过；Origin 同数据目视验收待做"
+  },
+  "带标签柱状图": {
+    "status": "已实现待验收",
+    "how": "柱图配合数值/X-Y/行号/指定列数据标签，字号与偏移可调",
+    "verify": "标签行对齐、段值、边缘定位、SVG 与撤销回归已通过；Origin 同数据目视验收待做"
+  },
+  "条形图": {
+    "status": "已实现待验收",
+    "how": "数值型条形图、并排分组、误差换向、物理轴范围与共享矩形",
+    "verify": "轴方向、正负值、分组误差、SVG 与撤销回归已通过；Origin 同数据目视验收待做"
+  },
+  "堆叠柱状图": {
+    "status": "已实现待验收",
+    "how": "按原始行与 X 对齐，正负柱段分别累加，共享矩形与 SVG",
+    "verify": "缺失行、正负值、段几何、误差与撤销回归已通过；Origin 同数据目视验收待做"
+  },
+  "百分比堆叠柱状图": {
+    "status": "已实现待验收",
+    "how": "按行正负组分别归一至 ±100%，零总量与极端尺度处理，共享 SVG",
+    "verify": "归一化参考值、极端数值、误差缩放及撤销回归已通过；Origin 同数据目视验收待做"
+  },
+  "浮动柱状图": {
+    "status": "已实现待验收",
+    "how": "上下端列稳定配对、完整行过滤、反向区间、多组排列与共享 SVG",
+    "verify": "配对、删列/复用、矩形、对数裁剪与撤销回归已通过；Origin 同数据目视验收待做"
+  },
+  "面积图": {
+    "status": "已实现待验收",
+    "how": "按连续有效行分段、跨零三角剖分、透明度、边界线与共享 SVG",
+    "verify": "面积积分、缺口、对数裁剪、网格缩放与撤销回归已通过；Origin 同数据目视验收待做"
+  }
+}
 for r in rows:
-    if r["status"] == TODO and r["feature"].startswith(PROTO_FEATURES):
-        r["status"] = PROTO
+    r.update(AUDITED_FEATURES.get(r["feature"], {}))
 
 # ---------------------------------------------------------------- 输出
 for i, r in enumerate(rows, 1):
@@ -556,13 +646,16 @@ md = [
     "本清单只记录功能点，不包含 Origin 文档正文。实现时按公开说明和观察到的行为编写，不复制 Origin 的代码、文字或图片。",
     "",
     f"共 {len(rows)} 项：" + "，".join(f"{k} {by_pri[k]} 项" for k in ["P0", "P1", "P2", "不做"]) + "。",
-    "状态：" + "，".join(f"{k} {by_status[k]} 项" for k in [DONE, PROTO, TODO, SKIP]) + "。",
+    "状态：" + "，".join(f"{k} {by_status[k]} 项" for k in [DONE, REVIEW, PARTIAL, TODO, SKIP]) + "。",
     "",
     "- **P0 / M1 日常够用**：一个人做日常数据处理和论文作图需要的最小集合。",
     "- **P1 / M2 论文全流程**：拟合报告、统计检验、多面板、信号处理等，覆盖大部分论文工作。",
     "- **P2 / M3 高级功能**：3D、专业图、Pro 版统计、图像处理等。",
     "- **不做**：脚本兼容（LabTalk、Origin C、X-Function）、Origin 私有工程格式、与特定外部软件的连接。",
-    "- **状态“原型”**：网页原型已实现，Rust 版待移植或部分完成。",
+    "- **部分实现**：Rust 桌面版已有部分能力，本条仍有明确功能缺口；实现方案中列出待补内容。",
+    "- **已实现待验收**：本条所列功能范围已接入桌面工作流，现有自动化检查已覆盖，仍需完成列出的人工、参考软件或专项验收。",
+    "- **已完成**：按当前条目范围完成实现与既定验证；后续发现问题继续修复。",
+    "- **未开始**：当前桌面版尚无可用实现；旧网页演示单独说明，不计作桌面完成度。",
     "",
     "验证原则：分析结果与 Origin 及 NIST StRD 认证数据集、SciPy / R 交叉比对；图形与 Origin 同数据出图目视比较。",
     "",

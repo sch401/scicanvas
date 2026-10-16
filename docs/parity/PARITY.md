@@ -4,13 +4,16 @@
 本清单只记录功能点，不包含 Origin 文档正文。实现时按公开说明和观察到的行为编写，不复制 Origin 的代码、文字或图片。
 
 共 488 项：P0 87 项，P1 136 项，P2 254 项，不做 11 项。
-状态：已完成 27 项，原型 41 项，未开始 409 项，不做 11 项。
+状态：已完成 27 项，已实现待验收 24 项，部分实现 16 项，未开始 410 项，不做 11 项。
 
 - **P0 / M1 日常够用**：一个人做日常数据处理和论文作图需要的最小集合。
 - **P1 / M2 论文全流程**：拟合报告、统计检验、多面板、信号处理等，覆盖大部分论文工作。
 - **P2 / M3 高级功能**：3D、专业图、Pro 版统计、图像处理等。
 - **不做**：脚本兼容（LabTalk、Origin C、X-Function）、Origin 私有工程格式、与特定外部软件的连接。
-- **状态“原型”**：网页原型已实现，Rust 版待移植或部分完成。
+- **部分实现**：Rust 桌面版已有部分能力，本条仍有明确功能缺口；实现方案中列出待补内容。
+- **已实现待验收**：本条所列功能范围已接入桌面工作流，现有自动化检查已覆盖，仍需完成列出的人工、参考软件或专项验收。
+- **已完成**：按当前条目范围完成实现与既定验证；后续发现问题继续修复。
+- **未开始**：当前桌面版尚无可用实现；旧网页演示单独说明，不计作桌面完成度。
 
 验证原则：分析结果与 Origin 及 NIST StRD 认证数据集、SciPy / R 交叉比对；图形与 Origin 同数据出图目视比较。
 
@@ -23,8 +26,8 @@
 |---|---|---|---|---|---|---|
 | F001 | 多文档子窗口（拖动、缩放、最小化、最大化） | Basic Child Window Operations | P0 | 已完成 | 自绘 MDI；拖动/缩放、最小化换行、最大化/还原与统一窗口命令 | 真实 egui 拖动、缩放、窗口按钮与几何恢复回归 |
 | F002 | 项目管理器（文件夹树、显示 / 隐藏窗口） | Project Explorer | P0 | 已完成 | 真实多级文件夹树；新建/重命名/菜单移动/删除保留内容；显示与隐藏窗口 | 层级、循环拦截、目录继承、保存迁移和撤销回归 |
-| F003 | 项目管理器多级文件夹、拖动整理 | Using Project Explorer to Manage Child Windows | P1 | 原型 | 多级文件夹与菜单移动已做；拖放整理待做 | 项目树与移动命令回归；拖放验收待做 |
-| F004 | 窗口排列：层叠 / 平铺 | Arrange Windows | P1 | 原型 | 按工作区矩形计算位置 | 手动操作 |
+| F003 | 项目管理器多级文件夹、拖动整理 | Using Project Explorer to Manage Child Windows | P1 | 部分实现 | 真实多级目录、新建/重命名/菜单移动/删除保留内容已实现；拖放整理待做 | 项目树与移动命令回归已通过；补齐拖放后验收 |
+| F004 | 窗口排列：层叠 / 平铺 | Arrange Windows | P1 | 已实现待验收 | app.rs 已接入层叠/平铺命令，按工作区尺寸排列可见窗口并恢复普通状态 | 窗口基础回归已通过；不同窗口数、窄工作区与显示缩放的人工验收待做 |
 | F005 | 项目文件保存 / 打开 | Opening, Closing and Backing Up the Origin Project File | P0 | 已完成 | v8 .scproj、v0–v7 迁移、文件夹校验、同目录临时文件替换 | 项目/文件夹往返、损坏引用、旧文件迁移与保存失败回归 |
 | F006 | 自动备份与崩溃恢复 | Opening, Closing and Backing Up the Origin Project File | P1 | 未开始 | 定时写临时文件 | 强制退出后恢复 |
 | F007 | 最近打开的文件 | Recent Origin Files | P1 | 未开始 | 配置文件记录 | 手动操作 |
@@ -34,7 +37,7 @@
 | F011 | Notes 文本窗口 / Markdown 报告 | Notes Window | P2 | 未开始 | egui_commonmark | 手动操作 |
 | F012 | 命令窗口（交互式脚本） | The Origin Command Window and Script Window | P1 | 未开始 | 嵌入 Python（PyO3） | 执行脚本修改工作表 |
 | F013 | 深色模式 | Dark Mode | P0 | 已完成 | 浅色、深色、跟随系统三种选择；统一主题命令 | 主题切换命令与项目数据不变回归 |
-| F014 | 快捷键与自定义快捷键 | Hotkeys | P1 | 原型 | 固定快捷键已做，自定义待做 | 手动操作 |
+| F014 | 快捷键与自定义快捷键 | Hotkeys | P1 | 部分实现 | 固定快捷键与命令面板已实现；用户自定义快捷键与冲突配置待做 | 固定快捷键、文字框撤销回归已通过；自定义部分待实现 |
 | F015 | 全文搜索（在项目中查找） | Finding in Origin Project | P2 | 未开始 | 遍历项目数据 | 手动操作 |
 | F016 | 工程保护（密码） | Protecting Origin Projects | P2 | 未开始 | age / chacha20poly1305 加密 | 加密→解密往返 |
 | F017 | 中文界面 | — | P0 | 已完成 | 简体中文界面，Windows 系统中文字体回退 | 中文菜单与项目树控件回归 |
@@ -51,11 +54,11 @@
 | F023 | 单元格输入与编辑 | Basic Operations on Worksheet | P0 | 已完成 | egui_extras TableBuilder | 手动操作 |
 | F024 | 长名称 / 单位 / 注释表头行 | Displaying Supporting Data in Worksheet Header Rows | P0 | 已完成 | 列元数据 | 轴标题自动取“长名称 (单位)” |
 | F025 | 自定义表头行（参数、采样间隔、迷你图等） | Displaying Supporting Data in Worksheet Header Rows | P1 | 未开始 | 可扩展的表头行定义 | 手动操作 |
-| F026 | 列属性：X / Y / Z / X误差 / Y误差 / 标签 / 忽略 | Setting Column Designation | P0 | 原型 | X / Y / X误差 / Y误差 / 忽略已做；Z 和标签待做 | 自动关联、插列、删除与撤销回归；Origin 目视对照待做 |
-| F027 | 插入 / 删除 / 移动列 | Arranging the Worksheet: Columns and Rows | P0 | 原型 | 插入、删除已做，拖动移动待做 | 手动操作 |
+| F026 | 列属性：X / Y / Z / X误差 / Y误差 / 标签 / 忽略 | Setting Column Designation | P0 | 部分实现 | X/Y/X误差/Y误差/忽略及误差自动关联已实现；Z 与专用标签列角色待做 | 误差关联、删除/插列与撤销回归已通过；补齐其余角色后验收 |
+| F027 | 插入 / 删除 / 移动列 | Arranging the Worksheet: Columns and Rows | P0 | 部分实现 | 列插入、删除、清空与稳定列标识已实现；移动列待做 | 列操作、引用清理与撤销回归已通过；列移动待实现 |
 | F028 | 插入 / 删除行 | Arranging the Worksheet: Columns and Rows | P0 | 未开始 | — | 手动操作 |
 | F029 | 从 Excel 复制粘贴（多单元格） | Copying and Pasting Worksheet Data | P0 | 已完成 | 制表符解析 | 单元测试 |
-| F030 | 鼠标拖动框选单元格、Shift 扩展、复制选区 | Scrolling and Simple Data Selection in the Worksheet | P0 | 原型 | 网页原型已做，待移植到 Rust | 手动操作 |
+| F030 | 鼠标拖动框选单元格、Shift 扩展、复制选区 | Scrolling and Simple Data Selection in the Worksheet | P0 | 已实现待验收 | Rust app.rs/sheet.rs 已接入拖动框选、Shift 扩展、复制/剪切/粘贴与清空选区 | 选区边界、键盘、剪贴板及撤销回归已通过；真实鼠标与长表人工验收待做 |
 | F031 | 查找与替换 | Finding and Replacing Worksheet Data | P1 | 未开始 | — | 手动操作 |
 | F032 | 数值显示格式（小数位、科学计数、工程单位） | Controlling How Numeric Data Display in the Worksheet Column | P0 | 未开始 | 列格式属性 | 单元测试 |
 | F033 | 日期时间列与计算 | Dates and Times in the Worksheet | P1 | 未开始 | chrono / jiff | 单元测试 |
@@ -63,7 +66,7 @@
 | F035 | 设置列值（公式列） | Using Formulae to Set or Transform Worksheet Column Values | P0 | 未开始 | 自写表达式解析器（col(A)*2+sin(col(B))） | 与 Origin 同公式结果逐行比较 |
 | F036 | 单元格公式（=A1+B1） | Using a Formula to Set Cell Values | P2 | 未开始 | 依赖图 + 增量重算 | 单元测试 |
 | F037 | 生成数据序列（等差、随机数、正态分布） | Generating Simple Worksheet Datasets | P1 | 未开始 | rand / rand_distr | 统计检验分布 |
-| F038 | 排序（列、工作表、按多列） | Sorting Worksheet Data | P0 | 原型 | 稳定排序 | 单元测试 |
+| F038 | 排序（列、工作表、按多列） | Sorting Worksheet Data | P0 | 部分实现 | 按一列稳定排序整张工作表，同行联动，数值/文本/空值规则已实现；独立列排序与多关键字排序待做 | sort_book 行对齐、升降序与撤销回归已通过；其余排序模式待实现 |
 | F039 | 数据筛选 | Data Filter | P1 | 未开始 | — | 手动操作 |
 | F040 | 条件格式（按值着色） | Conditional Formatting | P2 | 未开始 | — | 目视检查 |
 | F041 | 转置 | Transposing Worksheets | P1 | 未开始 | — | 单元测试 |
@@ -78,7 +81,7 @@
 | F050 | 工作簿模板 | What is Saved with the Workbook Template (*.OTW or *.OTWU) File? | P1 | 未开始 | 保存列定义与格式 | 套模板后结构一致 |
 | F051 | 选中数据的状态栏统计 | Scrolling and Simple Data Selection in the Worksheet | P0 | 已完成 | — | 与手算比较 |
 | F052 | 单元格内嵌图片 / 迷你图 | Inserting Graphs Images and Other Objects into Worksheet Cells | P2 | 未开始 | — | 目视检查 |
-| F053 | 大数据量（百万行流畅滚动） | Origin Limitations | P0 | 原型 | 虚拟化表格已用；列式存储待改为 f64 数组 | 1e6 行滚动帧率 |
+| F053 | 大数据量（百万行流畅滚动） | Origin Limitations | P0 | 部分实现 | 虚拟化表格与十万行编辑事务回归已有；百万行性能目标、数值列式存储和绘图抽点待落实 | 十万行事务复用/空闲帧测试已通过；百万行滚动帧率及内存验收待做 |
 
 ## 矩阵
 
@@ -121,10 +124,10 @@
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
 |---|---|---|---|---|---|---|
 | F080 | 按选列自动配对 X / Y 绘图 | Creating Graphs from Graph Templates | P0 | 已完成 | plot_from_selection | 单元测试 |
-| F081 | 按选区（部分行）绘图 | Creating Graphs from Graph Templates | P0 | 原型 | 网页原型已做 | 手动操作 |
+| F081 | 按选区（部分行）绘图 | Creating Graphs from Graph Templates | P0 | 已实现待验收 | 工作表矩形选区经 picked/PlotSpec.rows 接入作图、图库与保存，按原始行截取 | 选区行范围、无效行、项目往返与 SVG 回归已通过；Origin 同数据人工对照待做 |
 | F082 | 页面-图层-曲线 三层结构 | The Page-Layer-Plot Hierarchy | P0 | 已完成 | Graph → Page → Layer → PlotSpec；v0–v2 迁移与显式图层访问 | 迁移、往返和 SVG 版面回归测试 |
 | F083 | 往图层添加 / 移除曲线 | Adding or Swapping Data Plots in the Graph Layer | P0 | 未开始 | 图层内容对话框 | 手动操作 |
-| F084 | 多图层图形 | Creating Multi-Layer Graphs | P0 | 原型 | 多图层增删、各层属性与独立裁剪；分析与缩放跟随所选图层 | 跨工作簿、裁剪、保存与撤销测试；Origin 目视对照待做 |
+| F084 | 多图层图形 | Creating Multi-Layer Graphs | P0 | 已实现待验收 | 多图层增删、跨工作簿数据、独立属性/裁剪/视图、分析写回目标层已实现 | 跨工作簿、布局、裁剪、视图、保存与撤销回归已通过；Origin 多层图人工对照待做 |
 | F085 | 函数绘图（y = f(x)） | Plotting Mathematical Functions | P1 | 未开始 | 复用公式解析器 | 与解析值比较 |
 | F086 | 分组绘图（按分类列分组） | Plotting Data by Groups | P1 | 未开始 | — | 与 Origin 比较 |
 | F087 | 图形缩放、平移 | Zooming on the Graph Page and inside Layer | P0 | 已完成 | egui_plot | 手动操作 |
@@ -136,8 +139,8 @@
 | F093 | 对数轴 | Axes Dialog Reference | P0 | 已完成 | — | 与 Origin 比较 |
 | F094 | 其他坐标类型：倒数、概率、log2、ln、Logit | Axes Dialog Reference | P1 | 未开始 | — | 与 Origin 比较 |
 | F095 | 坐标轴断点 | Axes Dialog Reference | P1 | 未开始 | — | 目视比较 |
-| F096 | 刻度标签格式（科学计数、日期、自定义） | Axes Dialog Reference | P0 | 原型 | a×10ⁿ 已做 | 与 Origin 比较 |
-| F097 | 次刻度、刻度方向、四边框线 | Axes Dialog Reference | P0 | 原型 | SVG 导出已做，界面待做 | 目视比较 |
+| F096 | 刻度标签格式（科学计数、日期、自定义） | Axes Dialog Reference | P0 | 部分实现 | ticks.rs 已实现普通数值、a×10ⁿ 科学计数及对数刻度；日期与用户自定义格式待做 | 刻度边界与标签测试已通过；日期/自定义格式待实现 |
+| F097 | 次刻度、刻度方向、四边框线 | Axes Dialog Reference | P0 | 部分实现 | 屏幕/SVG 共用主次刻度与四边框，当前固定朝内；独立刻度方向设置待做 | 共享 scene、刻度与显示比例回归已通过；方向配置及人工目视验收待做 |
 | F098 | 网格线 | Axes Dialog Reference | P0 | 已完成 | — | 目视检查 |
 | F099 | 图例（自动更新） | Graph Legends | P0 | 已完成 | — | 目视检查 |
 | F100 | 图例手动编辑与位置拖动 | Manual Control of the Graph Legend | P1 | 未开始 | — | 手动操作 |
@@ -145,23 +148,23 @@
 | F102 | 文字标签（上下标、希腊字母、富文本） | Creating Text Labels | P0 | 未开始 | 迷你标记语言 + cosmic-text 排版 | 目视比较 |
 | F103 | LaTeX 公式 | Creating Text Labels | P1 | 未开始 | 评估 typst 或 MathJax 转 SVG | 目视比较 |
 | F104 | 绘图对象（直线、箭头、矩形、圆） | Creating and Editing Drawing Objects | P1 | 未开始 | — | 手动操作 |
-| F105 | 数据标签 | Adding Labels to Plots | P1 | 原型 | 数值/X-Y/行号/指定列文本，字号/偏移与 scene/SVG | 行对齐、文本转义、柱段值、图层与撤销回归；Origin 目视对照待做 |
-| F106 | 误差棒 | Adding Error Bars to Your Graph | P0 | 原型 | 对称 X/Y 误差列、稳定关联、端帽/线宽、共享 scene 与 SVG | 行对齐、对数裁剪、分组柱、项目往返和撤销回归；Origin 目视对照待做 |
+| F105 | 数据标签 | Adding Labels to Plots | P1 | 已实现待验收 | 数值/X-Y/原始行号/指定列文本，字号/偏移、边缘定位、屏幕/SVG 和撤销均已接入 | 行对齐、文本转义、柱段值、图层与真实开关回归已通过；密集标签与 Origin 目视验收待做 |
+| F106 | 误差棒 | Adding Error Bars to Your Graph | P0 | 已实现待验收 | 对称 X/Y 误差列、稳定自动关联、端帽/线宽、分组定位与屏幕/SVG 已实现；本条当前范围为对称误差 | 行对齐、对数裁剪、分组柱、往返与撤销回归已通过；Origin 对称误差图目视验收待做 |
 | F107 | 插入图片 / 表格到图中 | Inserting Image into Graph | P2 | 未开始 | — | 目视检查 |
 | F108 | 合并多张图 / 拆分图层 | The Merge Graph Dialog Box | P1 | 未开始 | — | 目视检查 |
-| F109 | 图层排列（行列网格、间距） | The Arrange Layers Dialog Box | P0 | 原型 | 网格与自定义图层矩形、叠放；独立网格间距待做 | 布局、命中、透明背景、迁移与撤销测试；Origin 目视对照待做 |
+| F109 | 图层排列（行列网格、间距） | The Arrange Layers Dialog Box | P0 | 部分实现 | 网格列数、页面尺寸、自由矩形与透明叠放已实现；独立网格间距/对齐配置待做 | 布局、命中、透明背景、迁移与撤销回归已通过；间距配置待实现 |
 | F110 | 布局页（多图拼版） | Using the Layout Page Window | P1 | 未开始 | — | 目视检查 |
 | F111 | 曲线颜色、线型、符号递增 | Customizing Data Plot Colors | P0 | 已完成 | Origin 默认颜色 / 符号顺序 | 目视比较 |
 | F112 | 按数据集控制颜色 / 大小（颜色映射） | Using a Dataset to Control Plot Color | P1 | 未开始 | — | 目视比较 |
-| F113 | 绘图属性对话框（Plot Details） | Plot Details Controls | P0 | 原型 | 基础项已做，分页完整版待做 | 手动操作 |
-| F114 | 显示范围（只画部分行） | Editing the Plots Display Range | P1 | 原型 | — | 手动操作 |
-| F115 | 页面尺寸、背景、边距 | The (Plot Details) Print/Dimensions Tab | P0 | 原型 | 毫米尺寸、统一逻辑画布与图层背景；页面配色、边距待做 | 显示缩放比例、SVG 尺寸和项目往返测试 |
+| F113 | 绘图属性对话框（Plot Details） | Plot Details Controls | P0 | 部分实现 | 图层级图型、列映射、轴范围、线宽/符号、误差/标签等属性已接入；逐曲线样式和完整分页待做 | 真实属性控件与撤销回归已通过；完整 Plot Details 范围待补齐 |
+| F114 | 显示范围（只画部分行） | Editing the Plots Display Range | P1 | 部分实现 | 从工作表选区创建并保存部分行绘图已实现；图形中的独立行范围编辑入口待做 | PlotSpec.rows 截取/保存回归已通过；补齐独立编辑入口后验收 |
+| F115 | 页面尺寸、背景、边距 | The (Plot Details) Print/Dimensions Tab | P0 | 部分实现 | 页面毫米尺寸、固定逻辑画布、图层透明背景已实现；页面配色与可调边距待做 | 屏幕缩放、SVG 尺寸与项目往返已通过；配色/边距配置待实现 |
 
 ## 图形探索与小工具
 
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
 |---|---|---|---|---|---|---|
-| F116 | 读取坐标 / 数据点提示 | Reading Coordinate Values in the Graph | P0 | 原型 | egui_plot 自带悬停坐标 | 手动操作 |
+| F116 | 读取坐标 / 数据点提示 | Reading Coordinate Values in the Graph | P0 | 部分实现 | 自绘 plot.rs 已实现悬停坐标、十字光标与图层定位；最近数据点吸附及点信息提示待做 | 坐标逆变换、图层命中与缩放回归已通过；数据点提示待实现 |
 | F117 | 数据高亮联动（图 ↔ 工作表） | Data Highlighter: Selecting Points in both Graph and Source Worksheet | P1 | 未开始 | — | 手动操作 |
 | F118 | 屏蔽数据点（Mask） | Masking Data Points in the Graph or Worksheet | P1 | 未开始 | 掩码位图 | 屏蔽后拟合结果与 Origin 比较 |
 | F119 | 框选 / 删除 / 移动数据点 | Drawing or Moving, or Deleting Data Points | P2 | 未开始 | — | 手动操作 |
@@ -180,8 +183,8 @@
 
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
 |---|---|---|---|---|---|---|
-| F130 | 线性回归（斜率、截距、标准误、R²、残差） | The Linear Regression Dialog Box | P0 | 原型 | faer / nalgebra 最小二乘 | NIST StRD 线性数据集 + Origin 结果 |
-| F131 | 多项式回归 | The Polynomial Regression Dialog Box | P0 | 原型 | QR 分解 | NIST StRD（Wampler 系列） |
+| F130 | 线性回归（斜率、截距、标准误、R²、残差） | The Linear Regression Dialog Box | P0 | 部分实现 | 已实现斜率/截距、标准误、R²、残差平方和及报告；逐点残差输出/残差图待做 | 教材参考值与拟合写回回归已通过；补齐残差输出后做 NIST/Origin 对照 |
+| F131 | 多项式回归 | The Polynomial Regression Dialog Box | P0 | 已实现待验收 | X 标准化后的正规方程与高斯–约当求逆；2–6 阶拟合、参数标准误、R²、曲线及撤销已接入 | 解析/仿真回归已通过；NIST Wampler、Origin 及高阶数值稳定性验收待做 |
 | F132 | 多元线性回归 | The Multiple Linear Regression Dialog Box | P1 | 未开始 | — | NIST StRD（Longley） |
 | F133 | 含 X 误差的线性拟合（York 法） | The Linear Fit with X Error Dialog (Pro Only) | P2 | 未开始 | — | 与 Origin 比较 |
 | F134 | 非线性拟合引擎（Levenberg–Marquardt） | Theory of Nonlinear Curve Fitting | P0 | 未开始 | 自写 LM 或 levenberg-marquardt crate | NIST StRD 非线性数据集（27 组，含高难度） |
@@ -197,7 +200,7 @@
 | F144 | 曲面拟合（22 个内置函数） | Non-linear Surface Fitting | P2 | 未开始 | — | 与 Origin 比较 |
 | F145 | 拟合比较（F 检验、AIC、BIC） | Fit Comparison | P1 | 未开始 | — | 与 Origin 比较 |
 | F146 | 标准曲线反查 X / Y | Finding Y/X from X/Y Standard Curves | P1 | 未开始 | — | 与 Origin 比较 |
-| F147 | 快速拟合（菜单一键） | Quick Fit | P0 | 原型 | — | 手动操作 |
+| F147 | 快速拟合（菜单一键） | Quick Fit | P0 | 已实现待验收 | 线性拟合一键命令、多项式阶数对话框、报告和结果写回已接入 | 命令、对话框确认/取消、目标图层与撤销回归已通过；完整人工工作流验收待做 |
 | F148 | 内置拟合函数：峰函数（Gauss、Lorentz、Voigt、PsdVoigt、LogNormal 等） | Curve Fitting Functions（共 239 个） | P0 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 |
 | F149 | 内置拟合函数：指数类（ExpDec1-3、ExpGrow、ExpAssoc 等） | Curve Fitting Functions（共 239 个） | P0 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 |
 | F150 | 内置拟合函数：S 形与生长（Boltzmann、Logistic、DoseResp、Hill、Gompertz 等） | Curve Fitting Functions（共 239 个） | P0 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 |
@@ -219,12 +222,12 @@
 | F161 | XYZ 轨迹插值 | XYZ Trace Interpolation | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 |
 | F162 | 二维插值 | 2D Interpolate/Extrapolate | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 |
 | F163 | 三维插值 | 3D Interpolation | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 |
-| F164 | 数值积分（梯形法、曲线下面积） | Integrate | P0 | 原型 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 |
+| F164 | 数值积分（梯形法、曲线下面积） | Integrate | P0 | 已实现待验收 | analysis.rs/ops.rs 已实现梯形积分、累计积分结果与绝对面积选项 | 解析积分、行对齐与结果写回回归已通过；Origin/SciPy 多组参考对照待做 |
 | F165 | 二维体积积分 | 2D Volume Integrate (Pro Only) | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 |
-| F166 | 数值微分（含 Savitzky-Golay 平滑求导） | Differentiate | P0 | 原型 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 |
+| F166 | 数值微分（含 Savitzky-Golay 平滑求导） | Differentiate | P0 | 部分实现 | 有限差分微分和独立 Savitzky–Golay 平滑已实现；直接 SG 平滑求导入口待做 | 解析函数微分与结果列回归已通过；组合求导功能待补齐 |
 | F167 | 多条曲线平均 / 合并 | Average/Merge Multiple Curves | P1 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 |
 | F168 | 简单列运算（加减乘除、两曲线相减） | Simple Column/Curve Math | P0 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 |
-| F169 | 归一化（最大值、Z 分数、区间缩放） | Normalize | P0 | 原型 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 |
+| F169 | 归一化（最大值、Z 分数、区间缩放） | Normalize | P0 | 已实现待验收 | 已接入除以最大值、Z 分数、区间缩放，结果写入派生列并支持撤销 | 算法参考值、写回及撤销回归已通过；Origin/SciPy 多组数值验收待做 |
 | F170 | 多边形面积 | Polygon Area | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 |
 | F171 | 反函数（交换 X、Y 求逆） | Inverse | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 |
 | F172 | 自定义滤波 / 中值滤波 | Median Filter | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 |
@@ -234,7 +237,7 @@
 
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
 |---|---|---|---|---|---|---|
-| F174 | 列统计（均值、标准差、中位数、分位数等） | Statistics on Columns | P0 | 原型 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
+| F174 | 列统计（均值、标准差、中位数、分位数等） | Statistics on Columns | P0 | 已实现待验收 | 已接入 N、均值、样本标准差、标准误、中位数、线性插值分位数、极值与总和，生成结果工作簿 | 描述统计与结果表回归已通过；Origin/SciPy/R 整组参考值对照待做 |
 | F175 | 行统计 | Statistics on Rows | P1 | 未开始 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
 | F176 | 整表统计 | Statistics on Whole Sheet | P1 | 未开始 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
 | F177 | 频数统计 / 分箱 | Frequency Counts | P0 | 未开始 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） |
@@ -266,7 +269,7 @@
 
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
 |---|---|---|---|---|---|---|
-| F201 | 平滑（移动平均、Savitzky-Golay、FFT 平滑、LOWESS） | Smoothing | P0 | 原型 | 自写 | 与 Origin 及 SciPy.signal 结果比较 |
+| F201 | 平滑（移动平均、Savitzky-Golay、FFT 平滑、LOWESS） | Smoothing | P0 | 部分实现 | 移动平均与二阶 Savitzky–Golay 已接入；FFT 平滑与 LOWESS 待做 | 已有算法、窗口边界、写回与撤销回归已通过；补齐其余方法后验收 |
 | F202 | FFT 滤波（低通、高通、带通、带阻） | FFT Filters | P1 | 未开始 | rustfft / realfft | 与 Origin 及 SciPy.signal 结果比较 |
 | F203 | IIR 滤波（巴特沃斯、切比雪夫等） | IIR Filters (Pro Only) | P2 | 未开始 | 自写或 biquad | 与 Origin 及 SciPy.signal 结果比较 |
 | F204 | 傅里叶变换 FFT / IFFT（幅值、相位、功率谱、窗函数） | Fast Fourier Transform (FFT) | P0 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 |
@@ -307,7 +310,7 @@
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
 |---|---|---|---|---|---|---|
 | F226 | 导出 SVG | Exporting Your Graph or Layout Page to an Image File | P0 | 已完成 | svg.rs | 目视比较 Origin 导出图 |
-| F227 | 导出 PNG（指定 DPI） | The Export Graph as Image Dialog Box | P0 | 原型 | resvg / tiny-skia 渲染 SVG；网页原型已有 | 像素尺寸检查 |
+| F227 | 导出 PNG（指定 DPI） | The Export Graph as Image Dialog Box | P0 | 未开始 | 当前 Rust 桌面版只有 SVG 导出入口；PNG 栅格化、指定 DPI 和保存流程待实现，旧网页演示不计桌面功能 | 实现后核对毫米尺寸/DPI 对应的像素尺寸与透明度 |
 | F228 | 导出 PDF（矢量，嵌入字体） | Which Export Format Should I Choose | P0 | 未开始 | svg2pdf / krilla | 用 PDF 阅读器检查 |
 | F229 | 导出 EPS | Which Export Format Should I Choose | P1 | 未开始 | 自写 PostScript 输出 | LaTeX 编译检查 |
 | F230 | 导出 TIFF（期刊要求） | Which Export Format Should I Choose | P1 | 未开始 | image | 尺寸与 DPI 检查 |
@@ -345,12 +348,12 @@
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
 |---|---|---|---|---|---|---|
 | F254 | 折线图 | Line Graph | P0 | 已完成 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F255 | 水平阶梯图 | Horizontal Step Graph | P1 | 原型 | 阶梯折线图元 + SVG 共享排版 | 拐点几何、拟合线与项目往返测试；Origin 目视对照待做 |
-| F256 | 垂直阶梯图 | Vertical Step Graph | P1 | 原型 | 阶梯折线图元 + SVG 共享排版 | 拐点几何、拟合线与项目往返测试；Origin 目视对照待做 |
+| F255 | 水平阶梯图 | Horizontal Step Graph | P1 | 已实现待验收 | 水平阶梯：先横后竖，共享折线图元与 SVG | 拐点几何、拟合线、保存与撤销回归已通过；Origin 同数据目视验收待做 |
+| F256 | 垂直阶梯图 | Vertical Step Graph | P1 | 已实现待验收 | 垂直阶梯：先竖后横，共享折线图元与 SVG | 拐点几何、拟合线、保存与撤销回归已通过；Origin 同数据目视验收待做 |
 | F257 | Y 偏移堆叠线图 | Stacked Lines by Y Offsets Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F258 | 棒棒糖图 | Lollipop Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F259 | 颜色映射线系列 | Colormapped Line Series | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F260 | 样条曲线图 | Spline Graph | P1 | 原型 | 自然三次样条 / 零基线垂线 / 数据标签 + scene/SVG | SciPy 数值对照、分段、SVG、标签和撤销回归；Origin 目视对照待做 |
+| F260 | 样条曲线图 | Spline Graph | P1 | 已实现待验收 | 自然三次样条、缺失/重复 X 分段、自动范围与共享折线图元 | 解析值和 SciPy 1.17.1 自然边界对照、分段及 SVG 回归已通过；Origin 同数据目视验收待做 |
 
 ## 图类型 · 2D 散点图
 
@@ -359,10 +362,10 @@
 | F261 | 散点图 | 2D Scatter Graph | P0 | 已完成 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F262 | 中心坐标散点图 | 2D Scatter Central Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F263 | 列散点图 | Column Scatter | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F264 | Y 误差棒图 | Y Error Bar Graph | P0 | 原型 | 对称误差列自动关联 + scene/SVG 共享图元 | 关联、端点几何、裁剪和撤销回归；Origin 目视对照待做 |
-| F265 | XY 误差棒图 | XY Error Bar Graph | P0 | 原型 | 对称误差列自动关联 + scene/SVG 共享图元 | 关联、端点几何、裁剪和撤销回归；Origin 目视对照待做 |
+| F264 | Y 误差棒图 | Y Error Bar Graph | P0 | 已实现待验收 | Y 对称误差列自动关联、端帽/线宽、裁剪与共享线段图元 | 端点几何、无效值、保存与撤销回归已通过；Origin 同数据目视验收待做 |
+| F265 | XY 误差棒图 | XY Error Bar Graph | P0 | 已实现待验收 | 对称 X/Y 误差列自动关联、方向转换、端帽/线宽与共享图元 | 关联、端点几何、裁剪及撤销回归已通过；Origin 同数据目视验收待做 |
 | F266 | 散点 + 地毯图 | Scatter+Rug Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F267 | 垂线图 | Vertical Drop Line | P1 | 原型 | 自然三次样条 / 零基线垂线 / 数据标签 + scene/SVG | SciPy 数值对照、分段、SVG、标签和撤销回归；Origin 目视对照待做 |
+| F267 | 垂线图 | Vertical Drop Line | P1 | 已实现待验收 | 原始点到零基线的垂线，对数轴使用显示下界；符号/线宽与 SVG 共用 | 正负值、对数基线、SVG 线段和撤销回归已通过；Origin 同数据目视验收待做 |
 | F268 | 气泡图 | Indexed Size Bubble Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F269 | 颜色映射散点图 | Color Mapped Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F270 | 气泡 + 颜色映射图 | Indexed Size (Bubble) and Color Map Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
@@ -378,7 +381,7 @@
 | F275 | 线系列图 | Line Series Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F276 | 两点线段图 | 2 Point Segment Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F277 | 三点线段图 | 3 Point Segment Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F278 | 样条连接点线图 | Spline Connected Graph | P1 | 原型 | 自然三次样条 / 零基线垂线 / 数据标签 + scene/SVG | SciPy 数值对照、分段、SVG、标签和撤销回归；Origin 目视对照待做 |
+| F278 | 样条连接点线图 | Spline Connected Graph | P1 | 已实现待验收 | 自然三次样条连接，符号与误差保持原始点；派生线独立绘制 | SciPy 数值、符号数、分段、自动范围及撤销回归已通过；Origin 同数据目视验收待做 |
 | F279 | 按行绘图 | Row Wise Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F280 | 前后对比图 | Before and After Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 
@@ -387,14 +390,14 @@
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
 |---|---|---|---|---|---|---|
 | F281 | 柱状图 | Column Graph | P0 | 已完成 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F282 | 带标签柱状图 | Column + Label Graph | P1 | 原型 | 自然三次样条 / 零基线垂线 / 数据标签 + scene/SVG | SciPy 数值对照、分段、SVG、标签和撤销回归；Origin 目视对照待做 |
-| F283 | 条形图 | Bar Graph | P0 | 原型 | 条形方向与误差换向 / 分段面积填充 + scene/SVG | 轴方向、跨零面积、缺口、透明度、SVG 和撤销回归；Origin 目视对照待做 |
-| F284 | 堆叠柱状图 | Stacked Column Graph | P1 | 原型 | 正负堆叠/百分比归一化/上下端配对 + scene/SVG | 缺失行、正负值、上下端、矩形几何、误差棒和撤销回归；Origin 目视对照待做 |
+| F282 | 带标签柱状图 | Column + Label Graph | P1 | 已实现待验收 | 柱图配合数值/X-Y/行号/指定列数据标签，字号与偏移可调 | 标签行对齐、段值、边缘定位、SVG 与撤销回归已通过；Origin 同数据目视验收待做 |
+| F283 | 条形图 | Bar Graph | P0 | 已实现待验收 | 数值型条形图、并排分组、误差换向、物理轴范围与共享矩形 | 轴方向、正负值、分组误差、SVG 与撤销回归已通过；Origin 同数据目视验收待做 |
+| F284 | 堆叠柱状图 | Stacked Column Graph | P1 | 已实现待验收 | 按原始行与 X 对齐，正负柱段分别累加，共享矩形与 SVG | 缺失行、正负值、段几何、误差与撤销回归已通过；Origin 同数据目视验收待做 |
 | F285 | 浮动条形图 | Floating Bar Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F286 | 堆叠条形图 | Stacked Bar Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F287 | 百分比堆叠柱状图 | 100% Stacked Column Graph | P1 | 原型 | 正负堆叠/百分比归一化/上下端配对 + scene/SVG | 缺失行、正负值、上下端、矩形几何、误差棒和撤销回归；Origin 目视对照待做 |
+| F287 | 百分比堆叠柱状图 | 100% Stacked Column Graph | P1 | 已实现待验收 | 按行正负组分别归一至 ±100%，零总量与极端尺度处理，共享 SVG | 归一化参考值、极端数值、误差缩放及撤销回归已通过；Origin 同数据目视验收待做 |
 | F288 | 百分比堆叠条形图 | 100% Stacked Bar Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
-| F289 | 浮动柱状图 | Floating Column Graph | P2 | 原型 | 正负堆叠/百分比归一化/上下端配对 + scene/SVG | 缺失行、正负值、上下端、矩形几何、误差棒和撤销回归；Origin 目视对照待做 |
+| F289 | 浮动柱状图 | Floating Column Graph | P2 | 已实现待验收 | 上下端列稳定配对、完整行过滤、反向区间、多组排列与共享 SVG | 配对、删列/复用、矩形、对数裁剪与撤销回归已通过；Origin 同数据目视验收待做 |
 | F290 | 百分比丝带图 | 100% Ribbon Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F291 | 丝带图 | Ribbon Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F292 | 圆堆积图 | Circular Packing Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
@@ -544,7 +547,7 @@
 
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
 |---|---|---|---|---|---|---|
-| F399 | 面积图 | Area Graph | P1 | 原型 | 条形方向与误差换向 / 分段面积填充 + scene/SVG | 轴方向、跨零面积、缺口、透明度、SVG 和撤销回归；Origin 目视对照待做 |
+| F399 | 面积图 | Area Graph | P1 | 已实现待验收 | 按连续有效行分段、跨零三角剖分、透明度、边界线与共享 SVG | 面积积分、缺口、对数裁剪、网格缩放与撤销回归已通过；Origin 同数据目视验收待做 |
 | F400 | 堆叠面积图 | Stacked Area Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F401 | 百分比堆叠面积图 | 100% Stacked Area Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
 | F402 | 填充面积图 | Fill Area Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 |
