@@ -4,7 +4,7 @@
 本清单只记录功能点，不包含 Origin 文档正文。实现时按公开说明和观察到的行为编写，不复制 Origin 的代码、文字或图片。
 
 共 488 项：P0 87 项，P1 136 项，P2 254 项，不做 11 项。
-状态：已完成 26 项，原型 41 项，未开始 410 项，不做 11 项。
+状态：已完成 27 项，原型 41 项，未开始 409 项，不做 11 项。
 
 - **P0 / M1 日常够用**：一个人做日常数据处理和论文作图需要的最小集合。
 - **P1 / M2 论文全流程**：拟合报告、统计检验、多面板、信号处理等，覆盖大部分论文工作。
@@ -21,23 +21,23 @@
 
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 |
 |---|---|---|---|---|---|---|
-| F001 | 多文档子窗口（拖动、缩放、最小化、最大化） | Basic Child Window Operations | P0 | 已完成 | egui Window | 手动操作 |
-| F002 | 项目管理器（文件夹树、显示 / 隐藏窗口） | Project Explorer | P0 | 已完成 | egui SidePanel；文件夹层级待做 | 手动操作 |
-| F003 | 项目管理器多级文件夹、拖动整理 | Using Project Explorer to Manage Child Windows | P1 | 未开始 | 树形数据模型 + 拖放 | 手动操作 |
+| F001 | 多文档子窗口（拖动、缩放、最小化、最大化） | Basic Child Window Operations | P0 | 已完成 | 自绘 MDI；拖动/缩放、最小化换行、最大化/还原与统一窗口命令 | 真实 egui 拖动、缩放、窗口按钮与几何恢复回归 |
+| F002 | 项目管理器（文件夹树、显示 / 隐藏窗口） | Project Explorer | P0 | 已完成 | 真实多级文件夹树；新建/重命名/菜单移动/删除保留内容；显示与隐藏窗口 | 层级、循环拦截、目录继承、保存迁移和撤销回归 |
+| F003 | 项目管理器多级文件夹、拖动整理 | Using Project Explorer to Manage Child Windows | P1 | 原型 | 多级文件夹与菜单移动已做；拖放整理待做 | 项目树与移动命令回归；拖放验收待做 |
 | F004 | 窗口排列：层叠 / 平铺 | Arrange Windows | P1 | 原型 | 按工作区矩形计算位置 | 手动操作 |
-| F005 | 项目文件保存 / 打开 | Opening, Closing and Backing Up the Origin Project File | P0 | 已完成 | serde_json（.scproj）；以后换成带二进制块的压缩格式 | 保存→打开→逐字段比较 |
+| F005 | 项目文件保存 / 打开 | Opening, Closing and Backing Up the Origin Project File | P0 | 已完成 | v8 .scproj、v0–v7 迁移、文件夹校验、同目录临时文件替换 | 项目/文件夹往返、损坏引用、旧文件迁移与保存失败回归 |
 | F006 | 自动备份与崩溃恢复 | Opening, Closing and Backing Up the Origin Project File | P1 | 未开始 | 定时写临时文件 | 强制退出后恢复 |
 | F007 | 最近打开的文件 | Recent Origin Files | P1 | 未开始 | 配置文件记录 | 手动操作 |
-| F008 | 撤销 / 重做 | — | P0 | 已完成 | 显式修改标记与编辑事务；100 步 / 300 MiB 上限 | 十万行事务复用、空闲帧、真实编辑控件回归测试 |
-| F009 | 命令注册表（菜单、工具栏、脚本共用同一套命令） | — | P0 | 原型 | 参照 PhotoCraft：每个操作是一个命令 | 每个菜单项都有对应命令 |
+| F008 | 撤销 / 重做 | — | P0 | 已完成 | 编辑事务；100 步 / 300 MiB；文件夹新建/重命名/移动/删除均可撤销 | 项目快照、真实编辑控件与文件夹事务回归 |
+| F009 | 命令注册表（菜单、工具栏、脚本共用同一套命令） | — | P0 | 已完成 | 统一命令注册表、可用条件、开关状态与修改标记；菜单/按钮/程序调用共用入口，供后续脚本集成复用 | 命令 ID 唯一、状态条件、窗口/文件夹命令与事务回归 |
 | F010 | 结果日志（分析结果记录） | Analysis Results: The Results Log | P1 | 未开始 | 停靠面板 + 结构化记录 | 手动操作 |
 | F011 | Notes 文本窗口 / Markdown 报告 | Notes Window | P2 | 未开始 | egui_commonmark | 手动操作 |
 | F012 | 命令窗口（交互式脚本） | The Origin Command Window and Script Window | P1 | 未开始 | 嵌入 Python（PyO3） | 执行脚本修改工作表 |
-| F013 | 深色模式 | Dark Mode | P0 | 已完成 | theme.rs 两套主题 | 目视检查 |
+| F013 | 深色模式 | Dark Mode | P0 | 已完成 | 浅色、深色、跟随系统三种选择；统一主题命令 | 主题切换命令与项目数据不变回归 |
 | F014 | 快捷键与自定义快捷键 | Hotkeys | P1 | 原型 | 固定快捷键已做，自定义待做 | 手动操作 |
 | F015 | 全文搜索（在项目中查找） | Finding in Origin Project | P2 | 未开始 | 遍历项目数据 | 手动操作 |
 | F016 | 工程保护（密码） | Protecting Origin Projects | P2 | 未开始 | age / chacha20poly1305 加密 | 加密→解密往返 |
-| F017 | 中文界面 | — | P0 | 已完成 | 系统中文字体回退 | 目视检查 |
+| F017 | 中文界面 | — | P0 | 已完成 | 简体中文界面，Windows 系统中文字体回退 | 中文菜单与项目树控件回归 |
 | F018 | 多语言界面（中 / 英） | — | P1 | 未开始 | fluent 或简单字符串表 | 切换语言检查 |
 | F019 | 选项 / 偏好设置对话框 | Setting Your Preferences with the Options Dialog Box | P1 | 未开始 | 配置文件 + 设置面板 | 手动操作 |
 | F020 | 自定义菜单与工具栏 | Custom Menus | P2 | 未开始 | 基于命令注册表 | 手动操作 |

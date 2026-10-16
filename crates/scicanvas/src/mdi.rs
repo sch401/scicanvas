@@ -32,14 +32,17 @@ impl Geom {
             state: WinState::Normal,
         }
     }
+}
 
-    pub fn toggle_max(&mut self) {
-        self.state = if self.state == WinState::Max {
-            WinState::Normal
-        } else {
-            WinState::Max
-        };
-    }
+fn minimized_rect(ws: Rect, slot: usize) -> Rect {
+    let columns = (ws.width() / (MIN_W + 4.0)).floor().max(1.0) as usize;
+    Rect::from_min_size(
+        pos2(
+            ws.left() + 4.0 + (slot % columns) as f32 * (MIN_W + 4.0),
+            (ws.bottom() - TITLE_H - 4.0 - (slot / columns) as f32 * (TITLE_H + 4.0)).max(ws.top()),
+        ),
+        vec2(MIN_W, TITLE_H),
+    )
 }
 
 pub fn layer_id(id: egui::Id) -> egui::LayerId {
@@ -49,6 +52,7 @@ pub fn layer_id(id: egui::Id) -> egui::LayerId {
 #[derive(Default)]
 pub struct WinResponse {
     pub close: bool,
+    pub state: Option<WinState>,
     /// 标题栏被按下（用于激活窗口）。
     pub pressed: bool,
 }
@@ -150,13 +154,7 @@ pub fn window(
     }
     let rect = match geom.state {
         WinState::Max => ws,
-        WinState::Min => Rect::from_min_size(
-            pos2(
-                ws.left() + 4.0 + min_slot as f32 * (MIN_W + 4.0),
-                ws.bottom() - TITLE_H - 4.0,
-            ),
-            vec2(MIN_W, TITLE_H),
-        ),
+        WinState::Min => minimized_rect(ws, min_slot),
         WinState::Normal => geom.rect.translate(ws.min.to_vec2()),
     };
 
@@ -224,20 +222,20 @@ pub fn window(
                 out.close = true;
             }
             if max.clicked() || bar_resp.double_clicked() {
-                if geom.state == WinState::Min {
-                    geom.state = WinState::Normal;
+                out.state = Some(if geom.state == WinState::Normal {
+                    WinState::Max
                 } else {
-                    geom.toggle_max();
-                }
+                    WinState::Normal
+                });
             }
             if min.is_some_and(|m| m.clicked()) {
-                geom.state = WinState::Min;
+                out.state = Some(WinState::Min);
             }
             if geom.state == WinState::Normal && bar_resp.dragged() {
                 geom.rect = geom.rect.translate(bar_resp.drag_delta());
             }
             if geom.state == WinState::Min && bar_resp.clicked() {
-                geom.state = WinState::Normal;
+                out.state = Some(WinState::Normal);
             }
             out.pressed |= close.is_pointer_button_down_on() || max.is_pointer_button_down_on();
 
@@ -315,4 +313,108 @@ pub fn window(
             }
         });
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn frame(ctx: &egui::Context, g: &mut Geom, events: Vec<egui::Event>) -> WinResponse {
+        let mut response = WinResponse::default();
+        let _ = ctx.run(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1000.0, 700.0))),
+                events,
+                ..Default::default()
+            },
+            |ctx| {
+                response = window(
+                    ctx,
+                    egui::Id::new("mdi-test"),
+                    Rect::from_min_size(Pos2::ZERO, vec2(800.0, 600.0)),
+                    g,
+                    0,
+                    "Window",
+                    "book",
+                    true,
+                    &crate::theme::palette(egui::Theme::Light),
+                    |ui| {
+                        ui.label("body");
+                    },
+                );
+            },
+        );
+        if let Some(state) = response.state {
+            g.state = state;
+        }
+        response
+    }
+    fn button(pos: Pos2, pressed: bool) -> egui::Event {
+        egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        }
+    }
+    fn click(ctx: &egui::Context, g: &mut Geom, pos: Pos2) -> WinResponse {
+        frame(ctx, g, vec![egui::Event::PointerMoved(pos), button(pos, true)]);
+        frame(ctx, g, vec![button(pos, false)])
+    }
+    #[test]
+    fn actual_title_buttons_drag_and_resize_preserve_normal_geometry() {
+        let ctx = egui::Context::default();
+        let mut g = Geom::new(pos2(20.0, 20.0), vec2(300.0, 200.0));
+        frame(&ctx, &mut g, vec![]);
+        frame(&ctx, &mut g, vec![]);
+        let start = pos2(100.0, 32.0);
+        frame(
+            &ctx,
+            &mut g,
+            vec![egui::Event::PointerMoved(start), button(start, true)],
+        );
+        let end = start + vec2(30.0, 15.0);
+        frame(&ctx, &mut g, vec![egui::Event::PointerMoved(end)]);
+        frame(&ctx, &mut g, vec![button(end, false)]);
+        assert!((g.rect.left() - 50.0).abs() < 1.0 && (g.rect.top() - 35.0).abs() < 1.0);
+        frame(&ctx, &mut g, vec![]);
+        let start = g.rect.max - vec2(3.0, 3.0);
+        let old = g.rect;
+        frame(
+            &ctx,
+            &mut g,
+            vec![egui::Event::PointerMoved(start), button(start, true)],
+        );
+        let end = start + vec2(40.0, 25.0);
+        frame(&ctx, &mut g, vec![egui::Event::PointerMoved(end)]);
+        frame(&ctx, &mut g, vec![button(end, false)]);
+        assert!(g.rect.width() > old.width() && g.rect.height() > old.height());
+        let normal = g.rect;
+        let at = pos2(g.rect.right() - 39.0, g.rect.top() + 12.0);
+        click(&ctx, &mut g, at);
+        assert_eq!(g.state, WinState::Max);
+        frame(&ctx, &mut g, vec![]);
+        click(&ctx, &mut g, pos2(761.0, 12.0));
+        assert_eq!(g.state, WinState::Normal);
+        assert_eq!(g.rect, normal);
+        frame(&ctx, &mut g, vec![]);
+        let at = pos2(g.rect.right() - 63.0, g.rect.top() + 12.0);
+        click(&ctx, &mut g, at);
+        assert_eq!(g.state, WinState::Min);
+        frame(&ctx, &mut g, vec![]);
+        click(&ctx, &mut g, pos2(135.0, 584.0));
+        assert_eq!(g.state, WinState::Normal);
+        assert_eq!(g.rect, normal);
+        frame(&ctx, &mut g, vec![]);
+        let at = pos2(g.rect.right() - 15.0, g.rect.top() + 12.0);
+        assert!(click(&ctx, &mut g, at).close);
+    }
+    #[test]
+    fn minimized_windows_wrap_inside_the_workspace() {
+        let ws = Rect::from_min_size(pos2(25.0, 45.0), vec2(600.0, 400.0));
+        for slot in 0..12 {
+            let r = minimized_rect(ws, slot);
+            assert!(ws.contains_rect(r));
+        }
+        assert!(minimized_rect(ws, 3).top() < minimized_rect(ws, 0).top());
+    }
 }

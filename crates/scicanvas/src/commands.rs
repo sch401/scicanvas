@@ -43,6 +43,21 @@ fn need_redo(a: &SciApp) -> Result<(), &'static str> {
 fn need_book(a: &SciApp) -> Result<(), &'static str> {
     a.active_book_id().map(|_| ()).ok_or("请先单击一个工作簿窗口")
 }
+fn need_project_item(a: &SciApp) -> Result<(), &'static str> {
+    a.project_target().map(|_| ()).ok_or("请在项目管理器中选择对象")
+}
+fn need_folder(a: &SciApp) -> Result<(), &'static str> {
+    a.project_target()
+        .filter(|id| a.project.folder(*id).is_some())
+        .map(|_| ())
+        .ok_or("请先选择文件夹")
+}
+fn need_window(a: &SciApp) -> Result<(), &'static str> {
+    a.project_target()
+        .filter(|id| a.project.book(*id).is_some() || a.project.graph(*id).is_some())
+        .map(|_| ())
+        .ok_or("请先选择工作簿或图形")
+}
 fn need_graph(a: &SciApp) -> Result<(), &'static str> {
     a.active_graph_id().map(|_| ()).ok_or("请先单击一个图形窗口")
 }
@@ -131,6 +146,110 @@ impl Command {
 fn build() -> Vec<Command> {
     vec![
         // 文件
+        c(
+            "project.folder.new",
+            "新建文件夹",
+            "open",
+            "",
+            "工作区",
+            "folder new 文件夹",
+            always,
+            |a| a.new_folder(),
+        )
+        .modifies(),
+        c(
+            "project.folder.remove",
+            "删除文件夹（保留内容）",
+            "coldel",
+            "",
+            "工作区",
+            "folder remove",
+            need_folder,
+            |a| a.remove_project_folder(),
+        )
+        .modifies(),
+        c(
+            "project.rename",
+            "重命名项目对象",
+            "props",
+            "",
+            "工作区",
+            "rename folder book graph",
+            need_project_item,
+            |a| a.rename_project_target(),
+        )
+        .modifies(),
+        c(
+            "project.move",
+            "移动项目对象",
+            "open",
+            "",
+            "工作区",
+            "move folder",
+            need_project_item,
+            |a| a.move_project_target(),
+        )
+        .modifies(),
+        c(
+            "project.show",
+            "显示窗口",
+            "book",
+            "",
+            "工作区",
+            "show window",
+            need_window,
+            |a| a.show_project_window(),
+        ),
+        c(
+            "project.hide",
+            "隐藏窗口",
+            "book",
+            "",
+            "工作区",
+            "hide window",
+            need_window,
+            |a| a.hide_project_window(),
+        ),
+        c(
+            "project.delete",
+            "删除项目对象…",
+            "coldel",
+            "",
+            "工作区",
+            "delete item",
+            need_window,
+            |a| a.confirm_delete = a.project_target(),
+        ),
+        c(
+            "window.minimize",
+            "最小化当前窗口",
+            "book",
+            "",
+            "工作区",
+            "minimize",
+            need_window,
+            |a| a.set_project_window_state(crate::mdi::WinState::Min),
+        ),
+        c(
+            "window.maximize",
+            "最大化当前窗口",
+            "book",
+            "",
+            "工作区",
+            "maximize",
+            need_window,
+            |a| a.set_project_window_state(crate::mdi::WinState::Max),
+        ),
+        c(
+            "window.restore",
+            "还原当前窗口",
+            "book",
+            "",
+            "工作区",
+            "restore",
+            need_window,
+            |a| a.set_project_window_state(crate::mdi::WinState::Normal),
+        ),
         c(
             "book.new",
             "新建工作簿",

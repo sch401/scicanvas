@@ -11,7 +11,8 @@
 | v4 | `version: 4`；列增加 `XError` / `YError`、`error_for`；图层增加 `error_bars` | 旧文件默认显示误差棒、端帽 6、线宽 1 |
 | v5 | `version: 5`；新增 `StackedBar` / `PercentStackedBar` / `FloatingBar`，`PlotSpec.base_by_y` | 旧文件默认没有浮动柱下端映射 |
 | v6 | `version: 6`；新增 `HorizontalBar` / `Area`，`Layer.area_opacity` | 旧文件填充透明度默认 0.35 |
-| v7 | `version: 7`；新增 `Spline` / `SplineSymbol` / `VerticalDrop`，`Layer.labels` | 当前格式；旧文件默认关闭数据标签 |
+| v7 | `version: 7`；新增 `Spline` / `SplineSymbol` / `VerticalDrop`，`Layer.labels` | 旧文件默认关闭数据标签 |
+| v8 | `version: 8`；`Project.folders` 保存文件夹编号、名称、上级与对象归属 | 当前格式；旧文件对象放在根目录 |
 
 `Layer` 的列映射来自展平序列化的 `PlotSpec`，仅保存一份。X/Y 引用、曲线独立 X 列、派生线、行范围、样式和对数轴设置随迁移保留。新添的变换和配色默认采用原始数据与 Origin 颜色。
 
@@ -38,3 +39,5 @@
 `Spline` / `SplineSymbol` 使用自然三次样条，两端二阶导数为零。连续原始行分段、段内按 X 排序，重复 X 处分开；均值视图按聚合后的 X 序列分段。每区间固定 16 段采样，采样值参与自动范围，非正对数片段断开。数值超出可表示范围的段使用原始折线；派生线独立绘制。大数据采样后续改为页面误差自适应。`VerticalDrop` 从原始点连接到零基线，对数轴使用显示下界。
 
 `labels` 保存 `visible`、`source`（`Value` / `XY` / `Row` / `Column`）、`column`、`size` 和 `offset`。默认关闭、字号 11、偏移 6；字号应为有限正数，偏移为有限非负数。行号和指定列文本按原始行读取，均值视图使用数值或 X/Y，派生线不加标签。删除标签列会清除引用，复用列标识也保持解除。柱段显示各段值，百分比添加 `%`，标签向坐标框内定位并裁剪，指定列换行转为空格。`tests/spline_labels.rs` 用解析值及本机 SciPy 1.17.1 `CubicSpline(..., bc_type="natural")` 参考值验证样条，并覆盖垂线、标签、SVG、撤销及版本迁移。
+
+`folders` 为虚拟项目文件夹数组，每项保存 `id`、`name`、`parent`、`items`。文件夹与工作簿/图形共用对象编号，根目录隐含存在，未归属任何文件夹的对象位于根目录。名称可用中文；文件夹最多 64 级，保存/打开校验编号重复、循环、缺失上级、无效或重复归属。删除文件夹时对象和子文件夹移到上级；删除工作簿或图形清理归属。新图形及新分析输出跟随来源工作簿目录，已有对象的位置保持。文件夹操作进入编辑事务，窗口显示和几何状态由当前界面会话维护。`tests/workspace.rs` 覆盖操作、非法移动、深度、分析目录、历史、v7/v8 往返和损坏文件。

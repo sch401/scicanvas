@@ -554,15 +554,18 @@ pub struct Project {
     pub version: u32,
     pub books: Vec<Book>,
     pub graphs: Vec<Graph>,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub folders: Vec<crate::project_tree::Folder>,
     pub next_id: u64,
 }
 
 impl Default for Project {
     fn default() -> Self {
         Project {
-            version: 7,
+            version: 8,
             books: Vec::new(),
             graphs: Vec::new(),
+            folders: Vec::new(),
             next_id: 1,
         }
     }
@@ -573,10 +576,12 @@ impl Project {
     pub fn plot_spec(&mut self, spec: crate::plotspec::PlotSpec) -> Result<u64, String> {
         let book = self.book(spec.book_id.ok_or("请选择工作簿")?).ok_or("找不到工作簿")?;
         spec.validate(book)?;
+        let parent = self.folder_of(book.id);
         let id = self.alloc_id();
         let mut graph = Graph::new(id, self.unique_name("Graph"));
         graph.first_layer_mut().spec = spec;
         self.graphs.push(graph);
+        self.move_project_item(id, parent)?;
         Ok(id)
     }
     pub fn alloc_id(&mut self) -> u64 {
@@ -605,13 +610,17 @@ impl Project {
         self.book(id)
             .map(|b| b.name.as_str())
             .or_else(|| self.graph(id).map(|g| g.name.as_str()))
+            .or_else(|| self.folder(id).map(|f| f.name.as_str()))
     }
 
     pub fn name_of_mut(&mut self, id: u64) -> Option<&mut String> {
         if let Some(i) = self.books.iter().position(|b| b.id == id) {
             return Some(&mut self.books[i].name);
         }
-        self.graphs.iter_mut().find(|g| g.id == id).map(|g| &mut g.name)
+        if let Some(g) = self.graphs.iter_mut().find(|g| g.id == id) {
+            return Some(&mut g.name);
+        }
+        self.folders.iter_mut().find(|f| f.id == id).map(|f| &mut f.name)
     }
 
     /// Book1、Book2……里第一个没用过的名字。
@@ -624,6 +633,9 @@ impl Project {
 
     /// 删除工作簿或图形。删除工作簿时，引用它的图形变成空图。
     pub fn remove(&mut self, id: u64) {
+        for f in &mut self.folders {
+            f.items.retain(|item| *item != id);
+        }
         self.books.retain(|b| b.id != id);
         self.graphs.retain(|g| g.id != id);
         for g in &mut self.graphs {

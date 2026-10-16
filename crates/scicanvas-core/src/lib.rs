@@ -15,6 +15,7 @@ pub mod plotspec;
 pub mod presets;
 #[cfg(feature = "serde")]
 pub mod project_file;
+pub mod project_tree;
 pub mod scene;
 pub mod spline;
 pub mod svg;

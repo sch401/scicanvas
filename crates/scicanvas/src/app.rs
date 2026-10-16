@@ -41,6 +41,9 @@ pub struct SciApp {
     pub(crate) selection: HashMap<u64, Vec<String>>,
     /// 当前激活的窗口。
     pub(crate) active: Option<u64>,
+    pub(crate) explorer_target: Option<u64>,
+    pub(crate) folder_destination: Option<u64>,
+    pub(crate) project_name: String,
     /// 正在编辑属性的图形。
     pub(crate) props_for: Option<u64>,
     active_layers: HashMap<u64, usize>,
@@ -120,6 +123,9 @@ impl SciApp {
             open: HashMap::new(),
             selection: HashMap::new(),
             active: None,
+            explorer_target: None,
+            folder_destination: None,
+            project_name: String::new(),
             props_for: None,
             active_layers: HashMap::new(),
             plot_draft: None,
@@ -166,12 +172,17 @@ impl SciApp {
             .map(|g| g.id)
             .or(project.books.last().map(|b| b.id));
         self.project = project;
+        self.explorer_target = self.active;
+        self.folder_destination = None;
+        self.project_name.clear();
         self.project_path = path;
         self.props_for = None;
         self.sheets.clear();
     }
 
     fn show_item(&mut self, id: u64) {
+        self.explorer_target = Some(id);
+        self.project_name = self.project.name_of(id).unwrap_or("").to_string();
         self.open.insert(id, true);
         if let Some(g) = self.geoms.get_mut(&id) {
             if g.state == WinState::Min {
@@ -276,7 +287,9 @@ impl SciApp {
     }
 
     pub(crate) fn new_book(&mut self) {
+        let parent = self.current_folder();
         let id = self.project.new_book();
+        self.project.move_project_item(id, parent).unwrap();
         self.show_item(id);
         self.status = format!(
             "已新建 {}，可直接输入数据，或从 Excel 复制一块区域后在单元格里粘贴",
@@ -433,6 +446,8 @@ impl SciApp {
             book.columns.len()
         );
         self.project.books.push(book);
+        let parent = self.current_folder();
+        self.project.move_project_item(id, parent).unwrap();
         self.show_item(id);
     }
 
@@ -528,6 +543,86 @@ impl SciApp {
                 }
             }
             Err(why) => self.status = why.to_string(),
+        }
+    }
+
+    pub(crate) fn project_target(&self) -> Option<u64> {
+        self.explorer_target.filter(|id| self.project.name_of(*id).is_some())
+    }
+    fn current_folder(&self) -> Option<u64> {
+        self.explorer_target.and_then(|id| {
+            if self.project.folder(id).is_some() {
+                Some(id)
+            } else {
+                self.project.folder_of(id)
+            }
+        })
+    }
+    pub(crate) fn new_folder(&mut self) {
+        match self.project.add_folder(self.current_folder()) {
+            Ok(id) => {
+                self.explorer_target = Some(id);
+                self.status = "已新建文件夹，可在右键菜单中重命名".into();
+                self.project_name = self.project.name_of(id).unwrap_or("").to_string();
+            }
+            Err(e) => self.status = e,
+        }
+    }
+    pub(crate) fn rename_project_target(&mut self) {
+        if let Some(id) = self.project_target() {
+            self.status = match self.project.rename_project_item(id, &self.project_name) {
+                Ok(()) => "已重命名".into(),
+                Err(e) => e,
+            };
+        }
+    }
+    pub(crate) fn move_project_target(&mut self) {
+        if let Some(id) = self.project_target() {
+            self.status = match self.project.move_project_item(id, self.folder_destination) {
+                Ok(()) => "已移动项目对象".into(),
+                Err(e) => e,
+            };
+        }
+    }
+    pub(crate) fn remove_project_folder(&mut self) {
+        if let Some(id) = self.project_target() {
+            let parent = self.project.folder(id).and_then(|f| f.parent);
+            self.status = match self.project.remove_folder(id) {
+                Ok(()) => {
+                    self.explorer_target = parent;
+                    self.project_name = parent.and_then(|id| self.project.name_of(id)).unwrap_or("").to_string();
+                    "已删除文件夹，内容已移到上级".into()
+                }
+                Err(e) => e,
+            };
+        }
+    }
+    pub(crate) fn hide_project_window(&mut self) {
+        if let Some(id) = self.project_target() {
+            self.open.insert(id, false);
+            if self.active == Some(id) {
+                self.active = None;
+            }
+            if self.props_for == Some(id) {
+                self.props_for = None;
+            }
+            self.status = "窗口已隐藏，可从项目管理器重新打开".into();
+        }
+    }
+    pub(crate) fn show_project_window(&mut self) {
+        if let Some(id) = self.project_target() {
+            self.show_item(id);
+        }
+    }
+    pub(crate) fn set_project_window_state(&mut self, state: WinState) {
+        if let Some(id) = self.project_target() {
+            self.open.insert(id, true);
+            self.geoms
+                .entry(id)
+                .or_insert_with(|| Geom::new(egui::pos2(20.0, 20.0), egui::vec2(420.0, 440.0)))
+                .state = state;
+            self.active = Some(id);
+            self.raise = Some(id);
         }
     }
 
@@ -627,6 +722,23 @@ impl SciApp {
             self.props_for = None;
         }
         self.confirm_delete = None;
+        self.project_name = self
+            .project_target()
+            .and_then(|id| self.project.name_of(id))
+            .unwrap_or("")
+            .to_string();
+        if self
+            .explorer_target
+            .is_some_and(|id| self.project.name_of(id).is_none())
+        {
+            self.explorer_target = self.active;
+        }
+        if self
+            .folder_destination
+            .is_some_and(|id| self.project.folder(id).is_none())
+        {
+            self.folder_destination = None;
+        }
         self.dialog = None;
         self.history_group = None;
         self.last_history_group = None;
@@ -1122,86 +1234,156 @@ impl SciApp {
         });
     }
 
-    fn explorer(&mut self, ui: &mut egui::Ui) {
-        let mut renamed = Vec::new();
-        ui.add_space(4.0);
-        ui.label(RichText::new("项目管理器").strong());
+    fn project_item_menu(&mut self, ui: &mut egui::Ui, id: u64) {
+        self.explorer_target = Some(id);
+        let folder = self.project.folder(id).is_some();
+        if folder {
+            if ui.button("新建子文件夹").clicked() {
+                self.run_command("project.folder.new");
+                ui.close_menu();
+            }
+        } else {
+            for (command, label) in [
+                ("project.show", "显示窗口"),
+                ("project.hide", "隐藏窗口"),
+                ("window.minimize", "最小化"),
+                ("window.maximize", "最大化"),
+                ("window.restore", "还原"),
+            ] {
+                if ui.button(label).clicked() {
+                    self.run_command(command);
+                    ui.close_menu();
+                }
+            }
+        }
         ui.separator();
-        let items: Vec<(u64, bool, String)> = self
+        ui.label("名称");
+        let response = ui.text_edit_singleline(&mut self.project_name);
+        if ui.button("重命名").clicked() || (response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)))
+        {
+            self.run_command("project.rename");
+            ui.close_menu();
+        }
+        ui.separator();
+        egui::ComboBox::from_id_salt(("move-project", id))
+            .selected_text(
+                self.folder_destination
+                    .and_then(|d| self.project.folder_path(d))
+                    .unwrap_or_else(|| "项目根目录".into()),
+            )
+            .show_ui(ui, |ui| {
+                ui.selectable_value(&mut self.folder_destination, None, "项目根目录");
+                for f in &self.project.folders {
+                    if f.id != id {
+                        ui.selectable_value(
+                            &mut self.folder_destination,
+                            Some(f.id),
+                            self.project.folder_path(f.id).unwrap(),
+                        );
+                    }
+                }
+            });
+        if ui.button("移动到所选位置").clicked() {
+            self.run_command("project.move");
+            ui.close_menu();
+        }
+        ui.separator();
+        if folder {
+            if ui.button("删除文件夹（保留内容）").clicked() {
+                self.run_command("project.folder.remove");
+                ui.close_menu();
+            }
+        } else if ui.button("删除对象…").clicked() {
+            self.run_command("project.delete");
+            ui.close_menu();
+        }
+    }
+
+    fn explorer_folder(&mut self, ui: &mut egui::Ui, parent: Option<u64>) {
+        let folders: Vec<_> = self
+            .project
+            .folders
+            .iter()
+            .filter(|f| f.parent == parent)
+            .map(|f| (f.id, f.name.clone()))
+            .collect();
+        for (id, name) in folders {
+            let response = egui::CollapsingHeader::new(if self.explorer_target == Some(id) {
+                RichText::new(&name).strong()
+            } else {
+                RichText::new(&name)
+            })
+            .id_salt(("project-folder", id))
+            .default_open(true)
+            .show(ui, |ui| self.explorer_folder(ui, Some(id)))
+            .header_response;
+            if response.clicked() {
+                self.explorer_target = Some(id);
+                self.project_name = self.project.name_of(id).unwrap_or("").to_string();
+            }
+            if response.secondary_clicked() {
+                self.project_name = name;
+                self.folder_destination = self.project.folder(id).and_then(|f| f.parent);
+            }
+            response.context_menu(|ui| self.project_item_menu(ui, id));
+        }
+        let items: Vec<_> = self
             .project
             .books
             .iter()
             .map(|b| (b.id, true, b.name.clone()))
             .chain(self.project.graphs.iter().map(|g| (g.id, false, g.name.clone())))
+            .filter(|(id, _, _)| self.project.folder_of(*id) == parent)
             .collect();
-        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
-            egui::CollapsingHeader::new("文件夹1")
-                .default_open(true)
-                .show(ui, |ui| {
-                    for (id, is_book, name) in items {
-                        let shown = self.open.get(&id).copied().unwrap_or(false);
-                        let active = self.active == Some(id);
-                        let resp = ui
-                            .horizontal(|ui| {
-                                let (tag, c) = if is_book {
-                                    ("表", self.pal.book)
-                                } else {
-                                    ("图", self.pal.graph)
-                                };
-                                ui.label(RichText::new(tag).small().strong().color(c));
-                                let text = if shown {
-                                    RichText::new(name)
-                                } else {
-                                    RichText::new(name).weak()
-                                };
-                                ui.selectable_label(active, text)
-                            })
-                            .inner;
-                        let resp = resp.on_hover_text(if shown {
-                            "单击激活，右键重命名或删除"
+        for (id, is_book, name) in items {
+            let shown = self.open.get(&id).copied().unwrap_or(false);
+            let response = ui
+                .horizontal(|ui| {
+                    ui.label(
+                        RichText::new(if is_book { "表" } else { "图" })
+                            .small()
+                            .strong()
+                            .color(if is_book { self.pal.book } else { self.pal.graph }),
+                    );
+                    ui.selectable_label(
+                        self.explorer_target == Some(id),
+                        if shown {
+                            RichText::new(&name)
                         } else {
-                            "窗口已隐藏，单击重新打开"
-                        });
-                        if resp.clicked() {
-                            self.show_item(id);
-                        }
-                        resp.context_menu(|ui| {
-                            if ui.button("打开").clicked() {
-                                self.show_item(id);
-                                ui.close_menu();
-                            }
-                            ui.horizontal(|ui| {
-                                ui.label("名称");
-                                if let Some(n) = self.project.name_of_mut(id) {
-                                    let before = n.clone();
-                                    let response = ui.text_edit_singleline(n);
-                                    if response.changed() {
-                                        renamed.push((id, before, n.clone()));
-                                    }
-                                    edit_group(&response, &mut self.history_group);
-                                }
-                            });
-                            ui.separator();
-                            if ui.button("删除…").clicked() {
-                                self.confirm_delete = Some(id);
-                                ui.close_menu();
-                            }
-                        });
-                    }
-                });
-        });
-        if !renamed.is_empty() {
-            if !self.history.is_pending() {
-                for (id, before, _) in &renamed {
-                    *self.project.name_of_mut(*id).unwrap() = before.clone();
-                }
-                self.begin_edit("重命名");
-                for (id, _, after) in renamed {
-                    *self.project.name_of_mut(id).unwrap() = after;
-                }
+                            RichText::new(&name).weak()
+                        },
+                    )
+                })
+                .inner
+                .on_hover_text("单击显示窗口；右键组织、重命名或隐藏");
+            if response.clicked() {
+                self.explorer_target = Some(id);
+                self.run_command("project.show");
             }
-            self.history.changed();
+            if response.secondary_clicked() {
+                self.project_name = name;
+                self.folder_destination = parent;
+            }
+            response.context_menu(|ui| self.project_item_menu(ui, id));
         }
+    }
+
+    fn explorer(&mut self, ui: &mut egui::Ui) {
+        ui.add_space(4.0);
+        ui.label(RichText::new("项目管理器").strong());
+        ui.horizontal(|ui| {
+            if ui.button("项目根目录").clicked() {
+                self.explorer_target = None;
+                self.project_name.clear();
+            }
+            if ui.button("新建文件夹").clicked() {
+                self.run_command("project.folder.new");
+            }
+        });
+        ui.separator();
+        egui::ScrollArea::vertical()
+            .auto_shrink([false, false])
+            .show(ui, |ui| self.explorer_folder(ui, None));
     }
 
     fn child_windows(&mut self, ctx: &egui::Context) {
@@ -1221,6 +1403,10 @@ impl SciApp {
             if let Some(layer) = ctx.layer_id_at(pos) {
                 if let Some(id) = ids.iter().copied().find(|id| win_id(*id) == layer.id) {
                     self.active = Some(id);
+                    if self.explorer_target != Some(id) {
+                        self.project_name = self.project.name_of(id).unwrap_or("").to_string();
+                    }
+                    self.explorer_target = Some(id);
                 }
             }
         }
@@ -1276,13 +1462,22 @@ impl SciApp {
             self.geoms.insert(id, geom);
             if resp.pressed {
                 self.active = Some(id);
+                if self.explorer_target != Some(id) {
+                    self.project_name = self.project.name_of(id).unwrap_or("").to_string();
+                }
+                self.explorer_target = Some(id);
+            }
+            if let Some(state) = resp.state {
+                self.explorer_target = Some(id);
+                self.run_command(match state {
+                    WinState::Min => "window.minimize",
+                    WinState::Max => "window.maximize",
+                    WinState::Normal => "window.restore",
+                });
             }
             if resp.close {
-                self.open.insert(id, false);
-                if self.active == Some(id) {
-                    self.active = None;
-                }
-                self.status = format!("{} 已隐藏，可在项目管理器中重新打开", name);
+                self.explorer_target = Some(id);
+                self.run_command("project.hide");
             }
         }
         self.raise = None;
@@ -2732,6 +2927,131 @@ mod history_tests {
         assert_eq!(&app.project, before);
         app.run_command("edit.redo");
         assert_eq!(app.project, after);
+    }
+
+    #[test]
+    fn workspace_folder_commands_share_history_and_keep_window_actions_in_session() {
+        let mut app = app();
+        app.explorer_target = None;
+        let before = app.project.clone();
+        app.run_command("project.folder.new");
+        let folder = app.explorer_target.unwrap();
+        roundtrip(&mut app, &before);
+        app.explorer_target = Some(folder);
+        app.project_name = "实验一".into();
+        let before = app.project.clone();
+        app.run_command("project.rename");
+        roundtrip(&mut app, &before);
+        app.explorer_target = Some(folder);
+        app.run_command("book.new");
+        let book = app.active.unwrap();
+        assert_eq!(app.project.folder_of(book), Some(folder));
+        app.explorer_target = Some(2);
+        app.folder_destination = Some(folder);
+        let before = app.project.clone();
+        app.run_command("project.move");
+        roundtrip(&mut app, &before);
+        app.explorer_target = Some(folder);
+        let before = app.project.clone();
+        app.run_command("project.folder.remove");
+        assert!(app.project.book(book).is_some());
+        roundtrip(&mut app, &before);
+        app.history = History::default();
+        app.explorer_target = Some(book);
+        let before = app.project.clone();
+        for (cmd, state) in [
+            ("window.minimize", WinState::Min),
+            ("window.maximize", WinState::Max),
+            ("window.restore", WinState::Normal),
+        ] {
+            app.run_command(cmd);
+            assert_eq!(app.geoms[&book].state, state);
+        }
+        app.run_command("project.hide");
+        assert!(!app.open[&book]);
+        app.run_command("project.show");
+        assert!(app.open[&book]);
+        assert_eq!(app.active, Some(book));
+        assert_eq!(app.project, before);
+        assert!(app.history.undo_label().is_none());
+    }
+
+    #[test]
+    fn workspace_command_ids_and_theme_actions_are_consistent() {
+        let mut ids = std::collections::BTreeSet::new();
+        for c in commands::commands() {
+            assert!(ids.insert(c.id), "重复命令 {}", c.id);
+            assert!(!c.label.is_empty());
+        }
+        let mut app = app();
+        let before = app.project.clone();
+        for (cmd, pref) in [
+            ("theme.dark", egui::ThemePreference::Dark),
+            ("theme.light", egui::ThemePreference::Light),
+            ("theme.system", egui::ThemePreference::System),
+        ] {
+            app.run_command(cmd);
+            assert_eq!(app.theme_pref, pref);
+        }
+        app.explorer_target = None;
+        app.project_name = "根目录选择不应重命名活动窗口".into();
+        app.run_command("project.rename");
+        assert_eq!(app.project, before);
+        app.active = None;
+        app.run_command("window.minimize");
+        assert_eq!(app.project, before);
+        assert!(app.history.undo_label().is_none());
+    }
+
+    #[test]
+    fn explorer_new_folder_button_and_tree_render_real_project_data() {
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        let mut app = app();
+        app.explorer_target = None;
+        let frame = |app: &mut SciApp, events| {
+            ctx.run(
+                egui::RawInput {
+                    events,
+                    ..Default::default()
+                },
+                |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| app.explorer(ui));
+                },
+            )
+        };
+        frame(&mut app, vec![]);
+        let output = frame(&mut app, vec![]);
+        let at = output
+            .shapes
+            .iter()
+            .find_map(|s| match &s.shape {
+                egui::Shape::Text(t) if t.galley.job.text == "新建文件夹" => Some(t.pos + egui::vec2(3.0, 4.0)),
+                _ => None,
+            })
+            .unwrap();
+        let before = app.project.clone();
+        for pressed in [true, false] {
+            frame(
+                &mut app,
+                vec![
+                    egui::Event::PointerMoved(at),
+                    egui::Event::PointerButton {
+                        pos: at,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+            );
+        }
+        assert_eq!(app.project.folders.len(), 1);
+        roundtrip(&mut app, &before);
+        let output = frame(&mut app, vec![]);
+        assert!(output
+            .shapes
+            .iter()
+            .any(|s| matches!(&s.shape,egui::Shape::Text(t) if t.galley.job.text=="文件夹1")));
     }
 
     #[test]

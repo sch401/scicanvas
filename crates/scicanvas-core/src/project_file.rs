@@ -8,7 +8,7 @@ use serde_json::Value;
 
 use crate::Project;
 
-pub const CURRENT_VERSION: u32 = 7;
+pub const CURRENT_VERSION: u32 = 8;
 
 /// 无版本号为 v0；显式未知版本拒绝打开，保留源文件。
 pub fn migrate(mut value: Value) -> Result<Value, String> {
@@ -60,6 +60,7 @@ pub fn from_json(text: &str) -> Result<Project, String> {
         .iter()
         .map(|b| b.id)
         .chain(project.graphs.iter().map(|g| g.id))
+        .chain(project.folders.iter().map(|f| f.id))
         .max()
         .unwrap_or(0);
     project.next_id = project.next_id.max(max_id.checked_add(1).ok_or("项目对象编号已用尽")?);
@@ -87,11 +88,13 @@ fn validate(project: &Project) -> Result<(), String> {
         .iter()
         .map(|b| b.id)
         .chain(project.graphs.iter().map(|g| g.id))
+        .chain(project.folders.iter().map(|f| f.id))
     {
         if id == 0 || id == u64::MAX || !ids.insert(id) {
             return Err(format!("对象编号 {id} 无效或重复"));
         }
     }
+    project.validate_folders()?;
     for book in &project.books {
         let mut keys = BTreeSet::new();
         for col in &book.columns {

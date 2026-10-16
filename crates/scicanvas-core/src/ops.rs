@@ -213,6 +213,7 @@ impl Project {
         g.first_layer_mut().plot_type = PlotType::Scatter;
         g.first_layer_mut().rows = item.rows;
         self.graphs.push(g);
+        self.move_project_item(id, self.folder_of(r.book_id)).unwrap();
         (id, 0)
     }
 
@@ -497,6 +498,7 @@ impl Project {
             c.data = stats.iter().map(|(_, d)| fmt_num(get(d))).collect();
         }
         self.books.push(nb);
+        self.move_project_item(id, self.folder_of(book_id))?;
         Ok(id)
     }
 

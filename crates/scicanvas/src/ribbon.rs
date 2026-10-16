@@ -205,7 +205,7 @@ pub static TABS: &[Tab] = &[
             },
             Group {
                 label: "显示",
-                items: &[Big("view.explorer"), Smalls(&["ribbon.toggle"])],
+                items: &[Big("view.explorer"), Smalls(&["ribbon.toggle", "project.folder.new"])],
             },
             Group {
                 label: "窗口",
