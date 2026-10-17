@@ -2263,6 +2263,10 @@ impl SciApp {
     /// Delete 清除、Ctrl+C / Ctrl+X / Ctrl+V、Ctrl+A 全选、Esc 取消选区、F2 或直接打字开始编辑。
     fn sheet_keys(&mut self, ctx: &egui::Context, id: u64, st: &mut SheetState) {
         use egui::{Event, Key};
+        // 项目管理器先于子窗口绘制：最后一次点击落在项目管理器时，按键不属于工作表。
+        if self.explorer_focus {
+            return;
+        }
         let Some(book) = self.project.book(id) else { return };
         if book.columns.is_empty() {
             return;
@@ -3020,6 +3024,8 @@ impl SciApp {
                     .resizable(true)
                     .default_width(190.0)
                     .show(ctx, |ui| self.explorer(ui));
+            } else {
+                self.explorer_focus = false;
             }
             // 子窗口放在面板之间剩下的区域里（Origin 的 MDI 工作区）
             self.child_windows(ctx);
@@ -3248,6 +3254,34 @@ mod history_tests {
         ui.key(&mut app, egui::Key::F2);
         assert_eq!(app.explorer_rename.map(|r| r.0), Some(1));
         assert!(ui.sheet.as_ref().unwrap().edit.is_none());
+    }
+
+    #[test]
+    fn sheet_keys_only_apply_after_clicking_the_sheet_not_the_explorer() {
+        let mut app = app();
+        app.active = Some(1);
+        app.explorer_target = Some(1);
+        let before = app.project.clone();
+        let mut ui = ExplorerUi::new();
+        ui.sheet = Some(SheetState {
+            range: Some(Range::single(0, 0)),
+            ..Default::default()
+        });
+        let at = ui.at(&mut app, "Book1");
+        ui.click(&mut app, at);
+        ui.key(&mut app, egui::Key::Delete);
+        ui.key(&mut app, egui::Key::ArrowDown);
+        ui.frame(&mut app, vec![egui::Event::Text("9".into())]);
+        assert_eq!(app.project, before);
+        let sheet = ui.sheet.as_ref().unwrap();
+        assert_eq!(sheet.range, Some(Range::single(0, 0)));
+        assert!(sheet.edit.is_none());
+
+        ui.click(&mut app, egui::pos2(300.0, 300.0));
+        ui.key(&mut app, egui::Key::Delete);
+        assert_ne!(app.project, before);
+        app.run_command("edit.undo");
+        assert_eq!(app.project, before);
     }
 
     #[test]
