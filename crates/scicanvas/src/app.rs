@@ -50,6 +50,8 @@ pub struct SciApp {
     explorer_click: Option<(u64, f64)>,
     /// Object ID and whether the inline name field needs initial focus.
     explorer_rename: Option<(u64, bool)>,
+    /// Whether the last pointer press landed in the project explorer panel.
+    explorer_focus: bool,
     /// 正在编辑属性的图形。
     pub(crate) props_for: Option<u64>,
     active_layers: HashMap<u64, usize>,
@@ -134,6 +136,7 @@ impl SciApp {
             project_name: String::new(),
             explorer_click: None,
             explorer_rename: None,
+            explorer_focus: false,
             props_for: None,
             active_layers: HashMap::new(),
             plot_draft: None,
@@ -1491,6 +1494,9 @@ impl SciApp {
     }
 
     fn explorer(&mut self, ui: &mut egui::Ui) {
+        if let Some(pos) = ui.input(|i| i.pointer.any_pressed().then(|| i.pointer.interact_pos()).flatten()) {
+            self.explorer_focus = ui.max_rect().contains(pos) && ui.ctx().layer_id_at(pos) == Some(ui.layer_id());
+        }
         ui.add_space(4.0);
         ui.label(RichText::new("项目管理器").strong());
         ui.horizontal(|ui| {
@@ -1506,9 +1512,12 @@ impl SciApp {
                 self.run_command("project.folder.new");
             }
         });
-        if self.explorer_rename.is_none() && ui.input(|i| i.key_pressed(egui::Key::F2)) {
+        // 面板先于子窗口绘制：只在项目管理器有焦点时处理 F2，并消费按键，避免工作表同时开始编辑单元格。
+        if self.explorer_rename.is_none() && self.explorer_focus && !ui.ctx().wants_keyboard_input() {
             if let Some(id) = self.project_target() {
-                self.start_explorer_rename(id);
+                if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::F2)) {
+                    self.start_explorer_rename(id);
+                }
             }
         }
         ui.separator();
@@ -3063,6 +3072,8 @@ mod history_tests {
     struct ExplorerUi {
         ctx: egui::Context,
         time: f64,
+        /// Draws the explorer as a side panel followed by this active sheet, as the app does.
+        sheet: Option<SheetState>,
     }
 
     impl ExplorerUi {
@@ -3070,7 +3081,11 @@ mod history_tests {
             let ctx = egui::Context::default();
             crate::fonts::setup(&ctx);
             ctx.style_mut(|s| s.animation_time = 0.0);
-            Self { ctx, time: 0.0 }
+            Self {
+                ctx,
+                time: 0.0,
+                sheet: None,
+            }
         }
 
         fn frame(&mut self, app: &mut SciApp, events: Vec<egui::Event>) -> egui::FullOutput {
@@ -3082,8 +3097,16 @@ mod history_tests {
                     events,
                     ..Default::default()
                 },
-                |ctx| {
-                    egui::CentralPanel::default().show(ctx, |ui| app.explorer(ui));
+                |ctx| match &mut self.sheet {
+                    Some(sheet) => {
+                        egui::SidePanel::left("explorer")
+                            .exact_width(190.0)
+                            .show(ctx, |ui| app.explorer(ui));
+                        app.sheet_keys(ctx, 1, sheet);
+                    }
+                    None => {
+                        egui::CentralPanel::default().show(ctx, |ui| app.explorer(ui));
+                    }
                 },
             )
         }
@@ -3203,6 +3226,28 @@ mod history_tests {
         assert_eq!(app.project.name_of(1), Some("失焦提交"));
         assert_eq!(app.explorer_target, None);
         roundtrip(&mut app, &before);
+    }
+
+    #[test]
+    fn f2_goes_to_the_focused_explorer_or_sheet_but_not_both() {
+        let mut app = app();
+        app.active = Some(1);
+        app.explorer_target = Some(1);
+        let mut ui = ExplorerUi::new();
+        ui.sheet = Some(SheetState {
+            range: Some(Range::single(0, 0)),
+            ..Default::default()
+        });
+        ui.click(&mut app, egui::pos2(300.0, 300.0));
+        ui.key(&mut app, egui::Key::F2);
+        assert!(app.explorer_rename.is_none());
+        assert!(ui.sheet.as_mut().unwrap().edit.take().is_some());
+
+        let at = ui.at(&mut app, "Book1");
+        ui.click(&mut app, at);
+        ui.key(&mut app, egui::Key::F2);
+        assert_eq!(app.explorer_rename.map(|r| r.0), Some(1));
+        assert!(ui.sheet.as_ref().unwrap().edit.is_none());
     }
 
     #[test]
