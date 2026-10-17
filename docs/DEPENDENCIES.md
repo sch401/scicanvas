@@ -17,6 +17,8 @@ GPL/LGPL 未列入允许列表。新增直接依赖继续优先 MIT / Apache-2.0
 | epaint_default_fonts 0.29.1 | OFL-1.1、LicenseRef-UFL-1.0 | egui 自带字体 |
 | resvg / usvg / usvg-parser / usvg-tree 0.37.0 | MPL-2.0 | egui SVG 图标 |
 
+核心库的 `serde` 特性使用 zip 9.x（MIT；4.x 有 RUSTSEC-2026-0369 等告警，因此工作区最低 Rust 版本升到 1.88）读写 `.scv`，只启用 deflate，并通过 flate2 选用纯 Rust 的 miniz_oxide 后端（与界面依赖相同），不引入加密或其他压缩算法。
+
 基础白名单还包含现有传递依赖使用的 ISC、Zlib、Unicode-3.0。
 上述字体和 MPL 例外按包及精确版本配置，其他包使用这些许可时仍需单独核对。
 

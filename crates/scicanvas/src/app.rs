@@ -467,14 +467,12 @@ impl SciApp {
     pub(crate) fn open_project(&mut self) {
         let Some(path) = rfd::FileDialog::new()
             .set_title("打开项目")
-            .add_filter("SciCanvas 项目", &["scproj"])
+            .add_filter("SciCanvas 项目", &["scv", "scproj"])
             .pick_file()
         else {
             return;
         };
-        let result = std::fs::read_to_string(&path)
-            .map_err(|e| e.to_string())
-            .and_then(|t| scicanvas_core::project_file::from_json(&t));
+        let result = scicanvas_core::project_file::load(&path);
         match result {
             Ok(p) => {
                 self.load_project(p, Some(path.clone()));
@@ -488,10 +486,16 @@ impl SciApp {
         let path = match (&self.project_path, save_as) {
             (Some(p), false) => p.clone(),
             _ => {
+                let stem = self
+                    .project_path
+                    .as_ref()
+                    .and_then(|p| p.file_stem())
+                    .map_or_else(|| "项目".into(), |s| s.to_string_lossy());
                 let Some(p) = rfd::FileDialog::new()
                     .set_title("保存项目")
-                    .add_filter("SciCanvas 项目", &["scproj"])
-                    .set_file_name("项目.scproj")
+                    .add_filter("SciCanvas 项目", &["scv"])
+                    .add_filter("旧版 JSON 项目", &["scproj"])
+                    .set_file_name(format!("{stem}.scv"))
                     .save_file()
                 else {
                     return;
@@ -2931,7 +2935,7 @@ impl SciApp {
                 ui.label("2. 输入数据：在工作簿里直接键入；或从 Excel 复制一块区域，单击单元格后 Ctrl+V，首行是文字时自动作为长名称。也可以 文件 → 导入数据。");
                 ui.label("3. 选列与绘图：单击列标题，Ctrl 或 Shift 多选；再点“绘图”选项卡里的图类型。没有选列时使用全部 Y 列。");
                 ui.label("4. 分析：“分析”选项卡里有线性 / 多项式拟合、平滑、微分、积分、归一化，“统计”选项卡里有列统计。对当前图形的曲线，或工作簿里选中的 Y 列计算，结果写进紧挨原列的新列。");
-                ui.label("5. 导出与保存：文件 → 导出图形（SVG）；文件 → 保存项目（.scproj）。");
+                ui.label("5. 导出与保存：文件 → 导出图形（SVG）；文件 → 保存项目（.scv，可用解压软件查看其中的表格和图）。");
             });
     }
 

@@ -138,7 +138,7 @@ fn area_mesh_has_the_correct_positive_negative_and_crossing_integrals() {
         assert!(sc.ya.lo <= 0.0 && sc.ya.hi >= 0.0);
         let area: f64 = triangles(&sc)
             .iter()
-            .flat_map(|pts| pts.chunks_exact(3))
+            .flat_map(|pts| pts.as_chunks::<3>().0)
             .map(|t| {
                 ((t[1][0] - t[0][0]) * (t[2][1] - t[0][1]) - (t[1][1] - t[0][1]) * (t[2][0] - t[0][0])).abs() / 2.0
             })
@@ -211,7 +211,7 @@ fn svg_contains_the_shared_triangles_opacity_and_independent_layer_clips() {
     let output = svg::render_page(p.graph(id).unwrap(), &p);
     assert_eq!(triangles(&sc).len(), 2);
     for pts in triangles(&sc) {
-        for t in pts.chunks_exact(3) {
+        for t in pts.as_chunks::<3>().0 {
             assert!(output.contains(&format!(
                 "M{:.2},{:.2}L{:.2},{:.2}L{:.2},{:.2}Z",
                 t[0][0], t[0][1], t[1][0], t[1][1], t[2][0], t[2][1]

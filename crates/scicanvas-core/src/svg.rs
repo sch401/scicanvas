@@ -98,7 +98,7 @@ fn prim(out: &mut String, p: &Prim) {
         }
         Prim::Triangles { pts, color, opacity } => {
             let mut d = String::new();
-            for triangle in pts.chunks_exact(3) {
+            for triangle in pts.as_chunks::<3>().0 {
                 let _ = write!(
                     d,
                     "M{:.2},{:.2}L{:.2},{:.2}L{:.2},{:.2}Z",

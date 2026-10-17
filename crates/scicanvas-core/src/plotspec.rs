@@ -110,7 +110,7 @@ impl PlotSpec {
                     return Err("浮动柱请按下端、上端的顺序选择成对的 Y 列".into());
                 }
                 let mut uppers = Vec::new();
-                for pair in keys.chunks_exact(2) {
+                for pair in keys.as_chunks::<2>().0 {
                     self.base_by_y.insert(pair[1].clone(), pair[0].clone());
                     uppers.push(pair[1].clone());
                 }
@@ -148,7 +148,7 @@ impl PlotSpec {
                 if base == key
                     || book
                         .column(base)
-                        .map_or(true, |c| matches!(c.role, crate::Role::XError | crate::Role::YError))
+                        .is_none_or(|c| matches!(c.role, crate::Role::XError | crate::Role::YError))
                 {
                     return Err("浮动柱下端应为另一列有效数据".into());
                 }

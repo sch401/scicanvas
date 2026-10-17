@@ -736,7 +736,7 @@ pub fn backstage(
                 ui.add_space(4.0);
                 let where_ = match &app.project_path {
                     Some(p) => format!("当前项目文件：{}", p.display()),
-                    None => "当前项目还没有保存。用“保存项目”存为 .scproj 文件。".to_string(),
+                    None => "当前项目还没有保存。用“保存项目”存为 .scv 文件。".to_string(),
                 };
                 ui.label(where_);
                 ui.add_space(20.0);
