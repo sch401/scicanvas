@@ -744,6 +744,28 @@ fn build() -> Vec<Command> {
         )
         .modifies(),
         c(
+            "row.insert",
+            "插入行",
+            "rowins",
+            "",
+            "行",
+            "insert row blank 插入行 空行",
+            need_range,
+            |a| a.insert_rows(),
+        )
+        .modifies(),
+        c(
+            "row.delete",
+            "删除行",
+            "rowdel",
+            "",
+            "行",
+            "delete remove row 删除行",
+            need_range,
+            |a| a.delete_rows(),
+        )
+        .modifies(),
+        c(
             "col.insert",
             "插入列",
             "colins",

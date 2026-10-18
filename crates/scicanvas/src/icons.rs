@@ -202,6 +202,18 @@ fn sources() -> Vec<(&'static str, String)> {
             ),
         ),
         (
+            "rowins",
+            wrap(
+                r##"<rect x="3.5" y="3.5" width="17" height="8" rx="1" fill="IC_PAPER"/><path d="M8 3.5v8"/><path d="M12 13.5v7M8.5 17h7" stroke="IC_G" stroke-width="2"/>"##,
+            ),
+        ),
+        (
+            "rowdel",
+            wrap(
+                r##"<rect x="3.5" y="3.5" width="17" height="8" rx="1" fill="IC_PAPER"/><path d="M8 3.5v8"/><path d="M9.5 14.5l5 5M14.5 14.5l-5 5" stroke="IC_R" stroke-width="2"/>"##,
+            ),
+        ),
+        (
             "coldel",
             wrap(
                 r##"<rect x="3.5" y="3.5" width="8" height="17" rx="1" fill="IC_PAPER"/><path d="M3.5 8h8"/><path d="M14.5 9.5l5 5M19.5 9.5l-5 5" stroke="IC_R" stroke-width="2"/>"##,

@@ -303,6 +303,35 @@ impl SciApp {
         }
     }
 
+    /// 在选区上方插入与选中行数相同的空行。
+    pub(crate) fn insert_rows(&mut self) {
+        let Some(bid) = self.active_book() else { return };
+        let Some(r) = self.sheets.get(&bid).and_then(|s| s.range) else {
+            self.status = "请先选择单元格".into();
+            return;
+        };
+        self.project.insert_rows(bid, r.r0(), r.rows());
+        self.status = format!("已在第 {} 行上方插入 {} 行", r.r0() + 1, r.rows());
+    }
+
+    /// 删除选区覆盖的整行（所有列）。
+    pub(crate) fn delete_rows(&mut self) {
+        let Some(bid) = self.active_book() else { return };
+        let Some(r) = self.sheets.get(&bid).and_then(|s| s.range) else {
+            self.status = "请先选择单元格".into();
+            return;
+        };
+        self.project.delete_rows(bid, r.r0(), r.r1());
+        if let Some(st) = self.sheets.get_mut(&bid) {
+            st.range = Some(Range::single(r.c0(), r.r0()));
+        }
+        self.status = if r.rows() == 1 {
+            format!("已删除第 {} 行", r.r0() + 1)
+        } else {
+            format!("已删除第 {}–{} 行", r.r0() + 1, r.r1() + 1)
+        };
+    }
+
     pub(crate) fn new_book(&mut self) {
         let parent = self.current_folder();
         let id = self.project.new_book();
@@ -2065,6 +2094,9 @@ impl SciApp {
                                                 ("edit.copy", "复制"),
                                                 ("edit.clear", "清除内容"),
                                                 ("", ""),
+                                                ("row.insert", "插入行"),
+                                                ("row.delete", "删除行"),
+                                                ("", ""),
                                                 ("plot.line", "折线图"),
                                                 ("plot.scatter", "散点图"),
                                                 ("plot.linesym", "点线图"),
@@ -3601,6 +3633,45 @@ mod history_tests {
         assert_ne!(app.active, Some(id));
         app.run_command("edit.redo");
         assert_eq!(app.open.get(&id), Some(&true));
+    }
+
+    #[test]
+    fn row_commands_follow_the_selection_and_undo_as_one_step() {
+        let mut app = app();
+        app.active = Some(1);
+        let before = app.project.clone();
+        let rows = |app: &SciApp| app.project.book(1).unwrap().columns[0].data.clone();
+        let original = rows(&app);
+        let select = |app: &mut SciApp| {
+            app.sheets.insert(
+                1,
+                SheetState {
+                    range: Some(Range {
+                        a: Cell { c: 1, r: 2 },
+                        b: Cell { c: 2, r: 4 },
+                    }),
+                    ..Default::default()
+                },
+            );
+        };
+
+        select(&mut app);
+        app.run_command("row.insert");
+        assert_eq!(rows(&app).len(), original.len() + 3);
+        assert_eq!(rows(&app)[2..5], [String::new(), String::new(), String::new()]);
+        assert_eq!(app.history.undo_label(), Some("插入行"));
+        roundtrip(&mut app, &before);
+        app.run_command("edit.undo");
+
+        select(&mut app);
+        app.run_command("row.delete");
+        assert_eq!(
+            rows(&app)[2],
+            original[5],
+            "whole rows go, whatever columns were selected"
+        );
+        assert_eq!(app.sheets[&1].range, Some(Range::single(1, 2)));
+        roundtrip(&mut app, &before);
     }
 
     #[test]

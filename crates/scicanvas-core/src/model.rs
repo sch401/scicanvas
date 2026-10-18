@@ -683,6 +683,66 @@ impl Project {
         }
     }
 
+    /// 在第 `at` 行之前插入 `n` 个空行；图形里引用这个工作簿的行范围随之下移。
+    pub fn insert_rows(&mut self, book_id: u64, at: usize, n: usize) {
+        let Some(b) = self.book_mut(book_id) else { return };
+        if n == 0 {
+            return;
+        }
+        for col in &mut b.columns {
+            // 插入点在数据末尾之后时，那里本来就是空行，不必补齐
+            if at < col.data.len() {
+                col.data.splice(at..at, std::iter::repeat_n(String::new(), n));
+            }
+        }
+        self.shift_row_ranges(book_id, |r| if r >= at { Some(r + n) } else { Some(r) });
+    }
+
+    /// 删除第 `r0..=r1` 行（整行，所有列）；图形的行范围相应上移，整段被删掉时改回使用全部行。
+    pub fn delete_rows(&mut self, book_id: u64, r0: usize, r1: usize) {
+        let Some(b) = self.book_mut(book_id) else { return };
+        if r0 > r1 {
+            return;
+        }
+        for col in &mut b.columns {
+            if r0 < col.data.len() {
+                col.data.drain(r0..=r1.min(col.data.len() - 1));
+            }
+            while col.data.last().is_some_and(|s| s.trim().is_empty()) {
+                col.data.pop();
+            }
+        }
+        let k = r1 - r0 + 1;
+        self.shift_row_ranges(book_id, |r| {
+            if r < r0 {
+                Some(r)
+            } else if r > r1 {
+                Some(r - k)
+            } else {
+                None
+            }
+        });
+    }
+
+    /// 按 `map` 平移引用 `book_id` 的图层行范围；端点被删除时向内收缩，整段删除则清除范围。
+    fn shift_row_ranges(&mut self, book_id: u64, map: impl Fn(usize) -> Option<usize>) {
+        for g in &mut self.graphs {
+            for layer in g.page.layers_mut() {
+                if layer.book_id != Some(book_id) {
+                    continue;
+                }
+                let Some((a, b)) = layer.rows else { continue };
+                // 起点被删时取删除段之后的第一行，终点被删时取删除段之前的最后一行
+                let start = (a..=b).find_map(&map);
+                let end = (a..=b).rev().find_map(&map);
+                layer.rows = match (start, end) {
+                    (Some(s), Some(e)) if s <= e => Some((s, e)),
+                    _ => None,
+                };
+            }
+        }
+    }
+
     pub fn new_book(&mut self) -> u64 {
         let id = self.alloc_id();
         let mut b = Book::new(id, self.unique_name("Book"));
@@ -846,6 +906,63 @@ mod tests {
         assert_eq!(s.len(), 2);
         assert_eq!(s[0].points.len(), 41);
         assert_eq!(s[0].name, "电压 A");
+    }
+
+    #[test]
+    fn inserting_and_deleting_rows_moves_cells_and_graph_row_ranges() {
+        let mut p = Project::sample();
+        let a = p.book(1).unwrap().columns[0].data.clone();
+        p.graph_mut(2).unwrap().first_layer_mut().rows = Some((5, 10));
+
+        p.insert_rows(1, 3, 2);
+        let col = &p.book(1).unwrap().columns[0].data;
+        assert_eq!(col.len(), a.len() + 2);
+        assert_eq!((&col[..3], &col[3], &col[4]), (&a[..3], &String::new(), &String::new()));
+        assert_eq!(&col[5..], &a[3..]);
+        assert_eq!(p.graph(2).unwrap().first_layer().rows, Some((7, 12)));
+
+        p.delete_rows(1, 3, 4);
+        assert_eq!(p.book(1).unwrap().columns[0].data, a);
+        assert_eq!(p.graph(2).unwrap().first_layer().rows, Some((5, 10)));
+
+        // 删掉范围的起点：范围从删除段之后的第一行开始
+        p.delete_rows(1, 4, 6);
+        assert_eq!(p.book(1).unwrap().columns[0].data[4], a[7]);
+        assert_eq!(p.graph(2).unwrap().first_layer().rows, Some((4, 7)));
+        // 整段删除：改回使用全部行
+        p.delete_rows(1, 3, 9);
+        assert_eq!(p.graph(2).unwrap().first_layer().rows, None);
+    }
+
+    #[test]
+    fn row_edits_leave_short_columns_alone_and_trim_trailing_blanks() {
+        let mut p = Project::sample();
+        let book = p.book_mut(1).unwrap();
+        book.columns[2].data.truncate(3);
+        book.columns[1].data.push(String::new());
+        let short = book.columns[2].data.clone();
+        p.insert_rows(1, 10, 4);
+        assert_eq!(
+            p.book(1).unwrap().columns[2].data,
+            short,
+            "rows past a column's end are already blank"
+        );
+
+        let book = p.book_mut(1).unwrap();
+        let last = book.columns[0].data.len() - 1;
+        book.columns[0].data[last] = String::new();
+        p.delete_rows(1, 0, 0);
+        let book = p.book(1).unwrap();
+        assert!(book
+            .columns
+            .iter()
+            .all(|c| c.data.last().is_none_or(|s| !s.trim().is_empty())));
+        assert_eq!(book.columns[2].data, short[1..]);
+        // 区间倒置、插入 0 行都不改动数据
+        let before = p.clone();
+        p.delete_rows(1, 5, 2);
+        p.insert_rows(1, 0, 0);
+        assert_eq!(p, before);
     }
 
     #[test]
