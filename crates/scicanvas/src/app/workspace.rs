@@ -3,6 +3,51 @@
 use super::*;
 
 impl SciApp {
+    fn select_project_item(&mut self, id: u64, extend: bool) {
+        if extend {
+            if self.explorer_selection.contains(&id) {
+                self.explorer_selection.retain(|selected| *selected != id);
+            } else {
+                self.explorer_selection.push(id);
+            }
+            self.explorer_target = self.explorer_selection.last().copied();
+        } else {
+            self.explorer_selection = vec![id];
+            self.explorer_target = Some(id);
+        }
+        self.project_name = self
+            .explorer_target
+            .and_then(|id| self.project.name_of(id))
+            .unwrap_or("")
+            .into();
+    }
+
+    /// 同时选中目录及其内容时，只移动最外层对象，保留内部层级。
+    fn selected_project_roots(&self, source: u64) -> Vec<u64> {
+        let selected = if self.explorer_selection.contains(&source) {
+            self.explorer_selection.clone()
+        } else {
+            vec![source]
+        };
+        selected
+            .iter()
+            .copied()
+            .filter(|id| {
+                let mut parent = self
+                    .project
+                    .folder(*id)
+                    .map_or_else(|| self.project.folder_of(*id), |f| f.parent);
+                while let Some(ancestor) = parent {
+                    if selected.contains(&ancestor) {
+                        return false;
+                    }
+                    parent = self.project.folder(ancestor).and_then(|f| f.parent);
+                }
+                true
+            })
+            .collect()
+    }
+
     pub(crate) fn open_plot_example(&mut self, kind: PlotType) {
         let example = crate::examples::ALL.iter().find(|e| e.kind == kind).unwrap();
         let mut sample = match scicanvas_core::project_file::from_scv(example.bytes) {
@@ -36,6 +81,7 @@ impl SciApp {
     }
 
     pub(super) fn show_item(&mut self, id: u64) {
+        self.explorer_selection = vec![id];
         self.explorer_target = Some(id);
         self.project_name = self.project.name_of(id).unwrap_or("").to_string();
         self.open.insert(id, true);
@@ -75,6 +121,7 @@ impl SciApp {
         self.active_layers.remove(&id);
         let name = self.project.name_of(id).unwrap_or("").to_string();
         self.project.remove(id);
+        self.explorer_selection.retain(|selected| *selected != id);
         self.open.remove(&id);
         self.selection.remove(&id);
         if self.active == Some(id) {
@@ -105,7 +152,7 @@ impl SciApp {
     pub(crate) fn new_folder(&mut self) {
         match self.project.add_folder(self.current_folder()) {
             Ok(id) => {
-                self.explorer_target = Some(id);
+                self.select_project_item(id, false);
                 self.status = "已新建文件夹，可在右键菜单中重命名".into();
                 self.project_name = self.project.name_of(id).unwrap_or("").to_string();
             }
@@ -124,10 +171,17 @@ impl SciApp {
 
     pub(crate) fn move_project_target(&mut self) {
         if let Some(id) = self.project_target() {
-            self.status = match self.project.move_project_item(id, self.folder_destination) {
-                Ok(()) => "已移动项目对象".into(),
-                Err(e) => e,
-            };
+            let roots = self.selected_project_roots(id);
+            // 移动只改变目录结构，保留目录副本即可整批回滚，无需复制表格数据。
+            let before = self.project.folders.clone();
+            for source in roots {
+                if let Err(error) = self.project.move_project_item(source, self.folder_destination) {
+                    self.project.folders = before;
+                    self.status = error;
+                    return;
+                }
+            }
+            self.status = "已移动所选项目对象".into();
         }
     }
 
@@ -137,6 +191,7 @@ impl SciApp {
             self.status = match self.project.remove_folder(id) {
                 Ok(()) => {
                     self.explorer_target = parent;
+                    self.explorer_selection = parent.into_iter().collect();
                     self.project_name = parent.and_then(|id| self.project.name_of(id)).unwrap_or("").to_string();
                     "已删除文件夹，内容已移到上级".into()
                 }
@@ -264,6 +319,13 @@ impl SciApp {
             }
         }
         ui.separator();
+        if self.explorer_selection.len() > 1 {
+            ui.label(format!(
+                "已选 {} 项，移动将应用于全部所选项",
+                self.explorer_selection.len()
+            ));
+            ui.label("重命名、显示、隐藏及删除针对当前项");
+        }
         ui.label("名称");
         let response = ui.text_edit_singleline(&mut self.project_name);
         if ui.button("重命名").clicked() || (response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)))
@@ -307,6 +369,7 @@ impl SciApp {
     }
 
     pub(super) fn start_explorer_rename(&mut self, id: u64) {
+        self.select_project_item(id, false);
         self.explorer_target = Some(id);
         self.project_name = self.project.name_of(id).unwrap_or("").into();
         self.explorer_click = None;
@@ -349,36 +412,46 @@ impl SciApp {
         let response = ui.add(
             egui::Button::new(text)
                 .frame(false)
-                .selected(self.explorer_target == Some(id))
+                .selected(self.explorer_selection.contains(&id) || self.explorer_target == Some(id))
                 .sense(egui::Sense::click_and_drag()),
         );
         response.dnd_set_drag_payload(ProjectDrag(id));
         if response.drag_started() {
             self.finish_explorer_rename(false);
+            if !self.explorer_selection.contains(&id) {
+                self.select_project_item(id, false);
+            }
             self.explorer_target = Some(id);
             self.project_name = self.project.name_of(id).unwrap_or("").into();
             self.explorer_click = None;
         }
         if response.clicked() {
             self.finish_explorer_rename(false);
+            let extend = ui.input(|i| i.modifiers.ctrl);
             let now = ui.input(|i| i.time);
-            let slow_second_click = self.explorer_target == Some(id)
+            let slow_second_click = !extend
+                && self.explorer_selection.len() <= 1
+                && self.explorer_target == Some(id)
                 && self
                     .explorer_click
                     .is_some_and(|(last, time)| last == id && (0.5..=2.0).contains(&(now - time)));
-            self.explorer_target = Some(id);
-            self.project_name = self.project.name_of(id).unwrap_or("").into();
-            if self.project.folder(id).is_none() {
+            self.select_project_item(id, extend);
+            if !extend && self.project.folder(id).is_none() {
                 self.run_command("project.show");
             }
             if slow_second_click {
                 self.start_explorer_rename(id);
-            } else {
+            } else if !extend {
                 self.explorer_click = Some((id, now));
+            } else {
+                self.explorer_click = None;
             }
         }
         if response.secondary_clicked() {
             self.finish_explorer_rename(false);
+            if !self.explorer_selection.contains(&id) {
+                self.select_project_item(id, false);
+            }
             self.explorer_click = None;
             self.project_name = self.project.name_of(id).unwrap_or("").into();
             self.folder_destination = self
@@ -387,7 +460,9 @@ impl SciApp {
                 .map_or_else(|| self.project.folder_of(id), |f| f.parent);
         }
         response.context_menu(|ui| self.project_item_menu(ui, id));
-        response.on_hover_text("拖到文件夹或项目根目录移动；选中后隔 0.5–2 秒再单击名称重命名，也可按 F2")
+        response.on_hover_text(
+            "Ctrl+单击添加或取消选择；拖到文件夹或根目录移动所选项；单选后隔 0.5–2 秒再单击名称重命名，也可按 F2",
+        )
     }
 
     pub(super) fn explorer_drop(&mut self, ui: &mut egui::Ui, response: &egui::Response, destination: Option<u64>) {
@@ -395,7 +470,7 @@ impl SciApp {
             let mut ancestor = destination;
             let mut valid = true;
             while let Some(id) = ancestor {
-                if id == payload.0 {
+                if self.selected_project_roots(payload.0).contains(&id) {
                     valid = false;
                     break;
                 }
@@ -413,11 +488,13 @@ impl SciApp {
             self.finish_explorer_rename(false);
             self.explorer_click = None;
             let source = payload.0;
-            let current = self
-                .project
-                .folder(source)
-                .map_or_else(|| self.project.folder_of(source), |f| f.parent);
-            if current != destination {
+            let changed = self.selected_project_roots(source).iter().any(|id| {
+                self.project
+                    .folder(*id)
+                    .map_or_else(|| self.project.folder_of(*id), |f| f.parent)
+                    != destination
+            });
+            if changed {
                 self.explorer_target = Some(source);
                 self.folder_destination = destination;
                 self.run_command("project.move");
@@ -496,6 +573,7 @@ impl SciApp {
             if root.clicked() {
                 self.finish_explorer_rename(false);
                 self.explorer_target = None;
+                self.explorer_selection.clear();
                 self.project_name.clear();
                 self.explorer_click = None;
             }
@@ -513,6 +591,11 @@ impl SciApp {
             }
         }
         ui.separator();
+        ui.label(if self.explorer_selection.len() > 1 {
+            format!("已选 {} 项", self.explorer_selection.len())
+        } else {
+            "Ctrl+单击可多选".into()
+        });
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
             .show(ui, |ui| self.explorer_folder(ui, None));
@@ -597,6 +680,7 @@ impl SciApp {
                 snapped = Some((id, snap));
             }
             if resp.pressed {
+                self.explorer_selection = vec![id];
                 self.active = Some(id);
                 if self.explorer_target != Some(id) {
                     self.project_name = self.project.name_of(id).unwrap_or("").to_string();

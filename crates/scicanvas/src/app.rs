@@ -51,6 +51,7 @@ pub struct SciApp {
     /// 当前激活的窗口。
     pub(crate) active: Option<u64>,
     pub(crate) explorer_target: Option<u64>,
+    explorer_selection: Vec<u64>,
     pub(crate) folder_destination: Option<u64>,
     pub(crate) project_name: String,
     explorer_click: Option<(u64, f64)>,
@@ -140,6 +141,7 @@ impl SciApp {
             selection: HashMap::new(),
             active: None,
             explorer_target: None,
+            explorer_selection: Vec::new(),
             folder_destination: None,
             project_name: String::new(),
             explorer_click: None,
@@ -194,6 +196,7 @@ impl SciApp {
             .or(project.books.last().map(|b| b.id));
         self.project = project;
         self.explorer_target = self.active;
+        self.explorer_selection = self.active.into_iter().collect();
         self.folder_destination = None;
         self.project_name.clear();
         self.explorer_click = None;
@@ -680,6 +683,7 @@ impl SciApp {
             self.props_for = None;
         }
         self.confirm_delete = None;
+        self.explorer_selection.retain(|id| self.project.name_of(*id).is_some());
         self.explorer_click = None;
         self.explorer_rename = None;
         self.project_name = self
@@ -2475,6 +2479,7 @@ mod history_tests {
     struct ExplorerUi {
         ctx: egui::Context,
         time: f64,
+        modifiers: egui::Modifiers,
         /// Draws the explorer as a side panel followed by this active sheet, as the app does.
         sheet: Option<SheetState>,
     }
@@ -2487,6 +2492,7 @@ mod history_tests {
             Self {
                 ctx,
                 time: 0.0,
+                modifiers: egui::Modifiers::NONE,
                 sheet: None,
             }
         }
@@ -2496,6 +2502,7 @@ mod history_tests {
             self.ctx.run(
                 egui::RawInput {
                     time: Some(self.time),
+                    modifiers: self.modifiers,
                     screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(400.0, 600.0))),
                     events,
                     ..Default::default()
@@ -2679,6 +2686,73 @@ mod history_tests {
         assert_ne!(app.project, before);
         app.run_command("edit.undo");
         assert_eq!(app.project, before);
+    }
+
+    #[test]
+    fn explorer_ctrl_click_toggles_selection_without_rename_or_data_changes() {
+        let mut app = app();
+        let folder = app.project.add_folder(None).unwrap();
+        let before = app.project.clone();
+        let mut ui = ExplorerUi::new();
+        let book = ui.at(&mut app, "Book1");
+        ui.click(&mut app, book);
+        assert_eq!(app.explorer_selection, vec![1]);
+        let graph = ui.at(&mut app, "Graph1");
+        ui.modifiers.ctrl = true;
+        ui.click(&mut app, graph);
+        assert_eq!(app.explorer_selection, vec![1, 2]);
+        let name = app.project.name_of(folder).unwrap().to_owned();
+        let folder_pos = ui.at(&mut app, &name);
+        ui.click(&mut app, folder_pos);
+        assert_eq!(app.explorer_selection, vec![1, 2, folder]);
+        ui.time += 0.7;
+        ui.click(&mut app, folder_pos);
+        assert_eq!(app.explorer_selection, vec![1, 2]);
+        assert!(app.explorer_rename.is_none());
+        ui.click(&mut app, graph);
+        assert_eq!(app.explorer_selection, vec![1]);
+        ui.click(&mut app, book);
+        assert!(app.explorer_selection.is_empty());
+        assert_eq!(app.explorer_target, None);
+        ui.modifiers = egui::Modifiers::NONE;
+        ui.click(&mut app, graph);
+        assert_eq!(app.explorer_selection, vec![2]);
+        assert_eq!(app.project, before);
+        assert!(app.history.undo_label().is_none());
+    }
+
+    #[test]
+    fn explorer_multi_drag_keeps_folder_contents_and_undoes_in_one_step() {
+        let mut app = app();
+        let parent = app.project.add_folder(None).unwrap();
+        let destination = app.project.add_folder(None).unwrap();
+        app.project.rename_project_item(parent, "来源").unwrap();
+        app.project.rename_project_item(destination, "目标").unwrap();
+        app.project.move_project_item(1, Some(parent)).unwrap();
+        let before = app.project.clone();
+        let mut ui = ExplorerUi::new();
+        let source = ui.at(&mut app, "来源");
+        ui.click(&mut app, source);
+        ui.modifiers.ctrl = true;
+        let book = ui.at(&mut app, "Book1");
+        ui.click(&mut app, book);
+        let graph = ui.at(&mut app, "Graph1");
+        ui.click(&mut app, graph);
+        ui.modifiers = egui::Modifiers::NONE;
+        ui.drag(&mut app, "Graph1", "目标");
+        assert_eq!(app.project.folder(parent).unwrap().parent, Some(destination));
+        assert_eq!(app.project.folder_of(1), Some(parent));
+        assert_eq!(app.project.folder_of(2), Some(destination));
+        roundtrip(&mut app, &before);
+        // 有一个目标会形成目录循环时，整批移动保持原样。
+        app.explorer_selection = vec![2, destination];
+        app.explorer_target = Some(2);
+        app.folder_destination = Some(parent);
+        let before = app.project.clone();
+        let label = app.history.undo_label().map(str::to_owned);
+        app.run_command("project.move");
+        assert_eq!(app.project, before);
+        assert_eq!(app.history.undo_label().map(str::to_owned), label);
     }
 
     #[test]
