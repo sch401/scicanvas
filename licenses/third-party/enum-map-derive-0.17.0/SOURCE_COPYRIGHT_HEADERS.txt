@@ -1,0 +1,131 @@
+[src/derive_enum.rs]
+// SPDX-FileCopyrightText: 2021 - 2023 Kamila Borowska <kamila@borowska.pw>
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+use crate::type_length;
+use proc_macro2::TokenStream;
+use quote::{format_ident, quote, ToTokens};
+use syn::{DataEnum, Fields, FieldsNamed, FieldsUnnamed, Ident, Variant};
+
+pub fn generate(name: Ident, data_enum: DataEnum) -> TokenStream {
+    let mut generator = EnumGenerator::empty();
+
+[src/derive_enum.rs]
+// SPDX-FileCopyrightText: 2021 - 2023 Kamila Borowska <kamila@borowska.pw>
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+use crate::type_length;
+use proc_macro2::TokenStream;
+use quote::{format_ident, quote, ToTokens};
+use syn::{DataEnum, Fields, FieldsNamed, FieldsUnnamed, Ident, Variant};
+
+pub fn generate(name: Ident, data_enum: DataEnum) -> TokenStream {
+    let mut generator = EnumGenerator::empty();
+    for variant in &data_enum.variants {
+
+[src/derive_struct.rs]
+// SPDX-FileCopyrightText: 2021 - 2022 Kamila Borowska <kamila@borowska.pw>
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+use crate::type_length;
+use proc_macro2::TokenStream;
+use quote::quote;
+use syn::{DataStruct, Fields, FieldsNamed, FieldsUnnamed, Ident, Index};
+
+pub fn generate(name: Ident, data_struct: DataStruct) -> TokenStream {
+    StructGenerator::from_fields(&data_struct.fields).finish(&name)
+
+[src/derive_struct.rs]
+// SPDX-FileCopyrightText: 2021 - 2022 Kamila Borowska <kamila@borowska.pw>
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+use crate::type_length;
+use proc_macro2::TokenStream;
+use quote::quote;
+use syn::{DataStruct, Fields, FieldsNamed, FieldsUnnamed, Ident, Index};
+
+pub fn generate(name: Ident, data_struct: DataStruct) -> TokenStream {
+    StructGenerator::from_fields(&data_struct.fields).finish(&name)
+}
+
+[src/lib.rs]
+// SPDX-FileCopyrightText: 2017 - 2022 Kamila Borowska <kamila@borowska.pw>
+// SPDX-FileCopyrightText: 2018 hcpl <hcpl.prog@gmail.com>
+// SPDX-FileCopyrightText: 2019 mara <vmedea@protonmail.com>
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+// SPDX-FileCopyrightText: 2021 Dietrich <dietrich@teilgedanken.de>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+//! Procedural macro implementing `#[derive(Enum)]`
+//!
+//! This is supposed to used with `enum-map` crate, which provides the
+//! actual usage documentation.
+
+[src/lib.rs]
+// SPDX-FileCopyrightText: 2017 - 2022 Kamila Borowska <kamila@borowska.pw>
+// SPDX-FileCopyrightText: 2018 hcpl <hcpl.prog@gmail.com>
+// SPDX-FileCopyrightText: 2019 mara <vmedea@protonmail.com>
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+// SPDX-FileCopyrightText: 2021 Dietrich <dietrich@teilgedanken.de>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+//! Procedural macro implementing `#[derive(Enum)]`
+//!
+//! This is supposed to used with `enum-map` crate, which provides the
+//! actual usage documentation.
+
+
+[src/lib.rs]
+// SPDX-FileCopyrightText: 2018 hcpl <hcpl.prog@gmail.com>
+// SPDX-FileCopyrightText: 2019 mara <vmedea@protonmail.com>
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+// SPDX-FileCopyrightText: 2021 Dietrich <dietrich@teilgedanken.de>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+//! Procedural macro implementing `#[derive(Enum)]`
+//!
+//! This is supposed to used with `enum-map` crate, which provides the
+//! actual usage documentation.
+
+mod derive_enum;
+
+[src/lib.rs]
+// SPDX-FileCopyrightText: 2019 mara <vmedea@protonmail.com>
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+// SPDX-FileCopyrightText: 2021 Dietrich <dietrich@teilgedanken.de>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+//! Procedural macro implementing `#[derive(Enum)]`
+//!
+//! This is supposed to used with `enum-map` crate, which provides the
+//! actual usage documentation.
+
+mod derive_enum;
+mod derive_struct;
+
+[src/lib.rs]
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+// SPDX-FileCopyrightText: 2021 Dietrich <dietrich@teilgedanken.de>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+//! Procedural macro implementing `#[derive(Enum)]`
+//!
+//! This is supposed to used with `enum-map` crate, which provides the
+//! actual usage documentation.
+
+mod derive_enum;
+mod derive_struct;
+

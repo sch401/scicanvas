@@ -16,8 +16,8 @@
   "ref": "Project Explorer",
   "pri": "P0",
   "status": "已完成",
-  "how": "真实多级文件夹树；新建/重命名/菜单移动/删除保留内容；显示与隐藏窗口",
-  "verify": "层级、循环拦截、目录继承、保存迁移和撤销回归",
+  "how": "真实多级目录；拖放/菜单移动、慢速双击/F2 就地重命名、删除保留内容、显示/隐藏窗口；快捷键按焦点分流",
+  "verify": "项目树、移动/重命名历史、F2 与工作表键盘隔离回归已通过",
   "id": "F002",
   "milestone": "M1 日常够用"
  },
@@ -38,8 +38,8 @@
   "ref": "Arrange Windows",
   "pri": "P1",
   "status": "已实现待验收",
-  "how": "app.rs 已接入层叠/平铺命令，按工作区尺寸排列可见窗口并恢复普通状态",
-  "verify": "窗口基础回归已通过；不同窗口数、窄工作区与显示缩放的人工验收待做",
+  "how": "层叠/平铺、边缘及四角吸附、顶部吸附布局与 Snap Assist 候选补位已接入",
+  "verify": "窗口几何、吸附和候选补位回归通过；Windows 不同缩放、窄窗口手工验收待做",
   "id": "F004",
   "milestone": "M2 论文全流程"
  },
@@ -49,8 +49,8 @@
   "ref": "Opening, Closing and Backing Up the Origin Project File",
   "pri": "P0",
   "status": "已完成",
-  "how": "v8 .scproj、v0–v7 迁移、文件夹校验、同目录临时文件替换",
-  "verify": "项目/文件夹往返、损坏引用、旧文件迁移与保存失败回归",
+  "how": ".scv ZIP 包保存 project.json、清单、CSV 表格和 SVG 预览，兼容旧 .scproj；内部数据 v8、迁移 v0–v7、完整性校验与原子替换",
+  "verify": "scv_files/project_files：包内容、往返、损坏输入、旧版迁移及保存回归已通过",
   "id": "F005",
   "milestone": "M1 日常够用"
  },
@@ -378,9 +378,9 @@
   "feature": "设置列值（公式列）",
   "ref": "Using Formulae to Set or Transform Worksheet Column Values",
   "pri": "P0",
-  "status": "已实现待验收",
-  "how": "工作表 → 设置列值（Ctrl+Q）：自写表达式解析器，列用短名或 col(A)，行号 i，常数 pi / e，+ − × ÷ ^ 与 24 个常用函数；结果覆盖目标列，可撤销",
-  "verify": "单元测试覆盖运算优先级（-2^2 = -4、^ 右结合）、函数、缺失值与错误提示；Origin 同公式对照待做",
+  "status": "部分实现",
+  "how": "Ctrl+Q 设置列值：表达式、列引用/col(A)、行号 i、pi/e、24 个函数调用名；按当前数据一次性覆盖结果并支持撤销。列公式持久化、依赖图和自动重算待做",
+  "verify": "公式解析/优先级/错误、写回与撤销回归已通过；源列变化自动重算与循环依赖验收待实现",
   "id": "F035",
   "milestone": "M1 日常够用"
  },
@@ -763,9 +763,9 @@
   "feature": "批量导入多个文件",
   "ref": "Importing Simple ASCII Data Files",
   "pri": "P1",
-  "status": "未开始",
-  "how": "",
-  "verify": "手动操作",
+  "status": "已实现待验收",
+  "how": "已有多文件拖入入口：数据文件逐个创建工作簿并合为一步撤销；混入项目时只打开第一个项目，其余忽略。当前文件对话框为单选，批量入口使用拖放",
+  "verify": "多文件拖入、结果写回、项目混入规则及一步撤销回归通过；Windows 多种格式、大批量文件与部分失败手工验收待做",
   "id": "F070",
   "milestone": "M2 论文全流程"
  },
@@ -895,9 +895,9 @@
   "feature": "页面-图层-曲线 三层结构",
   "ref": "The Page-Layer-Plot Hierarchy",
   "pri": "P0",
-  "status": "已完成",
-  "how": "Graph → Page → Layer → PlotSpec；v0–v2 迁移与显式图层访问",
-  "verify": "迁移、往返和 SVG 版面回归测试",
+  "status": "部分实现",
+  "how": "已有 Graph→Page→Layer→PlotSpec 与多 Y 曲线映射；每层持有一个 PlotSpec。持久化独立 Plot 对象、各曲线样式与 AxisSet 仍属 A2",
+  "verify": "多层/跨工作簿/保存与共享版面回归通过；独立 Plot 和同层混合图型待实现",
   "id": "F082",
   "milestone": "M1 日常够用"
  },
@@ -951,7 +951,7 @@
   "ref": "Zooming on the Graph Page and inside Layer",
   "pri": "P0",
   "status": "已完成",
-  "how": "egui_plot",
+  "how": "自绘 plot.rs/coord.rs：图层独立缩放、平移和视图复位；固定页面画布整体缩放",
   "verify": "手动操作",
   "id": "F087",
   "milestone": "M1 日常够用"
@@ -995,7 +995,7 @@
   "ref": "Graph Formats and Themes",
   "pri": "P1",
   "status": "未开始",
-  "how": "",
+  "how": "已有 Nature 默认配色与版式；图形主题的保存、切换和应用入口待做，默认样式单独计入现有绘图能力",
   "verify": "目视检查",
   "id": "F091",
   "milestone": "M2 论文全流程"
@@ -1083,7 +1083,7 @@
   "ref": "Graph Legends",
   "pri": "P0",
   "status": "已完成",
-  "how": "",
+  "how": "图例按曲线名称和当前图层更新，并按实际图元避让；图例手动编辑/拖动另见 F100",
   "verify": "目视检查",
   "id": "F099",
   "milestone": "M1 日常够用"
@@ -1094,7 +1094,7 @@
   "ref": "Manual Control of the Graph Legend",
   "pri": "P1",
   "status": "未开始",
-  "how": "",
+  "how": "已有自动图例避让，手动位置拖动和文字编辑入口待做",
   "verify": "手动操作",
   "id": "F100",
   "milestone": "M2 论文全流程"
@@ -1201,7 +1201,7 @@
   "ref": "The Arrange Layers Dialog Box",
   "pri": "P0",
   "status": "部分实现",
-  "how": "网格列数、页面尺寸、自由矩形与透明叠放已实现；独立网格间距/对齐配置待做",
+  "how": "已有上下/左右/四面板快捷创建、网格列数、自由矩形与透明叠放；独立网格间距/对齐与轴联动待做",
   "verify": "布局、命中、透明背景、迁移与撤销回归已通过；间距配置待实现",
   "id": "F109",
   "milestone": "M1 日常够用"
@@ -1321,9 +1321,9 @@
   "feature": "异常值检测",
   "ref": "Detecting Outliers",
   "pri": "P2",
-  "status": "未开始",
-  "how": "",
-  "verify": "与 Origin 比较",
+  "status": "部分实现",
+  "how": "统计菜单已有 Grubbs 检验，报告最远点及显著性；图内异常点标记、交互筛选及更多检测方法待做",
+  "verify": "Grubbs 数值与界面输出回归通过；图内标记、联动与范围交互待实现",
   "id": "F120",
   "milestone": "M3 高级功能"
  },
@@ -1494,11 +1494,19 @@
   "feature": "参数初值自动估计",
   "ref": "Fitting Functions",
   "pri": "P0",
-  "status": "部分实现",
-  "how": "6 个内置函数各自按数据估计初值（峰位与半高宽、对数线性回归、半高点穿越等）",
-  "verify": "自动初值在 6 组带噪声数据上全部收敛到 SciPy 最优解；其余函数待做",
+  "status": "已实现待验收",
+  "how": "当前 11 种内置非线性模型均有数据驱动初值估计；支持固定参数并报告未收敛状态",
+  "verify": "nlfit.rs 模型估计和拟合回归已通过；退化数据、复杂初值与 Origin 实例验收待做",
   "id": "F135",
-  "milestone": "M1 日常够用"
+  "milestone": "M1 日常够用",
+  "sub_items": {
+   "当前模型自动初值": {
+    "total": 11,
+    "done": 0,
+    "review": 11,
+    "note": "11 为当前内置模型数；完整函数库仍见 F514，退化数据与 Origin 实例待验收"
+   }
+  }
  },
  {
   "module": "回归与拟合",
@@ -1527,9 +1535,9 @@
   "feature": "拟合报告（参数表、ANOVA、置信带、预测带）",
   "ref": "Interpreting Regression Results",
   "pri": "P0",
-  "status": "未开始",
-  "how": "statrs 计算 t / F 分布",
-  "verify": "参数、标准误、R² 与 Origin 差 < 1e-6",
+  "status": "部分实现",
+  "how": "线性/多项式、非线性和多元回归已有临时报告，含参数/标准误、R²/RSS 等；多元回归还有 t/p 与整体 F 检验。完整拟合 ANOVA、置信/预测带、持久化报告待做",
+  "verify": "现有报告格式、数值及复制回归通过；完整拟合报告与带状输出待验收",
   "id": "F138",
   "milestone": "M1 日常够用"
  },
@@ -1775,16 +1783,24 @@
   "how": "分析 → 插值：线性、自然三次样条、Akima，等间距 X 网格、可自定义范围并按端点段外推；结果写成新 X/Y 列并加到图上，一步撤销",
   "verify": "与 SciPy 1.17.1 interp1d / CubicSpline / Akima1DInterpolator 的区间内与外推值一致（1e-12）；Origin 对照待做",
   "id": "F158",
-  "milestone": "M1 日常够用"
+  "milestone": "M1 日常够用",
+  "sub_items": {
+   "插值方法": {
+    "total": 3,
+    "done": 0,
+    "review": 3,
+    "note": "线性、自然三次样条、Akima；均匀输出网格入口已接入"
+   }
+  }
  },
  {
   "module": "数学运算",
   "feature": "按 X 求 Y 插值",
   "ref": "Interpolate/Extrapolate Y from X",
   "pri": "P1",
-  "status": "未开始",
-  "how": "自写，数值算法参照 Numerical Recipes / SciPy",
-  "verify": "与 Origin 及 SciPy 结果比较",
+  "status": "部分实现",
+  "how": "interpolate.rs 已可在指定 X 数组计算 Y；桌面插值对话框提供均匀网格及范围。按用户指定 X 列或单点查询的独立入口待做",
+  "verify": "线性/样条/Akima 参考值和外推回归通过；用户 X 列查询入口待实现",
   "id": "F159",
   "milestone": "M2 论文全流程"
  },
@@ -1870,9 +1886,9 @@
   "feature": "多条曲线平均 / 合并",
   "ref": "Average/Merge Multiple Curves",
   "pri": "P1",
-  "status": "已实现待验收",
-  "how": "分析 → 曲线平均：各曲线线性插值到 X 范围交集上的等间距点后求平均与标准差（Y 误差），结果表与线图",
-  "verify": "与 numpy.interp 插值后平均一致（1e-12）",
+  "status": "部分实现",
+  "how": "已把多曲线线性插值到共同 X 范围求均值/标准差，输出结果表、Y 误差及线图；通用曲线合并工作流待做",
+  "verify": "平均结果、缺失值、结果输出和一步撤销回归通过；通用合并入口与参考软件验收待做",
   "id": "F167",
   "milestone": "M2 论文全流程"
  },
@@ -2006,7 +2022,15 @@
   "how": "统计 → 正态性检验：Shapiro–Wilk（Royston AS R94，3 ≤ N ≤ 5000），每个点选列一行；KS、Anderson–Darling 待做",
   "verify": "与 SciPy 1.17.1 shapiro 一致（W 1e-6，SciPy 内部为单精度；p 1e-4）",
   "id": "F179",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "sub_items": {
+   "列明的正态性方法": {
+    "total": 3,
+    "done": 0,
+    "review": 1,
+    "note": "Shapiro–Wilk 已接入；KS、Anderson–Darling 未开始；仅计本条列明方法"
+   }
+  }
  },
  {
   "module": "统计",
@@ -2061,7 +2085,15 @@
   "how": "统计 → Grubbs 异常值：双侧检验离均值最远的点，给出 G、临界值 G(0.05) 与 p 值；Dixon Q 待做",
   "verify": "临界值与 p 值与按 scipy.stats.t 计算的 Grubbs 公式一致（1e-9）",
   "id": "F184",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "sub_items": {
+   "列明的异常值方法": {
+    "total": 2,
+    "done": 0,
+    "review": 1,
+    "note": "Grubbs 已接入；Dixon Q 未开始"
+   }
+  }
  },
  {
   "module": "统计",
@@ -2127,7 +2159,15 @@
   "how": "统计 → 单因素方差分析：每列一组，ANOVA 表、各组描述统计与 Tukey HSD 多重比较（组大小不等时为 Tukey–Kramer）；双因素、三因素待做",
   "verify": "与 SciPy 1.17.1 f_oneway、f.sf（1e-9）及 tukey_hsd（置信限 1e-7、p 值 1e-5）、studentized_range 一致；Origin 对照待做",
   "id": "F190",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "sub_items": {
+   "列明的 ANOVA 维数": {
+    "total": 3,
+    "done": 0,
+    "review": 1,
+    "note": "单因素及 Tukey/Tukey–Kramer 已接入；双因素、三因素未开始"
+   }
+  }
  },
  {
   "module": "统计",
@@ -2267,7 +2307,15 @@
   "how": "分析 → 信号处理 → FFT 滤波：低通、高通、带通、带阻理想滤波（频域置零后逆变换），结果写成新列，来源是图形时画进图里",
   "verify": "与 numpy rfft / irfft 掩模滤波逐点一致（1e-12）；带通 + 带阻 = 原信号",
   "id": "F202",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "sub_items": {
+   "频域滤波类型": {
+    "total": 4,
+    "done": 0,
+    "review": 4,
+    "note": "低通、高通、带通、带阻理想滤波；不代表 IIR 或其他滤波器实现"
+   }
+  }
  },
  {
   "module": "信号处理",
@@ -2286,7 +2334,7 @@
   "ref": "Fast Fourier Transform (FFT)",
   "pri": "P0",
   "status": "部分实现",
-  "how": "分析 → FFT：自写基 2 与 Bluestein（任意点数），矩形 / Hann / Hamming 窗，单边幅值（正弦振幅归一、相干增益补偿）、相位、功率谱表与幅值谱图；IFFT 待做",
+  "how": "任意点数 FFT（基 2/Bluestein）、矩形/Hann/Hamming 窗、单边幅值/相位/功率谱及幅值图已接入；滤波内部已有逆变换，独立 IFFT 命令与复数输入输出待做",
   "verify": "与 numpy.fft.rfft 的实部 / 虚部（基 2 与 Bluestein 两种长度）及 numpy 窗函数结果一致（1e-9）；IFFT 与 Origin 对照待做",
   "id": "F204",
   "milestone": "M1 日常够用"
@@ -5421,9 +5469,9 @@
   "feature": "分析报告表与重算（自动 / 手动 / 不重算）",
   "ref": "Recalculating Analysis Results",
   "pri": "P0",
-  "status": "未开始",
-  "how": "A5 Operation 与源数据依赖；变更后更新报告表",
-  "verify": "源数据改动、三种重算模式、报告往返和撤销回归",
+  "status": "部分实现",
+  "how": "已有独立分析结果工作簿与临时报表；统一持久化分析报告表、Operation 依赖记录及 Auto/Manual/None 三种重算模式待做",
+  "verify": "现有结果表/报告与历史回归通过；保存操作依赖、修改源数据触发重算尚待实现",
   "milestone": "M1 日常够用"
  },
  {
@@ -5649,16 +5697,16 @@
   "feature": "列公式函数库",
   "ref": "Set Column Values / Functions",
   "pri": "P0",
-  "status": "未开始",
-  "how": "A4 目标 120 个函数，分批登记定义与参考值",
-  "verify": "逐函数参考值、向量/缺失值和依赖重算",
+  "status": "部分实现",
+  "how": "表达式引擎已有 24 个函数调用名，对应 23 个独立函数（log/log10 同义），首批 120 函数目标、聚合函数及函数目录仍待补齐",
+  "verify": "已有解析和计算回归；当前函数按实现计入待验收，逐函数参考值覆盖与大数据验收待补",
   "milestone": "M1 日常够用",
   "sub_items": {
-   "规划函数": {
+   "规划函数（独立功能）": {
     "total": 120,
     "done": 0,
-    "review": 0,
-    "note": "SciCanvas 首批目标 120，不代表 Origin 约 300 个函数的完整覆盖"
+    "review": 23,
+    "note": "当前 24 个调用名中 log/log10 为同一函数；23 个功能按代码枚举计入待验收，逐函数参考验收待补；120 为 SciCanvas 首批目标"
    }
   }
  },
@@ -5712,16 +5760,22 @@
   "feature": "内置拟合函数库总览",
   "ref": "Fitting Function Library",
   "pri": "P1",
-  "status": "未开始",
-  "how": "汇总 F148–F156；239 为第三阶段路线参考基数，函数目录待逐项核对",
-  "verify": "逐函数测试与认证数据对照；现有线性/多项式回归单独计数",
+  "status": "部分实现",
+  "how": "当前内置 11 种非线性模型：Gauss、Lorentz、ExpDec1、Boltzmann、Logistic、Allometric1、Langmuir、Freundlich、准一级/准二级动力学、MichaelisMenten；239 项参考目录及其余函数族待补",
+  "verify": "已有模型的解析/SciPy 固定参考值、固定参数及界面写回回归通过；完整 NIST/Origin、函数目录逐项映射和稳定性验收待做",
   "milestone": "M2 论文全流程",
   "sub_items": {
    "显函数参考目录": {
     "total": 239,
     "done": 0,
     "review": 0,
-    "note": "第三阶段路线参考数量；与 F148–F156 重叠，不能相加；当前通用回归不计入内置库"
+    "note": "239 为第三阶段路线参考数；当前 11 模型逐项目录归属未确认，不直接折算为该目录完成数；与 F148–F156 重叠"
+   },
+   "当前内置模型": {
+    "total": 11,
+    "done": 0,
+    "review": 11,
+    "note": "当前 Model::ALL 的全部模型，已有模型回归；与 239 项参考目录逐项映射尚待核对，两个口径不相加"
    }
   }
  }

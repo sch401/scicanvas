@@ -1,0 +1,55 @@
+[src/lib.rs]
+// Copyright 2018 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+//! This library provides type-safe and fully-featured [`Mutex`] and [`RwLock`]
+//! types which wrap a simple raw mutex or rwlock type. This has several
+//! benefits: not only does it eliminate a large portion of the work in
+//! implementing custom lock types, it also allows users to write code which is
+//! generic with regards to different lock implementations.
+
+[src/mutex.rs]
+// Copyright 2018 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+use core::cell::UnsafeCell;
+use core::fmt;
+use core::marker::PhantomData;
+use core::mem;
+use core::ops::{Deref, DerefMut};
+
+[src/remutex.rs]
+// Copyright 2018 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+use crate::{
+    mutex::{RawMutex, RawMutexFair, RawMutexTimed},
+    GuardNoSend,
+};
+use core::{
+
+[src/rwlock.rs]
+// Copyright 2016 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+use core::cell::UnsafeCell;
+use core::fmt;
+use core::marker::PhantomData;
+use core::mem;
+use core::ops::{Deref, DerefMut};

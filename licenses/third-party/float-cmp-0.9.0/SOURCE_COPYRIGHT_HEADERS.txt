@@ -1,0 +1,69 @@
+[src/eq.rs]
+// Copyright 2014-2020 Optimal Computing (NZ) Ltd.
+// Licensed under the MIT license.  See LICENSE for details.
+
+use core::{f32, f64};
+#[cfg(feature = "num-traits")]
+#[allow(unused_imports)]
+use num_traits::float::FloatCore;
+use super::Ulps;
+
+/// A trait for approximate equality comparisons.
+pub trait ApproxEq: Sized {
+    /// This type type defines a margin within which two values are to be
+
+[src/lib.rs]
+// Copyright 2014-2020 Optimal Computing (NZ) Ltd.
+// Licensed under the MIT license.  See LICENSE for details.
+
+//! # float-cmp
+//!
+//! float-cmp defines and implements traits for approximate comparison of floating point types
+//! which have fallen away from exact equality due to the limited precision available within
+//! floating point representations. Implementations of these traits are provided for `f32`
+//! and `f64` types.
+//!
+//! When I was a kid in the '80s, the programming rule was "Never compare floating point
+//! numbers". If you can follow that rule and still get the outcome you desire, then more
+
+[src/ratio.rs]
+// Copyright 2014-2020 Optimal Computing (NZ) Ltd.
+// Licensed under the MIT license.  See LICENSE for details.
+
+use core::cmp::PartialOrd;
+use core::ops::{Sub, Div, Neg};
+use num_traits::Zero;
+
+/// ApproxEqRatio is a trait for approximate equality comparisons bounding the ratio
+/// of the difference to the larger.
+pub trait ApproxEqRatio : Div<Output = Self> + Sub<Output = Self> + Neg<Output = Self>
+    + PartialOrd + Zero + Sized + Copy
+{
+
+[src/ulps.rs]
+// Copyright 2014-2020 Optimal Computing (NZ) Ltd.
+// Licensed under the MIT license.  See LICENSE for details.
+
+#[cfg(feature="num_traits")]
+use num_traits::NumCast;
+
+/// A trait for floating point numbers which computes the number of representable
+/// values or ULPs (Units of Least Precision) that separate the two given values.
+#[cfg(feature="num_traits")]
+pub trait Ulps {
+    type U: Copy + NumCast;
+
+
+[src/ulps_eq.rs]
+// Copyright 2014-2020 Optimal Computing (NZ) Ltd.
+// Licensed under the MIT license.  See LICENSE for details.
+
+#[cfg(feature = "num-traits")]
+#[allow(unused_imports)]
+use num_traits::float::FloatCore;
+use super::Ulps;
+
+/// ApproxEqUlps is a trait for approximate equality comparisons.
+/// The associated type Flt is a floating point type which implements Ulps, and is
+/// required so that this trait can be implemented for compound types (e.g. vectors),
+/// not just for the floats themselves.

@@ -1,0 +1,14 @@
+[src/tables/name.rs]
+
+    pub const COPYRIGHT_NOTICE: u16 = 0;
+    pub const FAMILY: u16 = 1;
+    pub const SUBFAMILY: u16 = 2;
+    pub const UNIQUE_ID: u16 = 3;
+    pub const FULL_NAME: u16 = 4;
+    pub const VERSION: u16 = 5;
+    pub const POST_SCRIPT_NAME: u16 = 6;
+    pub const TRADEMARK: u16 = 7;
+    pub const MANUFACTURER: u16 = 8;
+    pub const DESIGNER: u16 = 9;
+    pub const DESCRIPTION: u16 = 10;
+    pub const VENDOR_URL: u16 = 11;

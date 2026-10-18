@@ -1,0 +1,74 @@
+[src/common.rs]
+
+Copyright 2022 The Arboard contributors
+
+The project to which this file belongs is licensed under either of
+the Apache 2.0 or the MIT license at the licensee's choice. The terms
+and conditions of the chosen license apply to this file.
+*/
+
+#[cfg(feature = "image-data")]
+use std::borrow::Cow;
+
+/// An error that might happen during a clipboard operation.
+///
+
+[src/lib.rs]
+
+Copyright 2022 The Arboard contributors
+
+The project to which this file belongs is licensed under either of
+the Apache 2.0 or the MIT license at the licensee's choice. The terms
+and conditions of the chosen license apply to this file.
+*/
+#![warn(unreachable_pub)]
+
+mod common;
+use std::{
+	borrow::Cow,
+	path::{Path, PathBuf},
+
+[src/platform/linux/x11.rs]
+
+Copyright 2022 The Arboard contributors
+
+The project to which this file belongs is licensed under either of
+the Apache 2.0 or the MIT license at the licensee's choice. The terms
+and conditions of the chosen license apply to this file.
+*/
+
+// More info about using the clipboard on X11:
+// https://tronche.com/gui/x/icccm/sec-2.html#s-2.6
+// https://freedesktop.org/wiki/ClipboardManager/
+
+use std::{
+
+[src/platform/osx.rs]
+
+Copyright 2022 The Arboard contributors
+
+The project to which this file belongs is licensed under either of
+the Apache 2.0 or the MIT license at the licensee's choice. The terms
+and conditions of the chosen license apply to this file.
+*/
+
+#[cfg(feature = "image-data")]
+use crate::common::ImageData;
+use crate::common::{private, Error};
+use objc2::{
+	msg_send,
+
+[src/platform/windows.rs]
+
+Copyright 2022 The Arboard contributors
+
+The project to which this file belongs is licensed under either of
+the Apache 2.0 or the MIT license at the licensee's choice. The terms
+and conditions of the chosen license apply to this file.
+*/
+
+#[cfg(feature = "image-data")]
+use crate::common::ImageData;
+use crate::common::{private, Error};
+use std::{
+	borrow::Cow,

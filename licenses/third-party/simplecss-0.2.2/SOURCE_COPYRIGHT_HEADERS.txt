@@ -1,0 +1,153 @@
+[examples/parse.rs]
+// Copyright 2019 the SimpleCSS Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Parse
+
+use std::io::{Read, Write};
+
+fn main() {
+    let args: Vec<_> = std::env::args().collect();
+    if args.len() != 2 {
+        println!("Usage:\n\tparse style.css\n\tparse - 'p {{ color:red }}'");
+        std::process::exit(1);
+
+[examples/select.rs]
+// Copyright 2019 the SimpleCSS Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Select
+
+struct XmlNode<'a, 'input: 'a>(roxmltree::Node<'a, 'input>);
+
+impl<'a, 'input: 'a> XmlNode<'a, 'input> {
+    fn select(&self, text: &str) -> Option<roxmltree::Node<'a, 'input>> {
+        let selectors = simplecss::Selector::parse(text)?;
+        self.0
+            .descendants()
+
+[src/lib.rs]
+// Copyright 2016 the SimpleCSS Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+/*!
+A simple [CSS 2.1](https://www.w3.org/TR/CSS21/) parser and selector.
+
+This is not a browser-grade CSS parser. If you need one,
+use [cssparser](https://crates.io/crates/cssparser) +
+[selectors](https://crates.io/crates/selectors).
+
+Since it's very simple we will start with limitations:
+
+
+[src/selector.rs]
+// Copyright 2019 the SimpleCSS Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use alloc::{vec, vec::Vec};
+use core::fmt;
+
+use log::warn;
+
+use crate::stream::Stream;
+use crate::Error;
+
+/// An attribute selector operator.
+
+[src/stream.rs]
+// Copyright 2016 the SimpleCSS Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use core::str;
+
+use crate::{Error, TextPos};
+
+trait CssCharExt {
+    fn is_name_start(&self) -> bool;
+    fn is_name_char(&self) -> bool;
+    fn is_non_ascii(&self) -> bool;
+    fn is_escape(&self) -> bool;
+
+[tests/declaration_tokenizer.rs]
+// Copyright 2019 the SimpleCSS Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Declaration Tokenizer
+
+use simplecss::*;
+
+macro_rules! tokenize {
+    ($name:ident, $text:expr, $( $token:expr ),*) => (
+        #[test]
+        fn $name() {
+            let mut t = DeclarationTokenizer::from($text);
+
+[tests/select.rs]
+// Copyright 2019 the SimpleCSS Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Select
+
+use simplecss::*;
+
+struct XmlNode<'a, 'input: 'a>(roxmltree::Node<'a, 'input>);
+
+impl<'a, 'input: 'a> XmlNode<'a, 'input> {
+    fn select(&self, text: &str) -> Vec<roxmltree::Node<'a, 'input>> {
+        let selectors = Selector::parse(text).unwrap();
+
+[tests/selector_tokenizer.rs]
+// Copyright 2019 the SimpleCSS Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Selector Tokenizer
+
+use simplecss::*;
+
+macro_rules! tokenize {
+    ($name:ident, $text:expr, $( $token:expr ),*) => (
+        #[test]
+        fn $name() {
+            let mut t = SelectorTokenizer::from($text);
+
+[tests/specificity.rs]
+// Copyright 2019 the SimpleCSS Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Specificity
+
+use simplecss::*;
+
+#[test]
+fn spec_01() {
+    let selectors = Selector::parse("*").unwrap();
+    assert_eq!(selectors.specificity(), [0, 0, 0]);
+}
+
+[tests/stylesheet.rs]
+// Copyright 2019 the SimpleCSS Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Stylesheet
+
+use simplecss::*;
+
+#[test]
+fn style_01() {
+    let style = StyleSheet::parse("");
+    assert_eq!(style.to_string(), "");
+}
+
+[tests/warnings.rs]
+// Copyright 2019 the SimpleCSS Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Warnings
+
+fn run_process(input: &str) -> String {
+    use std::io::Write;
+    use std::process::Stdio;
+
+    let mut child = std::process::Command::new("target/debug/examples/parse")
+        .arg("-")
+        .stdin(Stdio::piped())

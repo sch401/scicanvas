@@ -1,0 +1,312 @@
+[api/xml/gl.xml]
+    <comment>
+Copyright (c) 2013-2018 The Khronos Group Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+
+[api/xml/glx.xml]
+    <comment>
+Copyright (c) 2013-2018 The Khronos Group Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+
+[api/xml/wgl.xml]
+    <comment>
+Copyright (c) 2013-2018 The Khronos Group Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+
+[api_angle/scripts/egl.xml]
+
+    The above copyright notice and this permission notice shall be included
+    in all copies or substantial portions of the Materials.
+
+    THE MATERIALS ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+    EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+    IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+    CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+    TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+    MATERIALS OR THE USE OR OTHER DEALINGS IN THE MATERIALS.
+    -->
+    <!--
+
+[api_angle/scripts/egl.xml]
+    <!--
+    Copyright (c) 2013-2017 The Khronos Group Inc.
+
+    Permission is hereby granted, free of charge, to any person obtaining a
+    copy of this software and/or associated documentation files (the
+    "Materials"), to deal in the Materials without restriction, including
+    without limitation the rights to use, copy, modify, merge, publish,
+    distribute, sublicense, and/or sell copies of the Materials, and to
+    permit persons to whom the Materials are furnished to do so, subject to
+    the following conditions:
+
+    The above copyright notice and this permission notice shall be included
+    in all copies or substantial portions of the Materials.
+
+[api_angle/scripts/egl.xml]
+    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+    IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+    CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+    TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+    MATERIALS OR THE USE OR OTHER DEALINGS IN THE MATERIALS.
+    -->
+    <!--
+    This file, egl.xml, is the EGL API Registry. The older ".spec" file
+    format has been retired and will no longer be updated with new
+    extensions and API versions. The canonical version of the registry,
+    together with documentation, schema, and Python generator scripts used
+    to generate C header files for EGL, can be found in the Khronos Registry
+    at
+
+[api_angle/scripts/egl_angle_ext.xml]
+    <comment>
+    Copyright 2018 The ANGLE Project Authors. All rights reserved.
+    Use of this source code is governed by a BSD-style license that can be
+    found in the LICENSE file.
+
+    egl_angle_ext.xml
+        Includes data used to auto-generate ANGLE classes.
+    </comment>
+    <!-- SECTION: EGL command definitions. -->
+    <commands namespace="EGL">
+        <command>
+            <proto><ptype>EGLDeviceEXT</ptype> <name>eglCreateDeviceANGLE</name></proto>
+            <param><ptype>EGLint</ptype> <name>device_type</name></param>
+
+[api_angle/scripts/gl.xml]
+    <comment>
+Copyright (c) 2013-2018 The Khronos Group Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+
+[api_angle/scripts/gl_angle_ext.xml]
+    <comment>
+    Copyright 2018 The ANGLE Project Authors. All rights reserved.
+    Use of this source code is governed by a BSD-style license that can be
+    found in the LICENSE file.
+
+    gl_angle_ext.xml
+        Includes data used to auto-generate ANGLE classes.
+    </comment>
+    <!-- SECTION: GL command definitions. -->
+    <commands namespace="GL">
+            <command>
+                <proto>void <name>glBindUniformLocationCHROMIUM</name></proto>
+                <param><ptype>GLuint</ptype> <name>program</name></param>
+
+[api_angle/scripts/wgl.xml]
+    <comment>
+Copyright (c) 2013-2018 The Khronos Group Inc.
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+
+[api_egl/api/egl.xml]
+
+    The above copyright notice and this permission notice shall be included
+    in all copies or substantial portions of the Materials.
+
+    THE MATERIALS ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+    EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+    IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+    CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+    TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+    MATERIALS OR THE USE OR OTHER DEALINGS IN THE MATERIALS.
+    -->
+    <!--
+
+[api_egl/api/egl.xml]
+    <!--
+    Copyright (c) 2013-2017 The Khronos Group Inc.
+
+    Permission is hereby granted, free of charge, to any person obtaining a
+    copy of this software and/or associated documentation files (the
+    "Materials"), to deal in the Materials without restriction, including
+    without limitation the rights to use, copy, modify, merge, publish,
+    distribute, sublicense, and/or sell copies of the Materials, and to
+    permit persons to whom the Materials are furnished to do so, subject to
+    the following conditions:
+
+    The above copyright notice and this permission notice shall be included
+    in all copies or substantial portions of the Materials.
+
+[api_egl/api/egl.xml]
+    MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+    IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+    CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+    TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+    MATERIALS OR THE USE OR OTHER DEALINGS IN THE MATERIALS.
+    -->
+    <!--
+    This file, egl.xml, is the EGL API Registry. The older ".spec" file
+    format has been retired and will no longer be updated with new
+    extensions and API versions. The canonical version of the registry,
+    together with documentation, schema, and Python generator scripts used
+    to generate C header files for EGL, can be found in the Khronos Registry
+    at
+
+[api_webgl/specs/latest/1.0/webgl.idl]
+
+// Copyright (c) 2018 The Khronos Group Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and/or associated documentation files (the
+// "Materials"), to deal in the Materials without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Materials, and to
+// permit persons to whom the Materials are furnished to do so, subject to
+// the following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Materials.
+
+[api_webgl/specs/latest/1.0/webgl.idl]
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Materials.
+//
+// THE MATERIALS ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+// IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+// CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+// TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+// MATERIALS OR THE USE OR OTHER DEALINGS IN THE MATERIALS.
+
+typedef unsigned long  GLenum;
+
+[api_webgl/specs/latest/1.0/webgl.idl]
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+// IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+// CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+// TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+// MATERIALS OR THE USE OR OTHER DEALINGS IN THE MATERIALS.
+
+typedef unsigned long  GLenum;
+typedef boolean        GLboolean;
+typedef unsigned long  GLbitfield;
+typedef byte           GLbyte;         /* 'byte' should be a signed 8 bit type. */
+typedef short          GLshort;
+typedef long           GLint;
+typedef long           GLsizei;
+
+[api_webgl/specs/latest/2.0/webgl2.idl]
+
+// Copyright (c) 2018 The Khronos Group Inc.
+//
+// Permission is hereby granted, free of charge, to any person obtaining a
+// copy of this software and/or associated documentation files (the
+// "Materials"), to deal in the Materials without restriction, including
+// without limitation the rights to use, copy, modify, merge, publish,
+// distribute, sublicense, and/or sell copies of the Materials, and to
+// permit persons to whom the Materials are furnished to do so, subject to
+// the following conditions:
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Materials.
+
+[api_webgl/specs/latest/2.0/webgl2.idl]
+//
+// The above copyright notice and this permission notice shall be included
+// in all copies or substantial portions of the Materials.
+//
+// THE MATERIALS ARE PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+// IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+// CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+// TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+// MATERIALS OR THE USE OR OTHER DEALINGS IN THE MATERIALS.
+
+typedef long long GLint64;
+
+[api_webgl/specs/latest/2.0/webgl2.idl]
+// MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT.
+// IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY
+// CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT,
+// TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+// MATERIALS OR THE USE OR OTHER DEALINGS IN THE MATERIALS.
+
+typedef long long GLint64;
+typedef unsigned long long GLuint64;
+
+
+[Exposed=(Window,Worker)]
+interface WebGLQuery : WebGLObject {
+};
+
+[build.rs]
+// Copyright 2015 Brendan Zabarauskas and the gl-rs developers
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+
+[src/lib.rs]
+// Copyright 2015 Brendan Zabarauskas and the gl-rs developers
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and

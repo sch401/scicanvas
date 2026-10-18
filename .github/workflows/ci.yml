@@ -40,6 +40,13 @@ jobs:
           python tools/install_cargo_deny.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & ./target/tools/cargo-deny/cargo-deny.exe --locked check --hide-inclusion-graph
+      - name: 第三方声明与离线源码检查
+        run: |
+          cargo fetch --locked --target x86_64-pc-windows-msvc
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/third_party.py --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python -m unittest discover -s tools -p "test_*.py"
       - name: 清单同步与子项显示回归
         run: |
           python docs/parity/build_parity.py --check

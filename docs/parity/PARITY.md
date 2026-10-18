@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 98 项，P1 146 项，P2 259 项，不做 11 项。
-状态：已完成 27 项，已实现待验收 50 项，部分实现 33 项，未开始 393 项，不做 11 项。
+状态：已完成 26 项，已实现待验收 50 项，部分实现 41 项，未开始 386 项，不做 11 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -23,10 +23,10 @@
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
 |---|---|---|---|---|---|---|---|
 | F001 | 多文档子窗口（拖动、缩放、最小化、最大化） | Basic Child Window Operations | P0 | 已完成 | 自绘 MDI；拖动/缩放、最小化换行、最大化/还原与统一窗口命令 | 真实 egui 拖动、缩放、窗口按钮与几何恢复回归 | — |
-| F002 | 项目管理器（文件夹树、显示 / 隐藏窗口） | Project Explorer | P0 | 已完成 | 真实多级文件夹树；新建/重命名/菜单移动/删除保留内容；显示与隐藏窗口 | 层级、循环拦截、目录继承、保存迁移和撤销回归 | — |
+| F002 | 项目管理器（文件夹树、显示 / 隐藏窗口） | Project Explorer | P0 | 已完成 | 真实多级目录；拖放/菜单移动、慢速双击/F2 就地重命名、删除保留内容、显示/隐藏窗口；快捷键按焦点分流 | 项目树、移动/重命名历史、F2 与工作表键盘隔离回归已通过 | — |
 | F003 | 项目管理器多级文件夹、拖动整理 | Using Project Explorer to Manage Child Windows | P1 | 已实现待验收 | 真实多级目录；工作簿、图形与文件夹拖入目录/拖回根目录，目标高亮；名称慢速双击或 F2 就地编辑；菜单移动保留，均复用撤销事务 | 真实 egui 鼠标拖放、根目录移动、自身/下级拒绝、同目录无操作、慢/快速点击、Enter/Esc/失焦与撤销重做回归通过；Windows 手工交互验收待做 | — |
-| F004 | 窗口排列：层叠 / 平铺 | Arrange Windows | P1 | 已实现待验收 | app.rs 已接入层叠/平铺命令，按工作区尺寸排列可见窗口并恢复普通状态 | 窗口基础回归已通过；不同窗口数、窄工作区与显示缩放的人工验收待做 | — |
-| F005 | 项目文件保存 / 打开 | Opening, Closing and Backing Up the Origin Project File | P0 | 已完成 | v8 .scproj、v0–v7 迁移、文件夹校验、同目录临时文件替换 | 项目/文件夹往返、损坏引用、旧文件迁移与保存失败回归 | — |
+| F004 | 窗口排列：层叠 / 平铺 | Arrange Windows | P1 | 已实现待验收 | 层叠/平铺、边缘及四角吸附、顶部吸附布局与 Snap Assist 候选补位已接入 | 窗口几何、吸附和候选补位回归通过；Windows 不同缩放、窄窗口手工验收待做 | — |
+| F005 | 项目文件保存 / 打开 | Opening, Closing and Backing Up the Origin Project File | P0 | 已完成 | .scv ZIP 包保存 project.json、清单、CSV 表格和 SVG 预览，兼容旧 .scproj；内部数据 v8、迁移 v0–v7、完整性校验与原子替换 | scv_files/project_files：包内容、往返、损坏输入、旧版迁移及保存回归已通过 | — |
 | F006 | 自动备份与崩溃恢复 | Opening, Closing and Backing Up the Origin Project File | P1 | 未开始 | 定时写临时文件 | 强制退出后恢复 | — |
 | F007 | 最近打开的文件 | Recent Origin Files | P1 | 未开始 | 配置文件记录 | 手动操作 | — |
 | F008 | 撤销 / 重做 | — | P0 | 已完成 | 编辑事务；100 步 / 300 MiB；文件夹新建/重命名/移动/删除均可撤销 | 项目快照、真实编辑控件与文件夹事务回归 | — |
@@ -63,7 +63,7 @@
 | F032 | 数值显示格式（小数位、科学计数、工程单位） | Controlling How Numeric Data Display in the Worksheet Column | P0 | 未开始 | 列格式属性 | 单元测试 | — |
 | F033 | 日期时间列与计算 | Dates and Times in the Worksheet | P1 | 未开始 | chrono / jiff | 单元测试 | — |
 | F034 | 文本列与分类数据 | Setting Column Designation | P1 | 未开始 | 列数据类型 | 分类轴绘图 | — |
-| F035 | 设置列值（公式列） | Using Formulae to Set or Transform Worksheet Column Values | P0 | 已实现待验收 | 工作表 → 设置列值（Ctrl+Q）：自写表达式解析器，列用短名或 col(A)，行号 i，常数 pi / e，+ − × ÷ ^ 与 24 个常用函数；结果覆盖目标列，可撤销 | 单元测试覆盖运算优先级（-2^2 = -4、^ 右结合）、函数、缺失值与错误提示；Origin 同公式对照待做 | — |
+| F035 | 设置列值（公式列） | Using Formulae to Set or Transform Worksheet Column Values | P0 | 部分实现 | Ctrl+Q 设置列值：表达式、列引用/col(A)、行号 i、pi/e、24 个函数调用名；按当前数据一次性覆盖结果并支持撤销。列公式持久化、依赖图和自动重算待做 | 公式解析/优先级/错误、写回与撤销回归已通过；源列变化自动重算与循环依赖验收待实现 | — |
 | F036 | 单元格公式（=A1+B1） | Using a Formula to Set Cell Values | P2 | 未开始 | 依赖图 + 增量重算 | 单元测试 | — |
 | F037 | 生成数据序列（等差、随机数、正态分布） | Generating Simple Worksheet Datasets | P1 | 已实现待验收 | 工作表 → 填充序列：等差序列、均匀分布、正态分布随机数（SplitMix64 + Box–Muller），覆盖目标列，可撤销 | 单元测试：等差值精确；20000 个随机数的均值、标准差落在理论值附近；同种子可复现 | — |
 | F038 | 排序（列、工作表、按多列） | Sorting Worksheet Data | P0 | 部分实现 | 按一列稳定排序整张工作表，同行联动，数值/文本/空值规则已实现；独立列排序与多关键字排序待做 | sort_book 行对齐、升降序与撤销回归已通过；其余排序模式待实现 | — |
@@ -110,7 +110,7 @@
 | F067 | 导出 Excel | Exporting Worksheets and Matrices | P1 | 未开始 | rust_xlsxwriter | 用 Excel 打开检查 | — |
 | F068 | 导出 CSV | Exporting Worksheets and Matrices | P0 | 已实现待验收 | 工作表 → 导出 CSV：UTF-8 BOM、CRLF，表头为“长名称 (单位)”，与 .scv 内的 CSV 同一实现 | 导出后重新导入的往返测试；Excel 打开待人工验收 | — |
 | F069 | 拖放文件导入 | Importing Data by Drag-and-Drop | P0 | 已实现待验收 | 把文件拖进窗口：数据文件逐个导入为工作簿并合为一步撤销，项目文件（.scv / .scproj）直接打开；拖动时显示提示层 | 拖放事件回归（导入、撤销、打开项目）；资源管理器实际拖放待人工验收 | — |
-| F070 | 批量导入多个文件 | Importing Simple ASCII Data Files | P1 | 未开始 | — | 手动操作 | — |
+| F070 | 批量导入多个文件 | Importing Simple ASCII Data Files | P1 | 已实现待验收 | 已有多文件拖入入口：数据文件逐个创建工作簿并合为一步撤销；混入项目时只打开第一个项目，其余忽略。当前文件对话框为单选，批量入口使用拖放 | 多文件拖入、结果写回、项目混入规则及一步撤销回归通过；Windows 多种格式、大批量文件与部分失败手工验收待做 | — |
 | F071 | 从文件名和表头提取变量 | Extracting Variables from the File Name and Header | P2 | 未开始 | — | 单元测试 | — |
 | F072 | 二进制数据导入 | Importing Simple Binary Files with the Import Wizard | P2 | 未开始 | — | 单元测试 | — |
 | F073 | 第三方格式：MATLAB .mat | Importing Third Party Files | P2 | 未开始 | matfile | 与 MATLAB 比较 | — |
@@ -127,16 +127,16 @@
 |---|---|---|---|---|---|---|---|
 | F080 | 按选列自动配对 X / Y 绘图 | Creating Graphs from Graph Templates | P0 | 已完成 | plot_from_selection | 单元测试 | — |
 | F081 | 按选区（部分行）绘图 | Creating Graphs from Graph Templates | P0 | 已实现待验收 | 工作表矩形选区经 picked/PlotSpec.rows 接入作图、图库与保存，按原始行截取 | 选区行范围、无效行、项目往返与 SVG 回归已通过；Origin 同数据人工对照待做 | — |
-| F082 | 页面-图层-曲线 三层结构 | The Page-Layer-Plot Hierarchy | P0 | 已完成 | Graph → Page → Layer → PlotSpec；v0–v2 迁移与显式图层访问 | 迁移、往返和 SVG 版面回归测试 | — |
+| F082 | 页面-图层-曲线 三层结构 | The Page-Layer-Plot Hierarchy | P0 | 部分实现 | 已有 Graph→Page→Layer→PlotSpec 与多 Y 曲线映射；每层持有一个 PlotSpec。持久化独立 Plot 对象、各曲线样式与 AxisSet 仍属 A2 | 多层/跨工作簿/保存与共享版面回归通过；独立 Plot 和同层混合图型待实现 | — |
 | F083 | 往图层添加 / 移除曲线 | Adding or Swapping Data Plots in the Graph Layer | P0 | 未开始 | 图层内容对话框 | 手动操作 | — |
 | F084 | 多图层图形 | Creating Multi-Layer Graphs | P0 | 已实现待验收 | 多图层增删、跨工作簿数据、独立属性/裁剪/视图、分析写回目标层已实现 | 跨工作簿、布局、裁剪、视图、保存与撤销回归已通过；Origin 多层图人工对照待做 | — |
 | F085 | 函数绘图（y = f(x)） | Plotting Mathematical Functions | P1 | 未开始 | 复用公式解析器 | 与解析值比较 | — |
 | F086 | 分组绘图（按分类列分组） | Plotting Data by Groups | P1 | 未开始 | — | 与 Origin 比较 | — |
-| F087 | 图形缩放、平移 | Zooming on the Graph Page and inside Layer | P0 | 已完成 | egui_plot | 手动操作 | — |
+| F087 | 图形缩放、平移 | Zooming on the Graph Page and inside Layer | P0 | 已完成 | 自绘 plot.rs/coord.rs：图层独立缩放、平移和视图复位；固定页面画布整体缩放 | 手动操作 | — |
 | F088 | 批量绘图（同一模板换数据） | Batch Plotting | P1 | 未开始 | — | 手动操作 | — |
 | F089 | 图形模板（保存样式，换数据一键出图） | Creating Graphs from Graph Templates | P0 | 未开始 | 图形样式与数据引用分离 | 套模板后版式一致 | — |
 | F090 | 格式复制粘贴 | Copying and Pasting Formats | P1 | 未开始 | — | 手动操作 | — |
-| F091 | 主题（图形样式主题） | Graph Formats and Themes | P1 | 未开始 | — | 目视检查 | — |
+| F091 | 主题（图形样式主题） | Graph Formats and Themes | P1 | 未开始 | 已有 Nature 默认配色与版式；图形主题的保存、切换和应用入口待做，默认样式单独计入现有绘图能力 | 目视检查 | — |
 | F092 | 坐标轴范围与刻度 | Controlling the Graph Axis Display Range | P0 | 已完成 | ticks.rs（1/2/5 步长） | 与 Origin 自动刻度比较 | — |
 | F093 | 对数轴 | Axes Dialog Reference | P0 | 已完成 | — | 与 Origin 比较 | — |
 | F094 | 其他坐标类型：倒数、概率、log2、ln、Logit | Axes Dialog Reference | P1 | 未开始 | — | 与 Origin 比较 | — |
@@ -144,8 +144,8 @@
 | F096 | 刻度标签格式（科学计数、日期、自定义） | Axes Dialog Reference | P0 | 部分实现 | ticks.rs 已实现普通数值、a×10ⁿ 科学计数及对数刻度；日期与用户自定义格式待做 | 刻度边界与标签测试已通过；日期/自定义格式待实现 | — |
 | F097 | 次刻度、刻度方向、四边框线 | Axes Dialog Reference | P0 | 部分实现 | 屏幕/SVG 共用主次刻度；默认 Nature 风格，只画左轴和下轴、刻度朝外；四边框、朝内刻度和独立方向设置待做 | 共享 scene、刻度与显示比例回归已通过；方向配置及人工目视验收待做 | — |
 | F098 | 网格线 | Axes Dialog Reference | P0 | 已完成 | — | 目视检查 | — |
-| F099 | 图例（自动更新） | Graph Legends | P0 | 已完成 | — | 目视检查 | — |
-| F100 | 图例手动编辑与位置拖动 | Manual Control of the Graph Legend | P1 | 未开始 | — | 手动操作 | — |
+| F099 | 图例（自动更新） | Graph Legends | P0 | 已完成 | 图例按曲线名称和当前图层更新，并按实际图元避让；图例手动编辑/拖动另见 F100 | 目视检查 | — |
+| F100 | 图例手动编辑与位置拖动 | Manual Control of the Graph Legend | P1 | 未开始 | 已有自动图例避让，手动位置拖动和文字编辑入口待做 | 手动操作 | — |
 | F101 | 色阶条（Color Scale） | Color Scales | P1 | 未开始 | — | 目视检查 | — |
 | F102 | 文字标签（上下标、希腊字母、富文本） | Creating Text Labels | P0 | 未开始 | 迷你标记语言 + cosmic-text 排版 | 目视比较 | — |
 | F103 | LaTeX 公式 | Creating Text Labels | P1 | 未开始 | 评估 typst 或 MathJax 转 SVG | 目视比较 | — |
@@ -154,7 +154,7 @@
 | F106 | 误差棒 | Adding Error Bars to Your Graph | P0 | 已实现待验收 | 对称 X/Y 误差列、稳定自动关联、端帽/线宽、分组定位与屏幕/SVG 已实现；本条当前范围为对称误差 | 行对齐、对数裁剪、分组柱、往返与撤销回归已通过；Origin 对称误差图目视验收待做 | — |
 | F107 | 插入图片 / 表格到图中 | Inserting Image into Graph | P2 | 未开始 | — | 目视检查 | — |
 | F108 | 合并多张图 / 拆分图层 | The Merge Graph Dialog Box | P1 | 未开始 | — | 目视检查 | — |
-| F109 | 图层排列（行列网格、间距） | The Arrange Layers Dialog Box | P0 | 部分实现 | 网格列数、页面尺寸、自由矩形与透明叠放已实现；独立网格间距/对齐配置待做 | 布局、命中、透明背景、迁移与撤销回归已通过；间距配置待实现 | — |
+| F109 | 图层排列（行列网格、间距） | The Arrange Layers Dialog Box | P0 | 部分实现 | 已有上下/左右/四面板快捷创建、网格列数、自由矩形与透明叠放；独立网格间距/对齐与轴联动待做 | 布局、命中、透明背景、迁移与撤销回归已通过；间距配置待实现 | — |
 | F110 | 布局页（多图拼版） | Using the Layout Page Window | P1 | 未开始 | — | 目视检查 | — |
 | F111 | 曲线颜色、线型、符号递增 | Customizing Data Plot Colors | P0 | 已完成 | Nature 风格默认色系（深蓝、砖红、青、紫……）与圆点优先的符号顺序 | 目视比较 | — |
 | F112 | 按数据集控制颜色 / 大小（颜色映射） | Using a Dataset to Control Plot Color | P1 | 未开始 | — | 目视比较 | — |
@@ -170,7 +170,7 @@
 | F117 | 数据高亮联动（图 ↔ 工作表） | Data Highlighter: Selecting Points in both Graph and Source Worksheet | P1 | 未开始 | — | 手动操作 | — |
 | F118 | 屏蔽数据点（Mask） | Masking Data Points in the Graph or Worksheet | P1 | 未开始 | 掩码位图 | 屏蔽后拟合结果与 Origin 比较 | — |
 | F119 | 框选 / 删除 / 移动数据点 | Drawing or Moving, or Deleting Data Points | P2 | 未开始 | — | 手动操作 | — |
-| F120 | 异常值检测 | Detecting Outliers | P2 | 未开始 | — | 与 Origin 比较 | — |
+| F120 | 异常值检测 | Detecting Outliers | P2 | 部分实现 | 统计菜单已有 Grubbs 检验，报告最远点及显著性；图内异常点标记、交互筛选及更多检测方法待做 | Grubbs 数值与界面输出回归通过；图内标记、联动与范围交互待实现 | — |
 | F121 | 局部放大视图 | Magnifying or Zooming In on a Portion of the Graph | P2 | 未开始 | — | 手动操作 | — |
 | F122 | 快速拟合小工具（框选范围实时拟合） | The Quick Fit Gadget | P1 | 未开始 | 复用拟合引擎 | 与 Origin 比较 | — |
 | F123 | 快速寻峰小工具 | The Quick Peaks Gadget | P1 | 未开始 | — | 与 Origin 比较 | — |
@@ -193,10 +193,10 @@
 | F132 | 多元线性回归 | The Multiple Linear Regression Dialog Box | P1 | 已实现待验收 | 分析 → 多元线性回归：先点选自变量、最后点选因变量；参数表（值、标准误、t、p）与 R²、调整 R²、F 检验、残差标准差 | 与 numpy.linalg.lstsq 及 scipy.stats.t / f 计算的参数、标准误、p 值一致（1e-9），含缺失行与共线提示 | — |
 | F133 | 含 X 误差的线性拟合（York 法） | The Linear Fit with X Error Dialog (Pro Only) | P2 | 未开始 | — | 与 Origin 比较 | — |
 | F134 | 非线性拟合引擎（Levenberg–Marquardt） | Theory of Nonlinear Curve Fitting | P0 | 部分实现 | Levenberg–Marquardt（中心差分雅可比、自适应阻尼），标准误 (JᵀJ)⁻¹·RSS/(n−p)；目前只用内置函数，参数约束与自定义函数待做 | 与 SciPy 1.17.1 curve_fit 的参数（1e-6）、标准误（1e-4）一致，从自动初值收敛；Origin 对照待做 | — |
-| F135 | 参数初值自动估计 | Fitting Functions | P0 | 部分实现 | 6 个内置函数各自按数据估计初值（峰位与半高宽、对数线性回归、半高点穿越等） | 自动初值在 6 组带噪声数据上全部收敛到 SciPy 最优解；其余函数待做 | — |
+| F135 | 参数初值自动估计 | Fitting Functions | P0 | 已实现待验收 | 当前 11 种内置非线性模型均有数据驱动初值估计；支持固定参数并报告未收敛状态 | nlfit.rs 模型估计和拟合回归已通过；退化数据、复杂初值与 Origin 实例验收待做 | 当前模型自动初值：已完成 0/11，待验收 11，部分实现 0；11 为当前内置模型数；完整函数库仍见 F514，退化数据与 Origin 实例待验收 |
 | F136 | 参数固定、上下界、线性约束 | Parameters,Bounds,Constraints and Weighting | P0 | 部分实现 | 非线性拟合对话框可把任意参数固定为指定值，固定参数不计入自由度、标准误标为“固定”；上下界与线性约束待做 | 与 SciPy curve_fit 固定参数后的拟合一致（参数 1e-6、标准误 1e-4）；上下界待做 | — |
 | F137 | 加权拟合（误差列权重等） | Parameters,Bounds,Constraints and Weighting | P1 | 未开始 | — | 与 Origin 比较 | — |
-| F138 | 拟合报告（参数表、ANOVA、置信带、预测带） | Interpreting Regression Results | P0 | 未开始 | statrs 计算 t / F 分布 | 参数、标准误、R² 与 Origin 差 < 1e-6 | — |
+| F138 | 拟合报告（参数表、ANOVA、置信带、预测带） | Interpreting Regression Results | P0 | 部分实现 | 线性/多项式、非线性和多元回归已有临时报告，含参数/标准误、R²/RSS 等；多元回归还有 t/p 与整体 F 检验。完整拟合 ANOVA、置信/预测带、持久化报告待做 | 现有报告格式、数值及复制回归通过；完整拟合报告与带状输出待验收 | — |
 | F139 | 残差图（残差-自变量、正态概率图） | Residual Plot Analysis | P1 | 未开始 | — | 与 Origin 比较 | — |
 | F140 | 多峰拟合 | Multiple Curves/Multiple Peaks | P1 | 未开始 | — | 与 Origin 比较 | — |
 | F141 | 全局拟合（多组数据共享参数） | Multiple Curves/Multiple Peaks | P1 | 未开始 | — | 与 Origin 比较 | — |
@@ -216,14 +216,14 @@
 | F155 | 内置拟合函数：吸附与结合（Langmuir、Freundlich、BET、OneSiteBind 等） | Curve Fitting Functions（共 239 个） | P1 | 部分实现 | 吸附：Langmuir、Freundlich 等温线，准一级、准二级吸附动力学（线性化估计初值）；BET、OneSiteBind 等待做 | 与 SciPy 1.17.1 curve_fit 的参数（1e-6）、标准误（1e-4）一致，从自动初值（线性化回归）收敛；Origin 对照待做 | — |
 | F156 | 内置拟合函数：其余专业函数（流变、热力学、统计分布等） | Curve Fitting Functions（共 239 个） | P2 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 | — |
 | F157 | 寻峰分析专用函数（Bigaussian、FraserSuzuki 等 7 个） | Peak Analyzer Functions | P2 | 未开始 | — | 与 Origin 比较 | 寻峰函数：已完成 0/7，待验收 0，部分实现 0；第三阶段路线参考数量，目录待逐项核对 |
-| F514 | 内置拟合函数库总览 | Fitting Function Library | P1 | 未开始 | 汇总 F148–F156；239 为第三阶段路线参考基数，函数目录待逐项核对 | 逐函数测试与认证数据对照；现有线性/多项式回归单独计数 | 显函数参考目录：已完成 0/239，待验收 0，部分实现 0；第三阶段路线参考数量；与 F148–F156 重叠，不能相加；当前通用回归不计入内置库 |
+| F514 | 内置拟合函数库总览 | Fitting Function Library | P1 | 部分实现 | 当前内置 11 种非线性模型：Gauss、Lorentz、ExpDec1、Boltzmann、Logistic、Allometric1、Langmuir、Freundlich、准一级/准二级动力学、MichaelisMenten；239 项参考目录及其余函数族待补 | 已有模型的解析/SciPy 固定参考值、固定参数及界面写回回归通过；完整 NIST/Origin、函数目录逐项映射和稳定性验收待做 | 显函数参考目录：已完成 0/239，待验收 0，部分实现 0；239 为第三阶段路线参考数；当前 11 模型逐项目录归属未确认，不直接折算为该目录完成数；与 F148–F156 重叠；当前内置模型：已完成 0/11，待验收 11，部分实现 0；当前 Model::ALL 的全部模型，已有模型回归；与 239 项参考目录逐项映射尚待核对，两个口径不相加 |
 
 ## 数学运算
 
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
 |---|---|---|---|---|---|---|---|
-| F158 | 插值 / 外推（线性、三次样条、Akima） | Interpolate/Extrapolate | P0 | 已实现待验收 | 分析 → 插值：线性、自然三次样条、Akima，等间距 X 网格、可自定义范围并按端点段外推；结果写成新 X/Y 列并加到图上，一步撤销 | 与 SciPy 1.17.1 interp1d / CubicSpline / Akima1DInterpolator 的区间内与外推值一致（1e-12）；Origin 对照待做 | — |
-| F159 | 按 X 求 Y 插值 | Interpolate/Extrapolate Y from X | P1 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
+| F158 | 插值 / 外推（线性、三次样条、Akima） | Interpolate/Extrapolate | P0 | 已实现待验收 | 分析 → 插值：线性、自然三次样条、Akima，等间距 X 网格、可自定义范围并按端点段外推；结果写成新 X/Y 列并加到图上，一步撤销 | 与 SciPy 1.17.1 interp1d / CubicSpline / Akima1DInterpolator 的区间内与外推值一致（1e-12）；Origin 对照待做 | 插值方法：已完成 0/3，待验收 3，部分实现 0；线性、自然三次样条、Akima；均匀输出网格入口已接入 |
+| F159 | 按 X 求 Y 插值 | Interpolate/Extrapolate Y from X | P1 | 部分实现 | interpolate.rs 已可在指定 X 数组计算 Y；桌面插值对话框提供均匀网格及范围。按用户指定 X 列或单点查询的独立入口待做 | 线性/样条/Akima 参考值和外推回归通过；用户 X 列查询入口待实现 | — |
 | F160 | 轨迹插值 | Trace Interpolation | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
 | F161 | XYZ 轨迹插值 | XYZ Trace Interpolation | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
 | F162 | 二维插值 | 2D Interpolate/Extrapolate | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
@@ -231,14 +231,14 @@
 | F164 | 数值积分（梯形法、曲线下面积） | Integrate | P0 | 已实现待验收 | analysis.rs/ops.rs 已实现梯形积分、累计积分结果与绝对面积选项 | 解析积分、行对齐与结果写回回归已通过；Origin/SciPy 多组参考对照待做 | — |
 | F165 | 二维体积积分 | 2D Volume Integrate (Pro Only) | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
 | F166 | 数值微分（含 Savitzky-Golay 平滑求导） | Differentiate | P0 | 部分实现 | 有限差分微分和独立 Savitzky–Golay 平滑已实现；直接 SG 平滑求导入口待做 | 解析函数微分与结果列回归已通过；组合求导功能待补齐 | — |
-| F167 | 多条曲线平均 / 合并 | Average/Merge Multiple Curves | P1 | 已实现待验收 | 分析 → 曲线平均：各曲线线性插值到 X 范围交集上的等间距点后求平均与标准差（Y 误差），结果表与线图 | 与 numpy.interp 插值后平均一致（1e-12） | — |
+| F167 | 多条曲线平均 / 合并 | Average/Merge Multiple Curves | P1 | 部分实现 | 已把多曲线线性插值到共同 X 范围求均值/标准差，输出结果表、Y 误差及线图；通用曲线合并工作流待做 | 平均结果、缺失值、结果输出和一步撤销回归通过；通用合并入口与参考软件验收待做 | — |
 | F168 | 简单列运算（加减乘除、两曲线相减） | Simple Column/Curve Math | P0 | 已实现待验收 | 分析 → 列运算：两列或列与常数的加减乘除，结果新列与单位推导；不同 X 网格的曲线先线性插值后相减，范围外留空；一步撤销 | 逐行、常数、单位、除零与“原始减拟合”残差回归；Origin 对照待做 | — |
 | F169 | 归一化（最大值、Z 分数、区间缩放） | Normalize | P0 | 已实现待验收 | 已接入除以最大值、Z 分数、区间缩放，结果写入派生列并支持撤销 | 算法参考值、写回及撤销回归已通过；Origin/SciPy 多组数值验收待做 | — |
 | F170 | 多边形面积 | Polygon Area | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
 | F171 | 反函数（交换 X、Y 求逆） | Inverse | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
 | F172 | 自定义滤波 / 中值滤波 | Median Filter | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
 | F173 | 扣除直线基线 | Subtract Straight Line | P1 | 已实现待验收 | 扣除基线对话框选“两端连线”：首末两点连线作为基线 | 单元测试；Origin 对照待做 | — |
-| F509 | 列公式函数库 | Set Column Values / Functions | P0 | 未开始 | A4 目标 120 个函数，分批登记定义与参考值 | 逐函数参考值、向量/缺失值和依赖重算 | 规划函数：已完成 0/120，待验收 0，部分实现 0；SciCanvas 首批目标 120，不代表 Origin 约 300 个函数的完整覆盖 |
+| F509 | 列公式函数库 | Set Column Values / Functions | P0 | 部分实现 | 表达式引擎已有 24 个函数调用名，对应 23 个独立函数（log/log10 同义），首批 120 函数目标、聚合函数及函数目录仍待补齐 | 已有解析和计算回归；当前函数按实现计入待验收，逐函数参考值覆盖与大数据验收待补 | 规划函数（独立功能）：已完成 0/120，待验收 23，部分实现 0；当前 24 个调用名中 log/log10 为同一函数；23 个功能按代码枚举计入待验收，逐函数参考验收待补；120 为 SciCanvas 首批目标 |
 
 ## 统计
 
@@ -249,18 +249,18 @@
 | F176 | 整表统计 | Statistics on Whole Sheet | P1 | 未开始 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
 | F177 | 频数统计 / 分箱 | Frequency Counts | P0 | 已实现待验收 | 统计 → 频数统计：等宽分箱（Sturges 或指定区间数、可选范围），每列生成区间、频数、累积与相对频率表，一步撤销 | 与 numpy.histogram 的边界与计数一致；Origin 对照待做 | — |
 | F178 | 二维频数统计 | 2D Frequency Counts/Binning | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
-| F179 | 正态性检验（Shapiro-Wilk、KS、Anderson-Darling 等） | Normality Test | P1 | 部分实现 | 统计 → 正态性检验：Shapiro–Wilk（Royston AS R94，3 ≤ N ≤ 5000），每个点选列一行；KS、Anderson–Darling 待做 | 与 SciPy 1.17.1 shapiro 一致（W 1e-6，SciPy 内部为单精度；p 1e-4） | — |
+| F179 | 正态性检验（Shapiro-Wilk、KS、Anderson-Darling 等） | Normality Test | P1 | 部分实现 | 统计 → 正态性检验：Shapiro–Wilk（Royston AS R94，3 ≤ N ≤ 5000），每个点选列一行；KS、Anderson–Darling 待做 | 与 SciPy 1.17.1 shapiro 一致（W 1e-6，SciPy 内部为单精度；p 1e-4） | 列明的正态性方法：已完成 0/3，待验收 1，部分实现 0；Shapiro–Wilk 已接入；KS、Anderson–Darling 未开始；仅计本条列明方法 |
 | F180 | 相关系数（Pearson、Spearman、Kendall） | Correlation Coefficient (Pro Only) | P1 | 已实现待验收 | 统计 → 相关系数：点选列两两计算 Pearson、Spearman（平均秩）、Kendall τ-b（并列校正）及双侧 p 值 | 与 SciPy 1.17.1 pearsonr、spearmanr、kendalltau(method="asymptotic") 一致（1e-9），含并列值与负相关；Origin 对照待做 | — |
 | F181 | 偏相关系数 | Partial Correlation Coefficient (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
 | F182 | 分布拟合 | Distribution Fit (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
 | F183 | 列联表与卡方检验 | Cross Tabulation and Chi-square (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
-| F184 | Grubbs / Dixon Q 异常值检验 | Grubbs' Test | P1 | 部分实现 | 统计 → Grubbs 异常值：双侧检验离均值最远的点，给出 G、临界值 G(0.05) 与 p 值；Dixon Q 待做 | 临界值与 p 值与按 scipy.stats.t 计算的 Grubbs 公式一致（1e-9） | — |
+| F184 | Grubbs / Dixon Q 异常值检验 | Grubbs' Test | P1 | 部分实现 | 统计 → Grubbs 异常值：双侧检验离均值最远的点，给出 G、临界值 G(0.05) 与 p 值；Dixon Q 待做 | 临界值与 p 值与按 scipy.stats.t 计算的 Grubbs 公式一致（1e-9） | 列明的异常值方法：已完成 0/2，待验收 1，部分实现 0；Grubbs 已接入；Dixon Q 未开始 |
 | F185 | 单样本 t 检验 | One-Sample T-Test | P0 | 已实现待验收 | 统计 → t 检验（单样本）：自写正则化不完全 Beta 求 t 分布，报告 t、自由度、双侧 p、置信区间 | 与 SciPy 1.17.1 ttest_1samp 一致（1e-9）；Origin 对照待做 | — |
 | F186 | 双样本 t 检验（含 Welch） | Two-Sample T-Test | P0 | 已实现待验收 | 统计 → t 检验（双样本）：方差相等的 Student 检验与 Welch 检验，置信区间针对均值差 | 与 SciPy 1.17.1 ttest_ind（equal_var 真/假）一致（1e-9）；Origin 对照待做 | — |
 | F187 | 配对 t 检验 | Pair-Sample T-Test | P0 | 已实现待验收 | 统计 → t 检验（配对）：按行配对，只用两列都有数值的行 | 与 SciPy 1.17.1 ttest_rel 一致（1e-9）；Origin 对照待做 | — |
 | F188 | 方差检验（单样本、F 检验） | Two Sample Test for Variances (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
 | F189 | 比例检验、泊松率检验 | One-Sample Proportion Test (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
-| F190 | 单因素 / 双因素 / 三因素方差分析（含多重比较） | One, Two, and Three Way ANOVA | P1 | 部分实现 | 统计 → 单因素方差分析：每列一组，ANOVA 表、各组描述统计与 Tukey HSD 多重比较（组大小不等时为 Tukey–Kramer）；双因素、三因素待做 | 与 SciPy 1.17.1 f_oneway、f.sf（1e-9）及 tukey_hsd（置信限 1e-7、p 值 1e-5）、studentized_range 一致；Origin 对照待做 | — |
+| F190 | 单因素 / 双因素 / 三因素方差分析（含多重比较） | One, Two, and Three Way ANOVA | P1 | 部分实现 | 统计 → 单因素方差分析：每列一组，ANOVA 表、各组描述统计与 Tukey HSD 多重比较（组大小不等时为 Tukey–Kramer）；双因素、三因素待做 | 与 SciPy 1.17.1 f_oneway、f.sf（1e-9）及 tukey_hsd（置信限 1e-7、p 值 1e-5）、studentized_range 一致；Origin 对照待做 | 列明的 ANOVA 维数：已完成 0/3，待验收 1，部分实现 0；单因素及 Tukey/Tukey–Kramer 已接入；双因素、三因素未开始 |
 | F191 | 重复测量方差分析 | Repeated Measure ANOVA (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
 | F192 | 非参数检验（Wilcoxon、Mann-Whitney、Kruskal-Wallis、Friedman 等） | Nonparametric Tests (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
 | F193 | 生存分析（Kaplan-Meier、Cox 回归、Weibull） | Survival Analysis (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
@@ -281,9 +281,9 @@
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
 |---|---|---|---|---|---|---|---|
 | F201 | 平滑（移动平均、Savitzky-Golay、FFT 平滑、LOWESS） | Smoothing | P0 | 部分实现 | 移动平均与二阶 Savitzky–Golay 已接入；FFT 平滑与 LOWESS 待做 | 已有算法、窗口边界、写回与撤销回归已通过；补齐其余方法后验收 | 平滑方法：已完成 0/4，待验收 2，部分实现 0；移动平均、Savitzky–Golay 已实现待验收；FFT、LOWESS 未开始 |
-| F202 | FFT 滤波（低通、高通、带通、带阻） | FFT Filters | P1 | 已实现待验收 | 分析 → 信号处理 → FFT 滤波：低通、高通、带通、带阻理想滤波（频域置零后逆变换），结果写成新列，来源是图形时画进图里 | 与 numpy rfft / irfft 掩模滤波逐点一致（1e-12）；带通 + 带阻 = 原信号 | — |
+| F202 | FFT 滤波（低通、高通、带通、带阻） | FFT Filters | P1 | 已实现待验收 | 分析 → 信号处理 → FFT 滤波：低通、高通、带通、带阻理想滤波（频域置零后逆变换），结果写成新列，来源是图形时画进图里 | 与 numpy rfft / irfft 掩模滤波逐点一致（1e-12）；带通 + 带阻 = 原信号 | 频域滤波类型：已完成 0/4，待验收 4，部分实现 0；低通、高通、带通、带阻理想滤波；不代表 IIR 或其他滤波器实现 |
 | F203 | IIR 滤波（巴特沃斯、切比雪夫等） | IIR Filters (Pro Only) | P2 | 未开始 | 自写或 biquad | 与 Origin 及 SciPy.signal 结果比较 | — |
-| F204 | 傅里叶变换 FFT / IFFT（幅值、相位、功率谱、窗函数） | Fast Fourier Transform (FFT) | P0 | 部分实现 | 分析 → FFT：自写基 2 与 Bluestein（任意点数），矩形 / Hann / Hamming 窗，单边幅值（正弦振幅归一、相干增益补偿）、相位、功率谱表与幅值谱图；IFFT 待做 | 与 numpy.fft.rfft 的实部 / 虚部（基 2 与 Bluestein 两种长度）及 numpy 窗函数结果一致（1e-9）；IFFT 与 Origin 对照待做 | — |
+| F204 | 傅里叶变换 FFT / IFFT（幅值、相位、功率谱、窗函数） | Fast Fourier Transform (FFT) | P0 | 部分实现 | 任意点数 FFT（基 2/Bluestein）、矩形/Hann/Hamming 窗、单边幅值/相位/功率谱及幅值图已接入；滤波内部已有逆变换，独立 IFFT 命令与复数输入输出待做 | 与 numpy.fft.rfft 的实部 / 虚部（基 2 与 Bluestein 两种长度）及 numpy 窗函数结果一致（1e-9）；IFFT 与 Origin 对照待做 | — |
 | F205 | 短时傅里叶变换 STFT | Short-Time Fourier Transform (Pro Only) | P2 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 | — |
 | F206 | 卷积 / 反卷积 | Convolution | P1 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 | — |
 | F207 | 相关（自相关、互相关） | Correlation | P1 | 已实现待验收 | 分析 → 信号处理 → 相关函数：选一列求自相关、两列求互相关（归一化，滞后以点计），结果表与线图 | 与 numpy.correlate 归一化结果一致（1e-12） | — |
@@ -688,7 +688,7 @@
 
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
 |---|---|---|---|---|---|---|---|
-| F489 | 分析报告表与重算（自动 / 手动 / 不重算） | Recalculating Analysis Results | P0 | 未开始 | A5 Operation 与源数据依赖；变更后更新报告表 | 源数据改动、三种重算模式、报告往返和撤销回归 | — |
+| F489 | 分析报告表与重算（自动 / 手动 / 不重算） | Recalculating Analysis Results | P0 | 部分实现 | 已有独立分析结果工作簿与临时报表；统一持久化分析报告表、Operation 依赖记录及 Auto/Manual/None 三种重算模式待做 | 现有结果表/报告与历史回归通过；保存操作依赖、修改源数据触发重算尚待实现 | — |
 | F490 | 分析主题与对话框设置保存 | Analysis Themes | P1 | 未开始 | A5 保存分析参数主题，按操作恢复设置 | 跨会话恢复参数并验证默认值 | — |
 | F491 | 分析模板批处理多个数据集 | Batch Processing | P1 | 未开始 | A5 模板输入映射、批量执行与错误报告 | 多文件运行、部分失败、结果关联 | — |
 

@@ -1,0 +1,178 @@
+[src/adapter.rs]
+// Copyright 2022 The AccessKit Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (found in
+// the LICENSE-APACHE file) or the MIT license (found in
+// the LICENSE-MIT file), at your option.
+
+use accesskit::{
+    ActionHandler, ActivationHandler, Live, NodeBuilder, NodeId, Role, Tree as TreeData, TreeUpdate,
+};
+use accesskit_consumer::{FilterResult, Node, Tree, TreeChangeHandler};
+use std::{
+    collections::HashSet,
+    sync::{atomic::Ordering, Arc},
+
+[src/context.rs]
+// Copyright 2023 The AccessKit Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (found in
+// the LICENSE-APACHE file) or the MIT license (found in
+// the LICENSE-MIT file), at your option.
+
+use accesskit::{ActionHandler, ActionRequest, Point};
+use accesskit_consumer::Tree;
+use std::sync::{atomic::AtomicBool, Arc, Mutex, RwLock, RwLockReadGuard};
+
+use crate::{util::*, window_handle::WindowHandle};
+
+pub(crate) trait ActionHandlerNoMut {
+
+[src/filters.rs]
+// Copyright 2023 The AccessKit Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (found in
+// the LICENSE-APACHE file) or the MIT license (found in
+// the LICENSE-MIT file), at your option.
+
+pub(crate) use accesskit_consumer::{
+    common_filter as filter, common_filter_with_root_exception as filter_with_root_exception,
+};
+
+[src/lib.rs]
+// Copyright 2021 The AccessKit Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (found in
+// the LICENSE-APACHE file) or the MIT license (found in
+// the LICENSE-MIT file), at your option.
+
+mod context;
+mod filters;
+mod node;
+mod text;
+mod util;
+mod window_handle;
+
+
+[src/node.rs]
+// Copyright 2022 The AccessKit Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (found in
+// the LICENSE-APACHE file) or the MIT license (found in
+// the LICENSE-MIT file), at your option.
+
+// Derived from Chromium's accessibility abstraction.
+// Copyright 2021 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE.chromium file.
+
+#![allow(non_upper_case_globals)]
+
+
+[src/node.rs]
+// Derived from Chromium's accessibility abstraction.
+// Copyright 2021 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE.chromium file.
+
+#![allow(non_upper_case_globals)]
+
+use accesskit::{
+    Action, ActionData, ActionRequest, Live, NodeId, NodeIdContent, Orientation, Point, Role,
+    Toggled,
+};
+use accesskit_consumer::{FilterResult, Node, TreeState};
+use paste::paste;
+
+[src/subclass.rs]
+// Copyright 2022 The AccessKit Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (found in
+// the LICENSE-APACHE file) or the MIT license (found in
+// the LICENSE-MIT file), at your option.
+
+use accesskit::{ActionHandler, ActivationHandler, TreeUpdate};
+use std::{
+    cell::{Cell, RefCell},
+    ffi::c_void,
+    mem::transmute,
+};
+use windows::{
+
+[src/tests/mod.rs]
+// Copyright 2022 The AccessKit Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (found in
+// the LICENSE-APACHE file) or the MIT license (found in
+// the LICENSE-MIT file), at your option.
+
+use accesskit::{ActionHandler, ActivationHandler};
+use once_cell::sync::Lazy;
+use std::{
+    cell::RefCell,
+    sync::{Arc, Condvar, Mutex},
+    thread,
+    time::Duration,
+
+[src/tests/simple.rs]
+// Copyright 2022 The AccessKit Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (found in
+// the LICENSE-APACHE file) or the MIT license (found in
+// the LICENSE-MIT file), at your option.
+
+use accesskit::{
+    Action, ActionHandler, ActionRequest, ActivationHandler, Node, NodeBuilder, NodeId, Role, Tree,
+    TreeUpdate,
+};
+use windows::{core::*, Win32::UI::Accessibility::*};
+
+use super::*;
+
+[src/tests/subclassed.rs]
+// Copyright 2022 The AccessKit Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (found in
+// the LICENSE-APACHE file) or the MIT license (found in
+// the LICENSE-MIT file), at your option.
+
+use accesskit::{
+    Action, ActionHandler, ActionRequest, ActivationHandler, Node, NodeBuilder, NodeId, Role, Tree,
+    TreeUpdate,
+};
+use windows::Win32::{Foundation::*, UI::Accessibility::*};
+use winit::{
+    application::ApplicationHandler,
+
+[src/text.rs]
+// Copyright 2022 The AccessKit Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (found in
+// the LICENSE-APACHE file) or the MIT license (found in
+// the LICENSE-MIT file), at your option.
+
+#![allow(non_upper_case_globals)]
+
+use accesskit::{Action, ActionData, ActionRequest};
+use accesskit_consumer::{
+    Node, TextPosition as Position, TextRange as Range, TreeState, WeakTextRange as WeakRange,
+};
+use std::sync::{Arc, RwLock, Weak};
+
+[src/util.rs]
+// Copyright 2022 The AccessKit Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (found in
+// the LICENSE-APACHE file) or the MIT license (found in
+// the LICENSE-MIT file), at your option.
+
+use accesskit::Point;
+use accesskit_consumer::TreeState;
+use std::sync::{Arc, Weak};
+use windows::{
+    core::*,
+    Win32::{
+        Foundation::*,
+
+[src/window_handle.rs]
+// Copyright 2024 The AccessKit Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (found in
+// the LICENSE-APACHE file) or the MIT license (found in
+// the LICENSE-MIT file), at your option.
+
+use windows::Win32::Foundation::HWND;
+
+#[repr(transparent)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct WindowHandle(pub HWND);
+
+unsafe impl Send for WindowHandle {}

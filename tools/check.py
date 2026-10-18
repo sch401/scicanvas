@@ -7,6 +7,8 @@ from install_cargo_deny import install
 def main():
     root = pathlib.Path(__file__).resolve().parents[1]
     subprocess.run([str(install()), "--locked", "check", "--hide-inclusion-graph"], cwd=root, check=True)
+    subprocess.run(["python", "tools/third_party.py", "--check"], cwd=root, check=True)
+    subprocess.run(["python", "-m", "unittest", "discover", "-s", "tools", "-p", "test_*.py"], cwd=root, check=True)
     subprocess.run(["python", "docs/parity/build_parity.py", "--check"], cwd=root, check=True)
     subprocess.run(["python", "-m", "unittest", "discover", "-s", "docs/parity", "-p", "test_*.py"], cwd=root, check=True)
     subprocess.run(["node", "--test", "docs/parity/parity.test.cjs"], cwd=root, check=True)

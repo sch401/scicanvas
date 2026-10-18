@@ -1,5 +1,6 @@
 //! 假设检验：单样本、双样本（Student / Welch）和配对 t 检验。
 //! t 分布用正则化不完全 Beta 函数计算，结果与 SciPy `ttest_1samp` / `ttest_ind` / `ttest_rel` 一致。
+//! 算法引用、数值对照与源码来源核对见 docs/COPYRIGHT_AUDIT.md；第三方声明保留在 THIRD_PARTY_NOTICES.md。
 
 /// ln Γ(x)，Lanczos 近似（g = 7，9 项），x > 0。
 pub fn ln_gamma(x: f64) -> f64 {

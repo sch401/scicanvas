@@ -1,0 +1,125 @@
+[src/host.rs]
+// Copyright 2013-2016 The rust-url developers.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+use crate::net::{Ipv4Addr, Ipv6Addr};
+use alloc::borrow::Cow;
+use alloc::borrow::ToOwned;
+use alloc::string::String;
+
+[src/lib.rs]
+// Copyright 2013-2015 The rust-url developers.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+/*!
+
+rust-url is an implementation of the [URL Standard](http://url.spec.whatwg.org/)
+for the [Rust](http://rust-lang.org/) programming language.
+
+[src/origin.rs]
+// Copyright 2016 The rust-url developers.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+use crate::host::Host;
+use crate::parser::default_port;
+use crate::Url;
+use alloc::borrow::ToOwned;
+
+[src/parser.rs]
+// Copyright 2013-2016 The rust-url developers.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+use alloc::borrow::Cow;
+use alloc::string::String;
+use core::fmt::{self, Formatter, Write};
+use core::str;
+
+[src/path_segments.rs]
+// Copyright 2016 The rust-url developers.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+use crate::parser::{self, to_u32, SchemeType};
+use crate::Url;
+use alloc::string::String;
+use core::str;
+
+[src/quirks.rs]
+// Copyright 2016 The rust-url developers.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+//! Getters and setters for URL components implemented per <https://url.spec.whatwg.org/#api>
+//!
+//! Unless you need to be interoperable with web browsers,
+//! you probably want to use `Url` method instead.
+
+[src/slicing.rs]
+// Copyright 2016 The rust-url developers.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+use core::ops::{Index, Range, RangeFrom, RangeFull, RangeTo};
+
+use crate::Url;
+
+
+[tests/unit.rs]
+// Copyright 2013-2014 The rust-url developers.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+//! Unit tests
+#![no_std]
+
+#[cfg(feature = "std")]
+
+[tests/wpt.rs]
+// Copyright 2013-2014 The rust-url developers.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+//! Data-driven tests imported from web-platform-tests
+
+use serde_json::Value;
+use std::collections::HashMap;

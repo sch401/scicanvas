@@ -1,0 +1,289 @@
+[src/char_data/mod.rs]
+// Copyright 2015 The Servo Project Developers. See the
+// COPYRIGHT file at the top-level directory of this distribution.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+//! Accessor for `Bidi_Class` property from Unicode Character Database (UCD)
+
+mod tables;
+
+[src/char_data/mod.rs]
+// Copyright 2015 The Servo Project Developers. See the
+// COPYRIGHT file at the top-level directory of this distribution.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+//! Accessor for `Bidi_Class` property from Unicode Character Database (UCD)
+
+mod tables;
+
+
+[src/data_source.rs]
+// Copyright 2015 The Servo Project Developers. See the
+// COPYRIGHT file at the top-level directory of this distribution.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+use crate::BidiClass;
+
+/// This is the return value of [`BidiDataSource::bidi_matched_opening_bracket()`].
+
+[src/data_source.rs]
+// Copyright 2015 The Servo Project Developers. See the
+// COPYRIGHT file at the top-level directory of this distribution.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+use crate::BidiClass;
+
+/// This is the return value of [`BidiDataSource::bidi_matched_opening_bracket()`].
+///
+
+[src/deprecated.rs]
+// Copyright 2015 The Servo Project Developers. See the
+// COPYRIGHT file at the top-level directory of this distribution.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+//! This module holds deprecated assets only.
+
+use super::*;
+
+[src/deprecated.rs]
+// Copyright 2015 The Servo Project Developers. See the
+// COPYRIGHT file at the top-level directory of this distribution.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+//! This module holds deprecated assets only.
+
+use super::*;
+
+
+[src/explicit.rs]
+// Copyright 2015 The Servo Project Developers. See the
+// COPYRIGHT file at the top-level directory of this distribution.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+//! 3.3.2 Explicit Levels and Directions
+//!
+//! <http://www.unicode.org/reports/tr9/#Explicit_Levels_and_Directions>
+
+[src/explicit.rs]
+// Copyright 2015 The Servo Project Developers. See the
+// COPYRIGHT file at the top-level directory of this distribution.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+//! 3.3.2 Explicit Levels and Directions
+//!
+//! <http://www.unicode.org/reports/tr9/#Explicit_Levels_and_Directions>
+
+
+[src/format_chars.rs]
+// Copyright 2017 The Servo Project Developers. See the
+// COPYRIGHT file at the top-level directory of this distribution.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+//! Directional Formatting Characters
+//!
+//! <http://www.unicode.org/reports/tr9/#Directional_Formatting_Characters>
+
+[src/format_chars.rs]
+// Copyright 2017 The Servo Project Developers. See the
+// COPYRIGHT file at the top-level directory of this distribution.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+//! Directional Formatting Characters
+//!
+//! <http://www.unicode.org/reports/tr9/#Directional_Formatting_Characters>
+
+
+[src/implicit.rs]
+// Copyright 2015 The Servo Project Developers. See the
+// COPYRIGHT file at the top-level directory of this distribution.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+//! 3.3.4 - 3.3.6. Resolve implicit levels and types.
+
+#[cfg(not(feature = "smallvec"))]
+
+[src/implicit.rs]
+// Copyright 2015 The Servo Project Developers. See the
+// COPYRIGHT file at the top-level directory of this distribution.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+//! 3.3.4 - 3.3.6. Resolve implicit levels and types.
+
+#[cfg(not(feature = "smallvec"))]
+use alloc::vec::Vec;
+
+[src/level.rs]
+// Copyright 2017 The Servo Project Developers. See the
+// COPYRIGHT file at the top-level directory of this distribution.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+//! Bidi Embedding Level
+//!
+//! See [`Level`](struct.Level.html) for more details.
+
+[src/level.rs]
+// Copyright 2017 The Servo Project Developers. See the
+// COPYRIGHT file at the top-level directory of this distribution.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+//! Bidi Embedding Level
+//!
+//! See [`Level`](struct.Level.html) for more details.
+//!
+
+[src/lib.rs]
+// Copyright 2015 The Servo Project Developers. See the
+// COPYRIGHT file at the top-level directory of this distribution.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+//! This crate implements the [Unicode Bidirectional Algorithm][tr9] for display of mixed
+//! right-to-left and left-to-right text.  It is written in safe Rust, compatible with the
+//! current stable release.
+
+[src/lib.rs]
+// Copyright 2015 The Servo Project Developers. See the
+// COPYRIGHT file at the top-level directory of this distribution.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+//! This crate implements the [Unicode Bidirectional Algorithm][tr9] for display of mixed
+//! right-to-left and left-to-right text.  It is written in safe Rust, compatible with the
+//! current stable release.
+//!
+
+[src/prepare.rs]
+// Copyright 2015 The Servo Project Developers. See the
+// COPYRIGHT file at the top-level directory of this distribution.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+//! 3.3.3 Preparations for Implicit Processing
+//!
+//! <http://www.unicode.org/reports/tr9/#Preparations_for_Implicit_Processing>
+
+[src/prepare.rs]
+// Copyright 2015 The Servo Project Developers. See the
+// COPYRIGHT file at the top-level directory of this distribution.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+//! 3.3.3 Preparations for Implicit Processing
+//!
+//! <http://www.unicode.org/reports/tr9/#Preparations_for_Implicit_Processing>
+
+
+[src/utf16.rs]
+// Copyright 2023 The Mozilla Foundation. See the
+// COPYRIGHT file at the top-level directory of this distribution.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+use super::TextSource;
+
+use alloc::borrow::Cow;
+
+[src/utf16.rs]
+// Copyright 2023 The Mozilla Foundation. See the
+// COPYRIGHT file at the top-level directory of this distribution.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+use super::TextSource;
+
+use alloc::borrow::Cow;
+use alloc::vec::Vec;

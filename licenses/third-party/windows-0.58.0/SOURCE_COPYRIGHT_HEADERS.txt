@@ -1,0 +1,14 @@
+[src/Windows/Win32/Media/MediaPlayer/impl.rs]
+    fn Language(&self) -> windows_core::Result<windows_core::BSTR>;
+    fn Copyright(&self) -> windows_core::Result<windows_core::BSTR>;
+    fn MaxItemCount(&self) -> windows_core::Result<i32>;
+    fn SetMaxItemCount(&self, count: i32) -> windows_core::Result<()>;
+    fn DownloadEnclosuresAutomatically(&self) -> windows_core::Result<super::super::Foundation::VARIANT_BOOL>;
+    fn SetDownloadEnclosuresAutomatically(&self, downloadenclosuresautomatically: super::super::Foundation::VARIANT_BOOL) -> windows_core::Result<()>;
+    fn DownloadStatus(&self) -> windows_core::Result<FEEDS_DOWNLOAD_STATUS>;
+    fn LastDownloadError(&self) -> windows_core::Result<FEEDS_DOWNLOAD_ERROR>;
+    fn Merge(&self, feedxml: &windows_core::BSTR, feedurl: &windows_core::BSTR) -> windows_core::Result<()>;
+    fn DownloadUrl(&self) -> windows_core::Result<windows_core::BSTR>;
+    fn IsList(&self) -> windows_core::Result<super::super::Foundation::VARIANT_BOOL>;
+    fn MarkAllItemsRead(&self) -> windows_core::Result<()>;
+    fn GetWatcher(&self, scope: FEEDS_EVENTS_SCOPE, mask: FEEDS_EVENTS_MASK) -> windows_core::Result<super::super::System::Com::IDispatch>;

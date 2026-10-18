@@ -1,0 +1,57 @@
+[src/geometry.rs]
+// Copyright 2023 The AccessKit Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (found in
+// the LICENSE-APACHE file) or the MIT license (found in
+// the LICENSE-MIT file), at your option.
+
+// Derived from kurbo.
+// Copyright 2018 The kurbo Authors.
+// Licensed under the Apache License, Version 2.0 (found in
+// the LICENSE-APACHE file) or the MIT license (found in
+// the LICENSE-MIT file), at your option.
+
+use std::{
+
+[src/geometry.rs]
+// Derived from kurbo.
+// Copyright 2018 The kurbo Authors.
+// Licensed under the Apache License, Version 2.0 (found in
+// the LICENSE-APACHE file) or the MIT license (found in
+// the LICENSE-MIT file), at your option.
+
+use std::{
+    fmt,
+    ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign},
+};
+
+/// A 2D affine transform. Derived from [kurbo](https://github.com/linebender/kurbo).
+#[derive(Clone, Copy, Debug, PartialEq)]
+
+[src/lib.rs]
+// Copyright 2021 The AccessKit Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (found in
+// the LICENSE-APACHE file) or the MIT license (found in
+// the LICENSE-MIT file), at your option.
+
+// Derived from Chromium's accessibility abstraction.
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE.chromium file.
+
+#[cfg(feature = "pyo3")]
+use pyo3::pyclass;
+
+[src/lib.rs]
+// Derived from Chromium's accessibility abstraction.
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE.chromium file.
+
+#[cfg(feature = "pyo3")]
+use pyo3::pyclass;
+#[cfg(feature = "schemars")]
+use schemars::{
+    gen::SchemaGenerator,
+    schema::{InstanceType, ObjectValidation, Schema, SchemaObject},
+    JsonSchema, Map as SchemaMap,
+};

@@ -1,0 +1,209 @@
+[src/lib.rs]
+// Copyright 2016 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+//! This library exposes a low-level API for creating your own efficient
+//! synchronization primitives.
+//!
+//! # The parking lot
+//!
+
+[src/parking_lot.rs]
+// Copyright 2016 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+use crate::thread_parker::{ThreadParker, ThreadParkerT, UnparkHandleT};
+use crate::util::UncheckedOptionExt;
+use crate::word_lock::WordLock;
+use core::{
+    cell::{Cell, UnsafeCell},
+    ptr,
+
+[src/spinwait.rs]
+// Copyright 2016 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+use crate::thread_parker;
+use core::hint::spin_loop;
+
+// Wastes some CPU time for the given number of iterations,
+// using a hint to indicate to the CPU that we are spinning.
+
+[src/thread_parker/generic.rs]
+// Copyright 2016 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+//! A simple spin lock based thread parker. Used on platforms without better
+//! parking facilities available.
+
+use core::hint::spin_loop;
+use core::sync::atomic::{AtomicBool, Ordering};
+
+[src/thread_parker/linux.rs]
+// Copyright 2016 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+use core::{
+    ptr,
+    sync::atomic::{AtomicI32, Ordering},
+};
+use libc;
+
+[src/thread_parker/redox.rs]
+// Copyright 2016 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+use core::{
+    ptr,
+    sync::atomic::{AtomicI32, Ordering},
+};
+use std::thread;
+
+[src/thread_parker/sgx.rs]
+// Copyright 2016 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+use core::sync::atomic::{AtomicBool, Ordering};
+use std::io::ErrorKind;
+use std::time::Instant;
+use std::{
+    io,
+
+[src/thread_parker/unix.rs]
+// Copyright 2016 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+#[cfg(target_vendor = "apple")]
+use core::ptr;
+use core::{
+    cell::{Cell, UnsafeCell},
+    mem::MaybeUninit,
+
+[src/thread_parker/wasm.rs]
+// Copyright 2016 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+//! The wasm platform can't park when atomic support is not available.
+//! So this ThreadParker just panics on any attempt to park.
+
+use std::thread;
+use std::time::Instant;
+
+[src/thread_parker/wasm_atomic.rs]
+// Copyright 2016 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+use core::{
+    arch::wasm32,
+    sync::atomic::{AtomicI32, Ordering},
+};
+use std::time::{Duration, Instant};
+
+[src/thread_parker/windows/keyed_event.rs]
+// Copyright 2016 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+use core::{
+    ffi,
+    mem::{self, MaybeUninit},
+    ptr,
+};
+
+[src/thread_parker/windows/mod.rs]
+// Copyright 2016 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+use core::{
+    ptr,
+    sync::atomic::{AtomicPtr, AtomicUsize, Ordering},
+};
+use std::time::Instant;
+
+[src/thread_parker/windows/waitaddress.rs]
+// Copyright 2016 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+use core::{
+    mem,
+    sync::atomic::{AtomicUsize, Ordering},
+};
+use std::{ffi, time::Instant};
+
+[src/util.rs]
+// Copyright 2016 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+// Option::unchecked_unwrap
+pub trait UncheckedOptionExt<T> {
+    unsafe fn unchecked_unwrap(self) -> T;
+}
+
+
+[src/word_lock.rs]
+// Copyright 2016 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+use crate::spinwait::SpinWait;
+use crate::thread_parker::{ThreadParker, ThreadParkerT, UnparkHandleT};
+use core::{
+    cell::Cell,
+    mem, ptr,

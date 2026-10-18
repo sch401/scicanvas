@@ -4,6 +4,12 @@
 
 **当前平台范围：Windows。** 开发、测试、性能验收、内置 Python 和安装包均以 Windows 为目标；macOS、Linux 适配与发布安排在后续阶段。
 
+## 版权与分发
+
+应用自有部分沿用 **MIT OR Apache-2.0**，见 [LICENSE-MIT](LICENSE-MIT) / [LICENSE-APACHE](LICENSE-APACHE)；第三方材料保留各自许可，详见 [第三方版权声明](THIRD_PARTY_NOTICES.md)、[MPL 对应源码说明](MPL_SOURCE.md)和[代码/素材检查记录](docs/COPYRIGHT_AUDIT.md)。AI 生成来源说明、AS R94 算法核对及发行边界在检查记录中单独说明。
+
+运行 `python tools/package_release.py` 生成包含 exe、许可证、版权声明和离线 MPL 源码的 Windows x64 发布候选 ZIP。向他人分发时保留完整包；`python tools/third_party.py --check` 检查声明与 Cargo.lock 是否一致。
+
 ## 运行
 
 需要 Rust 1.88 或更新版本（`rustup update` 可升级）。

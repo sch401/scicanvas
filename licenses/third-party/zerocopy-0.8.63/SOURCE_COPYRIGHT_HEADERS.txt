@@ -1,0 +1,998 @@
+[benches/ref_type_bytes_dynamic_padding.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_dynamic_padding.rs"]
+mod format;
+
+[benches/ref_type_bytes_dynamic_size.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_dynamic_size.rs"]
+mod format;
+
+[benches/ref_type_bytes_mut_dynamic_padding.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_dynamic_padding.rs"]
+mod format;
+
+[benches/ref_type_bytes_mut_dynamic_size.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_dynamic_size.rs"]
+mod format;
+
+[benches/ref_type_bytes_mut_static_size.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_static_size.rs"]
+mod format;
+
+[benches/ref_type_bytes_static_size.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_static_size.rs"]
+mod format;
+
+[benches/ref_type_deref_dynamic_padding.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_dynamic_padding.rs"]
+mod format;
+
+[benches/ref_type_deref_dynamic_size.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_dynamic_size.rs"]
+mod format;
+
+[benches/ref_type_deref_mut_dynamic_size.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_dynamic_size.rs"]
+mod format;
+
+[benches/ref_type_deref_mut_static_size.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_static_size.rs"]
+mod format;
+
+[benches/ref_type_deref_static_size.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_static_size.rs"]
+mod format;
+
+[benches/ref_type_from_bytes_dynamic_padding.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_dynamic_padding.rs"]
+mod format;
+
+[benches/ref_type_from_bytes_dynamic_size.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_dynamic_size.rs"]
+mod format;
+
+[benches/ref_type_from_bytes_static_size.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_static_size.rs"]
+mod format;
+
+[benches/ref_type_from_bytes_with_elems_dynamic_padding.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_dynamic_padding.rs"]
+mod format;
+
+[benches/ref_type_from_bytes_with_elems_dynamic_size.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_dynamic_size.rs"]
+mod format;
+
+[benches/ref_type_from_prefix_dynamic_padding.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_dynamic_padding.rs"]
+mod format;
+
+[benches/ref_type_from_prefix_dynamic_size.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_dynamic_size.rs"]
+mod format;
+
+[benches/ref_type_from_prefix_static_size.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_static_size.rs"]
+mod format;
+
+[benches/ref_type_from_prefix_with_elems_dynamic_padding.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_dynamic_padding.rs"]
+mod format;
+
+[benches/ref_type_from_prefix_with_elems_dynamic_size.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_dynamic_size.rs"]
+mod format;
+
+[benches/ref_type_from_suffix_dynamic_padding.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_dynamic_padding.rs"]
+mod format;
+
+[benches/ref_type_from_suffix_dynamic_size.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_dynamic_size.rs"]
+mod format;
+
+[benches/ref_type_from_suffix_static_size.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_static_size.rs"]
+mod format;
+
+[benches/ref_type_from_suffix_with_elems_dynamic_padding.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_dynamic_padding.rs"]
+mod format;
+
+[benches/ref_type_from_suffix_with_elems_dynamic_size.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_dynamic_size.rs"]
+mod format;
+
+[benches/ref_type_into_mut_dynamic_size.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_dynamic_size.rs"]
+mod format;
+
+[benches/ref_type_into_mut_static_size.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_static_size.rs"]
+mod format;
+
+[benches/ref_type_into_ref_dynamic_padding.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_dynamic_padding.rs"]
+mod format;
+
+[benches/ref_type_into_ref_dynamic_size.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_dynamic_size.rs"]
+mod format;
+
+[benches/ref_type_into_ref_static_size.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_static_size.rs"]
+mod format;
+
+[benches/ref_type_read_static_size.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_static_size.rs"]
+mod format;
+
+[benches/ref_type_write_static_size.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use zerocopy::Ref;
+
+#[path = "formats/coco_static_size.rs"]
+mod format;
+
+[build.rs]
+//
+// Copyright 2024 The Fuchsia Authors
+//
+// Licensed under the 2-Clause BSD License <LICENSE-BSD or
+// https://opensource.org/license/bsd-2-clause>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+// Sometimes we want to use lints which were added after our MSRV.
+// `unknown_lints` is `warn` by default and we deny warnings in CI, so without
+// this attribute, any unknown lint would cause a CI failure when testing with
+
+[clippy.toml]
+# Copyright 2023 The Fuchsia Authors
+#
+# Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+# <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+# license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+# This file may not be copied, modified, or distributed except according to
+# those terms.
+
+accept-comment-above-statement = true
+accept-comment-above-attributes = true
+
+[src/byte_slice.rs]
+//
+// Copyright 2024 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+//! Traits for types that encapsulate a `[u8]`.
+//!
+//! These traits are used to bound the `B` parameter of [`Ref`].
+
+
+[src/byteorder.rs]
+//
+// Copyright 2019 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+//! Byte order-aware numeric primitives.
+//!
+//! This module contains equivalents of the native multi-byte integer types with
+//! no alignment requirement and supporting byte order conversions.
+
+[src/deprecated.rs]
+//
+// Copyright 2024 The Fuchsia Authors
+//
+// Licensed under the 2-Clause BSD License <LICENSE-BSD or
+// https://opensource.org/license/bsd-2-clause>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+//! Deprecated items. These are kept separate so that they don't clutter up
+//! other modules.
+
+
+[src/doctests.rs]
+//
+// Copyright 2025 The Fuchsia Authors
+//
+// Licensed under the 2-Clause BSD License <LICENSE-BSD or
+// https://opensource.org/license/bsd-2-clause>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+#![cfg(feature = "derive")] // Required for derives on `SliceDst`
+#![allow(dead_code, missing_docs, missing_debug_implementations, missing_copy_implementations)]
+
+
+[src/error.rs]
+//
+// Copyright 2024 The Fuchsia Authors
+//
+// Licensed under the 2-Clause BSD License <LICENSE-BSD or
+// https://opensource.org/license/bsd-2-clause>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+//! Types related to error reporting.
+//!
+//! ## Single failure mode errors
+
+[src/impls.rs]
+//
+// Copyright 2024 The Fuchsia Authors
+//
+// Licensed under the 2-Clause BSD License <LICENSE-BSD or
+// https://opensource.org/license/bsd-2-clause>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use core::{
+    cell::{Cell, UnsafeCell},
+    mem::MaybeUninit as CoreMaybeUninit,
+
+[src/layout.rs]
+//
+// Copyright 2024 The Fuchsia Authors
+//
+// Licensed under the 2-Clause BSD License <LICENSE-BSD or
+// https://opensource.org/license/bsd-2-clause>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use core::{mem, num::NonZeroUsize};
+
+use crate::util;
+
+[src/lib.rs]
+//
+// Copyright 2018 The Fuchsia Authors
+//
+// Licensed under the 2-Clause BSD License <LICENSE-BSD or
+// https://opensource.org/license/bsd-2-clause>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+// After updating the following doc comment, make sure to run the following
+// command to update `README.md` based on its contents:
+//
+
+[src/macros.rs]
+//
+// Copyright 2024 The Fuchsia Authors
+//
+// Licensed under the 2-Clause BSD License <LICENSE-BSD or
+// https://opensource.org/license/bsd-2-clause>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+/// Safely transmutes a value of one type to a value of another type of the same
+/// size.
+///
+
+[src/pointer/inner.rs]
+//
+// Copyright 2024 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use core::{marker::PhantomData, ops::Range, ptr::NonNull};
+
+pub use _def::PtrInner;
+
+
+[src/pointer/invariant.rs]
+//
+// Copyright 2024 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+#![allow(missing_copy_implementations, missing_debug_implementations, missing_docs)]
+
+//! The parameterized invariants of a [`Ptr`][super::Ptr].
+//!
+
+[src/pointer/mod.rs]
+//
+// Copyright 2023 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+//! Abstractions over raw pointers.
+
+#![allow(missing_docs)]
+
+
+[src/pointer/ptr.rs]
+//
+// Copyright 2023 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+#![allow(missing_docs)]
+
+use core::{
+    fmt::{Debug, Formatter},
+
+[src/pointer/transmute.rs]
+//
+// Copyright 2025 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+#![allow(missing_docs)]
+
+use core::{
+    cell::{Cell, UnsafeCell},
+
+[src/ref.rs]
+//
+// Copyright 2024 The Fuchsia Authors
+//
+// Licensed under the 2-Clause BSD License <LICENSE-BSD or
+// https://opensource.org/license/bsd-2-clause>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+use super::*;
+use crate::pointer::{
+    BecauseMutationCompatible, BecauseSharedCompatible, MutationCompatible, TransmuteFromPtr,
+};
+
+[src/split_at.rs]
+//
+// Copyright 2025 The Fuchsia Authors
+//
+// Licensed under the 2-Clause BSD License <LICENSE-BSD or
+// https://opensource.org/license/bsd-2-clause>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use super::*;
+use crate::pointer::invariant::{Aligned, Exclusive, Invariants, Safe, Shared};
+
+
+[src/util/macro_util.rs]
+//
+// Copyright 2022 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+//! Utilities used by macros and by `zerocopy-derive`.
+//!
+//! These are defined here `zerocopy` rather than in code generated by macros or
+//! by `zerocopy-derive` so that they can be compiled once rather than
+
+[src/util/macros.rs]
+//
+// Copyright 2023 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+/// Unsafely implements trait(s) for a type.
+///
+/// # Safety
+///
+
+[src/util/mod.rs]
+//
+// Copyright 2023 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+#[macro_use]
+pub(crate) mod macros;
+
+#[doc(hidden)]
+
+[src/wrappers.rs]
+//
+// Copyright 2023 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+use core::{borrow::Borrow, fmt, hash::Hash};
+
+use super::*;
+use crate::pointer::{invariant::Safe, SizeEq, TransmuteFrom};
+
+[tests/codegen.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+#![cfg(__ZEROCOPY_INTERNAL_USE_ONLY_NIGHTLY_FEATURES_IN_TESTS)]
+
+use std::{panic, path::PathBuf, process::Command, thread};
+
+
+[tests/include.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+extern crate zerocopy;
+
+#[allow(unused)]
+#[cfg(feature = "derive")]
+
+[tests/ui.rs]
+// Copyright 2019 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+// Many of our UI tests require the "derive" feature to function properly. Cargo
+// enforces that requirement for this entire integration target. In particular:
+// - Some tests directly include `zerocopy-derive/tests/include.rs`, which
+//   derives traits on the `AU16` type.
+
+[tests/ui/diagnostic-not-implemented.rs]
+// Copyright 2022 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+include!("../include.rs");
+
+use util::NotZerocopy;
+use zerocopy::{FromBytes, FromZeros, Immutable, IntoBytes, KnownLayout, TryFromBytes, Unaligned};
+
+[tests/ui/include_value.rs]
+// Copyright 2023 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+include!("../include.rs");
+
+use util::NotZerocopy;
+
+
+[tests/ui/late-compile-pass.rs]
+// Copyright 2026 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+// These tests cause errors which are generated by a later compilation pass than
+// the other errors we generate, and so if they're compiled in the same file,
+// the compiler will never get to that pass, and so we won't get the errors.
+
+
+[tests/ui/max-align.rs]
+// Copyright 2023 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+include!("../include.rs");
+
+#[repr(C, align(1))]
+struct Align1;
+
+[tests/ui/ptr-is-invariant-over-v.rs]
+// Copyright 2025 The Fuchsia Authors
+//
+// Licensed under the 2-Clause BSD License <LICENSE-BSD or
+// https://opensource.org/license/bsd-2-clause>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+include!("../include.rs");
+
+use zerocopy::pointer::{
+
+[tests/ui/transmute-ptr-to-usize.rs]
+// Copyright 2022 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+include!("../include.rs");
+
+use zerocopy::transmute;
+
+
+[tests/ui/transmute.rs]
+// Copyright 2022 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+include!("../include.rs");
+
+use util::{NotZerocopy, AU16};
+use zerocopy::transmute;
+
+[tests/ui/transmute_mut.rs]
+// Copyright 2023 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+include!("../include.rs");
+
+use zerocopy::transmute_mut;
+
+
+[tests/ui/transmute_ref.rs]
+// Copyright 2023 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+include!("../include.rs");
+
+use zerocopy::transmute_ref;
+
+
+[tests/ui/try_transmute.rs]
+// Copyright 2022 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+include!("../include.rs");
+
+use util::{NotZerocopy, AU16};
+use zerocopy::try_transmute;
+
+[tests/ui/try_transmute_mut.rs]
+// Copyright 2024 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+include!("../include.rs");
+
+use util::{NotZerocopy, AU16};
+use zerocopy::try_transmute_mut;
+
+[tests/ui/try_transmute_ref.rs]
+// Copyright 2024 The Fuchsia Authors
+//
+// Licensed under a BSD-style license <LICENSE-BSD>, Apache License, Version 2.0
+// <LICENSE-APACHE or https://www.apache.org/licenses/LICENSE-2.0>, or the MIT
+// license <LICENSE-MIT or https://opensource.org/licenses/MIT>, at your option.
+// This file may not be copied, modified, or distributed except according to
+// those terms.
+
+include!("../include.rs");
+
+use util::{NotZerocopy, AU16};
+use zerocopy::try_transmute_ref;

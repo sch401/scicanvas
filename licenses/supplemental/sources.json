@@ -1,0 +1,86 @@
+[
+  {
+    "path": "licenses/supplemental/egui/LICENSE-MIT",
+    "url": "https://raw.githubusercontent.com/emilk/egui/fe368bacc4a15697e347607e73a56c0299b3d42d/LICENSE-MIT",
+    "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c",
+    "group": "egui"
+  },
+  {
+    "path": "licenses/supplemental/egui/LICENSE-APACHE",
+    "url": "https://raw.githubusercontent.com/emilk/egui/fe368bacc4a15697e347607e73a56c0299b3d42d/LICENSE-APACHE",
+    "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
+    "group": "egui"
+  },
+  {
+    "path": "licenses/supplemental/accesskit-02cf/LICENSE-MIT",
+    "url": "https://raw.githubusercontent.com/AccessKit/accesskit/02cf1aa5dda9cb4d97ef7bbab486c039c35960a8/LICENSE-MIT",
+    "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "group": "accesskit-02cf"
+  },
+  {
+    "path": "licenses/supplemental/accesskit-02cf/LICENSE-APACHE",
+    "url": "https://raw.githubusercontent.com/AccessKit/accesskit/02cf1aa5dda9cb4d97ef7bbab486c039c35960a8/LICENSE-APACHE",
+    "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+    "group": "accesskit-02cf"
+  },
+  {
+    "path": "licenses/supplemental/accesskit-c1bd/LICENSE-MIT",
+    "url": "https://raw.githubusercontent.com/AccessKit/accesskit/c1bd2d610615a244fd9e8bba0a6c3aecbfe46821/LICENSE-MIT",
+    "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "group": "accesskit-c1bd"
+  },
+  {
+    "path": "licenses/supplemental/accesskit-c1bd/LICENSE-APACHE",
+    "url": "https://raw.githubusercontent.com/AccessKit/accesskit/c1bd2d610615a244fd9e8bba0a6c3aecbfe46821/LICENSE-APACHE",
+    "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+    "group": "accesskit-c1bd"
+  },
+  {
+    "path": "licenses/supplemental/clipboard-win/LICENSE",
+    "url": "https://raw.githubusercontent.com/DoumanAsh/clipboard-win/3b27cf2bfd1adcfa6e0264eb51c1025ddaf0f342/LICENSE",
+    "sha256": "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566",
+    "group": "clipboard-win"
+  },
+  {
+    "path": "licenses/supplemental/enum-map/LICENSES/MIT.txt",
+    "url": "https://codeberg.org/xfix/enum-map/raw/commit/c788a9c4bd0431308d889942719f7a38761d9884/LICENSES/MIT.txt",
+    "sha256": "b85dcd3e453d05982552c52b5fc9e0bdd6d23c6f8e844b984a88af32570b0cc0",
+    "group": "enum-map"
+  },
+  {
+    "path": "licenses/supplemental/enum-map/LICENSES/Apache-2.0.txt",
+    "url": "https://codeberg.org/xfix/enum-map/raw/commit/c788a9c4bd0431308d889942719f7a38761d9884/LICENSES/Apache-2.0.txt",
+    "sha256": "074e6e32c86a4c0ef8b3ed25b721ca23aca83df277cd88106ef7177c354615ff",
+    "group": "enum-map"
+  },
+  {
+    "path": "licenses/supplemental/enum-map-derive/LICENSES/MIT.txt",
+    "url": "https://codeberg.org/xfix/enum-map/raw/commit/2026968c30ad14d268f3d70c618a704e22a3b980/LICENSES/MIT.txt",
+    "sha256": "b85dcd3e453d05982552c52b5fc9e0bdd6d23c6f8e844b984a88af32570b0cc0",
+    "group": "enum-map-derive"
+  },
+  {
+    "path": "licenses/supplemental/enum-map-derive/LICENSES/Apache-2.0.txt",
+    "url": "https://codeberg.org/xfix/enum-map/raw/commit/2026968c30ad14d268f3d70c618a704e22a3b980/LICENSES/Apache-2.0.txt",
+    "sha256": "074e6e32c86a4c0ef8b3ed25b721ca23aca83df277cd88106ef7177c354615ff",
+    "group": "enum-map-derive"
+  },
+  {
+    "path": "licenses/supplemental/gl_generator/LICENSE",
+    "url": "https://raw.githubusercontent.com/brendanzab/gl-rs/ea503e8d5fb6d73c6030e6191ce738cd3bf3433e/LICENSE",
+    "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "group": "gl_generator"
+  },
+  {
+    "path": "licenses/supplemental/khronos_api/LICENSE",
+    "url": "https://raw.githubusercontent.com/brendanzab/gl-rs/f150967b1c44ae888e6676f93f639ebc82771bdc/LICENSE",
+    "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "group": "khronos_api"
+  },
+  {
+    "path": "licenses/supplemental/scipy-1.17.1/LICENSE.txt",
+    "url": "https://raw.githubusercontent.com/scipy/scipy/v1.17.1/LICENSE.txt",
+    "sha256": "221e59f5e910fd7f94e44f0dac77436a11338c285c6346232e4a850a50da0e94",
+    "group": "scipy-1.17.1"
+  }
+]
