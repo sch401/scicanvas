@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 98 项，P1 146 项，P2 259 项，不做 11 项。
-状态：已完成 27 项，已实现待验收 40 项，部分实现 27 项，未开始 409 项，不做 11 项。
+状态：已完成 27 项，已实现待验收 40 项，部分实现 28 项，未开始 408 项，不做 11 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -260,7 +260,7 @@
 | F187 | 配对 t 检验 | Pair-Sample T-Test | P0 | 已实现待验收 | 统计 → t 检验（配对）：按行配对，只用两列都有数值的行 | 与 SciPy 1.17.1 ttest_rel 一致（1e-9）；Origin 对照待做 | — |
 | F188 | 方差检验（单样本、F 检验） | Two Sample Test for Variances (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
 | F189 | 比例检验、泊松率检验 | One-Sample Proportion Test (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
-| F190 | 单因素 / 双因素 / 三因素方差分析（含多重比较） | One, Two, and Three Way ANOVA | P1 | 未开始 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
+| F190 | 单因素 / 双因素 / 三因素方差分析（含多重比较） | One, Two, and Three Way ANOVA | P1 | 部分实现 | 统计 → 单因素方差分析：每列一组，ANOVA 表与各组描述统计；双因素、三因素与多重比较（Tukey 等）待做 | 与 SciPy 1.17.1 f_oneway 与 f.sf 一致（1e-9）；Origin 对照待做 | — |
 | F191 | 重复测量方差分析 | Repeated Measure ANOVA (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
 | F192 | 非参数检验（Wilcoxon、Mann-Whitney、Kruskal-Wallis、Friedman 等） | Nonparametric Tests (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
 | F193 | 生存分析（Kaplan-Meier、Cox 回归、Weibull） | Survival Analysis (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |

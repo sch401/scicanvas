@@ -968,6 +968,16 @@ fn build() -> Vec<Command> {
             |a| a.open_frequency_dialog(),
         ),
         c(
+            "stats.anova",
+            "单因素方差分析",
+            "stats",
+            "",
+            "统计",
+            "anova one way analysis of variance f test 方差分析 单因素 F 检验",
+            need_book,
+            |a| a.anova(),
+        ),
+        c(
             "stats.correlation",
             "相关系数",
             "stats",

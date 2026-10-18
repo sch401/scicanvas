@@ -435,6 +435,84 @@ pub fn correlation(x: &[f64], y: &[f64], method: CorrMethod) -> Result<Correlati
     Ok(Correlation { method, n, r, p })
 }
 
+/// F 分布的上尾概率 P(F > f)，自由度 (d1, d2)。
+pub fn f_sf(f: f64, d1: f64, d2: f64) -> f64 {
+    if f <= 0.0 {
+        return 1.0;
+    }
+    beta_inc(d2 / 2.0, d1 / 2.0, d2 / (d2 + d1 * f))
+}
+
+/// 单因素方差分析结果：组间、组内的平方和、自由度、均方，F 与 p，以及各组 N、均值、标准差。
+#[derive(Clone, Debug, PartialEq)]
+pub struct Anova {
+    pub n: Vec<usize>,
+    pub mean: Vec<f64>,
+    pub sd: Vec<f64>,
+    pub ss_between: f64,
+    pub ss_within: f64,
+    pub df_between: f64,
+    pub df_within: f64,
+    pub f: f64,
+    pub p: f64,
+}
+
+impl Anova {
+    pub fn ms_between(&self) -> f64 {
+        self.ss_between / self.df_between
+    }
+    pub fn ms_within(&self) -> f64 {
+        self.ss_within / self.df_within
+    }
+}
+
+/// 单因素方差分析（与 SciPy `f_oneway` 相同）；每组的非有限值视为缺失。
+pub fn one_way_anova(groups: &[Vec<f64>]) -> Result<Anova, String> {
+    let groups: Vec<Vec<f64>> = groups.iter().map(|g| finite(g)).collect();
+    if groups.len() < 2 {
+        return Err("方差分析至少需要 2 组".into());
+    }
+    if groups.iter().any(|g| g.is_empty()) {
+        return Err("有一组没有有效数值".into());
+    }
+    let total: usize = groups.iter().map(Vec::len).sum();
+    let k = groups.len();
+    if total <= k {
+        return Err("总数据点数必须多于组数".into());
+    }
+    let grand = groups.iter().flatten().sum::<f64>() / total as f64;
+    let mut out = Anova {
+        n: vec![],
+        mean: vec![],
+        sd: vec![],
+        ss_between: 0.0,
+        ss_within: 0.0,
+        df_between: (k - 1) as f64,
+        df_within: (total - k) as f64,
+        f: 0.0,
+        p: 0.0,
+    };
+    for g in &groups {
+        let m = g.iter().sum::<f64>() / g.len() as f64;
+        let ss: f64 = g.iter().map(|x| (x - m).powi(2)).sum();
+        out.n.push(g.len());
+        out.mean.push(m);
+        out.sd.push(if g.len() > 1 {
+            (ss / (g.len() - 1) as f64).sqrt()
+        } else {
+            f64::NAN
+        });
+        out.ss_between += g.len() as f64 * (m - grand).powi(2);
+        out.ss_within += ss;
+    }
+    if out.ss_within <= 0.0 {
+        return Err("组内没有变化（组内平方和为 0），无法计算 F 值".into());
+    }
+    out.f = out.ms_between() / out.ms_within();
+    out.p = f_sf(out.f, out.df_between, out.df_within);
+    Ok(out)
+}
+
 /// 频数统计的一个区间 `[lo, hi)`；最后一个区间包含右端点。
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Bin {
@@ -541,6 +619,31 @@ mod tests {
         assert_eq!(correlation(&xs, &ys, CorrMethod::Pearson).unwrap().n, 12);
         assert!(correlation(&[1.0, 2.0], &[1.0, 2.0], CorrMethod::Pearson).is_err());
         assert!(correlation(&[1.0, 1.0, 1.0], &[1.0, 2.0, 3.0], CorrMethod::Spearman).is_err());
+    }
+
+    #[test]
+    fn one_way_anova_matches_scipy() {
+        let near = |got: f64, want: f64| assert!((got - want).abs() <= 1e-9 * want.abs().max(1e-12), "{got} vs {want}");
+        // SciPy 1.17.1：f.sf 与 f_oneway
+        near(f_sf(3.7, 2.0, 15.0), 0.049411075318250015);
+        near(f_sf(0.4, 4.0, 30.0), 0.8070497187155657);
+        let groups = vec![
+            vec![5.1, 4.9, 6.2, 5.8, 6.0, 5.5, f64::NAN],
+            vec![4.6, 5.0, 4.4, 5.2, 4.8],
+            vec![6.3, 6.9, 7.1, 6.5, 6.8, 7.4, 6.6],
+        ];
+        let a = one_way_anova(&groups).unwrap();
+        assert_eq!(a.n, [6, 5, 7]);
+        near(a.ss_between, 12.254444444444433);
+        near(a.ss_within, 2.5483333333333342);
+        assert_eq!((a.df_between, a.df_within), (2.0, 15.0));
+        near(a.f, 36.06605624591238);
+        near(a.p, 1.859292068536071e-06);
+        assert!(one_way_anova(&groups[..1]).is_err());
+        assert!(one_way_anova(&[vec![1.0, 1.0], vec![2.0, 2.0]])
+            .unwrap_err()
+            .contains("组内"));
+        assert!(one_way_anova(&[vec![1.0], vec![2.0]]).is_err());
     }
 
     #[test]

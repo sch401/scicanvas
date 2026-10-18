@@ -7,7 +7,7 @@ use scicanvas_core::fmt_num;
 use scicanvas_core::interpolate::InterpMethod;
 use scicanvas_core::nlfit::Model;
 use scicanvas_core::ops::{AreaReport, ColumnOp, FitReport, NlFitReport};
-use scicanvas_core::stats::{Correlation, TTest, TTestKind};
+use scicanvas_core::stats::{Anova, Correlation, TTest, TTestKind};
 
 use crate::theme::Palette;
 
@@ -31,6 +31,11 @@ pub enum Dialog {
         custom: bool,
         from: f64,
         to: f64,
+    },
+    /// 单因素方差分析结果和各组（列）名称。
+    Anova {
+        result: Anova,
+        names: Vec<String>,
     },
     /// 相关系数：每一对列（名称 A、名称 B）的三种相关系数。
     Correlations(Vec<(String, String, Vec<Correlation>)>),
@@ -373,6 +378,64 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                 } else if cancel {
                     action = Action::Close;
                 }
+            });
+        }
+        Dialog::Anova { result, names } => {
+            window("单因素方差分析").show(ctx, |ui| {
+                let (table, groups) = anova_rows(result, names);
+                for (gi, rows) in [table, groups].iter().enumerate() {
+                    egui::Grid::new(("anova-grid", gi))
+                        .striped(true)
+                        .num_columns(rows[0].len())
+                        .spacing([18.0, 4.0])
+                        .show(ui, |ui| {
+                            for (ri, row) in rows.iter().enumerate() {
+                                for (ci, cell) in row.iter().enumerate() {
+                                    if ri == 0 {
+                                        ui.label(RichText::new(cell).color(pal.weak));
+                                    } else if ci == 0 {
+                                        ui.label(cell);
+                                    } else {
+                                        ui.label(RichText::new(cell).monospace());
+                                    }
+                                }
+                                ui.end_row();
+                            }
+                        });
+                    ui.add_space(8.0);
+                }
+                let verdict = if result.p < 0.05 {
+                    "α = 0.05 时各组均值有显著差异"
+                } else {
+                    "α = 0.05 时不能认为各组均值有差异"
+                };
+                ui.label(
+                    RichText::new(format!(
+                        "{verdict}。每个点选的列作为一组，缺失值已跳过；多重比较待后续版本。"
+                    ))
+                    .small()
+                    .color(pal.weak),
+                );
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    if ui
+                        .button("复制结果")
+                        .on_hover_text("复制为制表符分隔的文本，可粘贴到 Excel")
+                        .clicked()
+                    {
+                        let (table, groups) = anova_rows(result, names);
+                        let text: Vec<String> = table
+                            .iter()
+                            .chain([vec![]].iter())
+                            .chain(groups.iter())
+                            .map(|r| r.join("\t"))
+                            .collect();
+                        ui.ctx().copy_text(text.join("\n"));
+                    }
+                    if ui.button(RichText::new("关闭").strong()).clicked() {
+                        action = Action::Close;
+                    }
+                });
             });
         }
         Dialog::Correlations(pairs) => {
@@ -773,6 +836,48 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
         action = Action::Close;
     }
     action
+}
+
+/// ANOVA 表与各组统计量（首行为表头），供窗口和复制共用。
+fn anova_rows(a: &Anova, names: &[String]) -> (Vec<Vec<String>>, Vec<Vec<String>>) {
+    let row = |cells: &[&str]| cells.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+    let table = vec![
+        row(&["来源", "平方和", "自由度", "均方", "F", "p"]),
+        vec![
+            "组间".into(),
+            fmt_num(a.ss_between),
+            fmt_num(a.df_between),
+            fmt_num(a.ms_between()),
+            fmt_num(a.f),
+            fmt_num(a.p),
+        ],
+        vec![
+            "组内".into(),
+            fmt_num(a.ss_within),
+            fmt_num(a.df_within),
+            fmt_num(a.ms_within()),
+            String::new(),
+            String::new(),
+        ],
+        vec![
+            "总计".into(),
+            fmt_num(a.ss_between + a.ss_within),
+            fmt_num(a.df_between + a.df_within),
+            String::new(),
+            String::new(),
+            String::new(),
+        ],
+    ];
+    let mut groups = vec![row(&["组", "N", "均值", "标准差"])];
+    for (i, name) in names.iter().enumerate() {
+        groups.push(vec![
+            name.clone(),
+            a.n[i].to_string(),
+            fmt_num(a.mean[i]),
+            fmt_num(a.sd[i]),
+        ]);
+    }
+    (table, groups)
 }
 
 fn correlation_header() -> [&'static str; 9] {

@@ -1425,6 +1425,32 @@ impl SciApp {
         Some((id, keys))
     }
 
+    /// 每个点选的列作为一组做单因素方差分析。
+    pub(crate) fn anova(&mut self) {
+        let Some((id, keys)) = self.ttest_columns() else { return };
+        if keys.len() < 2 {
+            self.status = "请先在工作表里单击选中至少两列（每列一组）".into();
+            return;
+        }
+        let book = self.project.book(id).unwrap();
+        let groups: Vec<Vec<f64>> = keys.iter().map(|k| book.column(k).unwrap().values()).collect();
+        let names: Vec<String> = keys
+            .iter()
+            .map(|k| book.column(k).unwrap().display_name().to_owned())
+            .collect();
+        match scicanvas_core::stats::one_way_anova(&groups) {
+            Ok(result) => {
+                self.status = format!(
+                    "单因素方差分析：F = {}，p = {}",
+                    round_sig(result.f, 4),
+                    round_sig(result.p, 4)
+                );
+                self.dialog = Some(Dialog::Anova { result, names });
+            }
+            Err(e) => self.status = e,
+        }
+    }
+
     /// 点选的列两两计算 Pearson、Spearman、Kendall 相关系数。
     pub(crate) fn correlations(&mut self) {
         use scicanvas_core::stats::{correlation, CorrMethod};
@@ -4124,6 +4150,31 @@ mod history_tests {
             app.project.books.last().map(|b| b.id),
             "the new table is shown"
         );
+    }
+
+    #[test]
+    fn anova_treats_each_picked_column_as_a_group() {
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["B".into(), "C".into()]);
+        app.anova();
+        let book = app.project.book(1).unwrap();
+        let want = scicanvas_core::stats::one_way_anova(&[
+            book.column("B").unwrap().values(),
+            book.column("C").unwrap().values(),
+        ])
+        .unwrap();
+        match &app.dialog {
+            Some(Dialog::Anova { result, names }) => {
+                assert_eq!(result, &want);
+                assert_eq!(names, &["电压 A", "电压 B"]);
+            }
+            _ => panic!("report should open"),
+        }
+        app.dialog = None;
+        app.selection.insert(1, vec!["B".into()]);
+        app.anova();
+        assert!(app.dialog.is_none() && app.status.contains("至少两列"));
     }
 
     #[test]

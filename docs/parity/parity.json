@@ -2123,9 +2123,9 @@
   "feature": "单因素 / 双因素 / 三因素方差分析（含多重比较）",
   "ref": "One, Two, and Three Way ANOVA",
   "pri": "P1",
-  "status": "未开始",
-  "how": "statrs 分布函数 + 自写检验",
-  "verify": "与 Origin 及 SciPy / R 结果比较（统计量、p 值）",
+  "status": "部分实现",
+  "how": "统计 → 单因素方差分析：每列一组，ANOVA 表与各组描述统计；双因素、三因素与多重比较（Tukey 等）待做",
+  "verify": "与 SciPy 1.17.1 f_oneway 与 f.sf 一致（1e-9）；Origin 对照待做",
   "id": "F190",
   "milestone": "M2 论文全流程"
  },
