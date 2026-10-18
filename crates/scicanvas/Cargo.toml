@@ -11,9 +11,15 @@ name = "scicanvas"
 path = "src/main.rs"
 
 [dependencies]
-scicanvas-core = { path = "../scicanvas-core", features = ["serde", "encoding"] }
+scicanvas-core = { version = "0.1.0", path = "../scicanvas-core", features = ["serde", "encoding", "xlsx"] }
 # 界面：eframe/egui 及其表格、SVG 图标组件，版本必须一致
 eframe = "0.29"
 egui_extras = { version = "0.29", features = ["svg"] }
 # 系统原生的打开/保存文件对话框
 rfd = "0.15"
+# PNG 导出与复制图形：与 egui 图标共用 resvg 0.37，额外开启文字排版和系统字体
+resvg = { version = "=0.37.0", default-features = false, features = ["text", "system-fonts"] }
+# 剪贴板位图（egui 已经依赖同一版本；image-data 用依赖树里已有的 image 0.25）
+arboard = { version = "3.6", default-features = false, features = ["image-data"] }
+# PNG pHYs 块的 CRC（已在依赖树里）
+crc32fast = "1.4"

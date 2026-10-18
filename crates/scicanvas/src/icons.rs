@@ -21,6 +21,18 @@ fn wrap(body: &str) -> String {
 /// (名称, SVG 主体)
 fn sources() -> Vec<(&'static str, String)> {
     vec![
+        (
+            "steph",
+            wrap(&format!(
+                r##"{AX}<path d="M6 16h5V11h4V6h5" stroke="IC_R" stroke-width="1.9"/>"##
+            )),
+        ),
+        (
+            "stepv",
+            wrap(&format!(
+                r##"{AX}<path d="M6 16v-5h5V6h9" stroke="IC_R" stroke-width="1.9"/>"##
+            )),
+        ),
         ("undo", wrap(r#"<path d="M9 5L4 10l5 5M4 10h9a6 6 0 0 1 0 12"/>"#)),
         ("redo", wrap(r#"<path d="M15 5l5 5-5 5M20 10h-9a6 6 0 0 0 0 12"/>"#)),
         (
@@ -187,6 +199,18 @@ fn sources() -> Vec<(&'static str, String)> {
             "colins",
             wrap(
                 r##"<rect x="3.5" y="3.5" width="8" height="17" rx="1" fill="IC_PAPER"/><path d="M3.5 8h8"/><path d="M17 8.5v7M13.5 12h7" stroke="IC_G" stroke-width="2"/>"##,
+            ),
+        ),
+        (
+            "rowins",
+            wrap(
+                r##"<rect x="3.5" y="3.5" width="17" height="8" rx="1" fill="IC_PAPER"/><path d="M8 3.5v8"/><path d="M12 13.5v7M8.5 17h7" stroke="IC_G" stroke-width="2"/>"##,
+            ),
+        ),
+        (
+            "rowdel",
+            wrap(
+                r##"<rect x="3.5" y="3.5" width="17" height="8" rx="1" fill="IC_PAPER"/><path d="M8 3.5v8"/><path d="M9.5 14.5l5 5M14.5 14.5l-5 5" stroke="IC_R" stroke-width="2"/>"##,
             ),
         ),
         (

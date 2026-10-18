@@ -3,3 +3,13 @@ line,折线图,Line
 scatter,散点图,Scatter
 linesym,点线图,LineSymbol
 bar,柱状图,Bar
+stacked-bar,堆叠柱图,StackedBar
+percent-stacked-bar,百分比堆叠柱图,PercentStackedBar
+floating-bar,浮动柱图,FloatingBar
+horizontal-bar,条形图,HorizontalBar
+area,面积图,Area
+spline,样条曲线图,Spline
+spline-symbol,样条点线图,SplineSymbol
+vertical-drop,垂线图,VerticalDrop
+step-horizontal,水平阶梯图,StepHorizontal
+step-vertical,垂直阶梯图,StepVertical

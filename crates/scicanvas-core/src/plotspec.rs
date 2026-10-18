@@ -13,6 +13,8 @@ pub struct PlotSpec {
     #[cfg_attr(feature = "serde", serde(default))]
     pub x_by_y: std::collections::BTreeMap<String, String>,
     #[cfg_attr(feature = "serde", serde(default))]
+    pub base_by_y: std::collections::BTreeMap<String, String>,
+    #[cfg_attr(feature = "serde", serde(default))]
     pub line_only: Vec<String>,
     #[cfg_attr(feature = "serde", serde(default))]
     pub rows: Option<(usize, usize)>,
@@ -29,6 +31,7 @@ impl Default for PlotSpec {
             y_keys: vec![],
             plot_type: PlotType::LineSymbol,
             x_by_y: Default::default(),
+            base_by_y: Default::default(),
             line_only: vec![],
             rows: None,
             transform: Transform::Identity,
@@ -57,7 +60,11 @@ impl PlotSpec {
             .map(|c| c.key.clone())
             .collect();
         let Some(first_y) = y_keys.first().and_then(|k| book.column_index(k)) else {
-            return Err("请至少选择一个 Y 列".into());
+            return Err(if selected.is_empty() {
+                "工作簿里没有 Y 列，请先把列设为 Y".into()
+            } else {
+                "选中的列里没有 Y 列，请至少选中一个 Y 列".into()
+            });
         };
         let x_key = cols
             .iter()
@@ -76,13 +83,43 @@ impl PlotSpec {
                     .find(|c| c.role == crate::Role::X)
                     .map(|c| c.key.clone())
             });
-        Ok(Self {
+        let mut spec = Self {
             book_id: Some(book.id),
             x_key,
             y_keys,
-            plot_type,
             ..Default::default()
-        })
+        };
+        spec.set_plot_type(plot_type)?;
+        Ok(spec)
+    }
+
+    /// 初次选择浮动柱时，按 Y 列顺序配成下端/上端；以后使用保存的映射。
+    pub fn set_plot_type(&mut self, kind: PlotType) -> Result<(), String> {
+        if self.plot_type == kind {
+            return Ok(());
+        }
+        if kind == PlotType::FloatingBar {
+            let keys: Vec<_> = self
+                .y_keys
+                .iter()
+                .filter(|k| !self.line_only.contains(k))
+                .cloned()
+                .collect();
+            if !keys.iter().all(|k| self.base_by_y.contains_key(k)) || keys.is_empty() {
+                if keys.is_empty() || keys.len() % 2 != 0 {
+                    return Err("浮动柱请按下端、上端的顺序选择成对的 Y 列".into());
+                }
+                let mut uppers = Vec::new();
+                for pair in keys.as_chunks::<2>().0 {
+                    self.base_by_y.insert(pair[1].clone(), pair[0].clone());
+                    uppers.push(pair[1].clone());
+                }
+                uppers.extend(self.line_only.iter().filter(|k| self.y_keys.contains(k)).cloned());
+                self.y_keys = uppers;
+            }
+        }
+        self.plot_type = kind;
+        Ok(())
     }
     pub fn validate(&self, book: &Book) -> Result<(), String> {
         if self.book_id != Some(book.id) {
@@ -96,8 +133,26 @@ impl PlotSpec {
                 return Err(format!("找不到列 {key}"));
             }
         }
+        if self.y_keys.iter().any(|key| {
+            book.column(key)
+                .is_some_and(|c| matches!(c.role, crate::Role::XError | crate::Role::YError))
+        }) {
+            return Err("误差列会自动关联数据，请从 Y 列列表中移除误差列".into());
+        }
         if self.rows.is_some_and(|(a, b)| a > b || b == usize::MAX) {
             return Err("行范围无效".into());
+        }
+        if self.plot_type == PlotType::FloatingBar {
+            for key in self.y_keys.iter().filter(|k| !self.line_only.contains(k)) {
+                let base = self.base_by_y.get(key).ok_or("请为浮动柱选择下端列")?;
+                if base == key
+                    || book
+                        .column(base)
+                        .is_none_or(|c| matches!(c.role, crate::Role::XError | crate::Role::YError))
+                {
+                    return Err("浮动柱下端应为另一列有效数据".into());
+                }
+            }
         }
         Ok(())
     }
@@ -108,7 +163,24 @@ impl PlotSpec {
         let mut out = Vec::new();
         for key in &self.y_keys {
             let Some(c) = book.column(key) else { continue };
+            if matches!(c.role, crate::Role::XError | crate::Role::YError) {
+                continue;
+            }
             let yv = c.values();
+            let base_values = if self.plot_type == PlotType::FloatingBar && !self.line_only.contains(key) {
+                let Some(base) = self
+                    .base_by_y
+                    .get(key)
+                    .filter(|k| *k != key)
+                    .and_then(|k| book.column(k))
+                    .filter(|c| !matches!(c.role, crate::Role::XError | crate::Role::YError))
+                else {
+                    continue;
+                };
+                Some(base.values())
+            } else {
+                None
+            };
             let own_x = self.x_by_y.get(key).and_then(|k| book.column(k));
             let own_xv = own_x.map(|c| c.values());
             let xv = if own_x.is_some() { &own_xv } else { &main_xv };
@@ -118,20 +190,57 @@ impl PlotSpec {
                 _ => (0, n),
             };
             let mut pts = Vec::with_capacity(i1.saturating_sub(i0));
+            let error_values = [crate::Role::XError, crate::Role::YError].map(|role| {
+                if self.line_only.contains(key) || c.derived_from.is_some() {
+                    return None;
+                }
+                let find = |source: &str| {
+                    book.columns
+                        .iter()
+                        .enumerate()
+                        .find(|(i, col)| col.role == role && book.error_source(*i) == Some(source))
+                        .map(|(_, col)| col.values())
+                };
+                find(key).or_else(|| {
+                    if role == crate::Role::XError {
+                        own_x.or(xcol).and_then(|x| find(&x.key))
+                    } else {
+                        None
+                    }
+                })
+            });
+            let mut errors = Vec::with_capacity(pts.capacity());
+            let mut rows = Vec::with_capacity(pts.capacity());
+            let mut bases = Vec::with_capacity(pts.capacity());
             for i in i0..i1 {
                 let x = match xv {
                     Some(v) => v.get(i).copied().unwrap_or(f64::NAN),
                     None => (i + 1) as f64,
                 };
                 let y = yv.get(i).copied().unwrap_or(f64::NAN);
-                if x.is_finite() && y.is_finite() {
+                let base = base_values
+                    .as_ref()
+                    .map_or(0.0, |v| v.get(i).copied().unwrap_or(f64::NAN));
+                if x.is_finite() && y.is_finite() && base.is_finite() {
                     pts.push([x, y]);
+                    rows.push(i);
+                    bases.push(base);
+                    errors.push(error_values.each_ref().map(|values| {
+                        values
+                            .as_ref()
+                            .and_then(|v| v.get(i))
+                            .copied()
+                            .filter(|v| v.is_finite() && *v >= 0.0)
+                    }));
                 }
             }
             out.push(Series {
                 key: c.key.clone(),
                 name: c.display_name().to_string(),
                 points: pts,
+                errors,
+                rows,
+                bases,
                 line_only: self.line_only.contains(key),
                 source: c.derived_from.clone(),
             });
@@ -141,22 +250,76 @@ impl PlotSpec {
                 if s.line_only {
                     continue;
                 }
-                s.points.sort_by(|a, b| a[0].total_cmp(&b[0]));
+                let mut indices: Vec<_> = (0..s.points.len()).collect();
+                indices.sort_by(|a, b| s.points[*a][0].total_cmp(&s.points[*b][0]));
                 let mut grouped = Vec::new();
+                let mut bases = Vec::new();
                 let mut i = 0;
                 while i < s.points.len() {
-                    let x = s.points[i][0];
+                    let x = s.points[indices[i]][0];
                     let mut end = i + 1;
-                    while end < s.points.len() && s.points[end][0] == x {
+                    while end < s.points.len() && s.points[indices[end]][0] == x {
                         end += 1;
                     }
-                    let mean = s.points[i..end].iter().map(|p| p[1]).sum::<f64>() / (end - i) as f64;
+                    let mean = indices[i..end].iter().map(|j| s.points[*j][1]).sum::<f64>() / (end - i) as f64;
                     grouped.push([x, mean]);
+                    bases.push(indices[i..end].iter().map(|j| s.bases[*j]).sum::<f64>() / (end - i) as f64);
                     i = end;
                 }
                 s.points = grouped;
+                s.bases = bases;
+                s.rows = vec![0; s.points.len()];
+                // 原始行的测量误差不代表分组均值的标准误。
+                s.errors = vec![[None; 2]; s.points.len()];
             }
         }
+        if self.plot_type.is_stacked() {
+            stack_bars(&mut out, self.plot_type == PlotType::PercentStackedBar);
+        }
         (xcol, out)
+    }
+}
+
+fn stack_bars(series: &mut [Series], percent: bool) {
+    use std::collections::BTreeMap;
+    let key = |row: usize, x: f64| (row, if x == 0.0 { 0 } else { x.to_bits() });
+    let mut totals: BTreeMap<_, [f64; 2]> = BTreeMap::new();
+    let mut scales: BTreeMap<_, [f64; 2]> = BTreeMap::new();
+    if percent {
+        for s in series.iter().filter(|s| !s.line_only) {
+            for (p, row) in s.points.iter().zip(&s.rows) {
+                let scale = &mut scales.entry(key(*row, p[0])).or_default()[usize::from(p[1] < 0.0)];
+                *scale = scale.max(p[1].abs());
+            }
+        }
+        for s in series.iter().filter(|s| !s.line_only) {
+            for (p, row) in s.points.iter().zip(&s.rows) {
+                let key = key(*row, p[0]);
+                let sign = usize::from(p[1] < 0.0);
+                let scale = scales[&key][sign];
+                totals.entry(key).or_default()[sign] += if scale > 0.0 { p[1].abs() / scale } else { 0.0 };
+            }
+        }
+    }
+    let mut sums: BTreeMap<_, [f64; 2]> = BTreeMap::new();
+    for s in series.iter_mut().filter(|s| !s.line_only) {
+        for (((p, base), row), errors) in s.points.iter_mut().zip(&mut s.bases).zip(&s.rows).zip(&mut s.errors) {
+            let key = key(*row, p[0]);
+            let sign = usize::from(p[1] < 0.0);
+            if percent {
+                let total = totals[&key][sign];
+                let (scale, factor) = if total > 0.0 {
+                    (scales[&key][sign], 100.0 / total)
+                } else {
+                    (1.0, 0.0)
+                };
+                p[1] = p[1] / scale * factor;
+                errors[1] = errors[1].map(|e| e / scale * factor).filter(|e| e.is_finite());
+            }
+            let sum = &mut sums.entry(key).or_default()[sign];
+            *base = *sum;
+            *sum += p[1];
+            p[1] = *sum;
+        }
     }
 }

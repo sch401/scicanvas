@@ -96,6 +96,21 @@ fn prim(out: &mut String, p: &Prim) {
                 hex(*color)
             );
         }
+        Prim::Triangles { pts, color, opacity } => {
+            let mut d = String::new();
+            for triangle in pts.as_chunks::<3>().0 {
+                let _ = write!(
+                    d,
+                    "M{:.2},{:.2}L{:.2},{:.2}L{:.2},{:.2}Z",
+                    triangle[0][0], triangle[0][1], triangle[1][0], triangle[1][1], triangle[2][0], triangle[2][1]
+                );
+            }
+            let _ = write!(
+                out,
+                r#"<path d="{d}" fill="{}" fill-opacity="{opacity}" stroke="none"/>"#,
+                hex(*color)
+            );
+        }
         Prim::Symbols { sym, pts, r, color } => {
             if pts.is_empty() {
                 return;
@@ -143,14 +158,9 @@ pub fn render(g: &Graph, book: Option<&Book>, w: f64, h: f64) -> String {
     render_scene(g.id, &sc, w, h, None)
 }
 
-pub fn render_page(g: &Graph, project: &crate::Project, w: f64, h: f64) -> String {
-    render_scene(
-        g.id,
-        &scene::build_page(g, project, w, h, None),
-        w,
-        h,
-        Some((g.page.width_mm, g.page.height_mm)),
-    )
+pub fn render_page(g: &Graph, project: &crate::Project) -> String {
+    let sc = scene::layout_page(g, project, &[]);
+    render_scene(g.id, &sc, sc.w, sc.h, Some((g.page.width_mm, g.page.height_mm)))
 }
 
 fn render_scene(id: u64, sc: &scene::Scene, w: f64, h: f64, physical: Option<(f64, f64)>) -> String {
@@ -222,7 +232,8 @@ mod tests {
         assert!(svg.ends_with("</svg>"));
         assert!(svg.contains("电压 A"));
         assert!(svg.contains("时间 (s)"));
-        assert!(svg.contains("#ff0000"));
+        // 第二条曲线用默认色板的砖红
+        assert!(svg.contains(&crate::palette_hex(1)));
     }
 
     #[test]
@@ -230,10 +241,10 @@ mod tests {
         let mut p = Project::sample();
         for t in PlotType::ALL {
             let g = p.graph_mut(2).unwrap();
-            g.plot_type = t;
-            g.y_log = true;
-            g.grid = true;
-            g.title = "测试 <标题>".into();
+            g.first_layer_mut().plot_type = t;
+            g.first_layer_mut().y_log = true;
+            g.first_layer_mut().grid = true;
+            g.first_layer_mut().title = "测试 <标题>".into();
             let svg = render(p.graph(2).unwrap(), p.book(1), 640.0, 480.0);
             assert!(svg.contains("测试 &lt;标题&gt;"));
             assert!(!svg.contains("NaN"));
@@ -245,9 +256,21 @@ mod tests {
         let mut p = Project::sample();
         p.fit_poly(&crate::ops::Source::Graph(2), 1).unwrap();
         let svg = render(p.graph(2).unwrap(), p.book(1), 800.0, 600.0);
-        // B 是黑色数据，拟合线红色；C 是红色数据，拟合线改用蓝色
-        assert!(svg.contains("#e8182c"));
-        assert!(svg.contains("#1f6fe5"));
+        // B 是深蓝数据，拟合线用砖红；C 本身是砖红，拟合线改用深蓝，避免和原数据同色
+        let layer = p.graph(2).unwrap().first_layer();
+        let (_, series) = layer.spec.series(p.book(1).unwrap());
+        let styles = crate::series_styles(&series, layer.plot_type);
+        let fit_color = |source: &str| {
+            series
+                .iter()
+                .zip(&styles)
+                .find(|(s, _)| s.line_only && s.source.as_deref() == Some(source))
+                .map(|(_, st)| st.color.rgb())
+                .unwrap()
+        };
+        assert_eq!(fit_color("B"), crate::FIT_RGB);
+        assert_eq!(fit_color("C"), crate::FIT_ALT_RGB);
+        assert_eq!(crate::PALETTE[1], crate::FIT_RGB);
         assert!(svg.contains("电压 A 线性拟合"));
     }
 

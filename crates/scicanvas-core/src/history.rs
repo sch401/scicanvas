@@ -12,85 +12,105 @@ struct Snapshot {
 }
 
 pub struct History {
-    present: Project,
+    pending: Option<Pending>,
     undo: VecDeque<Snapshot>,
     redo: VecDeque<Snapshot>,
     bytes: usize,
     max_steps: usize,
     max_bytes: usize,
-    mergeable: bool,
+}
+
+struct Pending {
+    before: Snapshot,
+    changed: bool,
+}
+
+impl Default for History {
+    fn default() -> Self {
+        Self::with_limits(100, 300 * 1024 * 1024)
+    }
 }
 
 impl History {
-    pub fn new(project: &Project) -> Self {
-        Self::with_limits(project, 100, 300 * 1024 * 1024)
-    }
-
-    pub fn with_limits(project: &Project, max_steps: usize, max_bytes: usize) -> Self {
+    pub fn with_limits(max_steps: usize, max_bytes: usize) -> Self {
         Self {
-            present: project.clone(),
+            pending: None,
             undo: VecDeque::new(),
             redo: VecDeque::new(),
             bytes: 0,
             max_steps,
             max_bytes,
-            mergeable: false,
         }
     }
 
-    /// 在实际修改后记录；无变化时保留重做栈。同一控件的一次编辑可合并。
-    pub fn record(&mut self, current: &Project, label: &str, merge: bool) -> bool {
-        // ponytail: 比较项目需要 O(数据量)，大项目改用修改代数和 Arc 列数据。
-        if self.present == *current {
+    /// 修改前开启事务；同一事务的后续输入复用第一份快照。
+    pub fn begin(&mut self, current: &Project, label: &str) {
+        if self.pending.is_none() {
+            self.pending = Some(Pending {
+                before: Snapshot::new(current.clone(), label.to_string()),
+                changed: false,
+            });
+        }
+    }
+
+    pub fn is_pending(&self) -> bool {
+        self.pending.is_some()
+    }
+
+    /// 实际写入后设置修改标记。空闲帧不比较或复制项目。
+    pub fn changed(&mut self) {
+        self.pending.as_mut().expect("写入前应开启撤销事务").changed = true;
+    }
+
+    pub fn commit(&mut self, current: &Project) -> bool {
+        let Some(pending) = self.pending.take() else {
+            return false;
+        };
+        if !pending.changed || pending.before.project == *current {
             return false;
         }
-        let before = std::mem::replace(&mut self.present, current.clone());
-        let merge = merge && self.mergeable;
-        self.mergeable = true;
         self.redo.clear();
-        self.bytes = self.undo.iter().map(|s| s.bytes).sum();
-        if !(merge && !self.undo.is_empty()) {
-            let snapshot = Snapshot::new(before, label.to_string());
-            self.bytes += snapshot.bytes;
-            self.undo.push_back(snapshot);
-        } else if self.undo.back().is_some_and(|s| s.project == *current) {
-            // 一次连续编辑又回到起点，不留空记录。
-            self.bytes -= self.undo.pop_back().unwrap().bytes;
-            self.mergeable = false;
-        }
+        self.bytes = self.undo.iter().map(|s| s.bytes).sum::<usize>() + pending.before.bytes;
+        self.undo.push_back(pending.before);
         self.trim();
         true
     }
 
     pub fn undo_label(&self) -> Option<&str> {
-        self.undo.back().map(|s| s.label.as_str())
+        self.pending
+            .as_ref()
+            .filter(|p| p.changed)
+            .map(|p| p.before.label.as_str())
+            .or_else(|| self.undo.back().map(|s| s.label.as_str()))
     }
 
     pub fn redo_label(&self) -> Option<&str> {
-        self.redo.back().map(|s| s.label.as_str())
+        if self.pending.as_ref().is_some_and(|p| p.changed) {
+            None
+        } else {
+            self.redo.back().map(|s| s.label.as_str())
+        }
     }
 
-    /// 调用前先 record，保证当前编辑已提交到历史。
+    /// 先提交当前事务，再撤销；每次只克隆一次当前项目供重做。
     pub fn undo(&mut self, current: &Project) -> Option<Project> {
-        self.mergeable = false;
+        self.commit(current);
         let snapshot = self.undo.pop_back()?;
         self.bytes -= snapshot.bytes;
         let reverse = Snapshot::new(current.clone(), snapshot.label);
         self.bytes += reverse.bytes;
         self.redo.push_back(reverse);
-        self.present = snapshot.project.clone();
         self.trim();
         Some(snapshot.project)
     }
 
     pub fn redo(&mut self, current: &Project) -> Option<Project> {
-        self.mergeable = false;
+        self.commit(current);
         let snapshot = self.redo.pop_back()?;
         self.bytes -= snapshot.bytes;
         let reverse = Snapshot::new(current.clone(), snapshot.label);
         self.bytes += reverse.bytes;
         self.undo.push_back(reverse);
-        self.present = snapshot.project.clone();
         self.trim();
         Some(snapshot.project)
     }
@@ -101,9 +121,6 @@ impl History {
                 break;
             };
             self.bytes -= old.bytes;
-        }
-        if self.undo.is_empty() {
-            self.mergeable = false;
         }
     }
 }
@@ -118,6 +135,11 @@ impl Snapshot {
 /// 估算快照拥有的堆内存；BTreeMap 按每项 128 字节保守计入节点开销。
 fn estimated_bytes(p: &Project) -> usize {
     let mut bytes = p.books.capacity() * size_of::<Book>() + p.graphs.capacity() * size_of::<Graph>();
+    bytes += p.folders.capacity() * size_of::<crate::project_tree::Folder>()
+        + p.folders
+            .iter()
+            .map(|f| f.name.capacity() + f.items.capacity() * size_of::<u64>())
+            .sum::<usize>();
     for b in &p.books {
         bytes += b.name.capacity() + b.columns.capacity() * size_of::<Column>();
         for c in &b.columns {
@@ -127,6 +149,7 @@ fn estimated_bytes(p: &Project) -> usize {
                 .sum::<usize>();
             bytes += c.data.capacity() * size_of::<String>() + c.data.iter().map(String::capacity).sum::<usize>();
             bytes += c.derived_from.as_ref().map_or(0, String::capacity);
+            bytes += c.error_for.as_ref().map_or(0, String::capacity);
         }
     }
     for g in &p.graphs {
@@ -137,11 +160,17 @@ fn estimated_bytes(p: &Project) -> usize {
                 .map(|s| s.capacity())
                 .sum::<usize>();
             bytes += layer.x_key.as_ref().map_or(0, String::capacity);
+            bytes += layer.labels.column.as_ref().map_or(0, String::capacity);
             for keys in [&layer.y_keys, &layer.line_only] {
                 bytes += keys.capacity() * size_of::<String>() + keys.iter().map(String::capacity).sum::<usize>();
             }
             bytes += layer
                 .x_by_y
+                .iter()
+                .map(|(k, v)| 128 + k.capacity() + v.capacity())
+                .sum::<usize>();
+            bytes += layer
+                .base_by_y
                 .iter()
                 .map(|(k, v)| 128 + k.capacity() + v.capacity())
                 .sum::<usize>();
@@ -155,84 +184,94 @@ mod tests {
     use super::*;
 
     #[test]
-    fn roundtrip_and_branch() {
+    fn roundtrip_branch_and_noop_preserve_redo() {
         let mut p = Project::default();
-        let initial = p.clone();
-        let mut h = History::new(&p);
+        let mut h = History::default();
         let mut states = vec![p.clone()];
         for _ in 0..5 {
+            h.begin(&p, "新建");
             p.new_book();
-            assert!(h.record(&p, "新建工作簿", false));
+            h.changed();
+            assert!(h.commit(&p));
             states.push(p.clone());
         }
         for state in states[..5].iter().rev() {
             p = h.undo(&p).unwrap();
             assert_eq!(&p, state);
         }
-        assert_eq!(p, initial);
         assert!(h.undo(&p).is_none());
-        assert!(!h.record(&p, "无变化", false));
+        h.begin(&p, "空操作");
+        assert!(!h.commit(&p));
+        assert_eq!(h.redo_label(), Some("新建"));
         for state in states.iter().skip(1) {
             p = h.redo(&p).unwrap();
             assert_eq!(&p, state);
         }
         p = h.undo(&p).unwrap();
+        h.begin(&p, "重命名");
         p.books[0].name = "分支".into();
-        h.record(&p, "重命名", false);
+        h.changed();
+        h.commit(&p);
         assert!(h.redo(&p).is_none());
         assert_eq!(h.undo_label(), Some("重命名"));
     }
 
     #[test]
-    fn edits_merge_and_return_to_start() {
+    fn continuous_large_edit_reuses_snapshot_and_return_to_start_is_noop() {
         let mut p = Project::sample();
+        p.books[0].columns[0].data = vec!["123".into(); 100_000];
         let initial = p.clone();
-        let mut h = History::new(&p);
-        p.books[0].name = "a".into();
-        h.record(&p, "重命名", false);
-        p.books[0].name = "ab".into();
-        h.record(&p, "重命名", true);
+        let mut h = History::default();
+        h.begin(&p, "列名称");
+        let data = h.pending.as_ref().unwrap().before.project.books[0].columns[0]
+            .data
+            .as_ptr();
+        for _ in 0..50 {
+            h.begin(&p, "列名称");
+            p.books[0].columns[0].long_name.push('a');
+            h.changed();
+            assert_eq!(
+                h.pending.as_ref().unwrap().before.project.books[0].columns[0]
+                    .data
+                    .as_ptr(),
+                data
+            );
+        }
+        assert_eq!(h.undo_label(), Some("列名称"));
+        let edited = p.clone();
         p = h.undo(&p).unwrap();
         assert_eq!(p, initial);
-        assert_eq!(h.redo_label(), Some("重命名"));
         p = h.redo(&p).unwrap();
-        p.books[0].name = initial.books[0].name.clone();
-        h.record(&p, "重命名", false);
-        let before = p.clone();
-        p.books[0].name = "临时".into();
-        h.record(&p, "连续编辑", false);
-        p = before.clone();
-        h.record(&p, "连续编辑", true);
-        p.books[0].name = "重新输入".into();
-        h.record(&p, "连续编辑", true);
-        p = h.undo(&p).unwrap();
-        assert_eq!(p, before);
-        assert_eq!(h.undo_label(), Some("重命名"));
+        assert_eq!(p, edited);
+        h.begin(&p, "往返编辑");
+        p.books[0].name.push('x');
+        h.changed();
+        p.books[0].name.pop();
+        assert!(!h.commit(&p));
+        assert_eq!(h.undo_label(), Some("列名称"));
     }
 
     #[test]
     fn limits_evict_oldest_and_bound_redo() {
         let mut p = Project::default();
-        let mut h = History::with_limits(&p, 2, usize::MAX);
+        let mut h = History::with_limits(2, usize::MAX);
         for _ in 0..3 {
+            h.begin(&p, "新建");
             p.new_book();
-            h.record(&p, "新建", false);
+            h.changed();
+            h.commit(&p);
         }
         p = h.undo(&p).unwrap();
         p = h.undo(&p).unwrap();
         assert_eq!(p.books.len(), 1);
         assert!(h.undo(&p).is_none());
-
-        let mut h = History::with_limits(&p, 100, 4096);
+        let mut h = History::with_limits(100, 4096);
+        h.begin(&p, "大数据");
         p.books[0].columns[0].set(0, "x".repeat(8192));
-        h.record(&p, "大数据", false);
+        h.changed();
+        h.commit(&p);
         p = h.undo(&p).unwrap();
         assert!(h.bytes <= 4096);
         assert!(h.redo(&p).is_none());
-        p.books[0].columns[0].set(0, "x".repeat(8192));
-        let mut h = History::with_limits(&p, 100, 4096);
-        p.books[0].name = "修改".into();
-        h.record(&p, "重命名", false);
-        assert!(h.undo_label().is_none());
     }
 }

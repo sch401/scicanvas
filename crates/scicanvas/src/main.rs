@@ -2,9 +2,11 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod app;
+mod assist;
 mod builder;
 mod commands;
 mod dialogs;
+mod export;
 mod fonts;
 mod icons;
 mod mdi;

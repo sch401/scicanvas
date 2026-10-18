@@ -20,6 +20,16 @@ pub fn all() -> Vec<Preset> {
                 "Scatter" => PlotType::Scatter,
                 "LineSymbol" => PlotType::LineSymbol,
                 "Bar" => PlotType::Bar,
+                "StackedBar" => PlotType::StackedBar,
+                "PercentStackedBar" => PlotType::PercentStackedBar,
+                "FloatingBar" => PlotType::FloatingBar,
+                "HorizontalBar" => PlotType::HorizontalBar,
+                "Area" => PlotType::Area,
+                "Spline" => PlotType::Spline,
+                "SplineSymbol" => PlotType::SplineSymbol,
+                "VerticalDrop" => PlotType::VerticalDrop,
+                "StepHorizontal" => PlotType::StepHorizontal,
+                "StepVertical" => PlotType::StepVertical,
                 _ => unreachable!("内置预设使用已实现的图元"),
             };
             Preset { id, name, kind }

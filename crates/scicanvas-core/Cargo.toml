@@ -8,12 +8,23 @@ rust-version.workspace = true
 
 [features]
 default = []
-# 项目文件保存/读取（JSON）
-serde = ["dep:serde", "dep:serde_json"]
+# 项目文件保存/读取（.scv 压缩包与旧版 .scproj JSON）
+serde = ["dep:serde", "dep:serde_json", "dep:zip", "dep:flate2"]
 # 导入 GBK 编码的 CSV（中文版 Excel 常见）
 encoding = ["dep:encoding_rs"]
+# 导入 Excel .xlsx：复用 .scv 的 zip，XML 用依赖树里已有的 roxmltree
+xlsx = ["dep:zip", "dep:flate2", "dep:roxmltree"]
 
 [dependencies]
 serde = { version = "1", features = ["derive"], optional = true }
 serde_json = { version = "1", optional = true }
+# .scv 是 ZIP 容器（zip 9 需要 Rust 1.88）；只启用 deflate（flate2 纯 Rust 后端），不带加密和其他压缩算法
+zip = { version = "9", default-features = false, features = ["deflate-flate2"], optional = true }
+# zip 关闭了 flate2 的默认后端，这里显式选用界面依赖已在使用的纯 Rust miniz_oxide
+flate2 = { version = "1", default-features = false, features = ["rust_backend"], optional = true }
 encoding_rs = { version = "0.8", optional = true }
+roxmltree = { version = "0.20", optional = true }
+
+[[bench]]
+name = "data_pipeline"
+harness = false

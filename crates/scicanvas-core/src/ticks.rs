@@ -176,11 +176,14 @@ fn superscript(n: i32) -> String {
 
 /// 刻度标签：一般数值直接显示，很大或很小时显示为 a×10ⁿ。
 pub fn format_tick(v: f64) -> String {
+    if !v.is_finite() {
+        return v.to_string();
+    }
     if v == 0.0 {
         return "0".to_string();
     }
     let a = v.abs();
-    if a >= 1e5 || a < 1e-3 {
+    if !(1e-3..1e5).contains(&a) {
         let e = a.log10().floor() as i32;
         let m = round_sig(v / 10f64.powi(e), 3);
         let mant = if m == 1.0 {
@@ -245,5 +248,10 @@ mod tests {
         assert_eq!(format_tick(0.1 + 0.2), "0.3");
         assert_eq!(format_tick(100000.0), "10⁵");
         assert_eq!(format_tick(2e-4), "2×10⁻⁴");
+        assert_eq!(format_tick(1e-3), "0.001");
+        assert_eq!(format_tick(-1e5), "-10⁵");
+        assert_eq!(format_tick(f64::NAN), "NaN");
+        assert_eq!(format_tick(f64::INFINITY), "inf");
+        assert_eq!(format_tick(f64::NEG_INFINITY), "-inf");
     }
 }

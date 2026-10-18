@@ -79,13 +79,39 @@ pub static TABS: &[Tab] = &[
             Group {
                 label: "二维图",
                 items: &[
-                    Gallery(&["plot.line", "plot.scatter", "plot.linesym", "plot.bar"]),
+                    Gallery(&[
+                        "plot.line",
+                        "plot.scatter",
+                        "plot.linesym",
+                        "plot.bar",
+                        "plot.stacked_bar",
+                        "plot.percent_stacked_bar",
+                        "plot.floating_bar",
+                        "plot.horizontal_bar",
+                        "plot.area",
+                        "plot.spline",
+                        "plot.spline_symbol",
+                        "plot.vertical_drop",
+                        "plot.step_horizontal",
+                        "plot.step_vertical",
+                    ]),
                     Big("plot.builder"),
                 ],
             },
             Group {
+                label: "多面板",
+                items: &[Smalls(&[
+                    "plot.panels_stacked",
+                    "plot.panels_side",
+                    "plot.panels_grid4",
+                ])],
+            },
+            Group {
                 label: "图形",
-                items: &[Big("graph.props"), Smalls(&["graph.export"])],
+                items: &[
+                    Big("graph.props"),
+                    Smalls(&["graph.export", "graph.export_png", "graph.copy"]),
+                ],
             },
         ],
     },
@@ -96,13 +122,30 @@ pub static TABS: &[Tab] = &[
         groups: &[
             Group {
                 label: "拟合",
-                items: &[Big("fit.linear"), Big("fit.poly")],
+                items: &[
+                    Big("fit.linear"),
+                    Big("fit.poly"),
+                    Big("fit.nonlinear"),
+                    Big("fit.calibration"),
+                    Big("fit.mlr"),
+                ],
             },
             Group {
                 label: "数学",
                 items: &[
                     Smalls(&["math.smooth", "math.diff", "math.integ"]),
-                    Smalls(&["math.norm"]),
+                    Smalls(&["math.norm", "math.interp", "math.colmath"]),
+                    Smalls(&["math.average"]),
+                ],
+            },
+            Group {
+                label: "信号处理",
+                items: &[
+                    Big("signal.baseline"),
+                    Big("signal.peaks"),
+                    Big("signal.fft"),
+                    Big("signal.filter"),
+                    Big("signal.correlate"),
                 ],
             },
         ],
@@ -111,10 +154,20 @@ pub static TABS: &[Tab] = &[
         id: "stats",
         label: "统计",
         ctx: None,
-        groups: &[Group {
-            label: "描述统计",
-            items: &[Big("stats.columns")],
-        }],
+        groups: &[
+            Group {
+                label: "描述统计",
+                items: &[Big("stats.columns"), Big("stats.rows"), Big("stats.frequency")],
+            },
+            Group {
+                label: "假设检验",
+                items: &[Big("stats.ttest"), Big("stats.anova"), Big("stats.correlation")],
+            },
+            Group {
+                label: "数据检验",
+                items: &[Big("stats.normality"), Big("stats.grubbs")],
+            },
+        ],
     },
     Tab {
         id: "sheet",
@@ -127,15 +180,30 @@ pub static TABS: &[Tab] = &[
             },
             Group {
                 label: "列属性",
-                items: &[Smalls(&["col.setX", "col.setY", "col.setIgnore"])],
+                items: &[
+                    Smalls(&["col.setX", "col.setY", "col.setIgnore"]),
+                    Smalls(&["col.setXError", "col.setYError"]),
+                ],
+            },
+            Group {
+                label: "行",
+                items: &[Smalls(&["row.insert", "row.delete"])],
             },
             Group {
                 label: "列",
-                items: &[Smalls(&["col.insert", "col.delete", "col.clear"])],
+                items: &[
+                    Big("col.setvalues"),
+                    Big("col.fill"),
+                    Smalls(&["col.insert", "col.delete", "col.clear"]),
+                ],
             },
             Group {
                 label: "排序",
                 items: &[Smalls(&["sort.asc", "sort.desc"])],
+            },
+            Group {
+                label: "导出",
+                items: &[Smalls(&["book.export_csv"])],
             },
             Group {
                 label: "绘图",
@@ -152,7 +220,10 @@ pub static TABS: &[Tab] = &[
                 label: "图类型",
                 items: &[
                     Smalls(&["plot.line", "plot.scatter", "plot.linesym"]),
-                    Smalls(&["plot.bar"]),
+                    Smalls(&["plot.bar", "plot.step_horizontal", "plot.step_vertical"]),
+                    Smalls(&["plot.stacked_bar", "plot.percent_stacked_bar", "plot.floating_bar"]),
+                    Smalls(&["plot.horizontal_bar", "plot.area"]),
+                    Smalls(&["plot.spline", "plot.spline_symbol", "plot.vertical_drop"]),
                 ],
             },
             Group {
@@ -161,7 +232,7 @@ pub static TABS: &[Tab] = &[
             },
             Group {
                 label: "图例",
-                items: &[Big("graph.legend")],
+                items: &[Big("graph.legend"), Big("graph.labels")],
             },
             Group {
                 label: "设置",
@@ -169,7 +240,7 @@ pub static TABS: &[Tab] = &[
             },
             Group {
                 label: "导出",
-                items: &[Big("graph.export")],
+                items: &[Big("graph.export"), Smalls(&["graph.export_png", "graph.copy"])],
             },
         ],
     },
@@ -184,7 +255,7 @@ pub static TABS: &[Tab] = &[
             },
             Group {
                 label: "显示",
-                items: &[Big("view.explorer"), Smalls(&["ribbon.toggle"])],
+                items: &[Big("view.explorer"), Smalls(&["ribbon.toggle", "project.folder.new"])],
             },
             Group {
                 label: "窗口",
@@ -216,6 +287,8 @@ const BACKSTAGE_NAV: &[&str] = &[
     "file.save",
     "file.saveas",
     "graph.export",
+    "graph.export_png",
+    "book.export_csv",
     "project.reset",
     "help.show",
     "app.quit",
@@ -700,7 +773,11 @@ pub fn backstage(
                         }
                     }
                     for g in &app.project.graphs {
-                        let sub = format!("图形 · {}", g.plot_type.label());
+                        let sub = if g.page.layers().len() == 1 {
+                            format!("图形 · {}", g.first_layer().plot_type.label())
+                        } else {
+                            format!("图形 · {} 个图层", g.page.layers().len())
+                        };
                         if project_card(ui, "graph", &g.name, &sub, dark, pal).clicked() {
                             open = Some(g.id);
                         }
@@ -711,7 +788,7 @@ pub fn backstage(
                 ui.add_space(4.0);
                 let where_ = match &app.project_path {
                     Some(p) => format!("当前项目文件：{}", p.display()),
-                    None => "当前项目还没有保存。用“保存项目”存为 .scproj 文件。".to_string(),
+                    None => "当前项目还没有保存。用“保存项目”存为 .scv 文件。".to_string(),
                 };
                 ui.label(where_);
                 ui.add_space(20.0);

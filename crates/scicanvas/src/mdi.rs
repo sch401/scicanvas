@@ -1,6 +1,10 @@
 //! 多文档子窗口（Origin 的 MDI 工作区）：标题栏带最小化、最大化 / 还原、关闭按钮，
 //! 拖动标题栏移动，双击标题栏最大化 / 还原，拖动右下角或右边、下边改变大小。
 //! 最大化铺满工作区，最小化后排在工作区底部。
+//! 和 Windows 11 一样贴靠：把标题栏拖到工作区左右边缘占半边，拖到四角占四分之一，
+//! 拖到顶边最大化；拖动时显示预览框。贴靠后的窗口拖开时恢复原来的大小，
+//! 拖动最大化窗口的标题栏会先还原再跟随鼠标。贴到半边或角落后由界面层显示贴靠助手，
+//! 用其余窗口填满剩下的位置（见 `assist_zones`）。
 
 use eframe::egui::{self, pos2, vec2, Color32, CursorIcon, Mesh, Pos2, Rect, Sense, Shadow, Stroke, UiBuilder};
 
@@ -10,6 +14,10 @@ use crate::theme::Palette;
 pub const TITLE_H: f32 = 24.0;
 const MIN_W: f32 = 170.0;
 const MIN_SIZE: egui::Vec2 = egui::Vec2::new(220.0, 140.0);
+/// 鼠标离工作区边缘多近时触发贴靠。
+const SNAP_EDGE: f32 = 8.0;
+/// 靠近边缘时，离角落多近算作角落（四分之一）贴靠。
+const SNAP_CORNER: f32 = 80.0;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum WinState {
@@ -23,6 +31,8 @@ pub enum WinState {
 pub struct Geom {
     pub rect: Rect,
     pub state: WinState,
+    /// 贴靠前的大小；贴靠后的窗口被拖开时恢复成这个大小。
+    pub restore: Option<egui::Vec2>,
 }
 
 impl Geom {
@@ -30,16 +40,94 @@ impl Geom {
         Geom {
             rect: Rect::from_min_size(pos, size),
             state: WinState::Normal,
+            restore: None,
         }
     }
+}
 
-    pub fn toggle_max(&mut self) {
-        self.state = if self.state == WinState::Max {
-            WinState::Normal
-        } else {
-            WinState::Max
-        };
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Snap {
+    Max,
+    Left,
+    Right,
+    TopLeft,
+    TopRight,
+    BottomLeft,
+    BottomRight,
+}
+
+/// 拖动标题栏时鼠标位置对应的贴靠方式。工作区外（如功能区、侧栏）也算靠近对应边缘。
+pub fn snap_at(ws: Rect, p: Pos2) -> Option<Snap> {
+    let (left, right) = (p.x <= ws.left() + SNAP_EDGE, p.x >= ws.right() - SNAP_EDGE);
+    let (top, bottom) = (p.y <= ws.top() + SNAP_EDGE, p.y >= ws.bottom() - SNAP_EDGE);
+    let (near_top, near_bottom) = (p.y <= ws.top() + SNAP_CORNER, p.y >= ws.bottom() - SNAP_CORNER);
+    let (near_left, near_right) = (p.x <= ws.left() + SNAP_CORNER, p.x >= ws.right() - SNAP_CORNER);
+    Some(if (left && near_top) || (top && near_left) {
+        Snap::TopLeft
+    } else if (right && near_top) || (top && near_right) {
+        Snap::TopRight
+    } else if (left && near_bottom) || (bottom && near_left) {
+        Snap::BottomLeft
+    } else if (right && near_bottom) || (bottom && near_right) {
+        Snap::BottomRight
+    } else if top {
+        Snap::Max
+    } else if left {
+        Snap::Left
+    } else if right {
+        Snap::Right
+    } else {
+        return None;
+    })
+}
+
+/// 贴靠后的窗口矩形，相对于工作区左上角。
+pub fn snap_rect(ws: Rect, snap: Snap) -> Rect {
+    let (w, h) = (ws.width(), ws.height());
+    let (hw, hh) = ((w / 2.0).round(), (h / 2.0).round());
+    let r = |x: f32, y: f32, rw: f32, rh: f32| Rect::from_min_size(pos2(x, y), vec2(rw, rh));
+    match snap {
+        Snap::Max => r(0.0, 0.0, w, h),
+        Snap::Left => r(0.0, 0.0, hw, h),
+        Snap::Right => r(hw, 0.0, w - hw, h),
+        Snap::TopLeft => r(0.0, 0.0, hw, hh),
+        Snap::TopRight => r(hw, 0.0, w - hw, hh),
+        Snap::BottomLeft => r(0.0, hh, hw, h - hh),
+        Snap::BottomRight => r(hw, hh, w - hw, h - hh),
     }
+}
+
+/// 贴靠后留给贴靠助手依次填充的位置：半边贴靠剩另一半，四分之一贴靠剩其余三格。
+pub fn assist_zones(snap: Snap) -> Vec<Snap> {
+    match snap {
+        Snap::Max => Vec::new(),
+        Snap::Left => vec![Snap::Right],
+        Snap::Right => vec![Snap::Left],
+        quarter => [Snap::TopLeft, Snap::TopRight, Snap::BottomLeft, Snap::BottomRight]
+            .into_iter()
+            .filter(|q| *q != quarter)
+            .collect(),
+    }
+}
+
+/// 让鼠标在标题栏上的相对位置保持不变，把窗口换成 `size` 大小（相对工作区坐标）。
+fn follow_pointer(ws: Rect, p: Pos2, from: Rect, size: egui::Vec2) -> Rect {
+    let frac = ((p.x - from.left()) / from.width().max(1.0)).clamp(0.0, 1.0);
+    Rect::from_min_size(
+        pos2(p.x - ws.left() - frac * size.x, p.y - ws.top() - TITLE_H / 2.0),
+        size,
+    )
+}
+
+fn minimized_rect(ws: Rect, slot: usize) -> Rect {
+    let columns = (ws.width() / (MIN_W + 4.0)).floor().max(1.0) as usize;
+    Rect::from_min_size(
+        pos2(
+            ws.left() + 4.0 + (slot % columns) as f32 * (MIN_W + 4.0),
+            (ws.bottom() - TITLE_H - 4.0 - (slot / columns) as f32 * (TITLE_H + 4.0)).max(ws.top()),
+        ),
+        vec2(MIN_W, TITLE_H),
+    )
 }
 
 pub fn layer_id(id: egui::Id) -> egui::LayerId {
@@ -49,8 +137,11 @@ pub fn layer_id(id: egui::Id) -> egui::LayerId {
 #[derive(Default)]
 pub struct WinResponse {
     pub close: bool,
+    pub state: Option<WinState>,
     /// 标题栏被按下（用于激活窗口）。
     pub pressed: bool,
+    /// 这一帧松开标题栏时贴到了半边或角落（最大化不算）。
+    pub snapped: Option<Snap>,
 }
 
 #[derive(Clone, Copy, PartialEq)]
@@ -150,13 +241,7 @@ pub fn window(
     }
     let rect = match geom.state {
         WinState::Max => ws,
-        WinState::Min => Rect::from_min_size(
-            pos2(
-                ws.left() + 4.0 + min_slot as f32 * (MIN_W + 4.0),
-                ws.bottom() - TITLE_H - 4.0,
-            ),
-            vec2(MIN_W, TITLE_H),
-        ),
+        WinState::Min => minimized_rect(ws, min_slot),
         WinState::Normal => geom.rect.translate(ws.min.to_vec2()),
     };
 
@@ -168,6 +253,15 @@ pub fn window(
             ui.set_clip_rect(ws);
             let (_, _) = ui.allocate_exact_size(rect.size(), Sense::hover());
             let painter = ui.painter().clone();
+
+            // 贴靠预览画在本窗口图层里、窗口本体之前：压在其他窗口之上，被拖动的窗口之下，与 Windows 11 一致。
+            if geom.state != WinState::Min && ctx.is_being_dragged(id.with("title")) {
+                if let Some(snap) = ctx.input(|i| i.pointer.latest_pos()).and_then(|p| snap_at(ws, p)) {
+                    let preview = snap_rect(ws, snap).translate(ws.min.to_vec2()).shrink(4.0);
+                    painter.rect_filled(preview, 6.0, pal.title.gamma_multiply(0.22));
+                    painter.rect_stroke(preview, 6.0, Stroke::new(2.0_f32, pal.title.gamma_multiply(0.8)));
+                }
+            }
 
             // 阴影、边框、底色
             if geom.state != WinState::Max {
@@ -224,20 +318,54 @@ pub fn window(
                 out.close = true;
             }
             if max.clicked() || bar_resp.double_clicked() {
-                if geom.state == WinState::Min {
-                    geom.state = WinState::Normal;
+                out.state = Some(if geom.state == WinState::Normal {
+                    WinState::Max
                 } else {
-                    geom.toggle_max();
-                }
+                    WinState::Normal
+                });
             }
             if min.is_some_and(|m| m.clicked()) {
-                geom.state = WinState::Min;
+                out.state = Some(WinState::Min);
             }
-            if geom.state == WinState::Normal && bar_resp.dragged() {
+            let pointer = bar_resp.interact_pointer_pos();
+            let start_id = id.with("drag-start");
+            // 这一帧已按鼠标位置重新摆放窗口时，不再叠加拖动位移。
+            let mut placed = false;
+            if bar_resp.drag_started() {
+                if let Some(p) = pointer {
+                    if geom.state == WinState::Max {
+                        // 拖动最大化窗口：先还原，再跟随鼠标。
+                        geom.rect = follow_pointer(ws, p, rect, geom.rect.size());
+                        out.state = Some(WinState::Normal);
+                        placed = true;
+                    } else if let (WinState::Normal, Some(size)) = (geom.state, geom.restore.take()) {
+                        geom.rect = follow_pointer(ws, p, rect, size);
+                        placed = true;
+                    }
+                }
+                ctx.data_mut(|d| d.insert_temp(start_id, geom.rect));
+            }
+            if geom.state == WinState::Normal && bar_resp.dragged() && !placed {
                 geom.rect = geom.rect.translate(bar_resp.drag_delta());
             }
+            if bar_resp.drag_stopped() && geom.state != WinState::Min {
+                let start = ctx.data(|d| d.get_temp::<Rect>(start_id)).unwrap_or(geom.rect);
+                let released = ctx.input(|i| i.pointer.latest_pos()).or(pointer);
+                match released.and_then(|p| snap_at(ws, p)) {
+                    Some(Snap::Max) => {
+                        geom.rect = start;
+                        out.state = Some(WinState::Max);
+                    }
+                    Some(snap) => {
+                        geom.restore.get_or_insert(start.size());
+                        geom.rect = snap_rect(ws, snap);
+                        out.snapped = Some(snap);
+                    }
+                    None => {}
+                }
+            }
             if geom.state == WinState::Min && bar_resp.clicked() {
-                geom.state = WinState::Normal;
+                out.state = Some(WinState::Normal);
             }
             out.pressed |= close.is_pointer_button_down_on() || max.is_pointer_button_down_on();
 
@@ -287,6 +415,7 @@ pub fn window(
                         ctx.set_cursor_icon(cursor);
                     }
                     if g.dragged() {
+                        geom.restore = None;
                         let d = g.drag_delta();
                         let mut max = geom.rect.max;
                         if dx {
@@ -315,4 +444,211 @@ pub fn window(
             }
         });
     out
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    fn frame(ctx: &egui::Context, g: &mut Geom, events: Vec<egui::Event>) -> WinResponse {
+        let mut response = WinResponse::default();
+        let _ = ctx.run(
+            egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1000.0, 700.0))),
+                events,
+                ..Default::default()
+            },
+            |ctx| {
+                response = window(
+                    ctx,
+                    egui::Id::new("mdi-test"),
+                    Rect::from_min_size(Pos2::ZERO, vec2(800.0, 600.0)),
+                    g,
+                    0,
+                    "Window",
+                    "book",
+                    true,
+                    &crate::theme::palette(egui::Theme::Light),
+                    |ui| {
+                        ui.label("body");
+                    },
+                );
+            },
+        );
+        if let Some(state) = response.state {
+            g.state = state;
+        }
+        response
+    }
+    fn button(pos: Pos2, pressed: bool) -> egui::Event {
+        egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        }
+    }
+    fn click(ctx: &egui::Context, g: &mut Geom, pos: Pos2) -> WinResponse {
+        frame(ctx, g, vec![egui::Event::PointerMoved(pos), button(pos, true)]);
+        frame(ctx, g, vec![button(pos, false)])
+    }
+    #[test]
+    fn actual_title_buttons_drag_and_resize_preserve_normal_geometry() {
+        let ctx = egui::Context::default();
+        let mut g = Geom::new(pos2(20.0, 20.0), vec2(300.0, 200.0));
+        frame(&ctx, &mut g, vec![]);
+        frame(&ctx, &mut g, vec![]);
+        let start = pos2(100.0, 32.0);
+        frame(
+            &ctx,
+            &mut g,
+            vec![egui::Event::PointerMoved(start), button(start, true)],
+        );
+        let end = start + vec2(30.0, 15.0);
+        frame(&ctx, &mut g, vec![egui::Event::PointerMoved(end)]);
+        frame(&ctx, &mut g, vec![button(end, false)]);
+        assert!((g.rect.left() - 50.0).abs() < 1.0 && (g.rect.top() - 35.0).abs() < 1.0);
+        frame(&ctx, &mut g, vec![]);
+        let start = g.rect.max - vec2(3.0, 3.0);
+        let old = g.rect;
+        frame(
+            &ctx,
+            &mut g,
+            vec![egui::Event::PointerMoved(start), button(start, true)],
+        );
+        let end = start + vec2(40.0, 25.0);
+        frame(&ctx, &mut g, vec![egui::Event::PointerMoved(end)]);
+        frame(&ctx, &mut g, vec![button(end, false)]);
+        assert!(g.rect.width() > old.width() && g.rect.height() > old.height());
+        let normal = g.rect;
+        let at = pos2(g.rect.right() - 39.0, g.rect.top() + 12.0);
+        click(&ctx, &mut g, at);
+        assert_eq!(g.state, WinState::Max);
+        frame(&ctx, &mut g, vec![]);
+        click(&ctx, &mut g, pos2(761.0, 12.0));
+        assert_eq!(g.state, WinState::Normal);
+        assert_eq!(g.rect, normal);
+        frame(&ctx, &mut g, vec![]);
+        let at = pos2(g.rect.right() - 63.0, g.rect.top() + 12.0);
+        click(&ctx, &mut g, at);
+        assert_eq!(g.state, WinState::Min);
+        frame(&ctx, &mut g, vec![]);
+        click(&ctx, &mut g, pos2(135.0, 584.0));
+        assert_eq!(g.state, WinState::Normal);
+        assert_eq!(g.rect, normal);
+        frame(&ctx, &mut g, vec![]);
+        let at = pos2(g.rect.right() - 15.0, g.rect.top() + 12.0);
+        assert!(click(&ctx, &mut g, at).close);
+    }
+    #[test]
+    fn minimized_windows_wrap_inside_the_workspace() {
+        let ws = Rect::from_min_size(pos2(25.0, 45.0), vec2(600.0, 400.0));
+        for slot in 0..12 {
+            let r = minimized_rect(ws, slot);
+            assert!(ws.contains_rect(r));
+        }
+        assert!(minimized_rect(ws, 3).top() < minimized_rect(ws, 0).top());
+    }
+
+    /// 按住标题栏中间，经过 `via` 拖到 `to` 松开。
+    fn drag_title(ctx: &egui::Context, g: &mut Geom, via: Pos2, to: Pos2) -> WinResponse {
+        frame(ctx, g, vec![]);
+        frame(ctx, g, vec![]);
+        let rect = if g.state == WinState::Max {
+            Rect::from_min_size(Pos2::ZERO, vec2(800.0, 600.0))
+        } else {
+            g.rect
+        };
+        let start = pos2(rect.center().x, rect.top() + TITLE_H / 2.0);
+        frame(ctx, g, vec![egui::Event::PointerMoved(start), button(start, true)]);
+        frame(ctx, g, vec![egui::Event::PointerMoved(via)]);
+        frame(ctx, g, vec![egui::Event::PointerMoved(to)]);
+        let released = frame(ctx, g, vec![button(to, false)]);
+        frame(ctx, g, vec![]);
+        released
+    }
+
+    #[test]
+    fn snap_zones_follow_windows_11_edges_and_corners() {
+        let ws = Rect::from_min_size(pos2(100.0, 50.0), vec2(800.0, 600.0));
+        for (p, snap) in [
+            (pos2(500.0, 52.0), Some(Snap::Max)),
+            (pos2(500.0, 20.0), Some(Snap::Max)),
+            (pos2(101.0, 300.0), Some(Snap::Left)),
+            (pos2(60.0, 300.0), Some(Snap::Left)),
+            (pos2(899.0, 300.0), Some(Snap::Right)),
+            (pos2(101.0, 90.0), Some(Snap::TopLeft)),
+            (pos2(150.0, 52.0), Some(Snap::TopLeft)),
+            (pos2(899.0, 60.0), Some(Snap::TopRight)),
+            (pos2(101.0, 640.0), Some(Snap::BottomLeft)),
+            (pos2(890.0, 649.0), Some(Snap::BottomRight)),
+            (pos2(500.0, 649.0), None),
+            (pos2(500.0, 300.0), None),
+        ] {
+            assert_eq!(snap_at(ws, p), snap, "{p:?}");
+        }
+        assert_eq!(
+            snap_rect(ws, Snap::Left),
+            Rect::from_min_size(Pos2::ZERO, vec2(400.0, 600.0))
+        );
+        assert_eq!(assist_zones(Snap::Left), [Snap::Right]);
+        assert_eq!(
+            assist_zones(Snap::TopRight),
+            [Snap::TopLeft, Snap::BottomLeft, Snap::BottomRight]
+        );
+        assert!(assist_zones(Snap::Max).is_empty());
+        assert_eq!(
+            snap_rect(ws, Snap::BottomRight),
+            Rect::from_min_size(pos2(400.0, 300.0), vec2(400.0, 300.0))
+        );
+    }
+
+    #[test]
+    fn dragging_title_to_edges_snaps_and_dragging_away_restores_size() {
+        let ctx = egui::Context::default();
+        let original = Rect::from_min_size(pos2(200.0, 150.0), vec2(300.0, 200.0));
+        let mut g = Geom::new(original.min, original.size());
+
+        assert_eq!(
+            drag_title(&ctx, &mut g, pos2(150.0, 300.0), pos2(2.0, 300.0)).snapped,
+            Some(Snap::Left)
+        );
+        assert_eq!(
+            (g.state, g.rect),
+            (WinState::Normal, Rect::from_min_size(Pos2::ZERO, vec2(400.0, 600.0)))
+        );
+        assert_eq!(g.restore, Some(original.size()));
+
+        drag_title(&ctx, &mut g, pos2(300.0, 200.0), pos2(500.0, 250.0));
+        assert_eq!(
+            g.rect.size(),
+            original.size(),
+            "dragging a snapped window away restores its size"
+        );
+        assert!(g.rect.contains(pos2(500.0, 250.0)) && g.restore.is_none());
+
+        drag_title(&ctx, &mut g, pos2(700.0, 100.0), pos2(798.0, 4.0));
+        assert_eq!(g.rect, Rect::from_min_size(pos2(400.0, 0.0), vec2(400.0, 300.0)));
+        assert_eq!(g.restore, Some(original.size()));
+
+        // 从四分之一贴靠拖出：恢复大小，鼠标仍在标题栏同一相对位置（原标题栏的 25% 处）。
+        drag_title(&ctx, &mut g, pos2(500.0, 200.0), pos2(500.0, 140.0));
+        assert_eq!(g.rect.size(), original.size());
+        assert!((g.rect.left() + 0.25 * g.rect.width() - 500.0).abs() < 1.0);
+        assert!((g.rect.top() + TITLE_H / 2.0 - 140.0).abs() < 1.0);
+        let before_max = g.rect;
+        assert_eq!(
+            drag_title(&ctx, &mut g, pos2(500.0, 60.0), pos2(500.0, 1.0)).snapped,
+            None
+        );
+        assert_eq!(g.state, WinState::Max);
+        assert_eq!(g.rect, before_max, "maximizing by drag keeps the normal geometry");
+
+        drag_title(&ctx, &mut g, pos2(300.0, 100.0), pos2(300.0, 300.0));
+        assert_eq!(g.state, WinState::Normal);
+        assert_eq!(g.rect.size(), original.size());
+        assert!(
+            g.rect.contains(pos2(300.0, 300.0)),
+            "restored window follows the pointer"
+        );
+    }
 }

@@ -1,14 +1,28 @@
 //! 项目文件入口：版本迁移、完整性检查和同目录临时文件原子替换。
+//!
+//! `.scv` 是 ZIP 容器（类似 .docx）：`project.json` 是唯一的权威数据，
+//! `tables/*.csv` 和 `graphs/*.svg` 是保存时生成的预览，解压即可查看，打开时忽略。
+//! 旧版 `.scproj` 为纯 JSON，继续支持读写。
 
 use std::collections::BTreeSet;
-use std::io::Write;
+use std::io::{Cursor, Read, Write};
 use std::path::Path;
 
 use serde_json::Value;
+use zip::write::SimpleFileOptions;
+use zip::CompressionMethod;
 
-use crate::Project;
+use crate::{Book, Project};
 
-pub const CURRENT_VERSION: u32 = 2;
+pub const CURRENT_VERSION: u32 = 8;
+
+/// `.scv` 容器版本，与 `project.json` 的项目版本分开演进。
+pub const SCV_VERSION: u32 = 1;
+pub const SCV_MIMETYPE: &str = "application/vnd.scicanvas.project+zip";
+const PROJECT_ENTRY: &str = "project.json";
+const MANIFEST_ENTRY: &str = "manifest.json";
+/// 解压单个条目的上限，防止损坏或恶意压缩包耗尽内存。
+const MAX_ENTRY_BYTES: u64 = 1 << 31;
 
 /// 无版本号为 v0；显式未知版本拒绝打开，保留源文件。
 pub fn migrate(mut value: Value) -> Result<Value, String> {
@@ -22,7 +36,7 @@ pub fn migrate(mut value: Value) -> Result<Value, String> {
             "项目版本 {version} 高于当前支持的 {CURRENT_VERSION}，请更新 SciCanvas"
         ));
     }
-    if version == 2 {
+    if version >= 2 {
         if let Some(graphs) = object.get("graphs").and_then(Value::as_array) {
             for graph in graphs {
                 if graph
@@ -31,7 +45,7 @@ pub fn migrate(mut value: Value) -> Result<Value, String> {
                     .and_then(Value::as_array)
                     .is_none()
                 {
-                    return Err("第 2 版图形缺少页面或图层数据".into());
+                    return Err("图形缺少页面或图层数据".into());
                 }
             }
         }
@@ -60,6 +74,7 @@ pub fn from_json(text: &str) -> Result<Project, String> {
         .iter()
         .map(|b| b.id)
         .chain(project.graphs.iter().map(|g| g.id))
+        .chain(project.folders.iter().map(|f| f.id))
         .max()
         .unwrap_or(0);
     project.next_id = project.next_id.max(max_id.checked_add(1).ok_or("项目对象编号已用尽")?);
@@ -87,11 +102,13 @@ fn validate(project: &Project) -> Result<(), String> {
         .iter()
         .map(|b| b.id)
         .chain(project.graphs.iter().map(|g| g.id))
+        .chain(project.folders.iter().map(|f| f.id))
     {
         if id == 0 || id == u64::MAX || !ids.insert(id) {
             return Err(format!("对象编号 {id} 无效或重复"));
         }
     }
+    project.validate_folders()?;
     for book in &project.books {
         let mut keys = BTreeSet::new();
         for col in &book.columns {
@@ -110,11 +127,26 @@ fn validate(project: &Project) -> Result<(), String> {
                 layer.y_max,
                 f64::from(layer.line_width),
                 f64::from(layer.symbol_size),
+                f64::from(layer.error_bars.cap),
+                f64::from(layer.error_bars.width),
             ]
             .iter()
             .any(|x| !x.is_finite())
             {
                 return Err(format!("图形 {} 含无效的数值属性", graph.name));
+            }
+            if layer.error_bars.cap < 0.0 || layer.error_bars.width <= 0.0 {
+                return Err("误差棒端帽长度应非负，线宽应为正数".into());
+            }
+            if !layer.area_opacity.is_finite() || !(0.0..=1.0).contains(&layer.area_opacity) {
+                return Err("面积填充透明度应在 0 与 1 之间".into());
+            }
+            if !layer.labels.size.is_finite()
+                || layer.labels.size <= 0.0
+                || !layer.labels.offset.is_finite()
+                || layer.labels.offset < 0.0
+            {
+                return Err("数据标签字号应为有限正数，偏移应为有限非负数".into());
             }
             if layer.rows.is_some_and(|(a, b)| a > b || b == usize::MAX) {
                 return Err("图层行范围无效".into());
@@ -124,8 +156,201 @@ fn validate(project: &Project) -> Result<(), String> {
     Ok(())
 }
 
+/// 工作簿导出为 CSV：UTF-8 BOM（Excel 直接识别中文），表头为长名称（无则用列标识），
+/// 单位写成 `名称 (单位)`，与导入时的拆分规则一致。
+pub fn book_csv(book: &Book) -> String {
+    fn field(out: &mut String, text: &str) {
+        if text.contains([',', '"', '\r', '\n']) || text.trim() != text {
+            out.push('"');
+            out.push_str(&text.replace('"', "\"\""));
+            out.push('"');
+        } else {
+            out.push_str(text);
+        }
+    }
+    let mut out = String::from('\u{feff}');
+    for (i, col) in book.columns.iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        let name = if col.long_name.is_empty() {
+            &col.key
+        } else {
+            &col.long_name
+        };
+        if col.units.is_empty() {
+            field(&mut out, name);
+        } else {
+            field(&mut out, &format!("{name} ({})", col.units));
+        }
+    }
+    out.push_str("\r\n");
+    for row in 0..book.nrows() {
+        for (i, col) in book.columns.iter().enumerate() {
+            if i > 0 {
+                out.push(',');
+            }
+            field(&mut out, col.data.get(row).map_or("", String::as_str));
+        }
+        out.push_str("\r\n");
+    }
+    out
+}
+
+/// 压缩包内的文件名：编号前缀保证唯一，去掉 Windows 不允许的字符。
+fn entry_name(dir: &str, id: u64, name: &str, ext: &str) -> String {
+    let safe: String = name
+        .chars()
+        .map(|c| {
+            if c.is_control() || r#"<>:"/\|?*"#.contains(c) {
+                '_'
+            } else {
+                c
+            }
+        })
+        .take(80)
+        .collect();
+    let safe = safe.trim().trim_end_matches('.');
+    format!("{dir}/{id}-{}.{ext}", if safe.is_empty() { "未命名" } else { safe })
+}
+
+pub fn to_scv(project: &Project) -> Result<Vec<u8>, String> {
+    let json = to_json(project)?;
+    let folder = |id: u64| {
+        project
+            .folder_of(id)
+            .and_then(|f| project.folder_path(f))
+            .unwrap_or_default()
+    };
+    let tables: Vec<_> = project
+        .books
+        .iter()
+        .map(|b| (entry_name("tables", b.id, &b.name, "csv"), b))
+        .collect();
+    let graphs: Vec<_> = project
+        .graphs
+        .iter()
+        .map(|g| (entry_name("graphs", g.id, &g.name, "svg"), g))
+        .collect();
+    let manifest = serde_json::json!({
+        "format": "SciCanvas Project",
+        "scv_version": SCV_VERSION,
+        "project_version": CURRENT_VERSION,
+        "generator": concat!("SciCanvas ", env!("CARGO_PKG_VERSION")),
+        "project": PROJECT_ENTRY,
+        "tables": tables.iter().map(|(path, b)| serde_json::json!({
+            "id": b.id, "name": b.name, "folder": folder(b.id), "path": path,
+            "rows": b.nrows(), "columns": b.columns.len(),
+        })).collect::<Vec<_>>(),
+        "graphs": graphs.iter().map(|(path, g)| serde_json::json!({
+            "id": g.id, "name": g.name, "folder": folder(g.id), "path": path,
+        })).collect::<Vec<_>>(),
+    });
+    let manifest = serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())?;
+
+    let mut zip = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    let mut add = |name: &str, method: CompressionMethod, bytes: &[u8]| -> zip::result::ZipResult<()> {
+        let options = SimpleFileOptions::default()
+            .compression_method(method)
+            .large_file(bytes.len() as u64 >= u64::from(u32::MAX));
+        zip.start_file(name, options)?;
+        zip.write_all(bytes)?;
+        Ok(())
+    };
+    let result = (|| {
+        // 与 ODF/EPUB 相同：第一个条目不压缩，便于按文件头识别类型。
+        add("mimetype", CompressionMethod::Stored, SCV_MIMETYPE.as_bytes())?;
+        add(MANIFEST_ENTRY, CompressionMethod::Deflated, manifest.as_bytes())?;
+        add(PROJECT_ENTRY, CompressionMethod::Deflated, json.as_bytes())?;
+        for (path, book) in &tables {
+            add(path, CompressionMethod::Deflated, book_csv(book).as_bytes())?;
+        }
+        for (path, graph) in &graphs {
+            add(
+                path,
+                CompressionMethod::Deflated,
+                crate::svg::render_page(graph, project).as_bytes(),
+            )?;
+        }
+        Ok(())
+    })();
+    result
+        .and_then(|()| zip.finish())
+        .map(Cursor::into_inner)
+        .map_err(|e| format!("生成 .scv 失败：{e}"))
+}
+
+fn scv_text(zip: &mut zip::ZipArchive<Cursor<&[u8]>>, name: &str) -> Result<Option<String>, String> {
+    let entry = match zip.by_name(name) {
+        Ok(entry) => entry,
+        Err(zip::result::ZipError::FileNotFound) => return Ok(None),
+        Err(e) => return Err(format!("不是有效的 .scv 文件：{e}")),
+    };
+    let too_large = || format!("{name} 过大，无法打开");
+    if entry.size() > MAX_ENTRY_BYTES {
+        return Err(too_large());
+    }
+    let mut data = Vec::new();
+    entry
+        .take(MAX_ENTRY_BYTES + 1)
+        .read_to_end(&mut data)
+        .map_err(|e| format!("读取 {name} 失败：{e}"))?;
+    if data.len() as u64 > MAX_ENTRY_BYTES {
+        return Err(too_large());
+    }
+    String::from_utf8(data)
+        .map(Some)
+        .map_err(|_| format!("{name} 不是 UTF-8 文本"))
+}
+
+/// 只读取 `project.json`；`tables/`、`graphs/` 下的预览文件即使被修改或删除也不影响打开。
+pub fn from_scv(bytes: &[u8]) -> Result<Project, String> {
+    let mut zip = zip::ZipArchive::new(Cursor::new(bytes)).map_err(|e| format!("不是有效的 .scv 文件：{e}"))?;
+    if let Some(mimetype) = scv_text(&mut zip, "mimetype")? {
+        if mimetype.trim() != SCV_MIMETYPE {
+            return Err("压缩包不是 SciCanvas 项目".into());
+        }
+    }
+    if let Some(manifest) = scv_text(&mut zip, MANIFEST_ENTRY)? {
+        let manifest: Value = serde_json::from_str(&manifest).map_err(|e| format!("manifest.json 格式错误：{e}"))?;
+        let version = manifest
+            .get("scv_version")
+            .and_then(Value::as_u64)
+            .ok_or("manifest.json 缺少 scv_version")?;
+        if version > u64::from(SCV_VERSION) {
+            return Err(format!(
+                ".scv 容器版本 {version} 高于当前支持的 {SCV_VERSION}，请更新 SciCanvas"
+            ));
+        }
+    }
+    let json = scv_text(&mut zip, PROJECT_ENTRY)?.ok_or("压缩包缺少 project.json")?;
+    from_json(&json)
+}
+
+/// 按内容识别格式：ZIP 文件头为 `.scv`，否则按旧版 JSON 读取。
+pub fn from_bytes(bytes: &[u8]) -> Result<Project, String> {
+    if bytes.starts_with(b"PK") {
+        return from_scv(bytes);
+    }
+    let text = std::str::from_utf8(bytes).map_err(|_| "项目文件既不是 .scv 压缩包，也不是 UTF-8 JSON")?;
+    from_json(text.trim_start_matches('\u{feff}'))
+}
+
+pub fn load(path: &Path) -> Result<Project, String> {
+    from_bytes(&std::fs::read(path).map_err(|e| e.to_string())?)
+}
+
+/// 扩展名为 `.scproj` 时保存旧版 JSON，其余（含 `.scv`）保存为压缩包。
+pub fn is_legacy_path(path: &Path) -> bool {
+    path.extension().is_some_and(|e| e.eq_ignore_ascii_case("scproj"))
+}
+
 pub fn save(path: &Path, project: &Project) -> Result<(), String> {
-    let content = to_json(project)?;
+    let content = if is_legacy_path(path) {
+        to_json(project)?.into_bytes()
+    } else {
+        to_scv(project)?
+    };
     let name = path.file_name().ok_or("项目文件名为空")?.to_string_lossy();
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -134,7 +359,7 @@ pub fn save(path: &Path, project: &Project) -> Result<(), String> {
     let temporary = path.with_file_name(format!(".{name}.{}.{stamp}.tmp", std::process::id()));
     let mut file = std::fs::File::create_new(&temporary).map_err(|e| e.to_string())?;
     let result = (|| {
-        file.write_all(content.as_bytes())?;
+        file.write_all(&content)?;
         file.sync_all()?;
         drop(file);
         std::fs::rename(&temporary, path)

@@ -2,13 +2,75 @@
 //! 规则与 Origin 一致：结果列紧挨着原始列，拟合曲线加到图里显示为红色实线。
 
 use crate::analysis::{self, Describe, NormalizeMethod, PolyFit, SmoothMethod};
-use crate::model::{fmt_num, parse_num, Book, Column, Graph, PlotType, Project, Role};
+use crate::interpolate::{self, InterpMethod};
+use crate::model::{fmt_num, parse_num, round_sig, Book, Column, Graph, PlotType, Project, Role};
+
+/// 统计类操作选中的数据：工作簿编号、列标识和可选的行范围。
+type Picked = (u64, Vec<String>, Option<(usize, usize)>);
+
+/// 一条曲线的非线性拟合结果。
+#[derive(Clone, Debug, PartialEq)]
+pub struct NlFitReport {
+    pub name: String,
+    pub fit: crate::nlfit::NlFit,
+}
+
+/// 列运算的运算符。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ColumnOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+}
+
+impl ColumnOp {
+    pub const ALL: [ColumnOp; 4] = [ColumnOp::Add, ColumnOp::Sub, ColumnOp::Mul, ColumnOp::Div];
+
+    pub fn symbol(self) -> &'static str {
+        match self {
+            ColumnOp::Add => "+",
+            ColumnOp::Sub => "−",
+            ColumnOp::Mul => "×",
+            ColumnOp::Div => "÷",
+        }
+    }
+
+    fn apply(self, a: f64, b: f64) -> f64 {
+        match self {
+            ColumnOp::Add => a + b,
+            ColumnOp::Sub => a - b,
+            ColumnOp::Mul => a * b,
+            ColumnOp::Div => a / b,
+        }
+    }
+
+    /// 结果单位：加减保持 A 的单位，乘除组合两边的单位。
+    fn units(self, a: &str, b: &str) -> String {
+        match (self, a.is_empty(), b.is_empty()) {
+            (ColumnOp::Add | ColumnOp::Sub, _, _) | (_, _, true) => a.to_string(),
+            (ColumnOp::Mul, true, false) => b.to_string(),
+            (ColumnOp::Mul, false, false) => format!("{a}·{b}"),
+            (_, true, false) => format!("1/{b}"),
+            _ => format!("{a}/{b}"),
+        }
+    }
+}
+
+/// 列运算的第二个操作数。
+#[derive(Clone, Debug, PartialEq)]
+pub enum Operand {
+    Column(String),
+    Constant(f64),
+}
 
 /// 分析的输入来自哪里。
 #[derive(Clone, Debug, PartialEq)]
 pub enum Source {
     /// 当前图形里的数据曲线（不含拟合、平滑等结果曲线）。
     Graph(u64),
+    /// 指定页面中的图层；Graph 保留为第一图层的兼容入口。
+    Layer { graph_id: u64, index: usize },
     /// 工作簿里选中的列；什么都没选时用全部 Y 列。`rows` 为选区覆盖的行。
     Book {
         id: u64,
@@ -28,6 +90,7 @@ pub struct Item {
 pub struct Resolved {
     pub book_id: u64,
     pub graph_id: Option<u64>,
+    pub layer_index: usize,
     pub items: Vec<Item>,
 }
 
@@ -99,8 +162,13 @@ impl Project {
     /// 把分析输入解析成具体的数据组。
     pub fn resolve(&self, src: &Source) -> Result<Resolved, String> {
         match src {
-            Source::Graph(gid) => {
-                let g = self.graph(*gid).ok_or("找不到图形")?;
+            Source::Graph(gid) | Source::Layer { graph_id: gid, .. } => {
+                let layer_index = match src {
+                    Source::Layer { index, .. } => *index,
+                    _ => 0,
+                };
+                let graph = self.graph(*gid).ok_or("找不到图形")?;
+                let g = graph.page.layers().get(layer_index).ok_or("找不到图层")?;
                 if g.transform != crate::plotspec::Transform::Identity {
                     return Err("统计变换图层的分析请从工作簿选择原始数据执行".into());
                 }
@@ -109,7 +177,12 @@ impl Project {
                 let items: Vec<Item> = g
                     .y_keys
                     .iter()
-                    .filter(|k| !g.line_only.contains(k) && book.column(k).is_some())
+                    .filter(|k| {
+                        !g.line_only.contains(k)
+                            && book
+                                .column(k)
+                                .is_some_and(|c| !matches!(c.role, Role::XError | Role::YError))
+                    })
                     .map(|k| Item {
                         y: k.clone(),
                         x: g.x_by_y.get(k).cloned().or_else(|| g.x_key.clone()),
@@ -122,6 +195,7 @@ impl Project {
                 Ok(Resolved {
                     book_id: bid,
                     graph_id: Some(*gid),
+                    layer_index,
                     items,
                 })
             }
@@ -152,6 +226,7 @@ impl Project {
                 Ok(Resolved {
                     book_id: *id,
                     graph_id: None,
+                    layer_index: 0,
                     items,
                 })
             }
@@ -161,6 +236,7 @@ impl Project {
     /// 在 after_key 列右边插入结果列（排在同一来源已有结果列之后），返回新列标识。
     pub fn insert_result_column(&mut self, book_id: u64, after_key: &str, mut col: Column) -> Option<String> {
         let book = self.book_mut(book_id)?;
+        book.freeze_error_sources();
         let key = book.next_key();
         col.key = key.clone();
         col.derived_from = Some(after_key.to_string());
@@ -176,26 +252,29 @@ impl Project {
     }
 
     /// 结果曲线要加到哪张图：分析的来源图；否则已打开的、含这条 Y 的图；都没有就新建散点图。
-    fn graph_for_result(&mut self, r: &Resolved, item: &Item) -> u64 {
+    fn graph_for_result(&mut self, r: &Resolved, item: &Item) -> (u64, usize) {
         if let Some(g) = r.graph_id {
-            return g;
+            return (g, r.layer_index);
         }
-        if let Some(g) = self
-            .graphs
-            .iter()
-            .find(|g| g.book_id == Some(r.book_id) && g.y_keys.contains(&item.y))
-        {
-            return g.id;
+        for graph in &self.graphs {
+            if let Some(index) = graph.page.layers().iter().position(|g| {
+                g.book_id == Some(r.book_id)
+                    && g.y_keys.contains(&item.y)
+                    && g.transform == crate::plotspec::Transform::Identity
+            }) {
+                return (graph.id, index);
+            }
         }
         let id = self.alloc_id();
         let mut g = Graph::new(id, self.unique_name("Graph"));
-        g.book_id = Some(r.book_id);
-        g.x_key = item.x.clone();
-        g.y_keys = vec![item.y.clone()];
-        g.plot_type = PlotType::Scatter;
-        g.rows = item.rows;
+        g.first_layer_mut().book_id = Some(r.book_id);
+        g.first_layer_mut().x_key = item.x.clone();
+        g.first_layer_mut().y_keys = vec![item.y.clone()];
+        g.first_layer_mut().plot_type = PlotType::Scatter;
+        g.first_layer_mut().rows = item.rows;
         self.graphs.push(g);
-        id
+        self.move_project_item(id, self.folder_of(r.book_id)).unwrap();
+        (id, 0)
     }
 
     /// 多项式拟合（阶数 1 即线性拟合）。每条数据新增“拟合 X”和拟合值两列（200 个等间距点），
@@ -241,8 +320,8 @@ impl Project {
             cy.data = fx.iter().map(|x| fmt_num(fit.eval(*x))).collect();
             let kx = self.insert_result_column(r.book_id, &item.y, cx).unwrap();
             let ky = self.insert_result_column(r.book_id, &item.y, cy).unwrap();
-            let gid = self.graph_for_result(&r, item);
-            let g = self.graph_mut(gid).unwrap();
+            let (gid, index) = self.graph_for_result(&r, item);
+            let g = &mut self.graph_mut(gid).unwrap().page.layers_mut()[index];
             if !g.y_keys.contains(&item.y) {
                 g.y_keys.push(item.y.clone());
             }
@@ -264,6 +343,167 @@ impl Project {
                 kind,
                 order + 2
             )),
+        }
+    }
+
+    /// 分析输入里全部有效点的 X 范围（插值对话框的默认范围）。
+    pub fn x_range(&self, src: &Source) -> Option<(f64, f64)> {
+        let r = self.resolve(src).ok()?;
+        let book = self.book(r.book_id)?;
+        let xs: Vec<f64> = r
+            .items
+            .iter()
+            .flat_map(|item| {
+                let (xs, ys, _) = get_xy(book, item);
+                xs.into_iter()
+                    .zip(ys)
+                    .filter(|(x, y)| x.is_finite() && y.is_finite())
+                    .map(|(x, _)| x)
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        let lo = xs.iter().copied().fold(f64::INFINITY, f64::min);
+        let hi = xs.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        (lo < hi).then_some((lo, hi))
+    }
+
+    /// 在等间距的 `points` 个 X 上插值（`range` 为空时用数据的 X 范围，超出数据时外推），
+    /// 结果写成新的 X、Y 列并作为线加到图上。
+    pub fn interpolate(
+        &mut self,
+        src: &Source,
+        method: InterpMethod,
+        points: usize,
+        range: Option<(f64, f64)>,
+    ) -> Result<(u64, Vec<String>), String> {
+        let r = self.resolve(src)?;
+        let kind = format!("{}插值", method.label());
+        let mut graph = None;
+        let mut made = vec![];
+        let mut problems = vec![];
+        for item in &r.items {
+            let book = self.book(r.book_id).unwrap();
+            let (xs, ys, _) = get_xy(book, item);
+            let name = name_of(book, &item.y);
+            let (lo, hi) = range.unwrap_or_else(|| {
+                let finite = || xs.iter().zip(&ys).filter(|(x, y)| x.is_finite() && y.is_finite());
+                (
+                    finite().map(|(x, _)| *x).fold(f64::INFINITY, f64::min),
+                    finite().map(|(x, _)| *x).fold(f64::NEG_INFINITY, f64::max),
+                )
+            });
+            let fx = interpolate::grid(lo, hi, points);
+            let fy = match interpolate::interpolate(&xs, &ys, method, &fx) {
+                Ok(fy) if lo.is_finite() && hi.is_finite() && lo < hi => fy,
+                Ok(_) => {
+                    problems.push(format!("{name}：X 范围无效"));
+                    continue;
+                }
+                Err(e) => {
+                    problems.push(format!("{name}：{e}"));
+                    continue;
+                }
+            };
+            let x_units = item
+                .x
+                .as_deref()
+                .and_then(|k| book.column(k))
+                .map(|c| c.units.clone())
+                .unwrap_or_default();
+            let y_units = book.column(&item.y).map(|c| c.units.clone()).unwrap_or_default();
+            let note = format!("{kind}，{} 点，X 从 {} 到 {}", fx.len(), fmt_num(lo), fmt_num(hi));
+            let mut cx = Column::new("", Role::X);
+            cx.long_name = format!("{name} 插值 X");
+            cx.units = x_units;
+            cx.comment = note.clone();
+            cx.data = fx.iter().map(|x| fmt_num(*x)).collect();
+            let mut cy = Column::new("", Role::Y);
+            cy.long_name = format!("{name} {kind}");
+            cy.units = y_units;
+            cy.comment = note;
+            cy.data = fy.iter().map(|y| fmt_num(*y)).collect();
+            let kx = self.insert_result_column(r.book_id, &item.y, cx).unwrap();
+            let ky = self.insert_result_column(r.book_id, &item.y, cy).unwrap();
+            let (gid, index) = self.graph_for_result(&r, item);
+            let g = &mut self.graph_mut(gid).unwrap().page.layers_mut()[index];
+            if !g.y_keys.contains(&item.y) {
+                g.y_keys.push(item.y.clone());
+            }
+            g.y_keys.push(ky.clone());
+            g.x_by_y.insert(ky.clone(), kx);
+            g.line_only.push(ky.clone());
+            graph = Some(gid);
+            made.push(ky);
+        }
+        match graph {
+            Some(g) => Ok((g, made)),
+            None => Err(problems.join("；")),
+        }
+    }
+
+    /// 非线性拟合：对每条曲线拟合内置函数（自动初值），拟合曲线（200 点）写成新的 X、Y 列并加到图上。
+    pub fn nlfit(
+        &mut self,
+        src: &Source,
+        model: crate::nlfit::Model,
+        fixed: &[Option<f64>],
+    ) -> Result<(u64, Vec<NlFitReport>), String> {
+        let r = self.resolve(src)?;
+        let mut reports = vec![];
+        let mut graph = None;
+        let mut problems = vec![];
+        for item in &r.items {
+            let book = self.book(r.book_id).unwrap();
+            let (xs, ys, _) = get_xy(book, item);
+            let name = name_of(book, &item.y);
+            let fit = match crate::nlfit::fit(model, &xs, &ys, None, fixed) {
+                Ok(f) => f,
+                Err(e) => {
+                    problems.push(format!("{name}：{e}"));
+                    continue;
+                }
+            };
+            let x_units = item
+                .x
+                .as_deref()
+                .and_then(|k| book.column(k))
+                .map(|c| c.units.clone())
+                .unwrap_or_default();
+            let y_units = book.column(&item.y).map(|c| c.units.clone()).unwrap_or_default();
+            let equation = model
+                .params()
+                .iter()
+                .zip(&fit.params)
+                .map(|(n, v)| format!("{n} = {}", fmt_num(round_sig(*v, 6))))
+                .collect::<Vec<_>>()
+                .join("，");
+            let fx = interpolate::grid(fit.x_min, fit.x_max, 200);
+            let mut cx = Column::new("", Role::X);
+            cx.long_name = format!("{name} {} 拟合 X", model.name());
+            cx.units = x_units;
+            cx.comment = model.formula().into();
+            cx.data = fx.iter().map(|x| fmt_num(*x)).collect();
+            let mut cy = Column::new("", Role::Y);
+            cy.long_name = format!("{name} {} 拟合", model.name());
+            cy.units = y_units;
+            cy.comment = format!("{}；{}", model.formula(), equation);
+            cy.data = fx.iter().map(|x| fmt_num(fit.eval(*x))).collect();
+            let kx = self.insert_result_column(r.book_id, &item.y, cx).unwrap();
+            let ky = self.insert_result_column(r.book_id, &item.y, cy).unwrap();
+            let (gid, index) = self.graph_for_result(&r, item);
+            let g = &mut self.graph_mut(gid).unwrap().page.layers_mut()[index];
+            if !g.y_keys.contains(&item.y) {
+                g.y_keys.push(item.y.clone());
+            }
+            g.y_keys.push(ky.clone());
+            g.x_by_y.insert(ky.clone(), kx);
+            g.line_only.push(ky);
+            graph = Some(gid);
+            reports.push(NlFitReport { name, fit });
+        }
+        match graph {
+            Some(g) => Ok((g, reports)),
+            None => Err(problems.join("；")),
         }
     }
 
@@ -318,7 +558,7 @@ impl Project {
             )
         })?;
         if let Some(gid) = r.graph_id {
-            let g = self.graph_mut(gid).unwrap();
+            let g = &mut self.graph_mut(gid).unwrap().page.layers_mut()[r.layer_index];
             for (item, key) in &made {
                 g.y_keys.push(key.clone());
                 g.line_only.push(key.clone());
@@ -330,6 +570,302 @@ impl Project {
             }
         }
         Ok(made.into_iter().map(|(_, k)| k).collect())
+    }
+
+    /// 扣除基线：每条曲线在 Y 右边写两列（基线、扣除基线后的 Y）。来源是图形时，基线也加到图里。
+    /// 返回 (基线列, 扣除后列) 标识。
+    pub fn subtract_baseline(
+        &mut self,
+        src: &Source,
+        method: crate::baseline::BaselineMethod,
+    ) -> Result<Vec<(String, String)>, String> {
+        let (r, base) = self.per_item_column(src, |book, item, xs, ys| {
+            let y = book.column(&item.y).unwrap();
+            (
+                crate::baseline::baseline(xs, ys, method),
+                format!("{} 基线", y.display_name()),
+                y.units.clone(),
+                method.label(),
+            )
+        })?;
+        let mut made = vec![];
+        for (item, bkey) in &base {
+            let book = self.book(r.book_id).unwrap();
+            let (_, ys, idx) = get_xy(book, item);
+            let bv = book.column(bkey).unwrap().values();
+            let y = book.column(&item.y).unwrap();
+            let mut c = Column::new("", Role::Y);
+            c.long_name = format!("{} 扣除基线", y.display_name());
+            c.units = y.units.clone();
+            c.comment = method.label();
+            c.data = vec![String::new(); book.nrows()];
+            for (k, &row) in idx.iter().enumerate() {
+                let v = ys[k] - bv.get(row).copied().unwrap_or(f64::NAN);
+                if v.is_finite() {
+                    c.data[row] = fmt_num(v);
+                }
+            }
+            while c.data.last().is_some_and(|s| s.is_empty()) {
+                c.data.pop();
+            }
+            let key = self.insert_result_column(r.book_id, &item.y, c).unwrap();
+            made.push((bkey.clone(), key));
+        }
+        if let Some(gid) = r.graph_id {
+            let g = &mut self.graph_mut(gid).unwrap().page.layers_mut()[r.layer_index];
+            for (item, key) in &base {
+                g.y_keys.push(key.clone());
+                g.line_only.push(key.clone());
+                if item.x != g.x_key {
+                    if let Some(x) = &item.x {
+                        g.x_by_y.insert(key.clone(), x.clone());
+                    }
+                }
+            }
+        }
+        Ok(made)
+    }
+
+    /// FFT 滤波：每条曲线的滤波结果写成新列；来源是图形时也加到图里。X 需要等间距。
+    pub fn fft_filter(&mut self, src: &Source, kind: crate::fft::FilterKind) -> Result<Vec<String>, String> {
+        let r = self.resolve(src)?;
+        let book = self.book(r.book_id).unwrap();
+        for item in &r.items {
+            let (xs, _, _) = get_xy(book, item);
+            if item.x.is_some() && xs.len() >= 2 {
+                crate::fft::sample_interval(&xs).map_err(|e| format!("{}：{e}", name_of(book, &item.y)))?;
+            }
+        }
+        let (r, made) = self.per_item_column(src, |book, item, xs, ys| {
+            let y = book.column(&item.y).unwrap();
+            let dt = if item.x.is_some() {
+                crate::fft::sample_interval(xs).unwrap_or(1.0)
+            } else {
+                1.0
+            };
+            (
+                crate::fft::filter(ys, dt, kind).unwrap_or_else(|_| vec![f64::NAN; ys.len()]),
+                format!(
+                    "{} {}",
+                    y.display_name(),
+                    kind.label().split(' ').next().unwrap_or("滤波")
+                ),
+                y.units.clone(),
+                format!("FFT 滤波：{}", kind.label()),
+            )
+        })?;
+        if let Some(gid) = r.graph_id {
+            let g = &mut self.graph_mut(gid).unwrap().page.layers_mut()[r.layer_index];
+            for (item, key) in &made {
+                g.y_keys.push(key.clone());
+                g.line_only.push(key.clone());
+                if item.x != g.x_key {
+                    if let Some(x) = &item.x {
+                        g.x_by_y.insert(key.clone(), x.clone());
+                    }
+                }
+            }
+        }
+        Ok(made.into_iter().map(|(_, k)| k).collect())
+    }
+
+    /// 行统计：对选中的列逐行求均值、标准差、标准误和 N（如平行样），写在最后一列右边。
+    /// 均值为 Y 列、标准差为 Y 误差列，可直接画带误差棒的图。返回新列标识。
+    pub fn row_stats(&mut self, book_id: u64, keys: &[String]) -> Result<Vec<String>, String> {
+        if keys.len() < 2 {
+            return Err("行统计至少需要选中两列".into());
+        }
+        let book = self.book(book_id).ok_or("找不到工作簿")?;
+        let cols: Vec<Vec<f64>> = keys
+            .iter()
+            .map(|k| {
+                book.column(k)
+                    .map(|c| c.values())
+                    .ok_or_else(|| format!("找不到列 {k}"))
+            })
+            .collect::<Result<_, _>>()?;
+        let units = book.column(&keys[0]).unwrap().units.clone();
+        let names = format!("{}–{}", name_of(book, &keys[0]), name_of(book, keys.last().unwrap()));
+        let rows = cols.iter().map(Vec::len).max().unwrap_or(0);
+        let mut out: [Vec<String>; 4] = Default::default();
+        for r in 0..rows {
+            let v: Vec<f64> = cols
+                .iter()
+                .filter_map(|c| c.get(r).copied())
+                .filter(|v| v.is_finite())
+                .collect();
+            let n = v.len();
+            let mean = v.iter().sum::<f64>() / n as f64;
+            let sd = if n > 1 {
+                (v.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1) as f64).sqrt()
+            } else {
+                f64::NAN
+            };
+            let cell = |x: f64| if x.is_finite() { fmt_num(x) } else { String::new() };
+            out[0].push(cell(mean));
+            out[1].push(cell(sd));
+            out[2].push(cell(sd / (n as f64).sqrt()));
+            out[3].push(n.to_string());
+        }
+        let defs = [
+            ("均值", Role::Y, units.clone()),
+            ("标准差", Role::YError, units.clone()),
+            ("标准误", Role::Ignore, units),
+            ("N", Role::Ignore, String::new()),
+        ];
+        let mut made = vec![];
+        for ((label, role, units), mut data) in defs.into_iter().zip(out) {
+            while data.last().is_some_and(|s| s.is_empty()) {
+                data.pop();
+            }
+            let mut c = Column::new("", role);
+            c.long_name = format!("行{label}");
+            c.units = units;
+            c.comment = format!("{names} 共 {} 列逐行统计", keys.len());
+            c.data = data;
+            made.push(self.insert_result_column(book_id, keys.last().unwrap(), c).unwrap());
+        }
+        Ok(made)
+    }
+
+    /// 自相关 / 互相关：选一列时求自相关，两列时求第二列相对第一列的互相关（滞后以数据点计）。
+    /// 结果放进新工作簿（滞后、相关系数）并画成线图。返回 (工作簿, 图形) 编号。
+    pub fn correlation_function(&mut self, book_id: u64, keys: &[String]) -> Result<(u64, u64), String> {
+        let book = self.book(book_id).ok_or("找不到工作簿")?;
+        let (a, b) = match keys {
+            [a] => (a, a),
+            [a, b] => (a, b),
+            _ => return Err("请选中一列（自相关）或两列（互相关）".into()),
+        };
+        let col = |k: &str| book.column(k).ok_or_else(|| format!("找不到列 {k}"));
+        let (ca, cb) = (col(a)?, col(b)?);
+        let (va, vb) = (ca.values(), cb.values());
+        let (lags, r) = crate::stats::cross_correlation(&va, &vb)?;
+        let auto = a == b;
+        let title = if auto {
+            format!("{} 自相关", ca.display_name())
+        } else {
+            format!("{} 与 {} 互相关", ca.display_name(), cb.display_name())
+        };
+        let folder = self.folder_of(book_id);
+        let id = self.alloc_id();
+        let mut nb = Book::new(id, self.unique_name(&title));
+        let mut ykey = String::new();
+        for (role, name, values) in [
+            (Role::X, "滞后", lags.iter().map(|&k| k as f64).collect::<Vec<_>>()),
+            (Role::Y, "相关系数", r),
+        ] {
+            let k = nb.push_column(role);
+            let c = nb.columns.iter_mut().find(|c| c.key == k).unwrap();
+            c.long_name = name.into();
+            c.comment = format!("{title}，{} 点，归一化", va.len());
+            c.data = values.iter().map(|v| fmt_num(*v)).collect();
+            ykey = k;
+        }
+        self.books.push(nb);
+        self.move_project_item(id, folder)?;
+        let (gid, _) = self.plot_from_selection(id, &[ykey], PlotType::Line)?;
+        Ok((id, gid))
+    }
+
+    /// 按公式之外的方式填充列：等差序列或随机数，覆盖目标列，`n` 行。
+    pub fn fill_sequence(
+        &mut self,
+        book_id: u64,
+        target: &str,
+        kind: crate::stats::Sequence,
+        n: usize,
+        seed: u64,
+    ) -> Result<(), String> {
+        if n == 0 {
+            return Err("行数必须大于 0".into());
+        }
+        let book = self.book_mut(book_id).ok_or("找不到工作簿")?;
+        book.column(target).ok_or("找不到目标列")?;
+        book.freeze_error_sources();
+        let data = crate::stats::sequence(kind, n, seed)
+            .iter()
+            .map(|v| fmt_num(*v))
+            .collect();
+        book.columns.iter_mut().find(|c| c.key == target).unwrap().data = data;
+        Ok(())
+    }
+
+    /// 多条曲线平均：把各曲线线性插值到公共 X 区间（各曲线 X 范围的交集）上的等间距点，
+    /// 点数取最长曲线的点数；结果工作簿含 X、平均 Y、标准差（Y 误差）与 N，并画成线图。
+    pub fn average_curves(&mut self, src: &Source) -> Result<(u64, u64), String> {
+        let r = self.resolve(src)?;
+        if r.items.len() < 2 {
+            return Err("至少需要两条曲线".into());
+        }
+        let book = self.book(r.book_id).unwrap();
+        let mut curves = vec![];
+        for item in &r.items {
+            let (xs, ys, _) = get_xy(book, item);
+            if xs.len() < 2 {
+                return Err(format!("{}：数据点太少", name_of(book, &item.y)));
+            }
+            curves.push((xs, ys));
+        }
+        let lo = curves
+            .iter()
+            .map(|(x, _)| x.iter().copied().fold(f64::INFINITY, f64::min))
+            .fold(f64::NEG_INFINITY, f64::max);
+        let hi = curves
+            .iter()
+            .map(|(x, _)| x.iter().copied().fold(f64::NEG_INFINITY, f64::max))
+            .fold(f64::INFINITY, f64::min);
+        if hi.is_nan() || lo.is_nan() || hi <= lo {
+            return Err("各曲线的 X 范围没有重叠".into());
+        }
+        let n = curves.iter().map(|(x, _)| x.len()).max().unwrap();
+        let grid = interpolate::grid(lo, hi, n);
+        let mut ys = vec![];
+        for (x, y) in &curves {
+            ys.push(interpolate::interpolate(x, y, InterpMethod::Linear, &grid)?);
+        }
+        let k = ys.len() as f64;
+        let mean: Vec<f64> = (0..n).map(|i| ys.iter().map(|v| v[i]).sum::<f64>() / k).collect();
+        let sd: Vec<f64> = (0..n)
+            .map(|i| (ys.iter().map(|v| (v[i] - mean[i]).powi(2)).sum::<f64>() / (k - 1.0)).sqrt())
+            .collect();
+        let first = &r.items[0];
+        let x_units = first
+            .x
+            .as_deref()
+            .and_then(|k| book.column(k))
+            .map(|c| c.units.clone())
+            .unwrap_or_default();
+        let y_units = book.column(&first.y).map(|c| c.units.clone()).unwrap_or_default();
+        let note = format!(
+            "{} 条曲线在 X ∈ [{}, {}] 上线性插值后平均",
+            r.items.len(),
+            fmt_num(lo),
+            fmt_num(hi)
+        );
+        let folder = self.folder_of(r.book_id);
+        let id = self.alloc_id();
+        let mut nb = Book::new(id, self.unique_name("曲线平均"));
+        let mut mean_key = String::new();
+        for (role, name, units, values) in [
+            (Role::X, "X", &x_units, &grid),
+            (Role::Y, "平均", &y_units, &mean),
+            (Role::YError, "标准差", &y_units, &sd),
+        ] {
+            let key = nb.push_column(role);
+            let c = nb.columns.iter_mut().find(|c| c.key == key).unwrap();
+            c.long_name = name.into();
+            c.units = units.clone();
+            c.comment = note.clone();
+            c.data = values.iter().map(|v| fmt_num(*v)).collect();
+            if name == "平均" {
+                mean_key = key;
+            }
+        }
+        self.books.push(nb);
+        self.move_project_item(id, folder)?;
+        let (gid, _) = self.plot_from_selection(id, &[mean_key], PlotType::Line)?;
+        Ok((id, gid))
     }
 
     /// 数值微分，结果写成新列 d(Y)/dX。
@@ -407,9 +943,10 @@ impl Project {
 
     /// 列统计：结果放进新的工作簿，每行是一列数据的统计量。返回新工作簿。
     /// 来源是工作簿时统计选中的列（任意列属性），没选时统计全部 Y 列。
-    pub fn stats_on_columns(&mut self, src: &Source) -> Result<u64, String> {
-        let (book_id, keys, rows): (u64, Vec<String>, Option<(usize, usize)>) = match src {
-            Source::Graph(_) => {
+    /// 统计类操作的输入：工作簿、要统计的列（图层里的曲线或工作簿中选中的列，没选时用全部 Y 列）和行范围。
+    fn picked_columns(&self, src: &Source) -> Result<Picked, String> {
+        Ok(match src {
+            Source::Graph(_) | Source::Layer { .. } => {
                 let r = self.resolve(src)?;
                 (
                     r.book_id,
@@ -430,7 +967,11 @@ impl Project {
                 };
                 (*id, keys, *rows)
             }
-        };
+        })
+    }
+
+    pub fn stats_on_columns(&mut self, src: &Source) -> Result<u64, String> {
+        let (book_id, keys, rows) = self.picked_columns(src)?;
         let book = self.book(book_id).ok_or("找不到工作簿")?;
         let src_name = book.name.clone();
         let stats: Vec<(String, Describe)> = keys
@@ -479,7 +1020,438 @@ impl Project {
             c.data = stats.iter().map(|(_, d)| fmt_num(get(d))).collect();
         }
         self.books.push(nb);
+        self.move_project_item(id, self.folder_of(book_id))?;
         Ok(id)
+    }
+
+    /// 对每条曲线做 FFT：各生成一个频谱工作簿（频率、实部、虚部、幅值、相位、功率）和一张幅值–频率图，
+    /// 放在源工作簿所在的文件夹。X 必须等间距；没有 X 列时采样间隔按 1。返回 (工作簿, 图形) 编号。
+    pub fn fft(&mut self, src: &Source, window: crate::fft::Window) -> Result<Vec<(u64, u64)>, String> {
+        let r = self.resolve(src)?;
+        let folder = self.folder_of(r.book_id);
+        let mut made = vec![];
+        let mut problems = vec![];
+        for item in &r.items {
+            let book = self.book(r.book_id).unwrap();
+            let name = name_of(book, &item.y);
+            let (xs, ys, _) = get_xy(book, item);
+            let x_units = item
+                .x
+                .as_deref()
+                .and_then(|k| book.column(k))
+                .map(|c| c.units.clone())
+                .unwrap_or_default();
+            let y_units = book.column(&item.y).map(|c| c.units.clone()).unwrap_or_default();
+            let dt = if item.x.is_some() {
+                crate::fft::sample_interval(&xs)
+            } else {
+                Ok(1.0)
+            };
+            let spec = match dt.and_then(|dt| crate::fft::spectrum(&ys, dt, window)) {
+                Ok(s) => s,
+                Err(e) => {
+                    problems.push(format!("{name}：{e}"));
+                    continue;
+                }
+            };
+            let f_units = match x_units.as_str() {
+                "s" => "Hz".to_string(),
+                "" => String::new(),
+                u => format!("1/{u}"),
+            };
+            let p_units = if y_units.is_empty() {
+                String::new()
+            } else {
+                format!("{y_units}²")
+            };
+            let id = self.alloc_id();
+            let mut nb = Book::new(id, self.unique_name(&format!("{name} FFT")));
+            let note = format!("{} 的 FFT，{} 点，窗函数 {}", name, ys.len(), window.label());
+            let columns: [(Role, &str, &str, &[f64]); 6] = [
+                (Role::X, "频率", &f_units, &spec.freq),
+                (Role::Y, "实部", "", &spec.re),
+                (Role::Y, "虚部", "", &spec.im),
+                (Role::Y, "幅值", &y_units, &spec.amplitude),
+                (Role::Y, "相位", "°", &spec.phase_deg),
+                (Role::Y, "功率", &p_units, &spec.power),
+            ];
+            let mut amp_key = String::new();
+            for (role, long_name, units, values) in columns {
+                let k = nb.push_column(role);
+                let c = nb.columns.iter_mut().find(|c| c.key == k).unwrap();
+                c.long_name = long_name.into();
+                c.units = units.into();
+                c.comment = note.clone();
+                c.data = values.iter().map(|v| fmt_num(*v)).collect();
+                if long_name == "幅值" {
+                    amp_key = k;
+                }
+            }
+            self.books.push(nb);
+            self.move_project_item(id, folder)?;
+            let (gid, _) = self.plot_from_selection(id, &[amp_key], PlotType::Line)?;
+            made.push((id, gid));
+        }
+        if made.is_empty() {
+            return Err(problems.join("；"));
+        }
+        Ok(made)
+    }
+
+    /// 寻峰与峰积分：每条曲线生成一个峰表工作簿（峰位、峰高、突出度、半峰宽、面积、质心、积分起止 X），
+    /// 放在源工作簿所在的文件夹。`min_prominence` 是相对 Y 范围的比例（0.05 即 5%）。
+    /// X 需要单调；递减的 X（如红外光谱的波数）会先反转。返回新工作簿编号。
+    pub fn find_peaks(&mut self, src: &Source, min_prominence: f64) -> Result<Vec<u64>, String> {
+        let r = self.resolve(src)?;
+        let folder = self.folder_of(r.book_id);
+        let mut made = vec![];
+        let mut problems = vec![];
+        for item in &r.items {
+            let book = self.book(r.book_id).unwrap();
+            let name = name_of(book, &item.y);
+            let (mut xs, mut ys, _) = get_xy(book, item);
+            let unit = |k: Option<&str>| {
+                k.and_then(|k| book.column(k))
+                    .map(|c| c.units.clone())
+                    .unwrap_or_default()
+            };
+            let (x_units, y_units) = (unit(item.x.as_deref()), unit(Some(&item.y)));
+            if xs.len() < 3 {
+                problems.push(format!("{name}：数据点太少"));
+                continue;
+            }
+            if xs.windows(2).all(|w| w[1] < w[0]) {
+                xs.reverse();
+                ys.reverse();
+            } else if !xs.windows(2).all(|w| w[1] > w[0]) {
+                problems.push(format!("{name}：X 需要单调递增或递减"));
+                continue;
+            }
+            let (lo, hi) = ys
+                .iter()
+                .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), y| (a.min(*y), b.max(*y)));
+            let threshold = min_prominence * (hi - lo);
+            let peaks = crate::peaks::find_peaks(&xs, &ys, threshold);
+            if peaks.is_empty() {
+                problems.push(format!("{name}：没有突出度达到 {} 的峰", fmt_num(threshold)));
+                continue;
+            }
+            let area_units = match (x_units.as_str(), y_units.as_str()) {
+                ("", "") => String::new(),
+                ("", u) | (u, "") => u.to_string(),
+                (a, b) => format!("{b}·{a}"),
+            };
+            let id = self.alloc_id();
+            let mut nb = Book::new(id, self.unique_name(&format!("{name} 峰")));
+            let note = format!(
+                "{} 的峰，最小突出度 {}（Y 范围的 {}%）",
+                name,
+                fmt_num(threshold),
+                round_sig(min_prominence * 100.0, 4)
+            );
+            type Getter = fn(&crate::peaks::Peak, &[f64]) -> f64;
+            let columns: [(Role, &str, &str, Getter); 8] = [
+                (Role::X, "峰位", &x_units, |p, _| p.x),
+                (Role::Y, "峰高", &y_units, |p, _| p.height),
+                (Role::Y, "突出度", &y_units, |p, _| p.prominence),
+                (Role::Y, "半峰宽", &x_units, |p, _| p.fwhm),
+                (Role::Y, "面积", &area_units, |p, _| p.area),
+                (Role::Y, "质心", &x_units, |p, _| p.centroid),
+                (Role::Y, "积分起点", &x_units, |p, xs| xs[p.start]),
+                (Role::Y, "积分终点", &x_units, |p, xs| xs[p.end]),
+            ];
+            for (role, long_name, units, get) in columns {
+                let k = nb.push_column(role);
+                let c = nb.columns.iter_mut().find(|c| c.key == k).unwrap();
+                c.long_name = long_name.into();
+                c.units = units.into();
+                c.comment = note.clone();
+                c.data = peaks.iter().map(|p| fmt_num(get(p, &xs))).collect();
+            }
+            self.books.push(nb);
+            self.move_project_item(id, folder)?;
+            made.push(id);
+        }
+        if made.is_empty() {
+            return Err(problems.join("；"));
+        }
+        Ok(made)
+    }
+
+    /// 设置列值：按公式逐行计算，写入 `target` 列（覆盖原有内容）。公式里的列用短名引用，
+    /// 可以引用目标列自身（用的是计算前的值）。结果不是有限数的单元格留空。返回写入的行数。
+    pub fn set_column_values(&mut self, book_id: u64, target: &str, formula: &str) -> Result<usize, String> {
+        let expr = crate::formula::parse(formula)?;
+        let book = self.book(book_id).ok_or("找不到工作簿")?;
+        book.column(target).ok_or("找不到目标列")?;
+        let mut cols = std::collections::HashMap::new();
+        for k in expr.columns() {
+            let c = book
+                .column(&k)
+                .ok_or_else(|| format!("工作簿里没有列 {k}（列用短名引用，如 A、B）"))?;
+            cols.insert(k, c.values());
+        }
+        let rows = if cols.is_empty() {
+            book.nrows()
+        } else {
+            cols.values().map(Vec::len).max().unwrap_or(0)
+        };
+        if rows == 0 {
+            return Err("没有可计算的行：公式不引用列时按工作簿已有的行数计算".into());
+        }
+        let mut data: Vec<String> = (0..rows)
+            .map(|i| {
+                let v = expr.eval(i, &|k| cols.get(k).and_then(|v| v.get(i)).copied().unwrap_or(f64::NAN));
+                if v.is_finite() {
+                    fmt_num(v)
+                } else {
+                    String::new()
+                }
+            })
+            .collect();
+        while data.last().is_some_and(|s| s.is_empty()) {
+            data.pop();
+        }
+        let n = data.len();
+        let book = self.book_mut(book_id).unwrap();
+        book.freeze_error_sources();
+        book.columns.iter_mut().find(|c| c.key == target).unwrap().data = data;
+        Ok(n)
+    }
+
+    /// 标准曲线反查：用标准点（浓度 `x`、响应 `y`）拟合直线，把样品响应列 `sample` 反查成浓度，
+    /// 在样品列右边写入“反查浓度”和“95% 置信区间半宽”两列（单次测定）。返回标准曲线与两个新列标识。
+    pub fn calibrate(
+        &mut self,
+        book_id: u64,
+        x: &str,
+        y: &str,
+        sample: &str,
+    ) -> Result<(crate::stats::Calibration, String, String), String> {
+        let book = self.book(book_id).ok_or("找不到工作簿")?;
+        let col = |k: &str| book.column(k).ok_or_else(|| format!("找不到列 {k}"));
+        let (cx, cy, cs) = (col(x)?, col(y)?, col(sample)?);
+        let cal = crate::stats::Calibration::fit(&cx.values(), &cy.values())?;
+        let (x_name, x_units, s_name) = (
+            cx.display_name().to_owned(),
+            cx.units.clone(),
+            cs.display_name().to_owned(),
+        );
+        let inv: Vec<Option<(f64, f64, f64)>> = cs
+            .values()
+            .iter()
+            .map(|v| v.is_finite().then(|| cal.inverse(*v, 1)))
+            .collect();
+        let note = format!(
+            "{} = ({} − {}) / {}，R² = {}，n = {}",
+            x_name,
+            s_name,
+            fmt_num(round_sig(cal.intercept, 6)),
+            fmt_num(round_sig(cal.slope, 6)),
+            fmt_num(round_sig(cal.r2, 6)),
+            cal.n
+        );
+        let make = |long_name: String, pick: fn(&(f64, f64, f64)) -> f64| {
+            let mut c = Column::new("", Role::Y);
+            c.long_name = long_name;
+            c.units = x_units.clone();
+            c.comment = note.clone();
+            c.data = inv
+                .iter()
+                .map(|v| v.as_ref().map_or(String::new(), |v| fmt_num(pick(v))))
+                .collect();
+            while c.data.last().is_some_and(|s| s.is_empty()) {
+                c.data.pop();
+            }
+            c
+        };
+        let c0 = make(format!("{s_name} 反查{x_name}"), |v| v.0);
+        let c1 = make("95% 置信区间 ±".into(), |v| v.2);
+        let k0 = self.insert_result_column(book_id, sample, c0).unwrap();
+        let k1 = self.insert_result_column(book_id, sample, c1).unwrap();
+        Ok((cal, k0, k1))
+    }
+
+    /// 列运算：A op B，结果写成新列放在 A 右边。B 与 A 对应同一 X 列时逐行计算；
+    /// 对应不同 X 列时（如原始曲线减拟合曲线）先把 B 线性插值到 A 的 X 上，超出 B 的 X 范围处留空。
+    /// 结果不是有限数（除以 0、缺失值）的单元格留空。
+    pub fn column_math(&mut self, book_id: u64, a: &str, op: ColumnOp, b: &Operand) -> Result<String, String> {
+        let book = self.book(book_id).ok_or("找不到工作簿")?;
+        let ca = book.column(a).ok_or("找不到列 A")?;
+        let av = ca.values();
+        let (bv, b_name, b_units, note) = match b {
+            Operand::Constant(c) => {
+                if !c.is_finite() {
+                    return Err("常数必须是有限数".into());
+                }
+                (vec![*c; av.len()], fmt_num(*c), String::new(), String::new())
+            }
+            Operand::Column(k) => {
+                let cb = book.column(k).ok_or("找不到列 B")?;
+                let (xa, xb) = (x_for(book, ca, &[]), x_for(book, cb, &[]));
+                let values = if xa == xb {
+                    let mut v = cb.values();
+                    v.resize(av.len(), f64::NAN);
+                    v
+                } else {
+                    let item = Item {
+                        y: k.clone(),
+                        x: xb.clone(),
+                        rows: None,
+                    };
+                    let (xs, ys, _) = get_xy(book, &item);
+                    let lo = xs.iter().copied().fold(f64::INFINITY, f64::min);
+                    let hi = xs.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                    let ax: Vec<f64> = match xa.as_deref().and_then(|x| book.column(x)) {
+                        Some(c) => {
+                            let mut v = c.values();
+                            v.resize(av.len(), f64::NAN);
+                            v
+                        }
+                        None => (1..=av.len()).map(|i| i as f64).collect(),
+                    };
+                    let inside: Vec<f64> = ax.iter().map(|x| if *x >= lo && *x <= hi { *x } else { 0.0 }).collect();
+                    let at = interpolate::interpolate(&xs, &ys, InterpMethod::Linear, &inside)
+                        .map_err(|e| format!("列 B 无法插值到 A 的 X 上：{e}"))?;
+                    ax.iter()
+                        .zip(at)
+                        .map(|(x, y)| if *x >= lo && *x <= hi { y } else { f64::NAN })
+                        .collect()
+                };
+                let note = if xa == xb {
+                    String::new()
+                } else {
+                    format!("；{} 按线性插值到 {} 的 X 上", cb.display_name(), ca.display_name())
+                };
+                (values, cb.display_name().to_owned(), cb.units.clone(), note)
+            }
+        };
+        let mut data: Vec<String> = av
+            .iter()
+            .zip(&bv)
+            .map(|(x, y)| {
+                let r = op.apply(*x, *y);
+                if r.is_finite() {
+                    fmt_num(r)
+                } else {
+                    String::new()
+                }
+            })
+            .collect();
+        while data.last().is_some_and(|s| s.is_empty()) {
+            data.pop();
+        }
+        if data.is_empty() {
+            return Err("运算结果没有有效数值".into());
+        }
+        let name = format!("{} {} {}", ca.display_name(), op.symbol(), b_name);
+        let mut col = Column::new("", if ca.role == Role::X { Role::Y } else { ca.role });
+        col.units = op.units(&ca.units, &b_units);
+        col.comment = format!("列运算 {name}{note}");
+        col.long_name = name;
+        col.data = data;
+        let a = a.to_string();
+        self.insert_result_column(book_id, &a, col)
+            .ok_or_else(|| "无法写入结果列".into())
+    }
+
+    /// 统计类操作选中列的数值范围（频数统计对话框的默认范围）。
+    pub fn value_range(&self, src: &Source) -> Option<(f64, f64)> {
+        let (book_id, keys, rows) = self.picked_columns(src).ok()?;
+        let book = self.book(book_id)?;
+        let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
+        for key in &keys {
+            let v = book.column(key)?.values();
+            let v = match rows {
+                Some((a, b)) => v.into_iter().skip(a).take(b + 1 - a).collect(),
+                None => v,
+            };
+            for x in v.into_iter().filter(|x| x.is_finite()) {
+                (lo, hi) = (lo.min(x), hi.max(x));
+            }
+        }
+        (lo < hi).then_some((lo, hi))
+    }
+
+    /// 频数统计：每个选中的列生成一个结果工作簿，列出区间下限、中点、上限、频数、累积频数、
+    /// 相对频率和累积相对频率；`bins` 为空时按 Sturges 规则，`range` 为空时用数据范围。
+    pub fn frequency_counts(
+        &mut self,
+        src: &Source,
+        bins: Option<usize>,
+        range: Option<(f64, f64)>,
+    ) -> Result<Vec<u64>, String> {
+        let (book_id, keys, rows) = self.picked_columns(src)?;
+        let book = self.book(book_id).ok_or("找不到工作簿")?;
+        let src_name = book.name.clone();
+        let mut results = vec![];
+        let mut problems = vec![];
+        for key in &keys {
+            let Some(c) = book.column(key) else { continue };
+            let mut v = c.values();
+            if let Some((a, b)) = rows {
+                v = v.into_iter().skip(a).take(b + 1 - a).collect();
+            }
+            let n = v.iter().filter(|x| x.is_finite()).count();
+            let k = bins.unwrap_or_else(|| crate::stats::sturges_bins(n));
+            match crate::stats::histogram(&v, k, range) {
+                Ok(b) => results.push((c.display_name().to_owned(), c.units.clone(), b)),
+                Err(e) => problems.push(format!("{}：{e}", c.display_name())),
+            }
+        }
+        if results.is_empty() {
+            return Err(if problems.is_empty() {
+                "选中的数据里没有数值".into()
+            } else {
+                problems.join("；")
+            });
+        }
+        let folder = self.folder_of(book_id);
+        let mut ids = vec![];
+        for (name, units, bins) in results {
+            let id = self.alloc_id();
+            let mut nb = Book::new(id, self.unique_name(&format!("{name} 频数")));
+            let total: usize = bins.iter().map(|b| b.count).sum();
+            let note = match rows {
+                Some((a, b)) => format!("来自 {src_name} 的 {name}，第 {}–{} 行", a + 1, b + 1),
+                None => format!("来自 {src_name} 的 {name}"),
+            };
+            let mut cumulative = 0;
+            let cum: Vec<usize> = bins
+                .iter()
+                .map(|b| {
+                    cumulative += b.count;
+                    cumulative
+                })
+                .collect();
+            let share = |c: usize| if total == 0 { f64::NAN } else { c as f64 / total as f64 };
+            let columns: [(Role, &str, &str, Vec<f64>); 7] = [
+                (Role::Ignore, "区间下限", &units, bins.iter().map(|b| b.lo).collect()),
+                (
+                    Role::X,
+                    "区间中点",
+                    &units,
+                    bins.iter().map(|b| 0.5 * (b.lo + b.hi)).collect(),
+                ),
+                (Role::Ignore, "区间上限", &units, bins.iter().map(|b| b.hi).collect()),
+                (Role::Y, "频数", "", bins.iter().map(|b| b.count as f64).collect()),
+                (Role::Y, "累积频数", "", cum.iter().map(|c| *c as f64).collect()),
+                (Role::Y, "相对频率", "", bins.iter().map(|b| share(b.count)).collect()),
+                (Role::Y, "累积相对频率", "", cum.iter().map(|c| share(*c)).collect()),
+            ];
+            for (role, long_name, units, values) in columns {
+                let k = nb.push_column(role);
+                let c = nb.columns.iter_mut().find(|c| c.key == k).unwrap();
+                c.long_name = long_name.into();
+                c.units = units.into();
+                c.comment = note.clone();
+                c.data = values.into_iter().map(fmt_num).collect();
+            }
+            self.books.push(nb);
+            self.move_project_item(id, folder)?;
+            ids.push(id);
+        }
+        Ok(ids)
     }
 
     /// 按某一列排序整张工作表，各行数据一起移动。数值排在文本前面，空单元格排在最后。
@@ -548,7 +1520,7 @@ mod tests {
         assert_eq!(keys, vec!["A", "B", "D", "E", "C", "F", "G"]);
         assert_eq!(book.column("D").unwrap().role, Role::X);
         assert_eq!(book.column("E").unwrap().data.len(), 200);
-        let g = p.graph(2).unwrap();
+        let g = p.graph(2).unwrap().first_layer();
         assert_eq!(g.y_keys, vec!["B", "C", "E", "G"]);
         assert_eq!(g.x_by_y.get("E").map(|s| s.as_str()), Some("D"));
         assert!(g.line_only.contains(&"G".to_string()));
@@ -566,7 +1538,7 @@ mod tests {
         p.graphs.clear();
         let (gid, reps) = p.fit_poly(&book_src(&["C"]), 3).unwrap();
         assert_eq!(reps[0].kind, "3 阶多项式拟合");
-        let g = p.graph(gid).unwrap();
+        let g = p.graph(gid).unwrap().first_layer();
         assert_eq!(g.plot_type, PlotType::Scatter);
         assert_eq!(g.x_key.as_deref(), Some("A"));
         assert!(reps[0].fit.r2 > 0.99);
@@ -584,6 +1556,482 @@ mod tests {
             rows: None,
         };
         assert!(p.fit_poly(&src, 1).unwrap_err().contains("至少需要 3 个点"));
+    }
+
+    #[test]
+    fn nonlinear_fit_adds_curve_columns_and_reports_each_series() {
+        use crate::nlfit::Model;
+        let mut p = Project::sample();
+        // C 列是充电曲线 8(1 − e^{−t/4}) 加噪声，用 ExpDec1（A1 为负）拟合
+        let (gid, reports) = p.nlfit(&book_src(&["C"]), Model::ExpDec1, &[]).unwrap();
+        assert_eq!(reports.len(), 1);
+        let f = &reports[0].fit;
+        assert!(f.converged && f.r2 > 0.99);
+        assert!((f.params[0] - 8.0).abs() < 0.3 && (f.params[1] + 8.0).abs() < 0.4 && (f.params[2] - 4.0).abs() < 0.4);
+        let book = p.book(1).unwrap();
+        let y = book
+            .columns
+            .iter()
+            .find(|c| c.long_name == "电压 B ExpDec1 拟合")
+            .unwrap();
+        assert_eq!(y.data.len(), 200);
+        assert!(y.comment.contains("y = y0 + A1·exp(−x/t1)") && y.comment.contains("t1 = "));
+        let layer = p.graph(gid).unwrap().first_layer();
+        assert!(layer.line_only.contains(&y.key) && layer.x_by_y.contains_key(&y.key));
+        assert!(p.nlfit(&book_src(&["C"]), Model::Gauss, &[]).is_ok());
+        let id = p.new_book();
+        p.book_mut(id).unwrap().columns[1].data = vec!["1".into(), "2".into()];
+        let src = Source::Book {
+            id,
+            selected: vec![],
+            rows: None,
+        };
+        assert!(p.nlfit(&src, Model::Gauss, &[]).unwrap_err().contains("至少需要"));
+    }
+
+    #[test]
+    fn fft_builds_a_spectrum_table_and_amplitude_graph_per_curve() {
+        let mut p = Project::sample();
+        // 10 Hz 采样（X 以 s 为单位、间隔 0.1），2 Hz、振幅 4 的正弦落在频点上
+        let book = p.book_mut(1).unwrap();
+        book.columns[0].data = (0..50).map(|i| fmt_num(i as f64 * 0.1)).collect();
+        book.columns[1].data = (0..50)
+            .map(|i| fmt_num(4.0 * (2.0 * std::f64::consts::PI * 2.0 * i as f64 * 0.1).sin()))
+            .collect();
+        book.columns[2].data = (0..50).map(|i| fmt_num(i as f64)).collect();
+        let made = p.fft(&book_src(&["B"]), crate::fft::Window::Rect).unwrap();
+        assert_eq!(made.len(), 1);
+        let (bid, gid) = made[0];
+        let out = p.book(bid).unwrap();
+        let names: Vec<_> = out.columns.iter().map(|c| c.long_name.as_str()).collect();
+        assert_eq!(names, ["频率", "实部", "虚部", "幅值", "相位", "功率"]);
+        assert_eq!(
+            (out.columns[0].units.as_str(), out.columns[3].units.as_str()),
+            ("Hz", "mV")
+        );
+        assert_eq!(out.columns[5].units, "mV²");
+        let f = out.columns[0].values();
+        let amp = out.columns[3].values();
+        assert_eq!(f.len(), 26);
+        let peak = (0..amp.len()).max_by(|a, b| amp[*a].total_cmp(&amp[*b])).unwrap();
+        assert!((f[peak] - 2.0).abs() < 1e-9 && (amp[peak] - 4.0).abs() < 1e-6);
+        let layer = p.graph(gid).unwrap().first_layer();
+        assert_eq!(layer.y_keys, [out.columns[3].key.clone()]);
+        assert_eq!(layer.x_key.as_deref(), Some(out.columns[0].key.as_str()));
+
+        // 不等间距的 X 给出提示
+        p.book_mut(1).unwrap().columns[0].data[3] = "0.35".into();
+        assert!(p
+            .fft(&book_src(&["B"]), crate::fft::Window::Hann)
+            .unwrap_err()
+            .contains("不等间距"));
+    }
+
+    #[test]
+    fn find_peaks_builds_a_peak_table_per_curve() {
+        let mut p = Project::sample();
+        // 两个高斯峰（X 递减，如波数），在 X = 30 和 X = 70
+        let book = p.book_mut(1).unwrap();
+        book.columns[0].units = "cm⁻¹".into();
+        book.columns[0].data = (0..101).map(|i| fmt_num(100.0 - i as f64)).collect();
+        let g = |x: f64| 2.0 * (-((x - 30.0) / 4.0).powi(2)).exp() + (-((x - 70.0) / 6.0).powi(2)).exp();
+        book.columns[1].data = (0..101).map(|i| fmt_num(g(100.0 - i as f64))).collect();
+        let made = p.find_peaks(&book_src(&["B"]), 0.05).unwrap();
+        let out = p.book(made[0]).unwrap();
+        let names: Vec<_> = out.columns.iter().map(|c| c.long_name.as_str()).collect();
+        assert_eq!(
+            names,
+            [
+                "峰位",
+                "峰高",
+                "突出度",
+                "半峰宽",
+                "面积",
+                "质心",
+                "积分起点",
+                "积分终点"
+            ]
+        );
+        assert_eq!(out.columns[0].values(), [30.0, 70.0]);
+        assert_eq!(out.columns[4].units, "mV·cm⁻¹");
+        // 高斯峰 A·exp(−((x−c)/s)²) 的半峰宽为 2s·√ln2、面积为 A·s·√π
+        let fwhm = out.columns[3].values();
+        assert!((fwhm[0] - 8.0 * 2f64.ln().sqrt()).abs() < 0.05, "{fwhm:?}");
+        let area = out.columns[4].values();
+        assert!((area[0] - 8.0 * std::f64::consts::PI.sqrt()).abs() < 0.05, "{area:?}");
+        assert!((area[1] - 6.0 * std::f64::consts::PI.sqrt()).abs() < 0.05, "{area:?}");
+        // 阈值过高时只留主峰；没有峰时给出提示
+        let made = p.find_peaks(&book_src(&["B"]), 0.6).unwrap();
+        assert_eq!(p.book(made[0]).unwrap().columns[0].values(), [30.0]);
+        assert!(p.find_peaks(&book_src(&["B"]), 1.5).unwrap_err().contains("没有"));
+        p.book_mut(1).unwrap().columns[0].data[5] = "200".into();
+        assert!(p.find_peaks(&book_src(&["B"]), 0.05).unwrap_err().contains("单调"));
+    }
+
+    #[test]
+    fn baseline_subtraction_adds_baseline_and_corrected_columns() {
+        use crate::baseline::BaselineMethod;
+        let mut p = Project::sample();
+        let book = p.book_mut(1).unwrap();
+        book.columns[0].data = (0..5).map(|i| fmt_num(i as f64)).collect();
+        book.columns[1].data = ["1", "3", "", "6", "5"].iter().map(|s| s.to_string()).collect();
+        let made = p.subtract_baseline(&book_src(&["B"]), BaselineMethod::Line).unwrap();
+        let book = p.book(1).unwrap();
+        let (b, c) = (book.column(&made[0].0).unwrap(), book.column(&made[0].1).unwrap());
+        assert_eq!(book.column_index(&made[0].0), Some(2));
+        assert_eq!(book.column_index(&made[0].1), Some(3));
+        // 基线是 (0, 1) 到 (4, 5) 的连线；缺失行留空
+        assert_eq!(b.data, ["1", "2", "", "4", "5"]);
+        assert_eq!(c.data, ["0", "1", "", "2", "0"]);
+        assert_eq!((c.long_name.as_str(), c.units.as_str()), ("电压 A 扣除基线", "mV"));
+
+        // 来源是图形时，基线画进图里
+        let mut p = Project::sample();
+        let made = p
+            .subtract_baseline(&Source::Graph(2), BaselineMethod::Als { lambda: 100.0, p: 0.05 })
+            .unwrap();
+        let layer = p.graph(2).unwrap().first_layer();
+        assert!(made
+            .iter()
+            .all(|(b, _)| layer.y_keys.contains(b) && layer.line_only.contains(b)));
+    }
+
+    #[test]
+    fn set_column_values_evaluates_row_by_row() {
+        let mut p = Project::sample();
+        let book = p.book_mut(1).unwrap();
+        book.columns[0].data = ["1", "2", "3", "4"].iter().map(|s| s.to_string()).collect();
+        book.columns[1].data = ["10", "", "30", "-5"].iter().map(|s| s.to_string()).collect();
+        // 引用自身：用计算前的值；缺失、负数开方处留空
+        assert_eq!(p.set_column_values(1, "B", "B + sqrt(B) * A - i").unwrap(), 3);
+        let b = &p.book(1).unwrap().columns[1].data;
+        let want = 10.0 + 10f64.sqrt() - 1.0;
+        assert_eq!(b[0], fmt_num(want));
+        assert_eq!(b[1], "");
+        assert_eq!(b[2], fmt_num(30.0 + 30f64.sqrt() * 3.0 - 3.0));
+        assert_eq!(b.len(), 3, "trailing blanks trimmed");
+        // 不引用列时按已有行数
+        let rows = p.book(1).unwrap().nrows();
+        assert_eq!(p.set_column_values(1, "C", "i^2").unwrap(), rows);
+        assert_eq!(p.book(1).unwrap().columns[2].data[3], "16");
+        assert!(p.set_column_values(1, "C", "Z * 2").unwrap_err().contains("没有列 Z"));
+        assert!(p.set_column_values(1, "C", "2 +").is_err());
+        assert!(p.set_column_values(1, "Q", "1").unwrap_err().contains("目标列"));
+    }
+
+    #[test]
+    fn calibrate_writes_concentration_and_interval_beside_the_samples() {
+        let mut p = Project::sample();
+        let book = p.book_mut(1).unwrap();
+        let set = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        book.columns[0].data = set(&["0", "1", "2", "4", "6", "8", "10"]);
+        book.columns[0].units = "mg/L".into();
+        book.columns[1].data = set(&["0.02", "0.215", "0.41", "0.79", "1.22", "1.58", "2.01"]);
+        book.columns[2].data = set(&["0.9", "", "1.5"]);
+        let (cal, k0, k1) = p.calibrate(1, "A", "B", "C").unwrap();
+        let book = p.book(1).unwrap();
+        assert_eq!(book.column_index(&k0), Some(3));
+        assert_eq!(book.column_index(&k1), Some(4));
+        let (x0, ci) = (book.column(&k0).unwrap(), book.column(&k1).unwrap());
+        assert_eq!(x0.units, "mg/L");
+        assert_eq!(x0.data[1], "");
+        // 与 numpy.polyfit 和 scipy.stats.t 计算一致
+        let v = x0.values();
+        assert!((v[0] - 4.468198640158359).abs() < 1e-6 && (v[2] - (1.5 - cal.intercept) / cal.slope).abs() < 1e-6);
+        assert!((ci.values()[0] - 0.21355306685211103).abs() < 1e-6);
+        assert!(x0.comment.contains("R²"));
+        assert!(p.calibrate(1, "A", "B", "Z").is_err());
+    }
+
+    #[test]
+    fn fft_filter_adds_a_filtered_column_and_curve() {
+        use crate::fft::FilterKind;
+        let mut p = Project::sample();
+        let book = p.book_mut(1).unwrap();
+        book.columns[0].data = (0..32).map(|i| fmt_num(i as f64 * 0.1)).collect();
+        book.columns[1].data = (0..32)
+            .map(|i| {
+                fmt_num(
+                    1.0 + (2.0 * std::f64::consts::PI * i as f64 / 32.0).sin()
+                        + 0.3 * (i as f64 * std::f64::consts::PI).cos(),
+                )
+            })
+            .collect();
+        let keys = p.fft_filter(&book_src(&["B"]), FilterKind::LowPass(1.0)).unwrap();
+        let c = p.book(1).unwrap().column(&keys[0]).unwrap();
+        assert_eq!(c.long_name, "电压 A 低通");
+        // 低通去掉了奈奎斯特频率处的 0.3·cos(πi)，留下直流与 1 周期正弦
+        for (i, v) in c.values().iter().enumerate() {
+            let want = 1.0 + (2.0 * std::f64::consts::PI * i as f64 / 32.0).sin();
+            assert!((v - want).abs() < 1e-6, "{i}: {v} vs {want}");
+        }
+        let mut p = Project::sample();
+        let keys = p.fft_filter(&Source::Graph(2), FilterKind::HighPass(0.1)).unwrap();
+        assert!(keys
+            .iter()
+            .all(|k| p.graph(2).unwrap().first_layer().line_only.contains(k)));
+        p.book_mut(1).unwrap().columns[0].data[2] = "9".into();
+        assert!(p
+            .fft_filter(&book_src(&["B"]), FilterKind::LowPass(1.0))
+            .unwrap_err()
+            .contains("等间距"));
+    }
+
+    #[test]
+    fn row_stats_writes_mean_sd_se_and_n_after_the_last_column() {
+        let mut p = Project::sample();
+        let book = p.book_mut(1).unwrap();
+        let set = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        book.columns[0].data = set(&["1", "4", ""]);
+        book.columns[1].data = set(&["2", "", ""]);
+        book.columns[2].data = set(&["6", "5", ""]);
+        let keys: Vec<String> = ["A", "B", "C"].iter().map(|s| s.to_string()).collect();
+        let made = p.row_stats(1, &keys).unwrap();
+        let book = p.book(1).unwrap();
+        assert_eq!(book.column_index(&made[0]), Some(3));
+        let col = |i: usize| book.column(&made[i]).unwrap();
+        assert_eq!((col(0).role, col(1).role), (Role::Y, Role::YError));
+        assert_eq!(col(0).data, ["3", "4.5"]);
+        // 行 1：1、2、6 的样本标准差 √7，标准误 √(7/3)
+        assert_eq!(col(1).data[0], fmt_num(7f64.sqrt()));
+        assert_eq!(col(2).data[1], fmt_num(0.5));
+        assert_eq!(col(3).data, ["3", "2", "0"]);
+        assert!(p.row_stats(1, &keys[..1]).is_err());
+    }
+
+    #[test]
+    fn correlation_function_builds_a_lag_table_and_graph() {
+        let mut p = Project::sample();
+        let keys: Vec<String> = vec!["B".into(), "C".into()];
+        let (bid, gid) = p.correlation_function(1, &keys).unwrap();
+        let out = p.book(bid).unwrap();
+        let n = p.book(1).unwrap().column("B").unwrap().values().len() as f64;
+        let lags = out.columns[0].values();
+        assert_eq!((lags[0], *lags.last().unwrap()), (1.0 - n, n - 1.0));
+        assert!(out.name.contains("互相关"));
+        assert_eq!(p.graph(gid).unwrap().first_layer().y_keys, [out.columns[1].key.clone()]);
+        let (bid, _) = p.correlation_function(1, &keys[..1]).unwrap();
+        let r = p.book(bid).unwrap().columns[1].values();
+        assert_eq!(r[r.len() / 2], 1.0, "autocorrelation peaks at lag 0");
+        assert!(p.correlation_function(1, &[]).is_err());
+    }
+
+    #[test]
+    fn fill_sequence_overwrites_the_target_column() {
+        use crate::stats::Sequence;
+        let mut p = Project::sample();
+        p.fill_sequence(1, "C", Sequence::Arithmetic { start: 1.0, step: 2.0 }, 5, 0)
+            .unwrap();
+        assert_eq!(p.book(1).unwrap().column("C").unwrap().data, ["1", "3", "5", "7", "9"]);
+        assert!(p
+            .fill_sequence(1, "C", Sequence::Arithmetic { start: 1.0, step: 2.0 }, 0, 0)
+            .is_err());
+        assert!(p
+            .fill_sequence(1, "Q", Sequence::Uniform { min: 0.0, max: 1.0 }, 3, 0)
+            .is_err());
+    }
+
+    #[test]
+    fn average_curves_matches_numpy_interp_on_the_overlap() {
+        let mut p = Project::sample();
+        let book = p.book_mut(1).unwrap();
+        let set = |v: &[f64]| v.iter().map(|x| fmt_num(*x)).collect::<Vec<_>>();
+        // A、B 为第一条曲线；在 B 后插入第二条曲线的 X 与 Y
+        book.columns[0].data = set(&[0.0, 1.0, 2.0, 3.0, 4.0]);
+        book.columns[1].data = set(&[0.0, 2.0, 4.0, 6.0, 8.0]);
+        book.columns[2].role = Role::X;
+        book.columns[2].data = set(&[0.5, 1.5, 2.5, 3.5, 4.5]);
+        let k = book.push_column(Role::Y);
+        book.columns.iter_mut().find(|c| c.key == k).unwrap().data = set(&[1.0; 5]);
+        let (bid, gid) = p.average_curves(&book_src(&["B", &k])).unwrap();
+        let out = p.book(bid).unwrap();
+        // numpy.interp 在 linspace(0.5, 4.0, 5) 上平均：((2x) + 1) / 2
+        let grid = out.columns[0].values();
+        assert_eq!(grid, [0.5, 1.375, 2.25, 3.125, 4.0]);
+        for (x, m) in grid.iter().zip(out.columns[1].values()) {
+            assert!((m - (2.0 * x + 1.0) / 2.0).abs() < 1e-12);
+        }
+        assert_eq!(out.columns[2].role, Role::YError);
+        assert!(p.graph(gid).is_some());
+        assert!(p.average_curves(&book_src(&["B"])).unwrap_err().contains("两条"));
+    }
+
+    #[test]
+    fn column_math_works_row_by_row_with_constants_and_units() {
+        let mut p = Project::sample();
+        let key = p
+            .column_math(1, "B", ColumnOp::Sub, &Operand::Column("C".into()))
+            .unwrap();
+        let book = p.book(1).unwrap();
+        assert_eq!(book.column_index(&key), Some(2), "result sits right of A");
+        let (b, c, r) = (
+            book.column("B").unwrap(),
+            book.column("C").unwrap(),
+            book.column(&key).unwrap(),
+        );
+        assert_eq!(
+            (r.long_name.as_str(), r.units.as_str(), r.role),
+            ("电压 A − 电压 B", "mV", Role::Y)
+        );
+        for i in [0, 7, 40] {
+            let want = b.values()[i] - c.values()[i];
+            assert!((r.values()[i] - want).abs() < 1e-9);
+        }
+
+        let twice = p.column_math(1, "B", ColumnOp::Mul, &Operand::Constant(2.0)).unwrap();
+        let book = p.book(1).unwrap();
+        assert_eq!(
+            book.column(&twice).unwrap().values()[0],
+            2.0 * book.column("B").unwrap().values()[0]
+        );
+        assert_eq!(book.column(&twice).unwrap().units, "mV");
+        let sq = p
+            .column_math(1, "B", ColumnOp::Mul, &Operand::Column("C".into()))
+            .unwrap();
+        let ratio = p
+            .column_math(1, "B", ColumnOp::Div, &Operand::Column("A".into()))
+            .unwrap();
+        let book = p.book(1).unwrap();
+        assert_eq!(book.column(&sq).unwrap().units, "mV·mV");
+        assert_eq!(book.column(&ratio).unwrap().units, "mV/s");
+        // 第 0 行 A = 0，B ÷ A 不是有限数，留空
+        assert_eq!(book.column(&ratio).unwrap().data[0], "");
+        assert!(p
+            .column_math(1, "B", ColumnOp::Div, &Operand::Constant(0.0))
+            .unwrap_err()
+            .contains("没有有效数值"));
+        assert!(p
+            .column_math(1, "B", ColumnOp::Add, &Operand::Constant(f64::NAN))
+            .is_err());
+    }
+
+    #[test]
+    fn subtracting_a_curve_on_another_x_grid_interpolates_it_first() {
+        let mut p = Project::sample();
+        let (_, reports) = p.fit_poly(&book_src(&["B"]), 1).unwrap();
+        let fit = &reports[0].fit;
+        let book = p.book(1).unwrap();
+        let fit_y = book
+            .columns
+            .iter()
+            .find(|c| c.long_name.ends_with("线性拟合"))
+            .unwrap()
+            .key
+            .clone();
+        let key = p.column_math(1, "B", ColumnOp::Sub, &Operand::Column(fit_y)).unwrap();
+        let book = p.book(1).unwrap();
+        let r = book.column(&key).unwrap();
+        assert!(r.comment.contains("线性插值"));
+        // 直线的线性插值是精确的，所以差值就是拟合残差
+        let (x, b) = (book.column("A").unwrap().values(), book.column("B").unwrap().values());
+        for i in 0..x.len() {
+            let want = b[i] - fit.eval(x[i]);
+            assert!((r.values()[i] - want).abs() < 1e-5, "row {i}");
+        }
+
+        // B 的 X 范围之外留空
+        let id = p.new_book();
+        let short = p.book_mut(id).unwrap();
+        short.columns[0].data = ["0", "1", "2", "3"].map(String::from).to_vec();
+        short.columns[1].data = ["1", "1", "1", "1"].map(String::from).to_vec();
+        let x2 = short.push_column(Role::X);
+        let y2 = short.push_column(Role::Y);
+        short.columns.iter_mut().find(|c| c.key == x2).unwrap().data = ["1.5", "2.5"].map(String::from).to_vec();
+        short.columns.iter_mut().find(|c| c.key == y2).unwrap().data = ["10", "20"].map(String::from).to_vec();
+        let key = p.column_math(id, "B", ColumnOp::Add, &Operand::Column(y2)).unwrap();
+        assert_eq!(p.book(id).unwrap().column(&key).unwrap().data, ["", "", "16"]);
+    }
+
+    #[test]
+    fn frequency_counts_build_one_table_per_column_next_to_the_source() {
+        let mut p = Project::sample();
+        let folder = p.add_folder(None).unwrap();
+        p.move_project_item(1, Some(folder)).unwrap();
+        let ids = p.frequency_counts(&book_src(&["B", "C"]), Some(4), None).unwrap();
+        assert_eq!(ids.len(), 2);
+        let book = p.book(ids[0]).unwrap();
+        assert_eq!(book.name, "电压 A 频数1");
+        assert_eq!(p.folder_of(ids[0]), Some(folder), "results sit beside the source book");
+        let names: Vec<_> = book.columns.iter().map(|c| c.long_name.as_str()).collect();
+        assert_eq!(
+            names,
+            [
+                "区间下限",
+                "区间中点",
+                "区间上限",
+                "频数",
+                "累积频数",
+                "相对频率",
+                "累积相对频率"
+            ]
+        );
+        assert_eq!(book.columns[1].role, Role::X);
+        assert_eq!(book.columns[0].units, "mV");
+        let col = |i: usize| book.columns[i].values();
+        assert_eq!(col(3).len(), 4);
+        assert_eq!(col(3).iter().sum::<f64>(), 41.0, "every sample value is counted once");
+        assert_eq!(col(4)[3], 41.0);
+        assert_eq!(col(6)[3], 1.0);
+        // 单元格按 8 位有效数字保存，相加只需接近 1
+        assert!((col(5).iter().sum::<f64>() - 1.0).abs() < 1e-6);
+
+        // 默认按 Sturges 规则；自定义范围外的值不计
+        let auto = p.frequency_counts(&book_src(&["B"]), None, None).unwrap();
+        assert_eq!(p.book(auto[0]).unwrap().nrows(), crate::stats::sturges_bins(41));
+        let narrow = p
+            .frequency_counts(&book_src(&["A"]), Some(2), Some((0.0, 4.75)))
+            .unwrap();
+        assert_eq!(p.book(narrow[0]).unwrap().columns[3].values(), [5.0, 5.0]);
+        assert!(p
+            .frequency_counts(&book_src(&["B"]), Some(3), Some((5.0, 1.0)))
+            .is_err());
+        assert_eq!(p.value_range(&book_src(&["A"])), Some((0.0, 20.0)));
+    }
+
+    #[test]
+    fn interpolation_writes_xy_columns_and_adds_lines_to_the_graph() {
+        let mut p = Project::sample();
+        let (gid, keys) = p
+            .interpolate(&Source::Graph(2), InterpMethod::Spline, 41, None)
+            .unwrap();
+        assert_eq!(gid, 2);
+        assert_eq!(keys.len(), 2, "one result per data curve");
+        let book = p.book(1).unwrap();
+        let layer = p.graph(2).unwrap().first_layer();
+        for key in &keys {
+            assert!(layer.line_only.contains(key) && layer.y_keys.contains(key));
+            let x = book.column(&layer.x_by_y[key]).unwrap();
+            let y = book.column(key).unwrap();
+            assert_eq!((x.data.len(), y.data.len()), (41, 41));
+            assert_eq!((x.data[0].as_str(), x.data[40].as_str()), ("0", "20"));
+            assert!(y.long_name.ends_with("三次样条插值") && y.units == "mV");
+        }
+        // 网格落在原始 X 上（步长 0.5）时，插值结果就是原始数据
+        let y = book.column(&keys[0]).unwrap();
+        assert_eq!(y.data[..5], book.column("B").unwrap().data[..5]);
+
+        let (_, wide) = p
+            .interpolate(&Source::Graph(2), InterpMethod::Linear, 3, Some((-10.0, 30.0)))
+            .unwrap();
+        let x = p
+            .book(1)
+            .unwrap()
+            .column(&p.graph(2).unwrap().first_layer().x_by_y[&wide[0]])
+            .unwrap();
+        assert_eq!(x.data, ["-10", "10", "30"], "custom ranges extrapolate");
+
+        let id = p.new_book();
+        p.book_mut(id).unwrap().columns[0].data = vec!["1".into(), "1".into()];
+        p.book_mut(id).unwrap().columns[1].data = vec!["2".into(), "3".into()];
+        let src = Source::Book {
+            id,
+            selected: vec![],
+            rows: None,
+        };
+        assert!(p
+            .interpolate(&src, InterpMethod::Akima, 10, None)
+            .unwrap_err()
+            .contains("重复"));
     }
 
     #[test]
@@ -608,7 +2056,7 @@ mod tests {
         let mut p = Project::sample();
         let keys = p.smooth(&Source::Graph(2), SmoothMethod::SavitzkyGolay, 7).unwrap();
         assert_eq!(keys.len(), 2);
-        let g = p.graph(2).unwrap();
+        let g = p.graph(2).unwrap().first_layer();
         assert!(keys.iter().all(|k| g.line_only.contains(k) && g.y_keys.contains(k)));
     }
 
