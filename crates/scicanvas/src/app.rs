@@ -570,6 +570,26 @@ impl SciApp {
         };
     }
 
+    /// 当前工作簿导出为 CSV（UTF-8 BOM，Excel 可直接打开，表头含单位，可重新导入）。
+    pub(crate) fn export_csv(&mut self) {
+        let Some(id) = self.active_book() else { return };
+        let Some(book) = self.project.book(id) else { return };
+        let content = scicanvas_core::project_file::book_csv(book);
+        let (name, rows, cols) = (book.name.clone(), book.nrows(), book.columns.len());
+        let Some(path) = rfd::FileDialog::new()
+            .set_title("导出 CSV")
+            .add_filter("CSV 表格", &["csv"])
+            .set_file_name(format!("{name}.csv"))
+            .save_file()
+        else {
+            return;
+        };
+        self.status = match std::fs::write(&path, content) {
+            Ok(()) => format!("已导出 {}（{rows} 行 × {cols} 列）", path.display()),
+            Err(e) => format!("导出失败：{e}"),
+        };
+    }
+
     /// 按 300 dpi 把当前图形复制为位图，可直接粘贴到 Word、PPT。
     pub(crate) fn copy_graph(&mut self) {
         let Some(gid) = self.target_graph() else { return };

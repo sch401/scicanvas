@@ -159,6 +159,10 @@ pub static TABS: &[Tab] = &[
                 items: &[Smalls(&["sort.asc", "sort.desc"])],
             },
             Group {
+                label: "导出",
+                items: &[Smalls(&["book.export_csv"])],
+            },
+            Group {
                 label: "绘图",
                 items: &[Big("plot.linesym"), Smalls(&["plot.line", "plot.scatter", "plot.bar"])],
             },
@@ -241,6 +245,7 @@ const BACKSTAGE_NAV: &[&str] = &[
     "file.saveas",
     "graph.export",
     "graph.export_png",
+    "book.export_csv",
     "project.reset",
     "help.show",
     "app.quit",

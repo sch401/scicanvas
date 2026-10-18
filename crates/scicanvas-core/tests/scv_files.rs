@@ -86,6 +86,22 @@ fn scv_roundtrips_and_unzips_to_readable_tables_and_graphs() {
 }
 
 #[test]
+fn exported_csv_reimports_with_names_units_and_cells() {
+    let p = project();
+    let book = &p.books[0];
+    let text = scicanvas_core::csv::decode(project_file::book_csv(book).as_bytes());
+    let back = scicanvas_core::csv::book_from_table(9, "导入", scicanvas_core::csv::parse_table(&text));
+    assert_eq!(back.columns.len(), book.columns.len());
+    for (a, b) in back.columns.iter().zip(&book.columns) {
+        assert_eq!((&a.long_name, &a.units), (&b.long_name, &b.units));
+        // CSV 去掉单元格首尾空白属于导入行为，比较时同样处理
+        let trimmed: Vec<_> = b.data.iter().map(|s| s.trim().to_owned()).collect();
+        let got: Vec<_> = a.data.iter().map(|s| s.trim().to_owned()).collect();
+        assert_eq!(got, trimmed);
+    }
+}
+
+#[test]
 fn opening_reads_only_project_json_and_rejects_foreign_or_newer_archives() {
     let p = project();
     let json = project_file::to_json(&p).unwrap();

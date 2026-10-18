@@ -313,6 +313,16 @@ fn build() -> Vec<Command> {
             |a| a.export_svg(),
         ),
         c(
+            "book.export_csv",
+            "导出 CSV",
+            "export",
+            "",
+            "文件",
+            "export csv excel table worksheet 表格 工作表",
+            need_book,
+            |a| a.export_csv(),
+        ),
+        c(
             "graph.export_png",
             "导出 PNG",
             "export",

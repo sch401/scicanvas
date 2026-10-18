@@ -741,9 +741,9 @@
   "feature": "导出 CSV",
   "ref": "Exporting Worksheets and Matrices",
   "pri": "P0",
-  "status": "未开始",
-  "how": "",
-  "verify": "往返测试",
+  "status": "已实现待验收",
+  "how": "工作表 → 导出 CSV：UTF-8 BOM、CRLF，表头为“长名称 (单位)”，与 .scv 内的 CSV 同一实现",
+  "verify": "导出后重新导入的往返测试；Excel 打开待人工验收",
   "id": "F068",
   "milestone": "M1 日常够用"
  },
