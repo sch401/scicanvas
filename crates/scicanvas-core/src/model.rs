@@ -370,17 +370,18 @@ impl PlotType {
     }
 }
 
-/// Origin 默认的颜色递增顺序：黑、红、蓝、品红、橄榄、海军蓝……
+/// 默认的颜色递增顺序（Nature 风格的克制色系）：深蓝、砖红、青、紫、中灰、绿……
+/// 相邻颜色同时在色相和明度上拉开，不只靠红绿区分。
 pub const PALETTE: [(u8, u8, u8); 9] = [
-    (0, 0, 0),
-    (255, 0, 0),
-    (0, 0, 255),
-    (255, 0, 255),
-    (128, 128, 0),
-    (0, 0, 128),
-    (128, 0, 255),
-    (0, 128, 128),
-    (128, 0, 0),
+    (15, 77, 146),   // #0F4D92 深蓝
+    (182, 67, 66),   // #B64342 砖红
+    (66, 148, 158),  // #42949E 青
+    (154, 77, 142),  // #9A4D8E 紫
+    (118, 118, 118), // #767676 中灰
+    (46, 158, 68),   // #2E9E44 绿
+    (39, 39, 39),    // #272727 近黑
+    (55, 117, 186),  // #3775BA 中蓝
+    (233, 166, 161), // #E9A6A1 浅砖红
 ];
 
 pub fn palette_hex(i: usize) -> String {
@@ -388,7 +389,7 @@ pub fn palette_hex(i: usize) -> String {
     format!("#{:02x}{:02x}{:02x}", r, g, b)
 }
 
-/// 符号递增顺序：方块、圆、上三角、下三角、菱形……
+/// 符号递增顺序：圆、方块、上三角、下三角、菱形……
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Symbol {
     Square,
@@ -402,8 +403,8 @@ pub enum Symbol {
 }
 
 pub const SYMBOLS: [Symbol; 8] = [
-    Symbol::Square,
     Symbol::Circle,
+    Symbol::Square,
     Symbol::Up,
     Symbol::Down,
     Symbol::Diamond,
@@ -430,13 +431,13 @@ pub struct Series {
     pub source: Option<String>,
 }
 
-/// 拟合 / 平滑曲线的颜色：默认红色；如果它的原始数据本身是红色，改用蓝色。
-pub const FIT_RGB: (u8, u8, u8) = (232, 24, 44);
-pub const FIT_ALT_RGB: (u8, u8, u8) = (31, 111, 229);
+/// 拟合 / 平滑曲线的颜色：默认砖红；如果它的原始数据本身是砖红，改用深蓝。
+pub const FIT_RGB: (u8, u8, u8) = (182, 67, 66);
+pub const FIT_ALT_RGB: (u8, u8, u8) = (15, 77, 146);
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SeriesColor {
-    /// Origin 默认颜色顺序里的第 i 个。
+    /// 默认颜色顺序里的第 i 个。
     Palette(usize),
     Fit,
     FitAlt,
@@ -509,7 +510,7 @@ pub fn series_styles(series: &[Series], plot_type: PlotType) -> Vec<SeriesStyle>
         if s.line_only {
             let src = s.source.as_ref().and_then(|k| by_key.get(k));
             if let Some(&i) = src {
-                if PALETTE[i % PALETTE.len()] == (255, 0, 0) {
+                if PALETTE[i % PALETTE.len()] == FIT_RGB {
                     st.color = SeriesColor::FitAlt;
                 }
             }

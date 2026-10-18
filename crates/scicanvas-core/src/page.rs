@@ -14,8 +14,9 @@ pub struct Page {
 impl Default for Page {
     fn default() -> Self {
         Self {
-            width_mm: 85.0,
-            height_mm: 63.75,
+            // Nature 单栏宽 89 mm，4:3
+            width_mm: 89.0,
+            height_mm: 66.75,
             columns: 1,
             layers: vec![Layer::default()],
         }
@@ -115,8 +116,8 @@ impl Default for Layer {
             y_max: 10.0,
             x_log: false,
             y_log: false,
-            line_width: 1.5,
-            symbol_size: 6.0,
+            line_width: 1.0,
+            symbol_size: 4.5,
             area_opacity: default_area_opacity(),
             error_bars: Default::default(),
             labels: Default::default(),

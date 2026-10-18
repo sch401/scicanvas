@@ -166,7 +166,8 @@ fn area_gaps_and_log_filtered_rows_split_both_fill_and_outline() {
             .items
             .iter()
             .filter_map(|it| match &it.prim {
-                Prim::Polyline { pts, .. } => Some(pts.len()),
+                // 坐标轴本身也是一条黑色折线，这里只数面积边界线
+                Prim::Polyline { pts, color, .. } if *color != scene::INK => Some(pts.len()),
                 _ => None,
             })
             .collect();

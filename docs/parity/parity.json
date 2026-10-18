@@ -1061,7 +1061,7 @@
   "ref": "Axes Dialog Reference",
   "pri": "P0",
   "status": "部分实现",
-  "how": "屏幕/SVG 共用主次刻度与四边框，当前固定朝内；独立刻度方向设置待做",
+  "how": "屏幕/SVG 共用主次刻度；默认 Nature 风格，只画左轴和下轴、刻度朝外；四边框、朝内刻度和独立方向设置待做",
   "verify": "共享 scene、刻度与显示比例回归已通过；方向配置及人工目视验收待做",
   "id": "F097",
   "milestone": "M1 日常够用"
@@ -1223,7 +1223,7 @@
   "ref": "Customizing Data Plot Colors",
   "pri": "P0",
   "status": "已完成",
-  "how": "Origin 默认颜色 / 符号顺序",
+  "how": "Nature 风格默认色系（深蓝、砖红、青、紫……）与圆点优先的符号顺序",
   "verify": "目视比较",
   "id": "F111",
   "milestone": "M1 日常够用"

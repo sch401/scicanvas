@@ -232,7 +232,8 @@ mod tests {
         assert!(svg.ends_with("</svg>"));
         assert!(svg.contains("电压 A"));
         assert!(svg.contains("时间 (s)"));
-        assert!(svg.contains("#ff0000"));
+        // 第二条曲线用默认色板的砖红
+        assert!(svg.contains(&crate::palette_hex(1)));
     }
 
     #[test]
@@ -255,9 +256,21 @@ mod tests {
         let mut p = Project::sample();
         p.fit_poly(&crate::ops::Source::Graph(2), 1).unwrap();
         let svg = render(p.graph(2).unwrap(), p.book(1), 800.0, 600.0);
-        // B 是黑色数据，拟合线红色；C 是红色数据，拟合线改用蓝色
-        assert!(svg.contains("#e8182c"));
-        assert!(svg.contains("#1f6fe5"));
+        // B 是深蓝数据，拟合线用砖红；C 本身是砖红，拟合线改用深蓝，避免和原数据同色
+        let layer = p.graph(2).unwrap().first_layer();
+        let (_, series) = layer.spec.series(p.book(1).unwrap());
+        let styles = crate::series_styles(&series, layer.plot_type);
+        let fit_color = |source: &str| {
+            series
+                .iter()
+                .zip(&styles)
+                .find(|(s, _)| s.line_only && s.source.as_deref() == Some(source))
+                .map(|(_, st)| st.color.rgb())
+                .unwrap()
+        };
+        assert_eq!(fit_color("B"), crate::FIT_RGB);
+        assert_eq!(fit_color("C"), crate::FIT_ALT_RGB);
+        assert_eq!(crate::PALETTE[1], crate::FIT_RGB);
         assert!(svg.contains("电压 A 线性拟合"));
     }
 

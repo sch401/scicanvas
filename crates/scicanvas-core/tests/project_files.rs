@@ -25,6 +25,23 @@ fn old_versions_preserve_data_and_all_four_plot_layouts() {
 }
 
 #[test]
+#[ignore = "Explicit maintainer action; review the SVG diff before committing"]
+fn update_legacy_svg_fixtures() {
+    let mut p = project_file::from_json(V0).unwrap();
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
+    for (kind, name) in [
+        (PlotType::Line, "line"),
+        (PlotType::Scatter, "scatter"),
+        (PlotType::LineSymbol, "linesym"),
+        (PlotType::Bar, "bar"),
+    ] {
+        p.graphs[0].first_layer_mut().plot_type = kind;
+        let svg = svg::render(&p.graphs[0], p.book(1), 800.0, 600.0);
+        std::fs::write(dir.join(format!("legacy-{name}.svg")), svg).unwrap();
+    }
+}
+
+#[test]
 fn unsupported_or_damaged_files_fail_and_stale_allocator_recovers() {
     assert!(project_file::from_json("[").is_err());
     assert!(project_file::from_json("[]").is_err());

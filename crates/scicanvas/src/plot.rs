@@ -585,11 +585,18 @@ mod tests {
                     egui::CentralPanel::default().show(ctx, |ui| paint(ui, rect, &sc));
                 },
             );
+            // 坐标轴是“左轴 + 下轴”的三点折线：先竖直向下，再水平向右。
             let stroke = output
                 .shapes
                 .iter()
                 .find_map(|s| match &s.shape {
-                    Shape::Rect(r) if r.stroke.width > 0.0 => Some(r.stroke.width),
+                    Shape::Path(p)
+                        if p.points.len() == 3
+                            && (p.points[0].x - p.points[1].x).abs() < 1e-3
+                            && (p.points[1].y - p.points[2].y).abs() < 1e-3 =>
+                    {
+                        Some(p.stroke.width)
+                    }
                     _ => None,
                 })
                 .unwrap();

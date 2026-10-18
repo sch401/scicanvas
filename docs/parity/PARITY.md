@@ -142,7 +142,7 @@
 | F094 | 其他坐标类型：倒数、概率、log2、ln、Logit | Axes Dialog Reference | P1 | 未开始 | — | 与 Origin 比较 | — |
 | F095 | 坐标轴断点 | Axes Dialog Reference | P1 | 未开始 | — | 目视比较 | — |
 | F096 | 刻度标签格式（科学计数、日期、自定义） | Axes Dialog Reference | P0 | 部分实现 | ticks.rs 已实现普通数值、a×10ⁿ 科学计数及对数刻度；日期与用户自定义格式待做 | 刻度边界与标签测试已通过；日期/自定义格式待实现 | — |
-| F097 | 次刻度、刻度方向、四边框线 | Axes Dialog Reference | P0 | 部分实现 | 屏幕/SVG 共用主次刻度与四边框，当前固定朝内；独立刻度方向设置待做 | 共享 scene、刻度与显示比例回归已通过；方向配置及人工目视验收待做 | — |
+| F097 | 次刻度、刻度方向、四边框线 | Axes Dialog Reference | P0 | 部分实现 | 屏幕/SVG 共用主次刻度；默认 Nature 风格，只画左轴和下轴、刻度朝外；四边框、朝内刻度和独立方向设置待做 | 共享 scene、刻度与显示比例回归已通过；方向配置及人工目视验收待做 | — |
 | F098 | 网格线 | Axes Dialog Reference | P0 | 已完成 | — | 目视检查 | — |
 | F099 | 图例（自动更新） | Graph Legends | P0 | 已完成 | — | 目视检查 | — |
 | F100 | 图例手动编辑与位置拖动 | Manual Control of the Graph Legend | P1 | 未开始 | — | 手动操作 | — |
@@ -156,7 +156,7 @@
 | F108 | 合并多张图 / 拆分图层 | The Merge Graph Dialog Box | P1 | 未开始 | — | 目视检查 | — |
 | F109 | 图层排列（行列网格、间距） | The Arrange Layers Dialog Box | P0 | 部分实现 | 网格列数、页面尺寸、自由矩形与透明叠放已实现；独立网格间距/对齐配置待做 | 布局、命中、透明背景、迁移与撤销回归已通过；间距配置待实现 | — |
 | F110 | 布局页（多图拼版） | Using the Layout Page Window | P1 | 未开始 | — | 目视检查 | — |
-| F111 | 曲线颜色、线型、符号递增 | Customizing Data Plot Colors | P0 | 已完成 | Origin 默认颜色 / 符号顺序 | 目视比较 | — |
+| F111 | 曲线颜色、线型、符号递增 | Customizing Data Plot Colors | P0 | 已完成 | Nature 风格默认色系（深蓝、砖红、青、紫……）与圆点优先的符号顺序 | 目视比较 | — |
 | F112 | 按数据集控制颜色 / 大小（颜色映射） | Using a Dataset to Control Plot Color | P1 | 未开始 | — | 目视比较 | — |
 | F113 | 绘图属性对话框（Plot Details） | Plot Details Controls | P0 | 部分实现 | 图层级图型、列映射、轴范围、线宽/符号、误差/标签等属性已接入；逐曲线样式和完整分页待做 | 真实属性控件与撤销回归已通过；完整 Plot Details 范围待补齐 | — |
 | F114 | 显示范围（只画部分行） | Editing the Plots Display Range | P1 | 部分实现 | 从工作表选区创建并保存部分行绘图已实现；图形中的独立行范围编辑入口待做 | PlotSpec.rows 截取/保存回归已通过；补齐独立编辑入口后验收 | — |

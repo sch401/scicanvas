@@ -103,7 +103,7 @@ pub fn show(ctx: &egui::Context, project: &Project, draft: &mut Option<PlotSpec>
                     .collect();
                 floating_columns(&mut columns[0], spec, &cols);
                 columns[0].horizontal_wrapped(|ui| {
-                    ui.selectable_value(&mut spec.color_map, ColorMap::Origin, "Origin");
+                    ui.selectable_value(&mut spec.color_map, ColorMap::Origin, "默认");
                     ui.selectable_value(&mut spec.color_map, ColorMap::Viridis, "Viridis");
                     ui.selectable_value(&mut spec.color_map, ColorMap::Colorblind, "色盲友好");
                 });

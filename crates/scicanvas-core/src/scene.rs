@@ -1,8 +1,8 @@
 //! 图形版面：把一张图排成像素坐标下的图元列表。
 //!
 //! 界面上的绘制和 SVG 导出都从这里取图元，所以屏幕上看到的和导出的论文插图完全一致。
-//! 默认是常见的 SCI 期刊风格：白底、四边闭合的黑色坐标框、刻度朝内且四边都有、
-//! 不画网格、图例无边框并自动避开数据。
+//! 默认是 Nature 图稿风格：白底、只保留左轴和下轴、刻度朝外、不画网格、
+//! 无边框图例自动避开数据；按 96 单位 = 1 英寸，常用页宽 89 mm 时文字为 6–7 pt。
 
 use crate::coord::{Cartesian, Coord};
 use crate::model::{series_styles, Book, Graph, PlotType, Symbol};
@@ -16,15 +16,17 @@ pub const PAPER: Rgb = (255, 255, 255);
 const GRID: Rgb = (217, 217, 217);
 const MUTED: Rgb = (136, 136, 136);
 
-/// 坐标框线宽、主刻度 / 次刻度长度（像素）。
-pub const AXIS_WIDTH: f64 = 1.2;
-pub const MAJOR_TICK: f64 = 5.0;
-pub const MINOR_TICK: f64 = 2.8;
-/// 刻度标签、轴标题、图例、图标题的字号。
-pub const TICK_FONT: f64 = 13.0;
-pub const LABEL_FONT: f64 = 14.0;
-pub const LEGEND_FONT: f64 = 12.5;
-pub const TITLE_FONT: f64 = 16.0;
+/// 坐标轴线宽、主刻度 / 次刻度长度（逻辑单位，1 pt = 4/3 单位）：0.75 pt 轴线，刻度朝外。
+pub const AXIS_WIDTH: f64 = 1.0;
+pub const MAJOR_TICK: f64 = 4.0;
+pub const MINOR_TICK: f64 = 2.3;
+/// 刻度标签与轴标题的间距。
+const TICK_GAP: f64 = 3.0;
+/// 刻度标签、轴标题、图例、图标题的字号：约 6.4 pt 与 7 pt，落在 Nature 要求的 5–7 pt 内。
+pub const TICK_FONT: f64 = 8.5;
+pub const LABEL_FONT: f64 = 9.33;
+pub const LEGEND_FONT: f64 = 8.5;
+pub const TITLE_FONT: f64 = 9.33;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Anchor {
@@ -653,17 +655,17 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
         }
     };
 
-    // 版面：刻度朝内，标签紧贴坐标框
+    // 版面：刻度朝外，刻度标签和轴标题依次排在左轴、下轴外侧
     let ylab_w = ya
         .ticks
         .iter()
         .map(|t| text_width(&format_tick(*t), TICK_FONT))
-        .fold(14.0, f64::max);
+        .fold(8.0, f64::max);
     let has_title = !g.title.trim().is_empty();
-    let left = (ylab_w + 36.0).round();
-    let right = 18.0;
-    let top = if has_title { 40.0 } else { 16.0 };
-    let bottom = 50.0;
+    let left = (MAJOR_TICK + TICK_GAP + ylab_w + 5.0 + LABEL_FONT + 4.0).round();
+    let right = 14.0;
+    let top = if has_title { 12.0 + TITLE_FONT + 6.0 } else { 10.0 };
+    let bottom = (MAJOR_TICK + TICK_GAP + TICK_FONT + 5.0 + LABEL_FONT + 5.0).round();
     let pw = (w - left - right).max(20.0);
     let ph = (h - top - bottom).max(20.0);
     let coord = Cartesian {
@@ -775,7 +777,7 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
                         w: (b[0] - a[0]).abs(),
                         h: (a[1] - b[1]).abs(),
                         fill: Some((color, 1.0)),
-                        stroke: Some((INK, 0.8)),
+                        stroke: Some((INK, 0.5)),
                     },
                     true,
                 );
@@ -1034,32 +1036,28 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
         }
     }
 
-    // 坐标框：四边闭合
+    // 坐标轴：只画左轴和下轴（Nature 风格，不闭合）
     let data_end = push(
-        Prim::Rect {
-            x: left,
-            y: top,
-            w: pw,
-            h: ph,
-            fill: None,
-            stroke: Some((INK, AXIS_WIDTH)),
+        Prim::Polyline {
+            pts: vec![[left, top], [left, top + ph], [left + pw, top + ph]],
+            color: INK,
+            width: AXIS_WIDTH,
         },
         false,
     ) - 1;
 
-    // 刻度：四边都有，朝内；标签只在下边和左边
+    // 刻度：只在左轴和下轴，朝外
     let mut ticks = Vec::new();
     for t in &xa.ticks {
         let x = px(*t);
         if !inside_x(x) {
             continue;
         }
-        ticks.push([x, top + ph, x, top + ph - MAJOR_TICK]);
-        ticks.push([x, top, x, top + MAJOR_TICK]);
+        ticks.push([x, top + ph, x, top + ph + MAJOR_TICK]);
         push(
             text(
                 x,
-                top + ph + 6.0 + TICK_FONT / 2.0,
+                top + ph + MAJOR_TICK + TICK_GAP + TICK_FONT / 2.0,
                 format_tick(*t),
                 TICK_FONT,
                 Anchor::Middle,
@@ -1070,8 +1068,7 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
     for t in &xa.minor {
         let x = px(*t);
         if x > left && x < left + pw {
-            ticks.push([x, top + ph, x, top + ph - MINOR_TICK]);
-            ticks.push([x, top, x, top + MINOR_TICK]);
+            ticks.push([x, top + ph, x, top + ph + MINOR_TICK]);
         }
     }
     for t in &ya.ticks {
@@ -1079,15 +1076,16 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
         if !inside_y(y) {
             continue;
         }
-        ticks.push([left, y, left + MAJOR_TICK, y]);
-        ticks.push([left + pw, y, left + pw - MAJOR_TICK, y]);
-        push(text(left - 6.0, y, format_tick(*t), TICK_FONT, Anchor::End), false);
+        ticks.push([left, y, left - MAJOR_TICK, y]);
+        push(
+            text(left - MAJOR_TICK - TICK_GAP, y, format_tick(*t), TICK_FONT, Anchor::End),
+            false,
+        );
     }
     for t in &ya.minor {
         let y = py(*t);
         if y > top && y < top + ph {
-            ticks.push([left, y, left + MINOR_TICK, y]);
-            ticks.push([left + pw, y, left + pw - MINOR_TICK, y]);
+            ticks.push([left, y, left - MINOR_TICK, y]);
         }
     }
     push(
@@ -1104,7 +1102,7 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
     push(
         text(
             left + pw / 2.0,
-            top + ph + 6.0 + TICK_FONT + 6.0 + LABEL_FONT / 2.0,
+            top + ph + MAJOR_TICK + TICK_GAP + TICK_FONT + 5.0 + LABEL_FONT / 2.0,
             g.x_axis_title(book),
             LABEL_FONT,
             Anchor::Middle,
@@ -1113,7 +1111,7 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
     );
     push(
         Prim::Text {
-            x: left - 6.0 - ylab_w - 8.0 - LABEL_FONT / 2.0,
+            x: left - MAJOR_TICK - TICK_GAP - ylab_w - 5.0 - LABEL_FONT / 2.0,
             y: top + ph / 2.0,
             text: g.y_axis_title(book),
             size: LABEL_FONT,
@@ -1128,7 +1126,7 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
         push(
             Prim::Text {
                 x: left + pw / 2.0,
-                y: top / 2.0,
+                y: 6.0 + TITLE_FONT / 2.0,
                 text: g.title.clone(),
                 size: TITLE_FONT,
                 anchor: Anchor::Middle,
@@ -1142,8 +1140,8 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
 
     // 图例：坐标框内，白底无边框
     if g.legend && !series.is_empty() {
-        let lh = LEGEND_FONT + 6.0;
-        let sw = 26.0;
+        let lh = LEGEND_FONT + 4.0;
+        let sw = 18.0;
         let lw = series
             .iter()
             .map(|s| text_width(&s.name, LEGEND_FONT))
@@ -1180,10 +1178,10 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
             let x0 = lx + 4.0;
             if st.kind.is_bar() || st.kind == PlotType::Area {
                 push(Prim::Rect {
-                    x: x0 + 5.0,
-                    y: cy - 5.5,
-                    w: sw - 10.0,
-                    h: 11.0,
+                    x: x0 + 4.0,
+                    y: cy - 3.5,
+                    w: sw - 8.0,
+                    h: 7.0,
                     fill: Some((
                         color,
                         if st.kind == PlotType::Area {
@@ -1192,7 +1190,7 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
                             1.0
                         },
                     )),
-                    stroke: Some((INK, 0.8)),
+                    stroke: Some((INK, 0.5)),
                 });
             } else {
                 if st.kind.has_line() {
@@ -1211,7 +1209,7 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
                     });
                 }
             }
-            push(text(x0 + sw + 6.0, cy, s.name.clone(), LEGEND_FONT, Anchor::Start));
+            push(text(x0 + sw + 4.0, cy, s.name.clone(), LEGEND_FONT, Anchor::Start));
         }
     }
 
@@ -1238,14 +1236,22 @@ mod tests {
     use crate::model::Project;
 
     #[test]
-    fn inward_ticks_and_closed_frame() {
+    fn outward_ticks_on_left_and_bottom_axes_only() {
         let p = Project::sample();
         let sc = build(p.graph(2).unwrap(), p.book(1), 800.0, 600.0, None);
         let [l, t, w, h] = sc.plot;
-        // 坐标框是闭合矩形
-        assert!(sc.items.iter().any(|i| matches!(i.prim,
-            Prim::Rect { x, y, w: rw, h: rh, fill: None, stroke: Some(_) } if x == l && y == t && rw == w && rh == h)));
-        // 所有刻度线都在坐标框以内（朝内）
+        // 只有左轴和下轴：一条三点折线，没有闭合的坐标框
+        assert!(sc.items.iter().any(|i| matches!(&i.prim,
+            Prim::Polyline { pts, color, .. } if *color == INK && *pts == vec![[l, t], [l, t + h], [l + w, t + h]])));
+        assert!(!sc.items.iter().any(|i| matches!(
+            i.prim,
+            Prim::Rect {
+                fill: None,
+                stroke: Some(_),
+                ..
+            }
+        )));
+        // 刻度朝外：一端在左轴或下轴上，另一端在坐标框外；上边和右边没有刻度
         let segs: Vec<[f64; 4]> = sc
             .items
             .iter()
@@ -1259,9 +1265,13 @@ mod tests {
             .collect();
         assert!(!segs.is_empty());
         for s in segs {
-            for (x, y) in [(s[0], s[1]), (s[2], s[3])] {
-                assert!(x >= l - 1e-9 && x <= l + w + 1e-9 && y >= t - 1e-9 && y <= t + h + 1e-9);
-            }
+            let bottom = s[1] == t + h && s[3] > t + h && s[0] == s[2] && s[0] >= l - 1e-9 && s[0] <= l + w + 1e-9;
+            let left = s[0] == l && s[2] < l && s[1] == s[3] && s[1] >= t - 1e-9 && s[1] <= t + h + 1e-9;
+            assert!(
+                bottom || left,
+                "tick {s:?} should point outward from the left or bottom axis"
+            );
+            assert!(s[3] - s[1] <= MAJOR_TICK + 1e-9 && s[0] - s[2] <= MAJOR_TICK + 1e-9);
         }
     }
 

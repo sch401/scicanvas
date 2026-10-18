@@ -45,8 +45,8 @@ fn sample(kind: PlotType, book_name: &str, columns: Vec<Spec>) -> Project {
     p
 }
 
-/// 调整图层：轴标题概括多列数据；柱子占满坐标框时手动留出放图例的空白，
-/// 阶梯图留出顶部余量，最高一段不和坐标框重合。
+/// 调整图层：轴标题概括多列数据；阶梯图留出顶部余量，最高一段不贴着坐标框顶边；
+/// 百分比堆叠把 0–100 填满，横向留出放图例的位置。
 fn layer(mut p: Project, f: impl FnOnce(&mut Layer)) -> Project {
     f(p.graphs[0].first_layer_mut());
     p
@@ -162,10 +162,7 @@ fn samples() -> Vec<(String, Project)> {
                     ),
                 ],
             ),
-            |l| {
-                l.y_title = "产率 (%)".into();
-                range(l, None, Some((0.0, 120.0)));
-            },
+            |l| l.y_title = "产率 (%)".into(),
         ),
         layer(
             sample(
@@ -196,10 +193,7 @@ fn samples() -> Vec<(String, Project)> {
                     ),
                 ],
             ),
-            |l| {
-                l.y_title = "发电量 (TWh)".into();
-                range(l, Some((2019.0, 2030.0)), Some((0.0, 1000.0)));
-            },
+            |l| l.y_title = "发电量 (TWh)".into(),
         ),
         layer(
             sample(
@@ -218,7 +212,7 @@ fn samples() -> Vec<(String, Project)> {
                     (Y, "总磷", "mg/L", "Y 列", list(&[8.0, 6.5, 12.0, 5.0, 9.5])),
                 ],
             ),
-            |l| range(l, Some((0.0, 9.0)), None),
+            |l| range(l, Some((0.0, 8.0)), None),
         ),
         layer(
             sample(
