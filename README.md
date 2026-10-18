@@ -110,7 +110,9 @@ crates/
     scene.rs        图形版面：坐标框、刻度、曲线、图例排成图元，界面绘制和 SVG 导出共用
     svg.rs          SVG 导出
   scicanvas/        桌面界面（eframe + egui）
-    app.rs          项目管理器、子窗口、工作表、图形、各命令背后的操作
+    app.rs          应用状态、界面调度、图形属性与分析操作
+    app/workspace.rs 项目管理器、对象操作与子窗口
+    app/worksheet.rs 工作表绘制、选区、键盘编辑与列操作
     builder.rs      拖放 X/Y 映射、当前数据图库与预览
     commands.rs     命令注册表
     ribbon.rs       功能区、文件页、命令面板
