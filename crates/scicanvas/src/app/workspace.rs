@@ -3,6 +3,38 @@
 use super::*;
 
 impl SciApp {
+    pub(crate) fn open_plot_example(&mut self, kind: PlotType) {
+        let example = crate::examples::ALL.iter().find(|e| e.kind == kind).unwrap();
+        let mut sample = match scicanvas_core::project_file::from_scv(example.bytes) {
+            Ok(project) => project,
+            Err(error) => {
+                self.status = format!("打开示例失败：{error}");
+                return;
+            }
+        };
+        let mut book = sample.books.remove(0);
+        let mut graph = sample.graphs.remove(0);
+        let parent = self.current_folder();
+        book.id = self.project.alloc_id();
+        book.name = self.project.unique_name(&format!("{}示例数据", kind.label()));
+        graph.id = self.project.alloc_id();
+        graph.name = self.project.unique_name(&format!("{}示例", kind.label()));
+        for layer in graph.page.layers_mut() {
+            layer.book_id = Some(book.id);
+        }
+        let (book_id, graph_id) = (book.id, graph.id);
+        self.project.books.push(book);
+        self.project.graphs.push(graph);
+        for id in [book_id, graph_id] {
+            self.project.move_project_item(id, parent).unwrap();
+            self.show_item(id);
+        }
+        self.status = format!(
+            "已打开{}示例；查看数据表的注释行了解各列用法，可撤销本次添加",
+            kind.label()
+        );
+    }
+
     pub(super) fn show_item(&mut self, id: u64) {
         self.explorer_target = Some(id);
         self.project_name = self.project.name_of(id).unwrap_or("").to_string();

@@ -2377,6 +2377,101 @@ mod history_tests {
         assert_eq!(app.project, after);
     }
 
+    #[test]
+    fn embedded_plot_examples_preserve_current_project_and_undo_as_one_step() {
+        assert_eq!(crate::examples::ALL.len(), PlotType::ALL.len());
+        for kind in PlotType::ALL {
+            let example = crate::examples::ALL.iter().find(|e| e.kind == kind).unwrap();
+            assert!(commands::find(example.plot_command).is_some());
+            let mut app = app();
+            let folder = app.project.add_folder(None).unwrap();
+            app.explorer_target = Some(folder);
+            app.project_path = Some(PathBuf::from("user-project.scv"));
+            let before = app.project.clone();
+            app.run_command(example.command);
+            assert_eq!(&app.project.books[..before.books.len()], &before.books);
+            assert_eq!(&app.project.graphs[..before.graphs.len()], &before.graphs);
+            let book = app.project.books.last().unwrap();
+            let graph = app.project.graphs.last().unwrap();
+            assert_eq!(graph.first_layer().plot_type, kind);
+            assert_eq!(graph.first_layer().book_id, Some(book.id));
+            assert_eq!(app.project.folder_of(book.id), Some(folder));
+            assert_eq!(app.project.folder_of(graph.id), Some(folder));
+            assert!(book.columns.iter().any(|c| !c.comment.is_empty()));
+            assert_eq!(app.active, Some(graph.id));
+            assert_eq!(app.project_path, Some(PathBuf::from("user-project.scv")));
+            scicanvas_core::project_file::to_scv(&app.project).unwrap();
+            roundtrip(&mut app, &before);
+            app.run_command(example.command);
+            let names: Vec<_> = app.project.books.iter().map(|b| &b.name).collect();
+            assert_ne!(names[names.len() - 1], names[names.len() - 2]);
+        }
+    }
+
+    #[test]
+    fn ribbon_hover_example_button_is_clickable_even_without_plot_data() {
+        for empty in [false, true] {
+            let mut app = app();
+            if empty {
+                app.load_project(Project::default(), None);
+            }
+            let ctx = egui::Context::default();
+            crate::fonts::setup(&ctx);
+            ctx.style_mut(|s| s.interaction.tooltip_delay = 0.0);
+            let mut state = UiState::default();
+            state.tab = "plot";
+            let mut time = 0.0;
+            let mut frame = |events| {
+                time += 0.02;
+                let mut clicked = None;
+                let output = ctx.run(
+                    egui::RawInput {
+                        time: Some(time),
+                        screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1800.0, 600.0))),
+                        events,
+                        ..Default::default()
+                    },
+                    |ctx| ribbon::show(ctx, &app, &mut state, &app.pal, &mut clicked),
+                );
+                (output, clicked)
+            };
+            let at = |out: &egui::FullOutput, label: &str| {
+                out.shapes
+                    .iter()
+                    .find_map(|s| match &s.shape {
+                        egui::Shape::Text(t) if t.galley.job.text == label => Some(t.pos + egui::vec2(5.0, 5.0)),
+                        _ => None,
+                    })
+                    .unwrap_or_else(|| panic!("missing label {label}"))
+            };
+            frame(vec![]);
+            let tile = at(&frame(vec![]).0, "折线图");
+            frame(vec![egui::Event::PointerMoved(tile)]);
+            frame(vec![]);
+            let output = frame(vec![]).0;
+            let button = at(&output, "打开示例");
+            let hovered = frame(vec![egui::Event::PointerMoved(button)]).0;
+            let button = at(&hovered, "打开示例");
+            frame(vec![egui::Event::PointerMoved(button)]);
+            let mut command = None;
+            for pressed in [true, false] {
+                let (_, clicked) = frame(vec![egui::Event::PointerButton {
+                    pos: button,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: egui::Modifiers::NONE,
+                }]);
+                command = command.or(clicked);
+            }
+            assert_eq!(command, Some("example.line"));
+            app.run_command(command.unwrap());
+            assert_eq!(
+                app.project.graphs.last().unwrap().first_layer().plot_type,
+                PlotType::Line
+            );
+        }
+    }
+
     struct ExplorerUi {
         ctx: egui::Context,
         time: f64,

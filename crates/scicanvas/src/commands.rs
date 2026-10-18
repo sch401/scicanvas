@@ -144,7 +144,7 @@ impl Command {
 }
 
 fn build() -> Vec<Command> {
-    vec![
+    let mut commands = vec![
         // 文件
         c(
             "project.folder.new",
@@ -1251,7 +1251,21 @@ fn build() -> Vec<Command> {
             always,
             |a| a.ui.toggle_collapsed(),
         ),
-    ]
+    ];
+    commands.extend(crate::examples::ALL.iter().map(|example| {
+        c(
+            example.command,
+            example.label,
+            "book",
+            "",
+            "图型示例",
+            "example 示例 用法",
+            always,
+            example.run,
+        )
+        .modifies()
+    }));
+    commands
 }
 
 pub fn commands() -> &'static [Command] {

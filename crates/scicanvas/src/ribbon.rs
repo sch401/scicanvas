@@ -527,7 +527,7 @@ fn group(ui: &mut egui::Ui, app: &SciApp, g: &Group, pal: &Palette, clicked: &mu
                                 ui.horizontal(|ui| {
                                     for id in *ids {
                                         if let Some(c) = commands::find(id) {
-                                            if gallery_tile(ui, app, c, pal).clicked() {
+                                            if gallery_tile(ui, app, c, pal, clicked).clicked() {
                                                 *clicked = Some(c.id);
                                             }
                                         }
@@ -615,7 +615,13 @@ fn small_button(ui: &mut egui::Ui, app: &SciApp, c: &Command, pal: &Palette) -> 
     resp.on_hover_text(commands::tooltip(app, c))
 }
 
-fn gallery_tile(ui: &mut egui::Ui, app: &SciApp, c: &Command, pal: &Palette) -> egui::Response {
+fn gallery_tile(
+    ui: &mut egui::Ui,
+    app: &SciApp,
+    c: &Command,
+    pal: &Palette,
+    clicked: &mut Option<&'static str>,
+) -> egui::Response {
     let enabled = (c.when)(app).is_ok();
     let (rect, resp) = ui.allocate_exact_size(vec2(72.0, 62.0), if enabled { Sense::click() } else { Sense::hover() });
     button_bg(ui, rect, &resp, enabled, false, pal);
@@ -629,7 +635,21 @@ fn gallery_tile(ui: &mut egui::Ui, app: &SciApp, c: &Command, pal: &Palette) -> 
         FontId::proportional(11.5),
         text_color(enabled, pal),
     );
-    resp.on_hover_text(commands::tooltip(app, c))
+    resp.on_hover_ui(|ui| {
+        ui.set_max_width(300.0);
+        ui.strong(c.label);
+        if let Some(example) = crate::examples::ALL.iter().find(|e| e.plot_command == c.id) {
+            ui.label(example.description);
+            ui.separator();
+            ui.label("示例包含数据表和图形，表格注释行说明各列用途。");
+            if ui.button("打开示例").clicked() {
+                *clicked = Some(example.command);
+            }
+        }
+        if let Err(reason) = (c.when)(app) {
+            ui.label(reason);
+        }
+    })
 }
 
 fn icon_button(ui: &mut egui::Ui, app: &SciApp, c: &Command, dark: bool, pal: &Palette, size: f32) -> egui::Response {
