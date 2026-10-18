@@ -4,7 +4,7 @@ use eframe::egui::{self, Align2, RichText};
 use scicanvas_core::analysis::{NormalizeMethod, SmoothMethod};
 use scicanvas_core::fmt_num;
 use scicanvas_core::interpolate::InterpMethod;
-use scicanvas_core::ops::{AreaReport, FitReport};
+use scicanvas_core::ops::{AreaReport, ColumnOp, FitReport};
 use scicanvas_core::stats::{TTest, TTestKind};
 
 use crate::theme::Palette;
@@ -29,6 +29,14 @@ pub enum Dialog {
         custom: bool,
         from: f64,
         to: f64,
+    },
+    /// 列运算：A 与 B 的列名（只选一列时 B 为空，只能用常数）、运算符和常数。
+    ColumnMath {
+        a: String,
+        b: Option<String>,
+        op: ColumnOp,
+        use_constant: bool,
+        constant: f64,
     },
     /// 频数统计：区间数（自动时按 Sturges 规则）和统计范围（默认是数据范围）。
     Frequency {
@@ -69,6 +77,8 @@ pub enum Action {
     Interpolate(InterpMethod, usize, Option<(f64, f64)>),
     TTest(TTestKind, f64),
     Frequency(Option<usize>, Option<(f64, f64)>),
+    /// 运算符，以及常数（为空时用列 B）。
+    ColumnMath(ColumnOp, Option<f64>),
 }
 
 /// t 检验报告的行（标签、各组或总体的值），供窗口和复制共用。
@@ -343,6 +353,46 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                 let (ok, cancel) = buttons(ui, "插值");
                 if ok && valid {
                     action = Action::Interpolate(*method, *points, custom.then_some((*from, *to)));
+                } else if cancel {
+                    action = Action::Close;
+                }
+            });
+        }
+        Dialog::ColumnMath {
+            a,
+            b,
+            op,
+            use_constant,
+            constant,
+        } => {
+            window("列运算").show(ctx, |ui| {
+                if b.is_none() {
+                    *use_constant = true;
+                }
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(a.as_str()).strong());
+                    for o in ColumnOp::ALL {
+                        ui.selectable_value(op, o, o.symbol());
+                    }
+                    if *use_constant {
+                        ui.add(egui::DragValue::new(constant).speed(0.1));
+                    } else if let Some(b) = b.as_ref() {
+                        ui.label(RichText::new(b.as_str()).strong());
+                    }
+                });
+                ui.add_enabled_ui(b.is_some(), |ui| {
+                    ui.checkbox(use_constant, "用常数代替第二列");
+                });
+                ui.label(
+                    RichText::new(
+                        "结果写成新列放在第一列右边。两列对应不同的 X 列时（如原始曲线减拟合曲线），\n先把第二列按线性插值到第一列的 X 上；除以 0 或缺失值处留空。\n只选一列时与常数运算，选两列时按点选顺序。",
+                    )
+                    .small()
+                    .color(pal.weak),
+                );
+                let (ok, cancel) = buttons(ui, "计算");
+                if ok {
+                    action = Action::ColumnMath(*op, use_constant.then_some(*constant));
                 } else if cancel {
                     action = Action::Close;
                 }

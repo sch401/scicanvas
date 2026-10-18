@@ -128,7 +128,7 @@ pub static TABS: &[Tab] = &[
                 label: "数学",
                 items: &[
                     Smalls(&["math.smooth", "math.diff", "math.integ"]),
-                    Smalls(&["math.norm", "math.interp"]),
+                    Smalls(&["math.norm", "math.interp", "math.colmath"]),
                 ],
             },
         ],

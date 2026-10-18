@@ -8,6 +8,55 @@ use crate::model::{fmt_num, parse_num, Book, Column, Graph, PlotType, Project, R
 /// 统计类操作选中的数据：工作簿编号、列标识和可选的行范围。
 type Picked = (u64, Vec<String>, Option<(usize, usize)>);
 
+/// 列运算的运算符。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ColumnOp {
+    Add,
+    Sub,
+    Mul,
+    Div,
+}
+
+impl ColumnOp {
+    pub const ALL: [ColumnOp; 4] = [ColumnOp::Add, ColumnOp::Sub, ColumnOp::Mul, ColumnOp::Div];
+
+    pub fn symbol(self) -> &'static str {
+        match self {
+            ColumnOp::Add => "+",
+            ColumnOp::Sub => "−",
+            ColumnOp::Mul => "×",
+            ColumnOp::Div => "÷",
+        }
+    }
+
+    fn apply(self, a: f64, b: f64) -> f64 {
+        match self {
+            ColumnOp::Add => a + b,
+            ColumnOp::Sub => a - b,
+            ColumnOp::Mul => a * b,
+            ColumnOp::Div => a / b,
+        }
+    }
+
+    /// 结果单位：加减保持 A 的单位，乘除组合两边的单位。
+    fn units(self, a: &str, b: &str) -> String {
+        match (self, a.is_empty(), b.is_empty()) {
+            (ColumnOp::Add | ColumnOp::Sub, _, _) | (_, _, true) => a.to_string(),
+            (ColumnOp::Mul, true, false) => b.to_string(),
+            (ColumnOp::Mul, false, false) => format!("{a}·{b}"),
+            (_, true, false) => format!("1/{b}"),
+            _ => format!("{a}/{b}"),
+        }
+    }
+}
+
+/// 列运算的第二个操作数。
+#[derive(Clone, Debug, PartialEq)]
+pub enum Operand {
+    Column(String),
+    Constant(f64),
+}
+
 /// 分析的输入来自哪里。
 #[derive(Clone, Debug, PartialEq)]
 pub enum Source {
@@ -606,6 +655,89 @@ impl Project {
         Ok(id)
     }
 
+    /// 列运算：A op B，结果写成新列放在 A 右边。B 与 A 对应同一 X 列时逐行计算；
+    /// 对应不同 X 列时（如原始曲线减拟合曲线）先把 B 线性插值到 A 的 X 上，超出 B 的 X 范围处留空。
+    /// 结果不是有限数（除以 0、缺失值）的单元格留空。
+    pub fn column_math(&mut self, book_id: u64, a: &str, op: ColumnOp, b: &Operand) -> Result<String, String> {
+        let book = self.book(book_id).ok_or("找不到工作簿")?;
+        let ca = book.column(a).ok_or("找不到列 A")?;
+        let av = ca.values();
+        let (bv, b_name, b_units, note) = match b {
+            Operand::Constant(c) => {
+                if !c.is_finite() {
+                    return Err("常数必须是有限数".into());
+                }
+                (vec![*c; av.len()], fmt_num(*c), String::new(), String::new())
+            }
+            Operand::Column(k) => {
+                let cb = book.column(k).ok_or("找不到列 B")?;
+                let (xa, xb) = (x_for(book, ca, &[]), x_for(book, cb, &[]));
+                let values = if xa == xb {
+                    let mut v = cb.values();
+                    v.resize(av.len(), f64::NAN);
+                    v
+                } else {
+                    let item = Item {
+                        y: k.clone(),
+                        x: xb.clone(),
+                        rows: None,
+                    };
+                    let (xs, ys, _) = get_xy(book, &item);
+                    let lo = xs.iter().copied().fold(f64::INFINITY, f64::min);
+                    let hi = xs.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                    let ax: Vec<f64> = match xa.as_deref().and_then(|x| book.column(x)) {
+                        Some(c) => {
+                            let mut v = c.values();
+                            v.resize(av.len(), f64::NAN);
+                            v
+                        }
+                        None => (1..=av.len()).map(|i| i as f64).collect(),
+                    };
+                    let inside: Vec<f64> = ax.iter().map(|x| if *x >= lo && *x <= hi { *x } else { 0.0 }).collect();
+                    let at = interpolate::interpolate(&xs, &ys, InterpMethod::Linear, &inside)
+                        .map_err(|e| format!("列 B 无法插值到 A 的 X 上：{e}"))?;
+                    ax.iter()
+                        .zip(at)
+                        .map(|(x, y)| if *x >= lo && *x <= hi { y } else { f64::NAN })
+                        .collect()
+                };
+                let note = if xa == xb {
+                    String::new()
+                } else {
+                    format!("；{} 按线性插值到 {} 的 X 上", cb.display_name(), ca.display_name())
+                };
+                (values, cb.display_name().to_owned(), cb.units.clone(), note)
+            }
+        };
+        let mut data: Vec<String> = av
+            .iter()
+            .zip(&bv)
+            .map(|(x, y)| {
+                let r = op.apply(*x, *y);
+                if r.is_finite() {
+                    fmt_num(r)
+                } else {
+                    String::new()
+                }
+            })
+            .collect();
+        while data.last().is_some_and(|s| s.is_empty()) {
+            data.pop();
+        }
+        if data.is_empty() {
+            return Err("运算结果没有有效数值".into());
+        }
+        let name = format!("{} {} {}", ca.display_name(), op.symbol(), b_name);
+        let mut col = Column::new("", if ca.role == Role::X { Role::Y } else { ca.role });
+        col.units = op.units(&ca.units, &b_units);
+        col.comment = format!("列运算 {name}{note}");
+        col.long_name = name;
+        col.data = data;
+        let a = a.to_string();
+        self.insert_result_column(book_id, &a, col)
+            .ok_or_else(|| "无法写入结果列".into())
+    }
+
     /// 统计类操作选中列的数值范围（频数统计对话框的默认范围）。
     pub fn value_range(&self, src: &Source) -> Option<(f64, f64)> {
         let (book_id, keys, rows) = self.picked_columns(src).ok()?;
@@ -807,6 +939,92 @@ mod tests {
             rows: None,
         };
         assert!(p.fit_poly(&src, 1).unwrap_err().contains("至少需要 3 个点"));
+    }
+
+    #[test]
+    fn column_math_works_row_by_row_with_constants_and_units() {
+        let mut p = Project::sample();
+        let key = p
+            .column_math(1, "B", ColumnOp::Sub, &Operand::Column("C".into()))
+            .unwrap();
+        let book = p.book(1).unwrap();
+        assert_eq!(book.column_index(&key), Some(2), "result sits right of A");
+        let (b, c, r) = (
+            book.column("B").unwrap(),
+            book.column("C").unwrap(),
+            book.column(&key).unwrap(),
+        );
+        assert_eq!(
+            (r.long_name.as_str(), r.units.as_str(), r.role),
+            ("电压 A − 电压 B", "mV", Role::Y)
+        );
+        for i in [0, 7, 40] {
+            let want = b.values()[i] - c.values()[i];
+            assert!((r.values()[i] - want).abs() < 1e-9);
+        }
+
+        let twice = p.column_math(1, "B", ColumnOp::Mul, &Operand::Constant(2.0)).unwrap();
+        let book = p.book(1).unwrap();
+        assert_eq!(
+            book.column(&twice).unwrap().values()[0],
+            2.0 * book.column("B").unwrap().values()[0]
+        );
+        assert_eq!(book.column(&twice).unwrap().units, "mV");
+        let sq = p
+            .column_math(1, "B", ColumnOp::Mul, &Operand::Column("C".into()))
+            .unwrap();
+        let ratio = p
+            .column_math(1, "B", ColumnOp::Div, &Operand::Column("A".into()))
+            .unwrap();
+        let book = p.book(1).unwrap();
+        assert_eq!(book.column(&sq).unwrap().units, "mV·mV");
+        assert_eq!(book.column(&ratio).unwrap().units, "mV/s");
+        // 第 0 行 A = 0，B ÷ A 不是有限数，留空
+        assert_eq!(book.column(&ratio).unwrap().data[0], "");
+        assert!(p
+            .column_math(1, "B", ColumnOp::Div, &Operand::Constant(0.0))
+            .unwrap_err()
+            .contains("没有有效数值"));
+        assert!(p
+            .column_math(1, "B", ColumnOp::Add, &Operand::Constant(f64::NAN))
+            .is_err());
+    }
+
+    #[test]
+    fn subtracting_a_curve_on_another_x_grid_interpolates_it_first() {
+        let mut p = Project::sample();
+        let (_, reports) = p.fit_poly(&book_src(&["B"]), 1).unwrap();
+        let fit = &reports[0].fit;
+        let book = p.book(1).unwrap();
+        let fit_y = book
+            .columns
+            .iter()
+            .find(|c| c.long_name.ends_with("线性拟合"))
+            .unwrap()
+            .key
+            .clone();
+        let key = p.column_math(1, "B", ColumnOp::Sub, &Operand::Column(fit_y)).unwrap();
+        let book = p.book(1).unwrap();
+        let r = book.column(&key).unwrap();
+        assert!(r.comment.contains("线性插值"));
+        // 直线的线性插值是精确的，所以差值就是拟合残差
+        let (x, b) = (book.column("A").unwrap().values(), book.column("B").unwrap().values());
+        for i in 0..x.len() {
+            let want = b[i] - fit.eval(x[i]);
+            assert!((r.values()[i] - want).abs() < 1e-5, "row {i}");
+        }
+
+        // B 的 X 范围之外留空
+        let id = p.new_book();
+        let short = p.book_mut(id).unwrap();
+        short.columns[0].data = ["0", "1", "2", "3"].map(String::from).to_vec();
+        short.columns[1].data = ["1", "1", "1", "1"].map(String::from).to_vec();
+        let x2 = short.push_column(Role::X);
+        let y2 = short.push_column(Role::Y);
+        short.columns.iter_mut().find(|c| c.key == x2).unwrap().data = ["1.5", "2.5"].map(String::from).to_vec();
+        short.columns.iter_mut().find(|c| c.key == y2).unwrap().data = ["10", "20"].map(String::from).to_vec();
+        let key = p.column_math(id, "B", ColumnOp::Add, &Operand::Column(y2)).unwrap();
+        assert_eq!(p.book(id).unwrap().column(&key).unwrap().data, ["", "", "16"]);
     }
 
     #[test]

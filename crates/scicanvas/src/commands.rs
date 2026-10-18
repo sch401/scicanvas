@@ -886,6 +886,16 @@ fn build() -> Vec<Command> {
             |a| a.open_smooth_dialog(),
         ),
         c(
+            "math.colmath",
+            "列运算",
+            "colins",
+            "",
+            "分析",
+            "column arithmetic add subtract multiply divide curve subtract 列运算 加减乘除 曲线相减",
+            need_book,
+            |a| a.open_column_math_dialog(),
+        ),
+        c(
             "math.interp",
             "插值",
             "smooth",

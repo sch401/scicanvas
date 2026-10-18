@@ -1264,6 +1264,42 @@ impl SciApp {
         });
     }
 
+    pub(crate) fn open_column_math_dialog(&mut self) {
+        let Some((id, keys)) = self.ttest_columns() else { return };
+        let Some(book) = self.project.book(id) else { return };
+        let name = |k: Option<&String>| k.and_then(|k| book.column(k)).map(|c| c.display_name().to_owned());
+        let Some(a) = name(keys.first()) else {
+            self.status = "请先单击列标题选中一列或两列".into();
+            return;
+        };
+        let b = name(keys.get(1));
+        self.dialog = Some(Dialog::ColumnMath {
+            a,
+            use_constant: b.is_none(),
+            b,
+            op: scicanvas_core::ops::ColumnOp::Sub,
+            constant: 1.0,
+        });
+    }
+
+    fn column_math(&mut self, op: scicanvas_core::ops::ColumnOp, constant: Option<f64>) {
+        use scicanvas_core::ops::Operand;
+        let Some((id, keys)) = self.ttest_columns() else { return };
+        let Some(a) = keys.first().cloned() else { return };
+        let operand = match (constant, keys.get(1)) {
+            (Some(c), _) => Operand::Constant(c),
+            (None, Some(b)) => Operand::Column(b.clone()),
+            (None, None) => {
+                self.status = "请再选中第二列，或改用常数".into();
+                return;
+            }
+        };
+        match self.project.column_math(id, &a, op, &operand) {
+            Ok(key) => self.status = format!("列运算结果在新列 {key}"),
+            Err(e) => self.status = e,
+        }
+    }
+
     pub(crate) fn open_frequency_dialog(&mut self) {
         // 默认范围：要统计的各列里全部数值的最小、最大值
         let (from, to) = self
@@ -1462,6 +1498,14 @@ impl SciApp {
                 self.finish_edit();
             }
             dialogs::Action::TTest(kind, level) => self.run_ttest(kind, level),
+            dialogs::Action::ColumnMath(op, constant) => {
+                self.finish_edit();
+                self.begin_edit("列运算");
+                self.dialog = None;
+                self.column_math(op, constant);
+                self.history.changed();
+                self.finish_edit();
+            }
             dialogs::Action::Frequency(bins, range) => {
                 self.finish_edit();
                 self.begin_edit("频数统计");
@@ -3861,6 +3905,41 @@ mod history_tests {
         assert_ne!(app.active, Some(id));
         app.run_command("edit.redo");
         assert_eq!(app.open.get(&id), Some(&true));
+    }
+
+    #[test]
+    fn column_math_dialog_follows_the_picked_columns_and_undoes() {
+        use scicanvas_core::ops::ColumnOp;
+        let mut app = app();
+        app.active = Some(1);
+        let before = app.project.clone();
+        app.selection.insert(1, vec!["C".into(), "B".into()]);
+        app.open_column_math_dialog();
+        assert!(matches!(
+            &app.dialog,
+            Some(Dialog::ColumnMath { a, b: Some(b), use_constant: false, .. }) if a == "电压 B" && b == "电压 A"
+        ));
+        app.finish_edit();
+        app.begin_edit("列运算");
+        app.column_math(ColumnOp::Sub, None);
+        app.history.changed();
+        app.finish_edit();
+        let book = app.project.book(1).unwrap();
+        let result = book.columns.iter().find(|c| c.long_name == "电压 B − 电压 A").unwrap();
+        let want = book.column("C").unwrap().values()[3] - book.column("B").unwrap().values()[3];
+        assert!((result.values()[3] - want).abs() < 1e-9);
+        roundtrip(&mut app, &before);
+
+        app.selection.insert(1, vec!["B".into()]);
+        app.open_column_math_dialog();
+        assert!(matches!(
+            app.dialog,
+            Some(Dialog::ColumnMath {
+                b: None,
+                use_constant: true,
+                ..
+            })
+        ));
     }
 
     #[test]

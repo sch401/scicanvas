@@ -1881,9 +1881,9 @@
   "feature": "简单列运算（加减乘除、两曲线相减）",
   "ref": "Simple Column/Curve Math",
   "pri": "P0",
-  "status": "未开始",
-  "how": "自写，数值算法参照 Numerical Recipes / SciPy",
-  "verify": "与 Origin 及 SciPy 结果比较",
+  "status": "已实现待验收",
+  "how": "分析 → 列运算：两列或列与常数的加减乘除，结果新列与单位推导；不同 X 网格的曲线先线性插值后相减，范围外留空；一步撤销",
+  "verify": "逐行、常数、单位、除零与“原始减拟合”残差回归；Origin 对照待做",
   "id": "F168",
   "milestone": "M1 日常够用"
  },
