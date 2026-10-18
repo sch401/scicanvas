@@ -99,6 +99,14 @@ pub static TABS: &[Tab] = &[
                 ],
             },
             Group {
+                label: "多面板",
+                items: &[Smalls(&[
+                    "plot.panels_stacked",
+                    "plot.panels_side",
+                    "plot.panels_grid4",
+                ])],
+            },
+            Group {
                 label: "图形",
                 items: &[
                     Big("graph.props"),

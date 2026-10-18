@@ -279,6 +279,48 @@ impl Book {
     }
 }
 
+/// 多面板图的版式：面板数、排版列数和页面尺寸（Nature 单栏 89 mm / 双栏 183 mm）。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Panels {
+    /// 上下两面板
+    Stacked,
+    /// 左右两面板
+    SideBySide,
+    /// 2 × 2 四面板
+    Grid4,
+}
+
+impl Panels {
+    pub const ALL: [Panels; 3] = [Panels::Stacked, Panels::SideBySide, Panels::Grid4];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Panels::Stacked => "上下两面板",
+            Panels::SideBySide => "左右两面板",
+            Panels::Grid4 => "四面板",
+        }
+    }
+    pub fn count(self) -> usize {
+        match self {
+            Panels::Grid4 => 4,
+            _ => 2,
+        }
+    }
+    pub fn columns(self) -> usize {
+        match self {
+            Panels::Stacked => 1,
+            _ => 2,
+        }
+    }
+    pub fn page_mm(self) -> (f64, f64) {
+        match self {
+            Panels::Stacked => (89.0, 120.0),
+            Panels::SideBySide => (183.0, 70.0),
+            Panels::Grid4 => (183.0, 140.0),
+        }
+    }
+}
+
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum PlotType {
@@ -752,6 +794,66 @@ impl Project {
         id
     }
 
+    /// 多面板图：选中的 Y 列按顺序平均分到各面板（每个面板一个图层），X 列的选取规则与普通绘图相同。
+    pub fn plot_panels(
+        &mut self,
+        book_id: u64,
+        selected: &[String],
+        plot_type: PlotType,
+        panels: Panels,
+    ) -> Result<(u64, String), String> {
+        if plot_type == PlotType::FloatingBar {
+            return Err("浮动柱需要成对的 Y 列，请用单面板绘制".into());
+        }
+        let book = self.book(book_id).ok_or("找不到工作簿")?;
+        let spec = crate::plotspec::PlotSpec::from_selection(book, selected, plot_type)?;
+        let n = panels.count();
+        let ys = spec.y_keys.clone();
+        if ys.len() < n {
+            return Err(format!(
+                "{}需要至少 {} 个 Y 列，当前只有 {} 个",
+                panels.label(),
+                n,
+                ys.len()
+            ));
+        }
+        let book_name = book.name.clone();
+        // 前面的面板多分一列，例如 5 列分四面板为 2、1、1、1
+        let mut chunks = Vec::with_capacity(n);
+        let mut start = 0;
+        for i in 0..n {
+            let len = ys.len() / n + usize::from(i < ys.len() % n);
+            chunks.push(ys[start..start + len].to_vec());
+            start += len;
+        }
+        let specs: Vec<_> = chunks
+            .into_iter()
+            .map(|y_keys| crate::plotspec::PlotSpec { y_keys, ..spec.clone() })
+            .collect();
+        for s in &specs {
+            s.validate(book)?;
+        }
+        let parent = self.folder_of(book_id);
+        let id = self.alloc_id();
+        let mut graph = Graph::new(id, self.unique_name("Graph"));
+        let mut specs = specs.into_iter();
+        graph.first_layer_mut().spec = specs.next().unwrap();
+        for s in specs {
+            graph.page.add_layer(crate::page::Layer {
+                spec: s,
+                ..Default::default()
+            });
+        }
+        graph.page.columns = panels.columns();
+        (graph.page.width_mm, graph.page.height_mm) = panels.page_mm();
+        self.graphs.push(graph);
+        self.move_project_item(id, parent)?;
+        Ok((
+            id,
+            format!("已用 {} 的 {} 个 Y 列绘制{}", book_name, ys.len(), panels.label()),
+        ))
+    }
+
     /// 按选中的列绘图，规则与 Origin 一致：
     /// 选中的 Y 列各成一条曲线；X 取选中的 X 列，没有就取工作表里位于第一条 Y 列左边最近的 X 列；
     /// 什么都没选时使用全部 Y 列。
@@ -906,6 +1008,44 @@ mod tests {
         assert_eq!(s.len(), 2);
         assert_eq!(s[0].points.len(), 41);
         assert_eq!(s[0].name, "电压 A");
+    }
+
+    #[test]
+    fn panels_split_y_columns_in_order_and_lay_out_on_a_grid() {
+        let mut p = Project::sample();
+        for (panels, columns, size) in [
+            (Panels::Stacked, 1, (89.0, 120.0)),
+            (Panels::SideBySide, 2, (183.0, 70.0)),
+        ] {
+            let (id, _) = p.plot_panels(1, &[], PlotType::Line, panels).unwrap();
+            let page = &p.graph(id).unwrap().page;
+            let keys: Vec<_> = page.layers().iter().map(|l| l.y_keys.clone()).collect();
+            assert_eq!(keys, [vec!["B".to_string()], vec!["C".to_string()]]);
+            assert_eq!((page.columns, (page.width_mm, page.height_mm)), (columns, size));
+            assert!(page.layers().iter().all(|l| l.x_key.as_deref() == Some("A")));
+        }
+        assert!(p
+            .plot_panels(1, &[], PlotType::Line, Panels::Grid4)
+            .unwrap_err()
+            .contains("至少 4 个"));
+        assert!(p.plot_panels(1, &[], PlotType::FloatingBar, Panels::Stacked).is_err());
+
+        let book = p.book_mut(1).unwrap();
+        for _ in 0..3 {
+            let k = book.push_column(Role::Y);
+            let data = book.columns[1].data.clone();
+            book.columns.iter_mut().find(|c| c.key == k).unwrap().data = data;
+        }
+        let (id, msg) = p.plot_panels(1, &[], PlotType::Scatter, Panels::Grid4).unwrap();
+        assert!(msg.contains("5 个 Y 列"));
+        let g = p.graph(id).unwrap();
+        let sizes: Vec<_> = g.page.layers().iter().map(|l| l.y_keys.len()).collect();
+        assert_eq!(sizes, [2, 1, 1, 1], "earlier panels take the extra columns");
+        assert!(g.page.layers().iter().all(|l| l.plot_type == PlotType::Scatter));
+        let sc = crate::scene::layout_page(g, &p, &[]);
+        let xs: std::collections::BTreeSet<i64> = sc.layers.iter().map(|l| l.plot[0].round() as i64).collect();
+        let ys: std::collections::BTreeSet<i64> = sc.layers.iter().map(|l| l.plot[1].round() as i64).collect();
+        assert_eq!((sc.layers.len(), xs.len(), ys.len()), (4, 2, 2), "a 2 × 2 grid");
     }
 
     #[test]

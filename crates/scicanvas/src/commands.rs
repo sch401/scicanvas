@@ -441,6 +441,39 @@ fn build() -> Vec<Command> {
         )
         .modifies(),
         c(
+            "plot.panels_stacked",
+            "上下两面板",
+            "tile",
+            "",
+            "绘图",
+            "multi panel stack vertical two panels 多面板 上下 堆叠",
+            need_book,
+            |a| a.plot_panels(scicanvas_core::Panels::Stacked),
+        )
+        .modifies(),
+        c(
+            "plot.panels_side",
+            "左右两面板",
+            "tile",
+            "",
+            "绘图",
+            "multi panel side by side horizontal two panels 多面板 左右 并排",
+            need_book,
+            |a| a.plot_panels(scicanvas_core::Panels::SideBySide),
+        )
+        .modifies(),
+        c(
+            "plot.panels_grid4",
+            "四面板",
+            "tile",
+            "",
+            "绘图",
+            "multi panel four 2x2 grid 多面板 四面板 网格",
+            need_book,
+            |a| a.plot_panels(scicanvas_core::Panels::Grid4),
+        )
+        .modifies(),
+        c(
             "plot.line",
             "折线图",
             "line",

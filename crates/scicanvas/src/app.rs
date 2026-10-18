@@ -371,6 +371,24 @@ impl SciApp {
         }
     }
 
+    /// 用当前工作簿选中的 Y 列画多面板折线图，选区行范围对每个面板都生效。
+    pub(crate) fn plot_panels(&mut self, panels: scicanvas_core::Panels) {
+        let Some(bid) = self.active_book() else { return };
+        let (sel, rows) = self.picked(bid);
+        match self.project.plot_panels(bid, &sel, PlotType::Line, panels) {
+            Ok((gid, msg)) => {
+                if let Some(g) = self.project.graph_mut(gid) {
+                    for layer in g.page.layers_mut() {
+                        layer.rows = rows;
+                    }
+                }
+                self.show_item(gid);
+                self.status = msg;
+            }
+            Err(e) => self.status = e,
+        }
+    }
+
     pub(crate) fn set_role(&mut self, role: Role) {
         let Some(bid) = self.active_book() else { return };
         let sel = self.picked(bid).0;
