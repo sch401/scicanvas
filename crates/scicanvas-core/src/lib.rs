@@ -11,6 +11,7 @@ pub mod fft;
 pub mod history;
 pub mod interpolate;
 pub mod model;
+pub mod nlfit;
 pub mod ops;
 pub mod page;
 pub mod plotspec;

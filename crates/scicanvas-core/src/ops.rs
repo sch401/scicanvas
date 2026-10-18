@@ -3,10 +3,17 @@
 
 use crate::analysis::{self, Describe, NormalizeMethod, PolyFit, SmoothMethod};
 use crate::interpolate::{self, InterpMethod};
-use crate::model::{fmt_num, parse_num, Book, Column, Graph, PlotType, Project, Role};
+use crate::model::{fmt_num, parse_num, round_sig, Book, Column, Graph, PlotType, Project, Role};
 
 /// 统计类操作选中的数据：工作簿编号、列标识和可选的行范围。
 type Picked = (u64, Vec<String>, Option<(usize, usize)>);
+
+/// 一条曲线的非线性拟合结果。
+#[derive(Clone, Debug, PartialEq)]
+pub struct NlFitReport {
+    pub name: String,
+    pub fit: crate::nlfit::NlFit,
+}
 
 /// 列运算的运算符。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -430,6 +437,67 @@ impl Project {
         }
         match graph {
             Some(g) => Ok((g, made)),
+            None => Err(problems.join("；")),
+        }
+    }
+
+    /// 非线性拟合：对每条曲线拟合内置函数（自动初值），拟合曲线（200 点）写成新的 X、Y 列并加到图上。
+    pub fn nlfit(&mut self, src: &Source, model: crate::nlfit::Model) -> Result<(u64, Vec<NlFitReport>), String> {
+        let r = self.resolve(src)?;
+        let mut reports = vec![];
+        let mut graph = None;
+        let mut problems = vec![];
+        for item in &r.items {
+            let book = self.book(r.book_id).unwrap();
+            let (xs, ys, _) = get_xy(book, item);
+            let name = name_of(book, &item.y);
+            let fit = match crate::nlfit::fit(model, &xs, &ys, None) {
+                Ok(f) => f,
+                Err(e) => {
+                    problems.push(format!("{name}：{e}"));
+                    continue;
+                }
+            };
+            let x_units = item
+                .x
+                .as_deref()
+                .and_then(|k| book.column(k))
+                .map(|c| c.units.clone())
+                .unwrap_or_default();
+            let y_units = book.column(&item.y).map(|c| c.units.clone()).unwrap_or_default();
+            let equation = model
+                .params()
+                .iter()
+                .zip(&fit.params)
+                .map(|(n, v)| format!("{n} = {}", fmt_num(round_sig(*v, 6))))
+                .collect::<Vec<_>>()
+                .join("，");
+            let fx = interpolate::grid(fit.x_min, fit.x_max, 200);
+            let mut cx = Column::new("", Role::X);
+            cx.long_name = format!("{name} {} 拟合 X", model.name());
+            cx.units = x_units;
+            cx.comment = model.formula().into();
+            cx.data = fx.iter().map(|x| fmt_num(*x)).collect();
+            let mut cy = Column::new("", Role::Y);
+            cy.long_name = format!("{name} {} 拟合", model.name());
+            cy.units = y_units;
+            cy.comment = format!("{}；{}", model.formula(), equation);
+            cy.data = fx.iter().map(|x| fmt_num(fit.eval(*x))).collect();
+            let kx = self.insert_result_column(r.book_id, &item.y, cx).unwrap();
+            let ky = self.insert_result_column(r.book_id, &item.y, cy).unwrap();
+            let (gid, index) = self.graph_for_result(&r, item);
+            let g = &mut self.graph_mut(gid).unwrap().page.layers_mut()[index];
+            if !g.y_keys.contains(&item.y) {
+                g.y_keys.push(item.y.clone());
+            }
+            g.y_keys.push(ky.clone());
+            g.x_by_y.insert(ky.clone(), kx);
+            g.line_only.push(ky);
+            graph = Some(gid);
+            reports.push(NlFitReport { name, fit });
+        }
+        match graph {
+            Some(g) => Ok((g, reports)),
             None => Err(problems.join("；")),
         }
     }
@@ -1013,6 +1081,37 @@ mod tests {
             rows: None,
         };
         assert!(p.fit_poly(&src, 1).unwrap_err().contains("至少需要 3 个点"));
+    }
+
+    #[test]
+    fn nonlinear_fit_adds_curve_columns_and_reports_each_series() {
+        use crate::nlfit::Model;
+        let mut p = Project::sample();
+        // C 列是充电曲线 8(1 − e^{−t/4}) 加噪声，用 ExpDec1（A1 为负）拟合
+        let (gid, reports) = p.nlfit(&book_src(&["C"]), Model::ExpDec1).unwrap();
+        assert_eq!(reports.len(), 1);
+        let f = &reports[0].fit;
+        assert!(f.converged && f.r2 > 0.99);
+        assert!((f.params[0] - 8.0).abs() < 0.3 && (f.params[1] + 8.0).abs() < 0.4 && (f.params[2] - 4.0).abs() < 0.4);
+        let book = p.book(1).unwrap();
+        let y = book
+            .columns
+            .iter()
+            .find(|c| c.long_name == "电压 B ExpDec1 拟合")
+            .unwrap();
+        assert_eq!(y.data.len(), 200);
+        assert!(y.comment.contains("y = y0 + A1·exp(−x/t1)") && y.comment.contains("t1 = "));
+        let layer = p.graph(gid).unwrap().first_layer();
+        assert!(layer.line_only.contains(&y.key) && layer.x_by_y.contains_key(&y.key));
+        assert!(p.nlfit(&book_src(&["C"]), Model::Gauss).is_ok());
+        let id = p.new_book();
+        p.book_mut(id).unwrap().columns[1].data = vec!["1".into(), "2".into()];
+        let src = Source::Book {
+            id,
+            selected: vec![],
+            rows: None,
+        };
+        assert!(p.nlfit(&src, Model::Gauss).unwrap_err().contains("至少需要"));
     }
 
     #[test]

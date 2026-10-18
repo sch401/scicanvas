@@ -5,7 +5,8 @@ use scicanvas_core::analysis::{NormalizeMethod, SmoothMethod};
 use scicanvas_core::fft::Window as FftWindow;
 use scicanvas_core::fmt_num;
 use scicanvas_core::interpolate::InterpMethod;
-use scicanvas_core::ops::{AreaReport, ColumnOp, FitReport};
+use scicanvas_core::nlfit::Model;
+use scicanvas_core::ops::{AreaReport, ColumnOp, FitReport, NlFitReport};
 use scicanvas_core::stats::{TTest, TTestKind};
 
 use crate::theme::Palette;
@@ -31,6 +32,12 @@ pub enum Dialog {
         from: f64,
         to: f64,
     },
+    /// 非线性拟合：选择内置函数。
+    NlFit {
+        model: Model,
+    },
+    /// 非线性拟合结果。
+    NlFitReport(Vec<NlFitReport>),
     /// FFT：窗函数。
     Fft {
         window: FftWindow,
@@ -83,6 +90,7 @@ pub enum Action {
     TTest(TTestKind, f64),
     Frequency(Option<usize>, Option<(f64, f64)>),
     Fft(FftWindow),
+    NlFit(Model),
     /// 运算符，以及常数（为空时用列 B）。
     ColumnMath(ColumnOp, Option<f64>),
 }
@@ -364,6 +372,87 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                 }
             });
         }
+        Dialog::NlFit { model } => {
+            window("非线性拟合").show(ctx, |ui| {
+                egui::Grid::new("nlfit-models")
+                    .num_columns(3)
+                    .spacing([12.0, 6.0])
+                    .show(ui, |ui| {
+                        for m in Model::ALL {
+                            ui.label(RichText::new(m.category()).color(pal.weak));
+                            ui.radio_value(model, m, m.name());
+                            ui.label(RichText::new(m.formula()).monospace());
+                            ui.end_row();
+                        }
+                    });
+                ui.label(
+                    RichText::new(format!(
+                        "参数：{}。初值由数据自动估计，Levenberg–Marquardt 迭代；\n对当前图形的数据曲线，或工作簿里选中的 Y 列拟合，拟合曲线加到工作簿和图中。",
+                        model.params().join("、")
+                    ))
+                    .small()
+                    .color(pal.weak),
+                );
+                let (ok, cancel) = buttons(ui, "拟合");
+                if ok {
+                    action = Action::NlFit(*model);
+                } else if cancel {
+                    action = Action::Close;
+                }
+            });
+        }
+        Dialog::NlFitReport(reports) => {
+            window("非线性拟合结果").show(ctx, |ui| {
+                egui::ScrollArea::vertical().max_height(480.0).show(ui, |ui| {
+                    for (ri, r) in reports.iter().enumerate() {
+                        let f = &r.fit;
+                        ui.label(RichText::new(format!("{} · {}", r.name, f.model.name())).strong());
+                        ui.label(RichText::new(f.model.formula()).monospace().small());
+                        if !f.converged {
+                            ui.colored_label(
+                                egui::Color32::from_rgb(182, 67, 66),
+                                "迭代 500 次仍未收敛，结果仅供参考；可换用其他函数或检查数据",
+                            );
+                        }
+                        egui::Grid::new(("nlfit-grid", ri))
+                            .striped(true)
+                            .num_columns(3)
+                            .spacing([24.0, 4.0])
+                            .show(ui, |ui| {
+                                ui.label(RichText::new("参数").color(pal.weak));
+                                ui.label(RichText::new("值").color(pal.weak));
+                                ui.label(RichText::new("标准误").color(pal.weak));
+                                ui.end_row();
+                                for ((name, v), se) in f.model.params().iter().zip(&f.params).zip(&f.se) {
+                                    ui.label(*name);
+                                    ui.label(RichText::new(fmt_num(*v)).monospace());
+                                    ui.label(RichText::new(fmt_num(*se)).monospace());
+                                    ui.end_row();
+                                }
+                                for (k, v) in nlfit_stats(f) {
+                                    ui.label(k);
+                                    ui.label(RichText::new(v).monospace());
+                                    ui.label("");
+                                    ui.end_row();
+                                }
+                            });
+                        ui.add_space(10.0);
+                    }
+                });
+                ui.horizontal(|ui| {
+                    if ui
+                        .button("复制结果")
+                        .on_hover_text("复制为制表符分隔的文本，可粘贴到 Excel")
+                        .clicked()
+                    {
+                        ui.ctx().copy_text(nlfit_text(reports));
+                    }
+                    if ui.button(RichText::new("关闭").strong()).clicked() {
+                        action = Action::Close;
+                    }
+                });
+            });
+        }
         Dialog::Fft { window: w } => {
             window("FFT").show(ctx, |ui| {
                 ui.horizontal(|ui| {
@@ -615,6 +704,34 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
         action = Action::Close;
     }
     action
+}
+
+fn nlfit_stats(f: &scicanvas_core::nlfit::NlFit) -> Vec<(&'static str, String)> {
+    vec![
+        ("R²", fmt_num(f.r2)),
+        ("调整后 R²", fmt_num(f.adj_r2)),
+        ("残差平方和", fmt_num(f.rss)),
+        ("约化 χ²", fmt_num(f.reduced_chi2)),
+        ("数据点数 N", f.n.to_string()),
+        ("迭代次数", f.iterations.to_string()),
+    ]
+}
+
+fn nlfit_text(reports: &[NlFitReport]) -> String {
+    let mut lines = vec![];
+    for r in reports {
+        let f = &r.fit;
+        lines.push(format!("{}\t{}\t{}", r.name, f.model.name(), f.model.formula()));
+        lines.push("参数\t值\t标准误".into());
+        for ((name, v), se) in f.model.params().iter().zip(&f.params).zip(&f.se) {
+            lines.push(format!("{name}\t{}\t{}", fmt_num(*v), fmt_num(*se)));
+        }
+        for (k, v) in nlfit_stats(f) {
+            lines.push(format!("{k}\t{v}"));
+        }
+        lines.push(String::new());
+    }
+    lines.join("\n")
 }
 
 fn fit_text(reports: &[FitReport]) -> String {

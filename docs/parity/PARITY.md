@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 98 项，P1 146 项，P2 259 项，不做 11 项。
-状态：已完成 27 项，已实现待验收 39 项，部分实现 17 项，未开始 420 项，不做 11 项。
+状态：已完成 27 项，已实现待验收 39 项，部分实现 23 项，未开始 414 项，不做 11 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -192,8 +192,8 @@
 | F131 | 多项式回归 | The Polynomial Regression Dialog Box | P0 | 已实现待验收 | X 标准化后的正规方程与高斯–约当求逆；2–6 阶拟合、参数标准误、R²、曲线及撤销已接入 | 解析/仿真回归已通过；NIST Wampler、Origin 及高阶数值稳定性验收待做 | 多项式阶次：已完成 0/5，待验收 5，部分实现 0；2–6 阶；认证数据与稳定性验收待完成 |
 | F132 | 多元线性回归 | The Multiple Linear Regression Dialog Box | P1 | 未开始 | — | NIST StRD（Longley） | — |
 | F133 | 含 X 误差的线性拟合（York 法） | The Linear Fit with X Error Dialog (Pro Only) | P2 | 未开始 | — | 与 Origin 比较 | — |
-| F134 | 非线性拟合引擎（Levenberg–Marquardt） | Theory of Nonlinear Curve Fitting | P0 | 未开始 | 自写 LM 或 levenberg-marquardt crate | NIST StRD 非线性数据集（27 组，含高难度） | — |
-| F135 | 参数初值自动估计 | Fitting Functions | P0 | 未开始 | 每个内置函数配初值估计 | 与 Origin 收敛结果比较 | — |
+| F134 | 非线性拟合引擎（Levenberg–Marquardt） | Theory of Nonlinear Curve Fitting | P0 | 部分实现 | Levenberg–Marquardt（中心差分雅可比、自适应阻尼），标准误 (JᵀJ)⁻¹·RSS/(n−p)；目前只用内置函数，参数约束与自定义函数待做 | 与 SciPy 1.17.1 curve_fit 的参数（1e-6）、标准误（1e-4）一致，从自动初值收敛；Origin 对照待做 | — |
+| F135 | 参数初值自动估计 | Fitting Functions | P0 | 部分实现 | 6 个内置函数各自按数据估计初值（峰位与半高宽、对数线性回归、半高点穿越等） | 自动初值在 6 组带噪声数据上全部收敛到 SciPy 最优解；其余函数待做 | — |
 | F136 | 参数固定、上下界、线性约束 | Parameters,Bounds,Constraints and Weighting | P0 | 未开始 | — | 与 Origin 比较 | — |
 | F137 | 加权拟合（误差列权重等） | Parameters,Bounds,Constraints and Weighting | P1 | 未开始 | — | 与 Origin 比较 | — |
 | F138 | 拟合报告（参数表、ANOVA、置信带、预测带） | Interpreting Regression Results | P0 | 未开始 | statrs 计算 t / F 分布 | 参数、标准误、R² 与 Origin 差 < 1e-6 | — |
@@ -206,10 +206,10 @@
 | F145 | 拟合比较（F 检验、AIC、BIC） | Fit Comparison | P1 | 未开始 | — | 与 Origin 比较 | — |
 | F146 | 标准曲线反查 X / Y | Finding Y/X from X/Y Standard Curves | P1 | 未开始 | — | 与 Origin 比较 | — |
 | F147 | 快速拟合（菜单一键） | Quick Fit | P0 | 已实现待验收 | 线性拟合一键命令、多项式阶数对话框、报告和结果写回已接入 | 命令、对话框确认/取消、目标图层与撤销回归已通过；完整人工工作流验收待做 | — |
-| F148 | 内置拟合函数：峰函数（Gauss、Lorentz、Voigt、PsdVoigt、LogNormal 等） | Curve Fitting Functions（共 239 个） | P0 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 | — |
-| F149 | 内置拟合函数：指数类（ExpDec1-3、ExpGrow、ExpAssoc 等） | Curve Fitting Functions（共 239 个） | P0 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 | — |
-| F150 | 内置拟合函数：S 形与生长（Boltzmann、Logistic、DoseResp、Hill、Gompertz 等） | Curve Fitting Functions（共 239 个） | P0 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 | — |
-| F151 | 内置拟合函数：幂函数与对数（Power、Allometric、Log 等） | Curve Fitting Functions（共 239 个） | P0 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 | — |
+| F148 | 内置拟合函数：峰函数（Gauss、Lorentz、Voigt、PsdVoigt、LogNormal 等） | Curve Fitting Functions（共 239 个） | P0 | 部分实现 | 峰函数：Gauss、Lorentz（Origin 公式与参数名）；Voigt、PsdVoigt、LogNormal 等待做 | 与 SciPy 1.17.1 curve_fit 的参数（1e-6）、标准误（1e-4）一致，从自动初值收敛；Origin 对照待做 | — |
+| F149 | 内置拟合函数：指数类（ExpDec1-3、ExpGrow、ExpAssoc 等） | Curve Fitting Functions（共 239 个） | P0 | 部分实现 | 指数类：ExpDec1；ExpDec2/3、ExpGrow、ExpAssoc 等待做 | 与 SciPy 1.17.1 curve_fit 的参数（1e-6）、标准误（1e-4）一致，从自动初值收敛；Origin 对照待做 | — |
+| F150 | 内置拟合函数：S 形与生长（Boltzmann、Logistic、DoseResp、Hill、Gompertz 等） | Curve Fitting Functions（共 239 个） | P0 | 部分实现 | S 形：Boltzmann、Logistic；DoseResp、Hill、Gompertz 等待做 | 与 SciPy 1.17.1 curve_fit 的参数（1e-6）、标准误（1e-4）一致，从自动初值收敛；Origin 对照待做 | — |
+| F151 | 内置拟合函数：幂函数与对数（Power、Allometric、Log 等） | Curve Fitting Functions（共 239 个） | P0 | 部分实现 | 幂函数：Allometric1；Power、Log 等待做 | 与 SciPy 1.17.1 curve_fit 的参数（1e-6）、标准误（1e-4）一致，从自动初值收敛；Origin 对照待做 | — |
 | F152 | 内置拟合函数：多项式与有理函数（Poly、Rational 等） | Curve Fitting Functions（共 239 个） | P0 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 | — |
 | F153 | 内置拟合函数：波形（Sine、SineDamp、Pulse、SquareWave 等） | Curve Fitting Functions（共 239 个） | P1 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 | — |
 | F154 | 内置拟合函数：酶动力学（MichaelisMenten、各类抑制模型等） | Curve Fitting Functions（共 239 个） | P1 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 | — |

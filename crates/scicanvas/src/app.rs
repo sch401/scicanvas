@@ -1253,6 +1253,29 @@ impl SciApp {
         }
     }
 
+    pub(crate) fn open_nlfit_dialog(&mut self) {
+        self.dialog = Some(Dialog::NlFit {
+            model: scicanvas_core::nlfit::Model::Gauss,
+        });
+    }
+
+    fn nlfit(&mut self, model: scicanvas_core::nlfit::Model) {
+        let Some(src) = self.analysis_source() else { return };
+        match self.project.nlfit(&src, model) {
+            Ok((gid, reports)) => {
+                self.after_analysis(Some(gid));
+                let unconverged = reports.iter().filter(|r| !r.fit.converged).count();
+                self.status = if unconverged == 0 {
+                    format!("已完成 {} 条数据的 {} 拟合", reports.len(), model.name())
+                } else {
+                    format!("{} 拟合有 {unconverged} 条未收敛，请查看结果", model.name())
+                };
+                self.dialog = Some(Dialog::NlFitReport(reports));
+            }
+            Err(e) => self.status = e,
+        }
+    }
+
     pub(crate) fn open_poly_dialog(&mut self) {
         self.dialog = Some(Dialog::Poly { order: 2 });
     }
@@ -1521,6 +1544,14 @@ impl SciApp {
                 self.finish_edit();
             }
             dialogs::Action::TTest(kind, level) => self.run_ttest(kind, level),
+            dialogs::Action::NlFit(model) => {
+                self.finish_edit();
+                self.begin_edit("非线性拟合");
+                self.dialog = None;
+                self.nlfit(model);
+                self.history.changed();
+                self.finish_edit();
+            }
             dialogs::Action::Fft(window) => {
                 self.finish_edit();
                 self.begin_edit("FFT");
@@ -3936,6 +3967,32 @@ mod history_tests {
         assert_ne!(app.active, Some(id));
         app.run_command("edit.redo");
         assert_eq!(app.open.get(&id), Some(&true));
+    }
+
+    #[test]
+    fn nonlinear_fit_opens_a_report_and_undoes_as_one_step() {
+        use scicanvas_core::nlfit::Model;
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["C".into()]);
+        let before = app.project.clone();
+        app.open_nlfit_dialog();
+        assert!(matches!(app.dialog, Some(Dialog::NlFit { model: Model::Gauss })));
+        app.finish_edit();
+        app.begin_edit("非线性拟合");
+        app.dialog = None;
+        app.nlfit(Model::ExpDec1);
+        app.history.changed();
+        app.finish_edit();
+        match &app.dialog {
+            Some(Dialog::NlFitReport(reports)) => {
+                assert_eq!(reports.len(), 1);
+                assert!(reports[0].fit.converged);
+            }
+            _ => panic!("report should open"),
+        }
+        assert_eq!(app.history.undo_label(), Some("非线性拟合"));
+        roundtrip(&mut app, &before);
     }
 
     #[test]

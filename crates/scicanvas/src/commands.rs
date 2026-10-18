@@ -876,6 +876,16 @@ fn build() -> Vec<Command> {
             |a| a.open_poly_dialog(),
         ),
         c(
+            "fit.nonlinear",
+            "非线性拟合",
+            "fitpoly",
+            "",
+            "分析",
+            "nonlinear fit curve fitting levenberg marquardt gauss lorentz exponential boltzmann logistic power 非线性拟合 峰 指数 S形",
+            need_data,
+            |a| a.open_nlfit_dialog(),
+        ),
+        c(
             "math.smooth",
             "平滑",
             "smooth",
