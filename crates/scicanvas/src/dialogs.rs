@@ -7,7 +7,7 @@ use scicanvas_core::fmt_num;
 use scicanvas_core::interpolate::InterpMethod;
 use scicanvas_core::nlfit::Model;
 use scicanvas_core::ops::{AreaReport, ColumnOp, FitReport, NlFitReport};
-use scicanvas_core::stats::{Anova, Correlation, TTest, TTestKind};
+use scicanvas_core::stats::{Anova, Correlation, TTest, TTestKind, TukeyPair};
 
 use crate::theme::Palette;
 
@@ -36,6 +36,8 @@ pub enum Dialog {
     Anova {
         result: Anova,
         names: Vec<String>,
+        /// Tukey HSD 两两比较（95% 置信）。
+        tukey: Vec<TukeyPair>,
     },
     /// 相关系数：每一对列（名称 A、名称 B）的三种相关系数。
     Correlations(Vec<(String, String, Vec<Correlation>)>),
@@ -386,10 +388,14 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                 }
             });
         }
-        Dialog::Anova { result, names } => {
+        Dialog::Anova { result, names, tukey } => {
             window("单因素方差分析").show(ctx, |ui| {
                 let (table, groups) = anova_rows(result, names);
-                for (gi, rows) in [table, groups].iter().enumerate() {
+                let pairs = tukey_rows(tukey, names);
+                for (gi, rows) in [table, groups, pairs].iter().enumerate() {
+                    if gi == 2 {
+                        ui.label(RichText::new("Tukey HSD 多重比较（95% 置信区间）").strong());
+                    }
                     egui::Grid::new(("anova-grid", gi))
                         .striped(true)
                         .num_columns(rows[0].len())
@@ -417,7 +423,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                 };
                 ui.label(
                     RichText::new(format!(
-                        "{verdict}。每个点选的列作为一组，缺失值已跳过；多重比较待后续版本。"
+                        "{verdict}。每个点选的列作为一组，缺失值已跳过。\nTukey HSD 的 p 值已按多重比较校正，组大小不等时为 Tukey–Kramer。"
                     ))
                     .small()
                     .color(pal.weak),
@@ -430,10 +436,13 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                         .clicked()
                     {
                         let (table, groups) = anova_rows(result, names);
+                        let pairs = tukey_rows(tukey, names);
                         let text: Vec<String> = table
                             .iter()
                             .chain([vec![]].iter())
                             .chain(groups.iter())
+                            .chain([vec![]].iter())
+                            .chain(pairs.iter())
                             .map(|r| r.join("\t"))
                             .collect();
                         ui.ctx().copy_text(text.join("\n"));
@@ -864,6 +873,26 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
         action = Action::Close;
     }
     action
+}
+
+/// Tukey HSD 两两比较表（首行为表头）。
+fn tukey_rows(pairs: &[TukeyPair], names: &[String]) -> Vec<Vec<String>> {
+    let mut rows = vec![["组 A", "组 B", "均值差 A−B", "下限", "上限", "p", "α = 0.05"]
+        .iter()
+        .map(|s| s.to_string())
+        .collect::<Vec<_>>()];
+    for t in pairs {
+        rows.push(vec![
+            names[t.a].clone(),
+            names[t.b].clone(),
+            fmt_num(t.diff),
+            fmt_num(t.low),
+            fmt_num(t.high),
+            fmt_num(t.p),
+            if t.p < 0.05 { "显著" } else { "不显著" }.into(),
+        ]);
+    }
+    rows
 }
 
 /// ANOVA 表与各组统计量（首行为表头），供窗口和复制共用。

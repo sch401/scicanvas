@@ -2124,8 +2124,8 @@
   "ref": "One, Two, and Three Way ANOVA",
   "pri": "P1",
   "status": "部分实现",
-  "how": "统计 → 单因素方差分析：每列一组，ANOVA 表与各组描述统计；双因素、三因素与多重比较（Tukey 等）待做",
-  "verify": "与 SciPy 1.17.1 f_oneway 与 f.sf 一致（1e-9）；Origin 对照待做",
+  "how": "统计 → 单因素方差分析：每列一组，ANOVA 表、各组描述统计与 Tukey HSD 多重比较（组大小不等时为 Tukey–Kramer）；双因素、三因素待做",
+  "verify": "与 SciPy 1.17.1 f_oneway、f.sf（1e-9）及 tukey_hsd（置信限 1e-7、p 值 1e-5）、studentized_range 一致；Origin 对照待做",
   "id": "F190",
   "milestone": "M2 论文全流程"
  },

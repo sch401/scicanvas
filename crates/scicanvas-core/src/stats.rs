@@ -513,6 +513,182 @@ pub fn one_way_anova(groups: &[Vec<f64>]) -> Result<Anova, String> {
     Ok(out)
 }
 
+/// 标准正态分布函数 Φ(x)。
+fn norm_cdf(x: f64) -> f64 {
+    0.5 * erfc(-x / std::f64::consts::SQRT_2)
+}
+
+/// 学生化极差在无穷自由度下的分布函数 P(W < w)（k 组为 `cc`，`rr` 为 1），
+/// Copenhaver–Holland 算法的 Gauss–Legendre 积分（同 R `ptukey` 的 `wprob`）。
+fn range_cdf_inf(w: f64, cc: f64) -> f64 {
+    const XLEG: [f64; 6] = [
+        0.981_560_634_246_719_3,
+        0.904_117_256_370_474_9,
+        0.769_902_674_194_304_7,
+        0.587_317_954_286_617_4,
+        0.367_831_498_998_180_2,
+        0.125_233_408_511_468_9,
+    ];
+    const ALEG: [f64; 6] = [
+        0.047_175_336_386_511_83,
+        0.106_939_325_995_318_43,
+        0.160_078_328_543_346_23,
+        0.203_167_426_723_065_92,
+        0.233_492_536_538_354_8,
+        0.249_147_045_813_402_8,
+    ];
+    let qsqz = w * 0.5;
+    if qsqz >= 8.0 {
+        return 1.0;
+    }
+    // 极差落在 [−w/2, w/2] 内的部分
+    let mut pr = (2.0 * norm_cdf(qsqz) - 1.0).powf(cc);
+    let steps = if w > 3.0 { 2 } else { 3 };
+    let binc = (8.0 - qsqz) / steps as f64;
+    let (mut lo, mut hi) = (qsqz, qsqz + binc);
+    for _ in 0..steps {
+        let (a, b) = (0.5 * (hi + lo), 0.5 * (hi - lo));
+        let mut sum = 0.0;
+        for jj in 0..12 {
+            let (xx, wt) = if jj < 6 {
+                (-XLEG[jj], ALEG[jj])
+            } else {
+                (XLEG[11 - jj], ALEG[11 - jj])
+            };
+            let ac = a + b * xx;
+            if ac * ac > 60.0 {
+                break;
+            }
+            let inner = norm_cdf(ac) - norm_cdf(ac - w);
+            if inner >= (-30.0 / (cc - 1.0)).exp() {
+                sum += wt * (-0.5 * ac * ac).exp() * inner.powf(cc - 1.0);
+            }
+        }
+        pr += sum * 2.0 * b * cc / (2.0 * std::f64::consts::PI).sqrt();
+        lo = hi;
+        hi += binc;
+    }
+    pr.min(1.0)
+}
+
+/// 学生化极差分布函数 P(Q < q)，k 组、自由度 df（同 R `ptukey`）。
+pub fn studentized_range_cdf(q: f64, k: f64, df: f64) -> f64 {
+    const XLEGQ: [f64; 8] = [
+        0.989_400_934_991_649_9,
+        0.944_575_023_073_232_6,
+        0.865_631_202_387_831_7,
+        0.755_404_408_355_003,
+        0.617_876_244_402_643_7,
+        0.458_016_777_657_227_4,
+        0.281_603_550_779_258_9,
+        0.095_012_509_837_637_44,
+    ];
+    const ALEGQ: [f64; 8] = [
+        0.027_152_459_411_754_095,
+        0.062_253_523_938_647_89,
+        0.095_158_511_682_492_78,
+        0.124_628_971_255_533_87,
+        0.149_595_988_816_576_73,
+        0.169_156_519_395_002_54,
+        0.182_603_415_044_923_6,
+        0.189_450_610_455_068_5,
+    ];
+    if q <= 0.0 {
+        return 0.0;
+    }
+    if df > 25000.0 {
+        return range_cdf_inf(q, k);
+    }
+    // 对 s（样本标准差 / σ）的卡方型密度分段做 16 点 Gauss–Legendre 积分
+    let f2 = df * 0.5;
+    let ulen: f64 = if df <= 100.0 {
+        1.0
+    } else if df <= 800.0 {
+        0.5
+    } else if df <= 5000.0 {
+        0.25
+    } else {
+        0.125
+    };
+    let f2lf = f2 * df.ln() - df * std::f64::consts::LN_2 - ln_gamma(f2) + ulen.ln();
+    let (f21, ff4) = (f2 - 1.0, df * 0.25);
+    let mut ans = 0.0;
+    for i in 1..=50 {
+        let mut part = 0.0;
+        let twa1 = (2 * i - 1) as f64 * ulen;
+        for jj in 0..16 {
+            let (u, wt) = if jj < 8 {
+                (twa1 - XLEGQ[jj] * ulen, ALEGQ[jj])
+            } else {
+                (twa1 + XLEGQ[jj - 8] * ulen, ALEGQ[jj - 8])
+            };
+            let t1 = f2lf + f21 * u.ln() - u * ff4;
+            if t1 >= -30.0 {
+                part += range_cdf_inf(q * (u * 0.5).sqrt(), k) * wt * t1.exp();
+            }
+        }
+        if i as f64 * ulen >= 1.0 && part <= 1e-14 {
+            break;
+        }
+        ans += part;
+    }
+    ans.min(1.0)
+}
+
+/// 学生化极差分布的分位数（二分法反解 `studentized_range_cdf`）。
+pub fn studentized_range_ppf(p: f64, k: f64, df: f64) -> f64 {
+    let (mut lo, mut hi) = (0.0, 1.0);
+    while studentized_range_cdf(hi, k, df) < p {
+        hi *= 2.0;
+    }
+    for _ in 0..100 {
+        let mid = 0.5 * (lo + hi);
+        if studentized_range_cdf(mid, k, df) < p {
+            lo = mid;
+        } else {
+            hi = mid;
+        }
+        if hi - lo < 1e-12 * hi {
+            break;
+        }
+    }
+    0.5 * (lo + hi)
+}
+
+/// Tukey HSD 两两比较的一行：组 `a` 减组 `b` 的均值差、置信区间与校正后 p 值。
+#[derive(Clone, Debug, PartialEq)]
+pub struct TukeyPair {
+    pub a: usize,
+    pub b: usize,
+    pub diff: f64,
+    pub low: f64,
+    pub high: f64,
+    pub p: f64,
+}
+
+/// Tukey HSD 多重比较（与 SciPy `tukey_hsd` 相同；组大小不等时为 Tukey–Kramer）。`level` 为置信水平。
+pub fn tukey_hsd(a: &Anova, level: f64) -> Vec<TukeyPair> {
+    let k = a.n.len() as f64;
+    let mse = a.ms_within();
+    let crit = studentized_range_ppf(level, k, a.df_within);
+    let mut out = vec![];
+    for i in 0..a.n.len() {
+        for j in i + 1..a.n.len() {
+            let se = (mse / 2.0 * (1.0 / a.n[i] as f64 + 1.0 / a.n[j] as f64)).sqrt();
+            let diff = a.mean[i] - a.mean[j];
+            out.push(TukeyPair {
+                a: i,
+                b: j,
+                diff,
+                low: diff - crit * se,
+                high: diff + crit * se,
+                p: (1.0 - studentized_range_cdf(diff.abs() / se, k, a.df_within)).clamp(0.0, 1.0),
+            });
+        }
+    }
+    out
+}
+
 /// 频数统计的一个区间 `[lo, hi)`；最后一个区间包含右端点。
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Bin {
@@ -644,6 +820,69 @@ mod tests {
             .unwrap_err()
             .contains("组内"));
         assert!(one_way_anova(&[vec![1.0], vec![2.0]]).is_err());
+    }
+
+    #[test]
+    fn tukey_hsd_matches_scipy() {
+        let near = |got: f64, want: f64, tol: f64| assert!((got - want).abs() <= tol * want.abs(), "{got} vs {want}");
+        // SciPy 1.17.1：studentized_range.sf / ppf 与 tukey_hsd
+        for (q, k, df, sf) in [
+            (3.5, 3.0, 15.0, 0.06291535464371001),
+            (1.2, 4.0, 30.0, 0.8308381575181755),
+            (5.0, 2.0, 8.0, 0.007669728020954114),
+            (2.8, 6.0, 100.0, 0.3611337924235287),
+            (4.4, 3.0, 2000.0, 0.005364251952650667),
+            (0.3, 3.0, 10.0, 0.9755580143338938),
+        ] {
+            near(1.0 - studentized_range_cdf(q, k, df), sf, 1e-6);
+        }
+        for (k, df, q) in [
+            (3.0, 15.0, 3.6733776588970963),
+            (4.0, 30.0, 3.845401353042607),
+            (2.0, 8.0, 3.2611823228941685),
+        ] {
+            near(studentized_range_ppf(0.95, k, df), q, 1e-7);
+        }
+        let groups = vec![
+            vec![5.1, 4.9, 6.2, 5.8, 6.0, 5.5],
+            vec![4.6, 5.0, 4.4, 5.2, 4.8],
+            vec![6.3, 6.9, 7.1, 6.5, 6.8, 7.4, 6.6],
+        ];
+        let pairs = tukey_hsd(&one_way_anova(&groups).unwrap(), 0.95);
+        let want = [
+            (
+                0,
+                1,
+                0.7833333333333332,
+                0.017494544725510597,
+                0.135044134745392,
+                1.4316225319212745,
+            ),
+            (
+                0,
+                2,
+                -1.216666666666666,
+                0.0002449843862987189,
+                -1.8123015186967866,
+                -0.6210318146365452,
+            ),
+            (
+                1,
+                2,
+                -1.9999999999999991,
+                1.5856745170239606e-06,
+                -2.626887588262127,
+                -1.3731124117378712,
+            ),
+        ];
+        assert_eq!(pairs.len(), 3);
+        for (got, (a, b, diff, p, low, high)) in pairs.iter().zip(want) {
+            assert_eq!((got.a, got.b), (a, b));
+            near(got.diff, diff, 1e-12);
+            near(got.p, p, 1e-5);
+            near(got.low, low, 1e-7);
+            near(got.high, high, 1e-7);
+        }
     }
 
     #[test]

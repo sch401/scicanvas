@@ -1468,7 +1468,8 @@ impl SciApp {
                     round_sig(result.f, 4),
                     round_sig(result.p, 4)
                 );
-                self.dialog = Some(Dialog::Anova { result, names });
+                let tukey = scicanvas_core::stats::tukey_hsd(&result, 0.95);
+                self.dialog = Some(Dialog::Anova { result, names, tukey });
             }
             Err(e) => self.status = e,
         }
@@ -4223,8 +4224,9 @@ mod history_tests {
         ])
         .unwrap();
         match &app.dialog {
-            Some(Dialog::Anova { result, names }) => {
+            Some(Dialog::Anova { result, names, tukey }) => {
                 assert_eq!(result, &want);
+                assert_eq!(tukey, &scicanvas_core::stats::tukey_hsd(&want, 0.95));
                 assert_eq!(names, &["电压 A", "电压 B"]);
             }
             _ => panic!("report should open"),
