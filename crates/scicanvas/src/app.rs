@@ -1264,6 +1264,29 @@ impl SciApp {
         });
     }
 
+    pub(crate) fn open_fft_dialog(&mut self) {
+        self.dialog = Some(Dialog::Fft {
+            window: scicanvas_core::fft::Window::Hann,
+        });
+    }
+
+    fn fft(&mut self, window: scicanvas_core::fft::Window) {
+        let Some(src) = self.analysis_source() else { return };
+        match self.project.fft(&src, window) {
+            Ok(made) => {
+                let names: Vec<String> = made
+                    .iter()
+                    .filter_map(|(b, _)| self.project.name_of(*b).map(str::to_owned))
+                    .collect();
+                if let Some((_, g)) = made.last() {
+                    self.show_item(*g);
+                }
+                self.status = format!("FFT 结果在 {}，幅值谱已画成图", names.join("、"));
+            }
+            Err(e) => self.status = e,
+        }
+    }
+
     pub(crate) fn open_column_math_dialog(&mut self) {
         let Some((id, keys)) = self.ttest_columns() else { return };
         let Some(book) = self.project.book(id) else { return };
@@ -1498,6 +1521,14 @@ impl SciApp {
                 self.finish_edit();
             }
             dialogs::Action::TTest(kind, level) => self.run_ttest(kind, level),
+            dialogs::Action::Fft(window) => {
+                self.finish_edit();
+                self.begin_edit("FFT");
+                self.dialog = None;
+                self.fft(window);
+                self.history.changed();
+                self.finish_edit();
+            }
             dialogs::Action::ColumnMath(op, constant) => {
                 self.finish_edit();
                 self.begin_edit("列运算");

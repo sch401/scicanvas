@@ -655,6 +655,80 @@ impl Project {
         Ok(id)
     }
 
+    /// 对每条曲线做 FFT：各生成一个频谱工作簿（频率、实部、虚部、幅值、相位、功率）和一张幅值–频率图，
+    /// 放在源工作簿所在的文件夹。X 必须等间距；没有 X 列时采样间隔按 1。返回 (工作簿, 图形) 编号。
+    pub fn fft(&mut self, src: &Source, window: crate::fft::Window) -> Result<Vec<(u64, u64)>, String> {
+        let r = self.resolve(src)?;
+        let folder = self.folder_of(r.book_id);
+        let mut made = vec![];
+        let mut problems = vec![];
+        for item in &r.items {
+            let book = self.book(r.book_id).unwrap();
+            let name = name_of(book, &item.y);
+            let (xs, ys, _) = get_xy(book, item);
+            let x_units = item
+                .x
+                .as_deref()
+                .and_then(|k| book.column(k))
+                .map(|c| c.units.clone())
+                .unwrap_or_default();
+            let y_units = book.column(&item.y).map(|c| c.units.clone()).unwrap_or_default();
+            let dt = if item.x.is_some() {
+                crate::fft::sample_interval(&xs)
+            } else {
+                Ok(1.0)
+            };
+            let spec = match dt.and_then(|dt| crate::fft::spectrum(&ys, dt, window)) {
+                Ok(s) => s,
+                Err(e) => {
+                    problems.push(format!("{name}：{e}"));
+                    continue;
+                }
+            };
+            let f_units = match x_units.as_str() {
+                "s" => "Hz".to_string(),
+                "" => String::new(),
+                u => format!("1/{u}"),
+            };
+            let p_units = if y_units.is_empty() {
+                String::new()
+            } else {
+                format!("{y_units}²")
+            };
+            let id = self.alloc_id();
+            let mut nb = Book::new(id, self.unique_name(&format!("{name} FFT")));
+            let note = format!("{} 的 FFT，{} 点，窗函数 {}", name, ys.len(), window.label());
+            let columns: [(Role, &str, &str, &[f64]); 6] = [
+                (Role::X, "频率", &f_units, &spec.freq),
+                (Role::Y, "实部", "", &spec.re),
+                (Role::Y, "虚部", "", &spec.im),
+                (Role::Y, "幅值", &y_units, &spec.amplitude),
+                (Role::Y, "相位", "°", &spec.phase_deg),
+                (Role::Y, "功率", &p_units, &spec.power),
+            ];
+            let mut amp_key = String::new();
+            for (role, long_name, units, values) in columns {
+                let k = nb.push_column(role);
+                let c = nb.columns.iter_mut().find(|c| c.key == k).unwrap();
+                c.long_name = long_name.into();
+                c.units = units.into();
+                c.comment = note.clone();
+                c.data = values.iter().map(|v| fmt_num(*v)).collect();
+                if long_name == "幅值" {
+                    amp_key = k;
+                }
+            }
+            self.books.push(nb);
+            self.move_project_item(id, folder)?;
+            let (gid, _) = self.plot_from_selection(id, &[amp_key], PlotType::Line)?;
+            made.push((id, gid));
+        }
+        if made.is_empty() {
+            return Err(problems.join("；"));
+        }
+        Ok(made)
+    }
+
     /// 列运算：A op B，结果写成新列放在 A 右边。B 与 A 对应同一 X 列时逐行计算；
     /// 对应不同 X 列时（如原始曲线减拟合曲线）先把 B 线性插值到 A 的 X 上，超出 B 的 X 范围处留空。
     /// 结果不是有限数（除以 0、缺失值）的单元格留空。
@@ -939,6 +1013,44 @@ mod tests {
             rows: None,
         };
         assert!(p.fit_poly(&src, 1).unwrap_err().contains("至少需要 3 个点"));
+    }
+
+    #[test]
+    fn fft_builds_a_spectrum_table_and_amplitude_graph_per_curve() {
+        let mut p = Project::sample();
+        // 10 Hz 采样（X 以 s 为单位、间隔 0.1），2 Hz、振幅 4 的正弦落在频点上
+        let book = p.book_mut(1).unwrap();
+        book.columns[0].data = (0..50).map(|i| fmt_num(i as f64 * 0.1)).collect();
+        book.columns[1].data = (0..50)
+            .map(|i| fmt_num(4.0 * (2.0 * std::f64::consts::PI * 2.0 * i as f64 * 0.1).sin()))
+            .collect();
+        book.columns[2].data = (0..50).map(|i| fmt_num(i as f64)).collect();
+        let made = p.fft(&book_src(&["B"]), crate::fft::Window::Rect).unwrap();
+        assert_eq!(made.len(), 1);
+        let (bid, gid) = made[0];
+        let out = p.book(bid).unwrap();
+        let names: Vec<_> = out.columns.iter().map(|c| c.long_name.as_str()).collect();
+        assert_eq!(names, ["频率", "实部", "虚部", "幅值", "相位", "功率"]);
+        assert_eq!(
+            (out.columns[0].units.as_str(), out.columns[3].units.as_str()),
+            ("Hz", "mV")
+        );
+        assert_eq!(out.columns[5].units, "mV²");
+        let f = out.columns[0].values();
+        let amp = out.columns[3].values();
+        assert_eq!(f.len(), 26);
+        let peak = (0..amp.len()).max_by(|a, b| amp[*a].total_cmp(&amp[*b])).unwrap();
+        assert!((f[peak] - 2.0).abs() < 1e-9 && (amp[peak] - 4.0).abs() < 1e-6);
+        let layer = p.graph(gid).unwrap().first_layer();
+        assert_eq!(layer.y_keys, [out.columns[3].key.clone()]);
+        assert_eq!(layer.x_key.as_deref(), Some(out.columns[0].key.as_str()));
+
+        // 不等间距的 X 给出提示
+        p.book_mut(1).unwrap().columns[0].data[3] = "0.35".into();
+        assert!(p
+            .fft(&book_src(&["B"]), crate::fft::Window::Hann)
+            .unwrap_err()
+            .contains("不等间距"));
     }
 
     #[test]

@@ -2,6 +2,7 @@
 
 use eframe::egui::{self, Align2, RichText};
 use scicanvas_core::analysis::{NormalizeMethod, SmoothMethod};
+use scicanvas_core::fft::Window as FftWindow;
 use scicanvas_core::fmt_num;
 use scicanvas_core::interpolate::InterpMethod;
 use scicanvas_core::ops::{AreaReport, ColumnOp, FitReport};
@@ -29,6 +30,10 @@ pub enum Dialog {
         custom: bool,
         from: f64,
         to: f64,
+    },
+    /// FFT：窗函数。
+    Fft {
+        window: FftWindow,
     },
     /// 列运算：A 与 B 的列名（只选一列时 B 为空，只能用常数）、运算符和常数。
     ColumnMath {
@@ -77,6 +82,7 @@ pub enum Action {
     Interpolate(InterpMethod, usize, Option<(f64, f64)>),
     TTest(TTestKind, f64),
     Frequency(Option<usize>, Option<(f64, f64)>),
+    Fft(FftWindow),
     /// 运算符，以及常数（为空时用列 B）。
     ColumnMath(ColumnOp, Option<f64>),
 }
@@ -353,6 +359,29 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                 let (ok, cancel) = buttons(ui, "插值");
                 if ok && valid {
                     action = Action::Interpolate(*method, *points, custom.then_some((*from, *to)));
+                } else if cancel {
+                    action = Action::Close;
+                }
+            });
+        }
+        Dialog::Fft { window: w } => {
+            window("FFT").show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("窗函数");
+                    for m in FftWindow::ALL {
+                        ui.radio_value(w, m, m.label());
+                    }
+                });
+                ui.label(
+                    RichText::new(
+                        "对当前图形的数据曲线，或工作簿里选中的 Y 列做 FFT。X 需要等间距（X 以 s 为单位时频率单位为 Hz）。\n每条曲线生成一个频谱表（频率、实部、虚部、幅值、相位、功率）和一张幅值谱图；\n幅值按正弦振幅归一，加窗时按窗函数的相干增益补偿。",
+                    )
+                    .small()
+                    .color(pal.weak),
+                );
+                let (ok, cancel) = buttons(ui, "变换");
+                if ok {
+                    action = Action::Fft(*w);
                 } else if cancel {
                     action = Action::Close;
                 }

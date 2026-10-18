@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 98 项，P1 146 项，P2 259 项，不做 11 项。
-状态：已完成 27 项，已实现待验收 39 项，部分实现 16 项，未开始 421 项，不做 11 项。
+状态：已完成 27 项，已实现待验收 39 项，部分实现 17 项，未开始 420 项，不做 11 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -283,7 +283,7 @@
 | F201 | 平滑（移动平均、Savitzky-Golay、FFT 平滑、LOWESS） | Smoothing | P0 | 部分实现 | 移动平均与二阶 Savitzky–Golay 已接入；FFT 平滑与 LOWESS 待做 | 已有算法、窗口边界、写回与撤销回归已通过；补齐其余方法后验收 | 平滑方法：已完成 0/4，待验收 2，部分实现 0；移动平均、Savitzky–Golay 已实现待验收；FFT、LOWESS 未开始 |
 | F202 | FFT 滤波（低通、高通、带通、带阻） | FFT Filters | P1 | 未开始 | rustfft / realfft | 与 Origin 及 SciPy.signal 结果比较 | — |
 | F203 | IIR 滤波（巴特沃斯、切比雪夫等） | IIR Filters (Pro Only) | P2 | 未开始 | 自写或 biquad | 与 Origin 及 SciPy.signal 结果比较 | — |
-| F204 | 傅里叶变换 FFT / IFFT（幅值、相位、功率谱、窗函数） | Fast Fourier Transform (FFT) | P0 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 | — |
+| F204 | 傅里叶变换 FFT / IFFT（幅值、相位、功率谱、窗函数） | Fast Fourier Transform (FFT) | P0 | 部分实现 | 分析 → FFT：自写基 2 与 Bluestein（任意点数），矩形 / Hann / Hamming 窗，单边幅值（正弦振幅归一、相干增益补偿）、相位、功率谱表与幅值谱图；IFFT 待做 | 与 numpy.fft.rfft 的实部 / 虚部（基 2 与 Bluestein 两种长度）及 numpy 窗函数结果一致（1e-9）；IFFT 与 Origin 对照待做 | — |
 | F205 | 短时傅里叶变换 STFT | Short-Time Fourier Transform (Pro Only) | P2 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 | — |
 | F206 | 卷积 / 反卷积 | Convolution | P1 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 | — |
 | F207 | 相关（自相关、互相关） | Correlation | P1 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 | — |

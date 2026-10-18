@@ -7,6 +7,7 @@ pub mod analysis;
 pub mod colormap;
 pub mod coord;
 pub mod csv;
+pub mod fft;
 pub mod history;
 pub mod interpolate;
 pub mod model;

@@ -2285,9 +2285,9 @@
   "feature": "傅里叶变换 FFT / IFFT（幅值、相位、功率谱、窗函数）",
   "ref": "Fast Fourier Transform (FFT)",
   "pri": "P0",
-  "status": "未开始",
-  "how": "rustfft",
-  "verify": "与 Origin 及 SciPy.signal 结果比较",
+  "status": "部分实现",
+  "how": "分析 → FFT：自写基 2 与 Bluestein（任意点数），矩形 / Hann / Hamming 窗，单边幅值（正弦振幅归一、相干增益补偿）、相位、功率谱表与幅值谱图；IFFT 待做",
+  "verify": "与 numpy.fft.rfft 的实部 / 虚部（基 2 与 Bluestein 两种长度）及 numpy 窗函数结果一致（1e-9）；IFFT 与 Origin 对照待做",
   "id": "F204",
   "milestone": "M1 日常够用"
  },

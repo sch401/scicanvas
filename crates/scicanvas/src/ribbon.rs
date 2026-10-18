@@ -131,6 +131,10 @@ pub static TABS: &[Tab] = &[
                     Smalls(&["math.norm", "math.interp", "math.colmath"]),
                 ],
             },
+            Group {
+                label: "信号处理",
+                items: &[Big("signal.fft")],
+            },
         ],
     },
     Tab {

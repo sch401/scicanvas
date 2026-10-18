@@ -886,6 +886,16 @@ fn build() -> Vec<Command> {
             |a| a.open_smooth_dialog(),
         ),
         c(
+            "signal.fft",
+            "FFT",
+            "diff",
+            "",
+            "分析",
+            "fft fourier transform spectrum frequency amplitude phase power window hann 傅里叶 频谱 幅值 相位 功率",
+            need_data,
+            |a| a.open_fft_dialog(),
+        ),
+        c(
             "math.colmath",
             "列运算",
             "colins",
