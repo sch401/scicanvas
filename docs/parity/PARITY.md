@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 98 项，P1 146 项，P2 259 项，不做 11 项。
-状态：已完成 27 项，已实现待验收 44 项，部分实现 32 项，未开始 400 项，不做 11 项。
+状态：已完成 27 项，已实现待验收 44 项，部分实现 33 项，未开始 399 项，不做 11 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -204,7 +204,7 @@
 | F143 | 隐函数拟合（圆、椭圆等 5 个） | Nonlinear Implicit Curve Fitting | P2 | 未开始 | 正交距离回归 | 与 Origin 比较 | 隐函数：已完成 0/5，待验收 0，部分实现 0；第三阶段路线参考数量，目录待逐项核对 |
 | F144 | 曲面拟合（22 个内置函数） | Non-linear Surface Fitting | P2 | 未开始 | — | 与 Origin 比较 | 曲面函数：已完成 0/22，待验收 0，部分实现 0；第三阶段路线参考数量，目录待逐项核对 |
 | F145 | 拟合比较（F 检验、AIC、BIC） | Fit Comparison | P1 | 未开始 | — | 与 Origin 比较 | — |
-| F146 | 标准曲线反查 X / Y | Finding Y/X from X/Y Standard Curves | P1 | 未开始 | — | 与 Origin 比较 | — |
+| F146 | 标准曲线反查 X / Y | Finding Y/X from X/Y Standard Curves | P1 | 部分实现 | 分析 → 标准曲线反查：按点选顺序取标准浓度、标准响应、样品响应，线性标准曲线反查浓度并给出 95% 置信区间半宽（Miller & Miller 公式）；由 X 求 Y、非线性标准曲线待做 | 与 numpy.polyfit 和 scipy.stats.t 计算的反查值、标准差、置信区间一致（1e-9） | — |
 | F147 | 快速拟合（菜单一键） | Quick Fit | P0 | 已实现待验收 | 线性拟合一键命令、多项式阶数对话框、报告和结果写回已接入 | 命令、对话框确认/取消、目标图层与撤销回归已通过；完整人工工作流验收待做 | — |
 | F148 | 内置拟合函数：峰函数（Gauss、Lorentz、Voigt、PsdVoigt、LogNormal 等） | Curve Fitting Functions（共 239 个） | P0 | 部分实现 | 峰函数：Gauss、Lorentz（Origin 公式与参数名）；Voigt、PsdVoigt、LogNormal 等待做 | 与 SciPy 1.17.1 curve_fit 的参数（1e-6）、标准误（1e-4）一致，从自动初值收敛；Origin 对照待做 | — |
 | F149 | 内置拟合函数：指数类（ExpDec1-3、ExpGrow、ExpAssoc 等） | Curve Fitting Functions（共 239 个） | P0 | 部分实现 | 指数类：ExpDec1；ExpDec2/3、ExpGrow、ExpAssoc 等待做 | 与 SciPy 1.17.1 curve_fit 的参数（1e-6）、标准误（1e-4）一致，从自动初值收敛；Origin 对照待做 | — |

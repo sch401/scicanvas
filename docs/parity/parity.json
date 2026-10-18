@@ -1631,9 +1631,9 @@
   "feature": "标准曲线反查 X / Y",
   "ref": "Finding Y/X from X/Y Standard Curves",
   "pri": "P1",
-  "status": "未开始",
-  "how": "",
-  "verify": "与 Origin 比较",
+  "status": "部分实现",
+  "how": "分析 → 标准曲线反查：按点选顺序取标准浓度、标准响应、样品响应，线性标准曲线反查浓度并给出 95% 置信区间半宽（Miller & Miller 公式）；由 X 求 Y、非线性标准曲线待做",
+  "verify": "与 numpy.polyfit 和 scipy.stats.t 计算的反查值、标准差、置信区间一致（1e-9）",
   "id": "F146",
   "milestone": "M2 论文全流程"
  },

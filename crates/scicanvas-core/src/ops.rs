@@ -977,6 +977,59 @@ impl Project {
         Ok(n)
     }
 
+    /// 标准曲线反查：用标准点（浓度 `x`、响应 `y`）拟合直线，把样品响应列 `sample` 反查成浓度，
+    /// 在样品列右边写入“反查浓度”和“95% 置信区间半宽”两列（单次测定）。返回标准曲线与两个新列标识。
+    pub fn calibrate(
+        &mut self,
+        book_id: u64,
+        x: &str,
+        y: &str,
+        sample: &str,
+    ) -> Result<(crate::stats::Calibration, String, String), String> {
+        let book = self.book(book_id).ok_or("找不到工作簿")?;
+        let col = |k: &str| book.column(k).ok_or_else(|| format!("找不到列 {k}"));
+        let (cx, cy, cs) = (col(x)?, col(y)?, col(sample)?);
+        let cal = crate::stats::Calibration::fit(&cx.values(), &cy.values())?;
+        let (x_name, x_units, s_name) = (
+            cx.display_name().to_owned(),
+            cx.units.clone(),
+            cs.display_name().to_owned(),
+        );
+        let inv: Vec<Option<(f64, f64, f64)>> = cs
+            .values()
+            .iter()
+            .map(|v| v.is_finite().then(|| cal.inverse(*v, 1)))
+            .collect();
+        let note = format!(
+            "{} = ({} − {}) / {}，R² = {}，n = {}",
+            x_name,
+            s_name,
+            fmt_num(round_sig(cal.intercept, 6)),
+            fmt_num(round_sig(cal.slope, 6)),
+            fmt_num(round_sig(cal.r2, 6)),
+            cal.n
+        );
+        let make = |long_name: String, pick: fn(&(f64, f64, f64)) -> f64| {
+            let mut c = Column::new("", Role::Y);
+            c.long_name = long_name;
+            c.units = x_units.clone();
+            c.comment = note.clone();
+            c.data = inv
+                .iter()
+                .map(|v| v.as_ref().map_or(String::new(), |v| fmt_num(pick(v))))
+                .collect();
+            while c.data.last().is_some_and(|s| s.is_empty()) {
+                c.data.pop();
+            }
+            c
+        };
+        let c0 = make(format!("{s_name} 反查{x_name}"), |v| v.0);
+        let c1 = make("95% 置信区间 ±".into(), |v| v.2);
+        let k0 = self.insert_result_column(book_id, sample, c0).unwrap();
+        let k1 = self.insert_result_column(book_id, sample, c1).unwrap();
+        Ok((cal, k0, k1))
+    }
+
     /// 列运算：A op B，结果写成新列放在 A 右边。B 与 A 对应同一 X 列时逐行计算；
     /// 对应不同 X 列时（如原始曲线减拟合曲线）先把 B 线性插值到 A 的 X 上，超出 B 的 X 范围处留空。
     /// 结果不是有限数（除以 0、缺失值）的单元格留空。
@@ -1422,6 +1475,30 @@ mod tests {
         assert!(p.set_column_values(1, "C", "Z * 2").unwrap_err().contains("没有列 Z"));
         assert!(p.set_column_values(1, "C", "2 +").is_err());
         assert!(p.set_column_values(1, "Q", "1").unwrap_err().contains("目标列"));
+    }
+
+    #[test]
+    fn calibrate_writes_concentration_and_interval_beside_the_samples() {
+        let mut p = Project::sample();
+        let book = p.book_mut(1).unwrap();
+        let set = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        book.columns[0].data = set(&["0", "1", "2", "4", "6", "8", "10"]);
+        book.columns[0].units = "mg/L".into();
+        book.columns[1].data = set(&["0.02", "0.215", "0.41", "0.79", "1.22", "1.58", "2.01"]);
+        book.columns[2].data = set(&["0.9", "", "1.5"]);
+        let (cal, k0, k1) = p.calibrate(1, "A", "B", "C").unwrap();
+        let book = p.book(1).unwrap();
+        assert_eq!(book.column_index(&k0), Some(3));
+        assert_eq!(book.column_index(&k1), Some(4));
+        let (x0, ci) = (book.column(&k0).unwrap(), book.column(&k1).unwrap());
+        assert_eq!(x0.units, "mg/L");
+        assert_eq!(x0.data[1], "");
+        // 与 numpy.polyfit 和 scipy.stats.t 计算一致
+        let v = x0.values();
+        assert!((v[0] - 4.468198640158359).abs() < 1e-6 && (v[2] - (1.5 - cal.intercept) / cal.slope).abs() < 1e-6);
+        assert!((ci.values()[0] - 0.21355306685211103).abs() < 1e-6);
+        assert!(x0.comment.contains("R²"));
+        assert!(p.calibrate(1, "A", "B", "Z").is_err());
     }
 
     #[test]

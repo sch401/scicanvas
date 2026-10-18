@@ -1018,6 +1018,17 @@ fn build() -> Vec<Command> {
             |a| a.grubbs(),
         ),
         c(
+            "fit.calibration",
+            "标准曲线反查",
+            "fitlin",
+            "",
+            "分析",
+            "calibration curve standard inverse prediction concentration 标准曲线 反查 浓度 定量 校准",
+            need_book,
+            |a| a.calibrate(),
+        )
+        .modifies(),
+        c(
             "stats.anova",
             "单因素方差分析",
             "stats",

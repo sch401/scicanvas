@@ -122,7 +122,12 @@ pub static TABS: &[Tab] = &[
         groups: &[
             Group {
                 label: "拟合",
-                items: &[Big("fit.linear"), Big("fit.poly"), Big("fit.nonlinear")],
+                items: &[
+                    Big("fit.linear"),
+                    Big("fit.poly"),
+                    Big("fit.nonlinear"),
+                    Big("fit.calibration"),
+                ],
             },
             Group {
                 label: "数学",

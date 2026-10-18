@@ -872,6 +872,67 @@ pub fn grubbs(values: &[f64], alpha: f64) -> Result<Grubbs, String> {
     })
 }
 
+/// 线性标准曲线 y = a + b·x，用于由响应值反查浓度。
+#[derive(Clone, Debug, PartialEq)]
+pub struct Calibration {
+    pub n: usize,
+    pub intercept: f64,
+    pub slope: f64,
+    /// 残差标准差 s(y/x)。
+    pub s: f64,
+    pub r2: f64,
+    mean_y: f64,
+    sxx: f64,
+}
+
+impl Calibration {
+    /// 由标准点拟合；缺失值成对跳过。
+    pub fn fit(x: &[f64], y: &[f64]) -> Result<Calibration, String> {
+        let (x, y): (Vec<f64>, Vec<f64>) = x
+            .iter()
+            .zip(y)
+            .filter(|(a, b)| a.is_finite() && b.is_finite())
+            .map(|(a, b)| (*a, *b))
+            .unzip();
+        let n = x.len();
+        if n < 3 {
+            return Err("标准曲线至少需要 3 个标准点".into());
+        }
+        let nf = n as f64;
+        let (mx, my) = (x.iter().sum::<f64>() / nf, y.iter().sum::<f64>() / nf);
+        let sxx: f64 = x.iter().map(|v| (v - mx).powi(2)).sum();
+        let syy: f64 = y.iter().map(|v| (v - my).powi(2)).sum();
+        if sxx <= 0.0 {
+            return Err("标准点的浓度（X）全部相同".into());
+        }
+        let slope = x.iter().zip(&y).map(|(a, b)| (a - mx) * (b - my)).sum::<f64>() / sxx;
+        if slope == 0.0 {
+            return Err("标准曲线斜率为 0，无法反查".into());
+        }
+        let intercept = my - slope * mx;
+        let sse: f64 = x.iter().zip(&y).map(|(a, b)| (b - intercept - slope * a).powi(2)).sum();
+        Ok(Calibration {
+            n,
+            intercept,
+            slope,
+            s: (sse / (nf - 2.0)).sqrt(),
+            r2: if syy > 0.0 { 1.0 - sse / syy } else { 1.0 },
+            mean_y: my,
+            sxx,
+        })
+    }
+
+    /// 由 `m` 次平行测定的平均响应 `y0` 反查 x0，返回 (x0, 标准差 s(x0), 95% 置信区间半宽)。
+    /// 公式见 Miller & Miller《分析化学中的统计与化学计量学》。
+    pub fn inverse(&self, y0: f64, m: usize) -> (f64, f64, f64) {
+        let (b, nf) = (self.slope, self.n as f64);
+        let x0 = (y0 - self.intercept) / b;
+        let sx0 =
+            self.s / b.abs() * (1.0 / m as f64 + 1.0 / nf + (y0 - self.mean_y).powi(2) / (b * b * self.sxx)).sqrt();
+        (x0, sx0, t_ppf(0.975, nf - 2.0) * sx0)
+    }
+}
+
 /// 频数统计的一个区间 `[lo, hi)`；最后一个区间包含右端点。
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Bin {
@@ -1118,6 +1179,27 @@ mod tests {
         near(r.critical, 2.708245645805754);
         near(r.p, 0.9544522095301384);
         assert!(grubbs(&[1.0, 1.0, 1.0], 0.05).is_err());
+    }
+
+    #[test]
+    fn calibration_inverse_matches_numpy_and_scipy() {
+        let near = |got: f64, want: f64| assert!((got - want).abs() <= 1e-9 * want.abs(), "{got} vs {want}");
+        let x = [0.0, 1.0, 2.0, 4.0, 6.0, 8.0, 10.0];
+        let y = [0.02, 0.215, 0.41, 0.79, 1.22, 1.58, 2.01];
+        let c = Calibration::fit(&x, &y).unwrap();
+        // numpy.polyfit 与 scipy.stats.t.ppf(0.975, n − 2)
+        for (y0, m, x0, sx0, half) in [
+            (0.9, 1, 4.468198640158359, 0.0830757705868752, 0.21355306685211103),
+            (1.5, 3, 7.494276615887768, 0.05961193918634394, 0.15323736805947238),
+        ] {
+            let (a, b, h) = c.inverse(y0, m);
+            near(a, x0);
+            near(b, sx0);
+            near(h, half);
+        }
+        assert!(c.r2 > 0.999);
+        assert!(Calibration::fit(&[1.0, 1.0, 1.0], &[1.0, 2.0, 3.0]).is_err());
+        assert!(Calibration::fit(&[1.0, 2.0], &[1.0, 2.0]).is_err());
     }
 
     #[test]

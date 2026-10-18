@@ -1602,6 +1602,26 @@ impl SciApp {
         });
     }
 
+    /// 标准曲线反查：按点选顺序取标准浓度、标准响应、样品响应三列。
+    pub(crate) fn calibrate(&mut self) {
+        let Some((id, keys)) = self.ttest_columns() else { return };
+        if keys.len() != 3 {
+            self.status = "请按顺序 Ctrl+单击选中三列：标准浓度（X）、标准响应（Y）、样品响应".into();
+            return;
+        }
+        match self.project.calibrate(id, &keys[0], &keys[1], &keys[2]) {
+            Ok((cal, k0, k1)) => {
+                self.status = format!(
+                    "标准曲线 y = {} + {}·x，R² = {}；反查结果在新列 {k0}、{k1}",
+                    fmt_num(round_sig(cal.intercept, 6)),
+                    fmt_num(round_sig(cal.slope, 6)),
+                    fmt_num(round_sig(cal.r2, 6))
+                );
+            }
+            Err(e) => self.status = e,
+        }
+    }
+
     /// 每个点选的列作为一组做单因素方差分析。
     pub(crate) fn anova(&mut self) {
         let Some((id, keys)) = self.ttest_columns() else { return };
@@ -4448,6 +4468,25 @@ mod history_tests {
         app.selection.insert(1, vec![]);
         app.normality();
         assert!(app.dialog.is_none() && app.status.contains("选中"));
+    }
+
+    #[test]
+    fn calibrate_needs_three_columns_in_click_order() {
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["A".into(), "B".into()]);
+        app.calibrate();
+        assert!(app.status.contains("三列"));
+        let cols = app.project.book(1).unwrap().columns.len();
+        app.selection.insert(1, vec!["A".into(), "B".into(), "C".into()]);
+        app.begin_edit("标准曲线反查");
+        app.calibrate();
+        app.history.changed();
+        app.finish_edit();
+        assert_eq!(app.project.book(1).unwrap().columns.len(), cols + 2, "{}", app.status);
+        assert!(app.status.contains("R²"));
+        app.undo();
+        assert_eq!(app.project.book(1).unwrap().columns.len(), cols);
     }
 
     #[test]
