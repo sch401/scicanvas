@@ -1246,6 +1246,121 @@ impl SciApp {
         });
     }
 
+    pub(crate) fn open_frequency_dialog(&mut self) {
+        // 默认范围：要统计的各列里全部数值的最小、最大值
+        let (from, to) = self
+            .analysis_source()
+            .and_then(|src| self.project.value_range(&src))
+            .unwrap_or((0.0, 1.0));
+        self.dialog = Some(Dialog::Frequency {
+            auto: true,
+            bins: 10,
+            custom: false,
+            from,
+            to,
+        });
+    }
+
+    fn frequency_counts(&mut self, bins: Option<usize>, range: Option<(f64, f64)>) {
+        let Some(src) = self.analysis_source() else { return };
+        match self.project.frequency_counts(&src, bins, range) {
+            Ok(ids) => {
+                let names: Vec<String> = ids
+                    .iter()
+                    .filter_map(|id| self.project.name_of(*id).map(str::to_owned))
+                    .collect();
+                if let Some(last) = ids.last() {
+                    self.show_item(*last);
+                }
+                self.status = format!("频数统计结果在 {}", names.join("、"));
+            }
+            Err(e) => self.status = e,
+        }
+    }
+
+    /// 当前工作簿里按点选顺序参与检验的列（没有点选列时用单元格选区覆盖的列）。
+    fn ttest_columns(&self) -> Option<(u64, Vec<String>)> {
+        let id = self.active_book_id()?;
+        let book = self.project.book(id)?;
+        let keys: Vec<String> = self
+            .picked(id)
+            .0
+            .into_iter()
+            .filter(|k| book.column(k).is_some())
+            .collect();
+        Some((id, keys))
+    }
+
+    pub(crate) fn open_ttest_dialog(&mut self) {
+        let Some((id, keys)) = self.ttest_columns() else { return };
+        let book = self.project.book(id).unwrap();
+        let columns = keys
+            .iter()
+            .take(2)
+            .map(|k| book.column(k).unwrap().display_name().to_owned())
+            .collect();
+        self.dialog = Some(Dialog::TTest {
+            columns,
+            kind: if keys.len() >= 2 { 1 } else { 0 },
+            mu: 0.0,
+            equal_var: false,
+            level: 0.95,
+        });
+    }
+
+    fn run_ttest(&mut self, kind: scicanvas_core::stats::TTestKind, level: f64) {
+        let Some((id, keys)) = self.ttest_columns() else { return };
+        let book = self.project.book(id).unwrap();
+        let values = |k: Option<&String>| k.and_then(|k| book.column(k)).map(|c| c.values()).unwrap_or_default();
+        let names = keys
+            .iter()
+            .take(2)
+            .map(|k| book.column(k).unwrap().display_name().to_owned())
+            .collect();
+        match scicanvas_core::stats::t_test(kind, &values(keys.first()), &values(keys.get(1)), level) {
+            Ok(result) => {
+                self.status = format!(
+                    "{}：t = {}，p = {}",
+                    kind.label(),
+                    round_sig(result.t, 4),
+                    round_sig(result.p, 4)
+                );
+                self.dialog = Some(Dialog::TTestReport { result, names });
+            }
+            Err(e) => self.status = e,
+        }
+    }
+
+    pub(crate) fn open_interpolate_dialog(&mut self) {
+        let (from, to) = self
+            .analysis_source()
+            .and_then(|src| self.project.x_range(&src))
+            .unwrap_or((0.0, 1.0));
+        self.dialog = Some(Dialog::Interpolate {
+            method: scicanvas_core::interpolate::InterpMethod::Spline,
+            points: 100,
+            custom: false,
+            from,
+            to,
+        });
+    }
+
+    fn interpolate(
+        &mut self,
+        method: scicanvas_core::interpolate::InterpMethod,
+        points: usize,
+        range: Option<(f64, f64)>,
+    ) {
+        let Some(src) = self.analysis_source() else { return };
+        match self.project.interpolate(&src, method, points, range) {
+            Ok((gid, keys)) => {
+                self.show_item(gid);
+                self.status = format!("已{}插值，结果在新列 {}", method.label(), keys.join(", "));
+            }
+            Err(e) => self.status = e,
+        }
+    }
+
     pub(crate) fn open_normalize_dialog(&mut self) {
         self.dialog = Some(Dialog::Normalize {
             method: NormalizeMethod::MinMax,
@@ -1317,6 +1432,23 @@ impl SciApp {
                 self.begin_edit("平滑");
                 self.dialog = None;
                 self.smooth(m, w);
+                self.history.changed();
+                self.finish_edit();
+            }
+            dialogs::Action::Interpolate(method, points, range) => {
+                self.finish_edit();
+                self.begin_edit("插值");
+                self.dialog = None;
+                self.interpolate(method, points, range);
+                self.history.changed();
+                self.finish_edit();
+            }
+            dialogs::Action::TTest(kind, level) => self.run_ttest(kind, level),
+            dialogs::Action::Frequency(bins, range) => {
+                self.finish_edit();
+                self.begin_edit("频数统计");
+                self.dialog = None;
+                self.frequency_counts(bins, range);
                 self.history.changed();
                 self.finish_edit();
             }
@@ -3711,6 +3843,61 @@ mod history_tests {
         assert_ne!(app.active, Some(id));
         app.run_command("edit.redo");
         assert_eq!(app.open.get(&id), Some(&true));
+    }
+
+    #[test]
+    fn frequency_dialog_defaults_to_the_picked_columns_value_range() {
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["A".into()]);
+        app.open_frequency_dialog();
+        assert!(matches!(
+            app.dialog,
+            Some(Dialog::Frequency { auto: true, custom: false, from, to, .. }) if from == 0.0 && to == 20.0
+        ));
+        let before = app.project.clone();
+        app.frequency_counts(Some(4), None);
+        assert_eq!(app.project.books.len(), before.books.len() + 1);
+        assert_eq!(
+            app.active,
+            app.project.books.last().map(|b| b.id),
+            "the new table is shown"
+        );
+    }
+
+    #[test]
+    fn ttest_uses_the_picked_columns_in_click_order_and_leaves_data_alone() {
+        use scicanvas_core::stats::{t_test, TTestKind};
+        let mut app = app();
+        app.active = Some(1);
+        let before = app.project.clone();
+        app.selection.insert(1, vec!["C".into(), "B".into()]);
+        app.open_ttest_dialog();
+        match &app.dialog {
+            Some(Dialog::TTest { columns, kind, .. }) => {
+                assert_eq!(columns, &["电压 B", "电压 A"]);
+                assert_eq!(*kind, 1, "two picked columns default to a two-sample test");
+            }
+            _ => panic!("t-test dialog should open"),
+        }
+        let kind = TTestKind::TwoSample { equal_var: false };
+        app.run_ttest(kind, 0.95);
+        let book = app.project.book(1).unwrap();
+        let col = |k: &str| book.column(k).unwrap().values();
+        let want = t_test(kind, &col("C"), &col("B"), 0.95).unwrap();
+        match &app.dialog {
+            Some(Dialog::TTestReport { result, names }) => {
+                assert_eq!(result, &want);
+                assert_eq!(names, &["电压 B", "电压 A"]);
+            }
+            _ => panic!("report should open"),
+        }
+        assert_eq!(app.project, before);
+        assert!(app.history.undo_label().is_none());
+
+        app.selection.insert(1, vec!["B".into()]);
+        app.open_ttest_dialog();
+        assert!(matches!(app.dialog, Some(Dialog::TTest { kind: 0, .. })));
     }
 
     #[test]

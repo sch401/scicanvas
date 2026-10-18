@@ -120,7 +120,7 @@ pub static TABS: &[Tab] = &[
                 label: "数学",
                 items: &[
                     Smalls(&["math.smooth", "math.diff", "math.integ"]),
-                    Smalls(&["math.norm"]),
+                    Smalls(&["math.norm", "math.interp"]),
                 ],
             },
         ],
@@ -129,10 +129,16 @@ pub static TABS: &[Tab] = &[
         id: "stats",
         label: "统计",
         ctx: None,
-        groups: &[Group {
-            label: "描述统计",
-            items: &[Big("stats.columns")],
-        }],
+        groups: &[
+            Group {
+                label: "描述统计",
+                items: &[Big("stats.columns"), Big("stats.frequency")],
+            },
+            Group {
+                label: "假设检验",
+                items: &[Big("stats.ttest")],
+            },
+        ],
     },
     Tab {
         id: "sheet",

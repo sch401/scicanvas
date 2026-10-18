@@ -8,6 +8,7 @@ pub mod colormap;
 pub mod coord;
 pub mod csv;
 pub mod history;
+pub mod interpolate;
 pub mod model;
 pub mod ops;
 pub mod page;
@@ -18,6 +19,7 @@ pub mod project_file;
 pub mod project_tree;
 pub mod scene;
 pub mod spline;
+pub mod stats;
 pub mod svg;
 pub mod ticks;
 

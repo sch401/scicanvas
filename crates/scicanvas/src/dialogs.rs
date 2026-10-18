@@ -3,7 +3,9 @@
 use eframe::egui::{self, Align2, RichText};
 use scicanvas_core::analysis::{NormalizeMethod, SmoothMethod};
 use scicanvas_core::fmt_num;
+use scicanvas_core::interpolate::InterpMethod;
 use scicanvas_core::ops::{AreaReport, FitReport};
+use scicanvas_core::stats::{TTest, TTestKind};
 
 use crate::theme::Palette;
 
@@ -20,6 +22,35 @@ pub enum Dialog {
     },
     FitReport(Vec<FitReport>),
     Areas(Vec<AreaReport>),
+    /// 插值：方法、点数，以及是否使用自定义 X 范围（默认是数据的 X 范围）。
+    Interpolate {
+        method: InterpMethod,
+        points: usize,
+        custom: bool,
+        from: f64,
+        to: f64,
+    },
+    /// 频数统计：区间数（自动时按 Sturges 规则）和统计范围（默认是数据范围）。
+    Frequency {
+        auto: bool,
+        bins: usize,
+        custom: bool,
+        from: f64,
+        to: f64,
+    },
+    /// t 检验设置：`columns` 是参与检验的列名（按点选顺序）。
+    TTest {
+        columns: Vec<String>,
+        kind: usize,
+        mu: f64,
+        equal_var: bool,
+        level: f64,
+    },
+    /// t 检验结果和参与检验的列名。
+    TTestReport {
+        result: TTest,
+        names: Vec<String>,
+    },
     /// 导出 PNG：分辨率和页面毫米尺寸（用来显示像素数）。
     Png {
         dpi: u32,
@@ -35,6 +66,42 @@ pub enum Action {
     Smooth(SmoothMethod, usize),
     Normalize(NormalizeMethod),
     ExportPng(u32),
+    Interpolate(InterpMethod, usize, Option<(f64, f64)>),
+    TTest(TTestKind, f64),
+    Frequency(Option<usize>, Option<(f64, f64)>),
+}
+
+/// t 检验报告的行（标签、各组或总体的值），供窗口和复制共用。
+fn ttest_rows(r: &TTest, names: &[String]) -> Vec<(String, String)> {
+    let mut rows = vec![("检验".to_string(), r.kind.label().to_string())];
+    let groups = r.n.len();
+    for g in 0..groups {
+        let name = names.get(g).cloned().unwrap_or_default();
+        let tag = if groups > 1 {
+            format!("{}（{}）", ["A", "B"][g], name)
+        } else {
+            name
+        };
+        rows.push((format!("{tag} N"), r.n[g].to_string()));
+        rows.push((format!("{tag} 均值"), fmt_num(r.mean[g])));
+        rows.push((format!("{tag} 标准差"), fmt_num(r.sd[g])));
+    }
+    let (estimate, null) = match r.kind {
+        TTestKind::OneSample { mu } => ("均值", format!("均值 = {}", fmt_num(mu))),
+        TTestKind::TwoSample { .. } => ("均值差 A − B", "两组均值相等".to_string()),
+        TTestKind::Paired => ("差值均值 A − B", "差值均值为 0".to_string()),
+    };
+    rows.push(("原假设".into(), null));
+    rows.push((estimate.into(), fmt_num(r.estimate)));
+    rows.push(("标准误".into(), fmt_num(r.se)));
+    rows.push(("t".into(), fmt_num(r.t)));
+    rows.push(("自由度".into(), fmt_num(r.df)));
+    rows.push(("p（双侧）".into(), fmt_num(r.p)));
+    rows.push((
+        format!("{}% 置信区间", fmt_num(r.level * 100.0)),
+        format!("{} ~ {}", fmt_num(r.ci.0), fmt_num(r.ci.1)),
+    ));
+    rows
 }
 
 fn window(title: &str) -> egui::Window<'_> {
@@ -229,6 +296,209 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                 if ui.button("关闭").clicked() {
                     action = Action::Close;
                 }
+            });
+        }
+        Dialog::Interpolate {
+            method,
+            points,
+            custom,
+            from,
+            to,
+        } => {
+            window("插值").show(ctx, |ui| {
+                egui::Grid::new("interp-grid")
+                    .num_columns(2)
+                    .spacing([12.0, 8.0])
+                    .show(ui, |ui| {
+                        ui.label("方法");
+                        ui.horizontal(|ui| {
+                            for m in InterpMethod::ALL {
+                                ui.radio_value(method, m, m.label());
+                            }
+                        });
+                        ui.end_row();
+                        ui.label("点数");
+                        ui.add(egui::DragValue::new(points).range(2..=100_000).speed(1.0));
+                        ui.end_row();
+                        ui.label("X 范围");
+                        ui.horizontal(|ui| {
+                            ui.checkbox(custom, "自定义");
+                            ui.add_enabled(*custom, egui::DragValue::new(from).speed(0.1));
+                            ui.label("到");
+                            ui.add_enabled(*custom, egui::DragValue::new(to).speed(0.1));
+                        });
+                        ui.end_row();
+                    });
+                ui.label(
+                    RichText::new(
+                        "在等间距的 X 上求值，结果写成新的 X、Y 列并画成线。超出数据范围时按端点那一段外推。\nAkima 在数据突变处比三次样条更少过冲。",
+                    )
+                    .small()
+                    .color(pal.weak),
+                );
+                let valid = !*custom || (from.is_finite() && to.is_finite() && from < to);
+                if !valid {
+                    ui.colored_label(egui::Color32::from_rgb(182, 67, 66), "起点必须小于终点");
+                }
+                let (ok, cancel) = buttons(ui, "插值");
+                if ok && valid {
+                    action = Action::Interpolate(*method, *points, custom.then_some((*from, *to)));
+                } else if cancel {
+                    action = Action::Close;
+                }
+            });
+        }
+        Dialog::Frequency {
+            auto,
+            bins,
+            custom,
+            from,
+            to,
+        } => {
+            window("频数统计").show(ctx, |ui| {
+                egui::Grid::new("freq-grid")
+                    .num_columns(2)
+                    .spacing([12.0, 8.0])
+                    .show(ui, |ui| {
+                        ui.label("区间数");
+                        ui.horizontal(|ui| {
+                            ui.checkbox(auto, "自动（Sturges）");
+                            ui.add_enabled(!*auto, egui::DragValue::new(bins).range(1..=10_000));
+                        });
+                        ui.end_row();
+                        ui.label("统计范围");
+                        ui.horizontal(|ui| {
+                            ui.checkbox(custom, "自定义");
+                            ui.add_enabled(*custom, egui::DragValue::new(from).speed(0.1));
+                            ui.label("到");
+                            ui.add_enabled(*custom, egui::DragValue::new(to).speed(0.1));
+                        });
+                        ui.end_row();
+                    });
+                ui.label(
+                    RichText::new(
+                        "每个选中的列生成一个新表：区间下限、中点、上限、频数、累积频数、相对频率和累积相对频率。\n区间等宽，最后一个区间包含右端点（与 numpy.histogram 相同）；范围外的值不计。",
+                    )
+                    .small()
+                    .color(pal.weak),
+                );
+                let valid = !*custom || (from.is_finite() && to.is_finite() && from < to);
+                if !valid {
+                    ui.colored_label(egui::Color32::from_rgb(182, 67, 66), "起点必须小于终点");
+                }
+                let (ok, cancel) = buttons(ui, "统计");
+                if ok && valid {
+                    action = Action::Frequency((!*auto).then_some(*bins), custom.then_some((*from, *to)));
+                } else if cancel {
+                    action = Action::Close;
+                }
+            });
+        }
+        Dialog::TTest {
+            columns,
+            kind,
+            mu,
+            equal_var,
+            level,
+        } => {
+            window("t 检验").show(ctx, |ui| {
+                const KINDS: [&str; 3] = ["单样本", "双样本（独立）", "配对"];
+                ui.label(format!("参与检验的列：{}", columns.join("、")));
+                ui.horizontal(|ui| {
+                    for (i, label) in KINDS.iter().enumerate() {
+                        ui.radio_value(kind, i, *label);
+                    }
+                });
+                egui::Grid::new("ttest-grid")
+                    .num_columns(2)
+                    .spacing([12.0, 8.0])
+                    .show(ui, |ui| {
+                        if *kind == 0 {
+                            ui.label("假设均值");
+                            ui.add(egui::DragValue::new(mu).speed(0.1));
+                            ui.end_row();
+                        }
+                        if *kind == 1 {
+                            ui.label("方差");
+                            ui.checkbox(equal_var, "假设两组方差相等（不勾选为 Welch 检验）");
+                            ui.end_row();
+                        }
+                        ui.label("置信水平");
+                        ui.horizontal(|ui| {
+                            for l in [0.9, 0.95, 0.99] {
+                                ui.selectable_value(level, l, format!("{}%", fmt_num(l * 100.0)));
+                            }
+                        });
+                        ui.end_row();
+                    });
+                let need = if *kind == 0 { 1 } else { 2 };
+                let ready = columns.len() >= need;
+                let hint = match *kind {
+                    0 => "使用第 1 列。".to_string(),
+                    1 => "比较第 1 列（A）与第 2 列（B）两组独立样本。".to_string(),
+                    _ => "按行配对第 1 列（A）与第 2 列（B），只用两列都有数值的行。".to_string(),
+                };
+                ui.label(RichText::new(hint).small().color(pal.weak));
+                if !ready {
+                    ui.colored_label(
+                        egui::Color32::from_rgb(182, 67, 66),
+                        "请先在工作表里按顺序单击选中两列（Ctrl+单击多选）",
+                    );
+                }
+                let (ok, cancel) = buttons(ui, "计算");
+                if ok && ready {
+                    let k = match *kind {
+                        0 => TTestKind::OneSample { mu: *mu },
+                        1 => TTestKind::TwoSample { equal_var: *equal_var },
+                        _ => TTestKind::Paired,
+                    };
+                    action = Action::TTest(k, *level);
+                } else if cancel {
+                    action = Action::Close;
+                }
+            });
+        }
+        Dialog::TTestReport { result, names } => {
+            window("t 检验结果").show(ctx, |ui| {
+                let rows = ttest_rows(result, names);
+                egui::Grid::new("ttest-report")
+                    .striped(true)
+                    .num_columns(2)
+                    .spacing([24.0, 4.0])
+                    .show(ui, |ui| {
+                        for (k, v) in &rows {
+                            ui.label(k);
+                            ui.label(RichText::new(v).monospace());
+                            ui.end_row();
+                        }
+                    });
+                let verdict = if result.p < 1.0 - result.level {
+                    "在该显著性水平下拒绝原假设"
+                } else {
+                    "在该显著性水平下不能拒绝原假设"
+                };
+                ui.label(
+                    RichText::new(format!(
+                        "显著性水平 α = {}：{verdict}。缺失值和非数值单元格已跳过。",
+                        fmt_num(1.0 - result.level)
+                    ))
+                    .small()
+                    .color(pal.weak),
+                );
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    if ui
+                        .button("复制结果")
+                        .on_hover_text("复制为制表符分隔的文本，可粘贴到 Excel")
+                        .clicked()
+                    {
+                        let text: Vec<String> = rows.iter().map(|(k, v)| format!("{k}\t{v}")).collect();
+                        ui.ctx().copy_text(text.join("\n"));
+                    }
+                    if ui.button(RichText::new("关闭").strong()).clicked() {
+                        action = Action::Close;
+                    }
+                });
             });
         }
         Dialog::Png { dpi, page_mm } => {
