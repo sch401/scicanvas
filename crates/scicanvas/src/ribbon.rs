@@ -100,7 +100,10 @@ pub static TABS: &[Tab] = &[
             },
             Group {
                 label: "图形",
-                items: &[Big("graph.props"), Smalls(&["graph.export"])],
+                items: &[
+                    Big("graph.props"),
+                    Smalls(&["graph.export", "graph.export_png", "graph.copy"]),
+                ],
             },
         ],
     },
@@ -190,7 +193,7 @@ pub static TABS: &[Tab] = &[
             },
             Group {
                 label: "导出",
-                items: &[Big("graph.export")],
+                items: &[Big("graph.export"), Smalls(&["graph.export_png", "graph.copy"])],
             },
         ],
     },
@@ -237,6 +240,7 @@ const BACKSTAGE_NAV: &[&str] = &[
     "file.save",
     "file.saveas",
     "graph.export",
+    "graph.export_png",
     "project.reset",
     "help.show",
     "app.quit",

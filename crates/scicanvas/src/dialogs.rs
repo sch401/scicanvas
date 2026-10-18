@@ -8,11 +8,23 @@ use scicanvas_core::ops::{AreaReport, FitReport};
 use crate::theme::Palette;
 
 pub enum Dialog {
-    Poly { order: usize },
-    Smooth { method: SmoothMethod, window: usize },
-    Normalize { method: NormalizeMethod },
+    Poly {
+        order: usize,
+    },
+    Smooth {
+        method: SmoothMethod,
+        window: usize,
+    },
+    Normalize {
+        method: NormalizeMethod,
+    },
     FitReport(Vec<FitReport>),
     Areas(Vec<AreaReport>),
+    /// 导出 PNG：分辨率和页面毫米尺寸（用来显示像素数）。
+    Png {
+        dpi: u32,
+        page_mm: (f64, f64),
+    },
 }
 
 /// 对话框里用户做出的选择，由 app.rs 执行。
@@ -22,6 +34,7 @@ pub enum Action {
     Fit(usize),
     Smooth(SmoothMethod, usize),
     Normalize(NormalizeMethod),
+    ExportPng(u32),
 }
 
 fn window(title: &str) -> egui::Window<'_> {
@@ -214,6 +227,36 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                         .color(pal.weak),
                 );
                 if ui.button("关闭").clicked() {
+                    action = Action::Close;
+                }
+            });
+        }
+        Dialog::Png { dpi, page_mm } => {
+            window("导出 PNG").show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("分辨率");
+                    for preset in [150, 300, 600, 1200] {
+                        ui.selectable_value(dpi, preset, format!("{preset} dpi"));
+                    }
+                    ui.add(egui::DragValue::new(dpi).range(72..=2400).suffix(" dpi"));
+                });
+                let px = |mm: f64| (mm / 25.4 * f64::from(*dpi)).round();
+                ui.label(format!(
+                    "页面 {} × {} mm，输出约 {} × {} 像素",
+                    fmt_num(page_mm.0),
+                    fmt_num(page_mm.1),
+                    px(page_mm.0),
+                    px(page_mm.1)
+                ));
+                ui.label(
+                    RichText::new("期刊投稿的线条图一般用 600 dpi；PNG 记录了分辨率，插入 Word 时按页面实际尺寸显示。")
+                        .small()
+                        .color(pal.weak),
+                );
+                let (ok, cancel) = buttons(ui, "导出…");
+                if ok {
+                    action = Action::ExportPng(*dpi);
+                } else if cancel {
                     action = Action::Close;
                 }
             });

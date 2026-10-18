@@ -537,6 +537,54 @@ impl SciApp {
         };
     }
 
+    pub(crate) fn export_png_dialog(&mut self) {
+        let Some(gid) = self.target_graph() else { return };
+        let Some(g) = self.project.graph(gid) else { return };
+        self.dialog = Some(Dialog::Png {
+            dpi: 600,
+            page_mm: (g.page.width_mm, g.page.height_mm),
+        });
+    }
+
+    pub(crate) fn export_png(&mut self, dpi: u32) {
+        let Some(gid) = self.target_graph() else { return };
+        let Some(g) = self.project.graph(gid).cloned() else {
+            return;
+        };
+        let Some(path) = rfd::FileDialog::new()
+            .set_title("导出 PNG")
+            .add_filter("PNG 图像", &["png"])
+            .set_file_name(format!("{}.png", g.name))
+            .save_file()
+        else {
+            return;
+        };
+        let result = crate::export::rasterize(&svg::render_page(&g, &self.project), dpi).and_then(|pixmap| {
+            let bytes = crate::export::png_bytes(&pixmap, dpi)?;
+            std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+            Ok((pixmap.width(), pixmap.height()))
+        });
+        self.status = match result {
+            Ok((w, h)) => format!("已导出 {}（{w} × {h} 像素，{dpi} dpi）", path.display()),
+            Err(e) => format!("导出失败：{e}"),
+        };
+    }
+
+    /// 按 300 dpi 把当前图形复制为位图，可直接粘贴到 Word、PPT。
+    pub(crate) fn copy_graph(&mut self) {
+        let Some(gid) = self.target_graph() else { return };
+        let Some(g) = self.project.graph(gid).cloned() else {
+            return;
+        };
+        let dpi = crate::export::CLIPBOARD_DPI;
+        let result = crate::export::rasterize(&svg::render_page(&g, &self.project), dpi)
+            .and_then(|pixmap| crate::export::copy_to_clipboard(&pixmap));
+        self.status = match result {
+            Ok(()) => format!("已复制 {}（{dpi} dpi 位图），可粘贴到 Word、PPT", g.name),
+            Err(e) => format!("复制失败：{e}"),
+        };
+    }
+
     // ---------------------------------------------------------------- 命令用到的查询与操作
 
     /// 执行一条命令（功能区、快捷键、命令面板都走这里）。不能执行时在状态栏说明原因。
@@ -1146,6 +1194,10 @@ impl SciApp {
                 self.history.changed();
                 self.finish_edit();
             }
+            dialogs::Action::ExportPng(dpi) => {
+                self.dialog = None;
+                self.export_png(dpi);
+            }
             dialogs::Action::Normalize(m) => {
                 self.finish_edit();
                 self.begin_edit("归一化");
@@ -1184,12 +1236,13 @@ impl SciApp {
             }
         }
         // 命令面板打开时，方向键、回车由面板自己处理
-        let keys: [(Modifiers, Key, &str); 8] = [
+        let keys: [(Modifiers, Key, &str); 9] = [
             (Modifiers::COMMAND, Key::N, "book.new"),
             (Modifiers::COMMAND, Key::O, "file.open"),
             (Modifiers::COMMAND, Key::S, "file.save"),
             (Modifiers::COMMAND, Key::I, "file.import"),
             (Modifiers::COMMAND, Key::E, "graph.export"),
+            (Modifiers::COMMAND, Key::J, "graph.copy"),
             (Modifiers::COMMAND, Key::K, "palette.open"),
             (Modifiers::COMMAND, Key::F1, "ribbon.toggle"),
             (Modifiers::NONE, Key::F1, "help.show"),
@@ -2514,7 +2567,9 @@ impl SciApp {
         resp.context_menu(|ui| {
             for (cid, label) in [
                 ("graph.props", "绘图属性…"),
+                ("graph.copy", "复制图形"),
                 ("graph.export", "导出 SVG…"),
+                ("graph.export_png", "导出 PNG…"),
                 ("", ""),
                 ("graph.legend", "图例"),
                 ("graph.grid", "网格线"),

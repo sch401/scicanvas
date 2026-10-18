@@ -6,6 +6,7 @@ mod assist;
 mod builder;
 mod commands;
 mod dialogs;
+mod export;
 mod fonts;
 mod icons;
 mod mdi;
