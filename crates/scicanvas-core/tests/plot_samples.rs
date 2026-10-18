@@ -45,7 +45,8 @@ fn sample(kind: PlotType, book_name: &str, columns: Vec<Spec>) -> Project {
     p
 }
 
-/// 调整图层：轴标题概括多列数据；柱类图手动留出空白，图例不压住柱子。
+/// 调整图层：轴标题概括多列数据；柱子占满坐标框时手动留出放图例的空白，
+/// 阶梯图留出顶部余量，最高一段不和坐标框重合。
 fn layer(mut p: Project, f: impl FnOnce(&mut Layer)) -> Project {
     f(p.graphs[0].first_layer_mut());
     p
@@ -197,7 +198,7 @@ fn samples() -> Vec<(String, Project)> {
             ),
             |l| {
                 l.y_title = "发电量 (TWh)".into();
-                range(l, Some((2019.0, 2029.0)), Some((0.0, 1000.0)));
+                range(l, Some((2019.0, 2030.0)), Some((0.0, 1000.0)));
             },
         ),
         layer(
@@ -243,28 +244,25 @@ fn samples() -> Vec<(String, Project)> {
             ),
             |l| l.y_title = "气温 (°C)".into(),
         ),
-        layer(
-            sample(
-                HorizontalBar,
-                "处理方法去除率",
-                vec![
-                    (
-                        X,
-                        "方法编号",
-                        "",
-                        "X 列：显示在纵轴。1 混凝，2 活性炭，3 臭氧，4 膜分离，5 生物法，6 芬顿",
-                        numbers(6),
-                    ),
-                    (
-                        Y,
-                        "去除率",
-                        "%",
-                        "Y 列：显示为横向条的长度",
-                        list(&[45.2, 68.7, 74.1, 91.3, 63.5, 82.8]),
-                    ),
-                ],
-            ),
-            |l| range(l, None, Some((0.0, 8.0))),
+        sample(
+            HorizontalBar,
+            "处理方法去除率",
+            vec![
+                (
+                    X,
+                    "方法编号",
+                    "",
+                    "X 列：显示在纵轴。1 混凝，2 活性炭，3 臭氧，4 膜分离，5 生物法，6 芬顿",
+                    numbers(6),
+                ),
+                (
+                    Y,
+                    "去除率",
+                    "%",
+                    "Y 列：显示为横向条的长度",
+                    list(&[45.2, 68.7, 74.1, 91.3, 63.5, 82.8]),
+                ),
+            ],
         ),
         sample(
             Area,

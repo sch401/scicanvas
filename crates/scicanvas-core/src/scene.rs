@@ -398,6 +398,123 @@ fn spline_paths(s: &crate::Series) -> Vec<Vec<[f64; 2]>> {
     out
 }
 
+/// 图例要避开的数据几何（页面像素坐标）。
+#[derive(Clone, Copy, Debug)]
+enum Obstacle {
+    /// [左, 上, 右, 下]：柱子、标签文字。
+    Box([f64; 4]),
+    /// 线段及其半线宽：折线、阶梯线、误差棒、垂线。
+    Seg([f64; 4], f64),
+    Tri([[f64; 2]; 3]),
+    /// 圆心与半径：数据符号。
+    Dot([f64; 2], f64),
+}
+
+impl Obstacle {
+    fn bounds(&self) -> [f64; 4] {
+        match *self {
+            Obstacle::Box(b) => b,
+            Obstacle::Seg([x1, y1, x2, y2], hw) => [x1.min(x2) - hw, y1.min(y2) - hw, x1.max(x2) + hw, y1.max(y2) + hw],
+            Obstacle::Tri([a, b, c]) => [
+                a[0].min(b[0]).min(c[0]),
+                a[1].min(b[1]).min(c[1]),
+                a[0].max(b[0]).max(c[0]),
+                a[1].max(b[1]).max(c[1]),
+            ],
+            Obstacle::Dot([x, y], r) => [x - r, y - r, x + r, y + r],
+        }
+    }
+
+    /// 点 q 是否落在几何上，或离它不超过 tol。
+    fn hits(&self, q: [f64; 2], tol: f64) -> bool {
+        match *self {
+            Obstacle::Box([l, t, r, b]) => q[0] >= l - tol && q[0] <= r + tol && q[1] >= t - tol && q[1] <= b + tol,
+            Obstacle::Seg([x1, y1, x2, y2], hw) => seg_dist(q, [x1, y1], [x2, y2]) <= hw + tol,
+            Obstacle::Tri([a, b, c]) => {
+                let side = |p: [f64; 2], u: [f64; 2]| (u[0] - p[0]) * (q[1] - p[1]) - (u[1] - p[1]) * (q[0] - p[0]);
+                let (d1, d2, d3) = (side(a, b), side(b, c), side(c, a));
+                let inside = !((d1 < 0.0 || d2 < 0.0 || d3 < 0.0) && (d1 > 0.0 || d2 > 0.0 || d3 > 0.0));
+                inside || seg_dist(q, a, b) <= tol || seg_dist(q, b, c) <= tol || seg_dist(q, c, a) <= tol
+            }
+            Obstacle::Dot(c, r) => (q[0] - c[0]).hypot(q[1] - c[1]) <= r + tol,
+        }
+    }
+}
+
+fn seg_dist(q: [f64; 2], a: [f64; 2], b: [f64; 2]) -> f64 {
+    let (dx, dy) = (b[0] - a[0], b[1] - a[1]);
+    let len2 = dx * dx + dy * dy;
+    let t = if len2 > 0.0 {
+        (((q[0] - a[0]) * dx + (q[1] - a[1]) * dy) / len2).clamp(0.0, 1.0)
+    } else {
+        0.0
+    };
+    (q[0] - a[0] - t * dx).hypot(q[1] - a[1] - t * dy)
+}
+
+/// 把已排好的数据图元拆成图例避让用的几何。
+fn obstacles(items: &[Item]) -> Vec<Obstacle> {
+    let mut out = Vec::new();
+    for item in items {
+        match &item.prim {
+            Prim::Rect { x, y, w, h, .. } => out.push(Obstacle::Box([*x, *y, x + w, y + h])),
+            Prim::Segments { segs, width, .. } => out.extend(segs.iter().map(|s| Obstacle::Seg(*s, width / 2.0))),
+            Prim::Polyline { pts, width, .. } => out.extend(
+                pts.windows(2)
+                    .map(|p| Obstacle::Seg([p[0][0], p[0][1], p[1][0], p[1][1]], width / 2.0)),
+            ),
+            Prim::Triangles { pts, .. } => out.extend(pts.as_chunks::<3>().0.iter().map(|t| Obstacle::Tri(*t))),
+            // 多边形符号最远伸到 1.3 倍半径
+            Prim::Symbols { pts, r, .. } => out.extend(pts.iter().map(|p| Obstacle::Dot(*p, r * 1.3))),
+            Prim::Text {
+                x,
+                y,
+                text,
+                size,
+                anchor,
+                ..
+            } => {
+                let w = text_width(text, *size);
+                let l = match anchor {
+                    Anchor::Start => *x,
+                    Anchor::Middle => x - w / 2.0,
+                    Anchor::End => x - w,
+                };
+                out.push(Obstacle::Box([l, y - size / 2.0, l + w, y + size / 2.0]));
+            }
+        }
+    }
+    out
+}
+
+/// 在矩形 [左, 上, 宽, 高] 内按网格采样，返回落在数据几何上的采样点数（近似重叠面积）。
+fn coverage(obstacles: &[Obstacle], [x, y, w, h]: [f64; 4]) -> usize {
+    const STEP: f64 = 2.0;
+    // 半个网格对角线：任何穿过网格的细线、细柱都至少碰到一个采样点
+    let tol = STEP * std::f64::consts::FRAC_1_SQRT_2;
+    let near: Vec<&Obstacle> = obstacles
+        .iter()
+        .filter(|o| {
+            let [l, t, r, b] = o.bounds();
+            r + tol >= x && l - tol <= x + w && b + tol >= y && t - tol <= y + h
+        })
+        .collect();
+    if near.is_empty() {
+        return 0;
+    }
+    let (nx, ny) = ((w / STEP).ceil() as usize, (h / STEP).ceil() as usize);
+    let mut count = 0;
+    for i in 0..=nx {
+        for j in 0..=ny {
+            let q = [x + w * i as f64 / nx.max(1) as f64, y + h * j as f64 / ny.max(1) as f64];
+            if near.iter().any(|o| o.hits(q, tol)) {
+                count += 1;
+            }
+        }
+    }
+    count
+}
+
 fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View>) -> Scene {
     let horizontal = g.plot_type == PlotType::HorizontalBar;
     // 数据（对数轴去掉非正值）
@@ -560,13 +677,15 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
     let inside_y = |y: f64| y >= top - 0.5 && y <= top + ph + 0.5;
 
     let mut items: Vec<Item> = Vec::new();
+    // 返回推入后的图元数，用来记下本图层数据图元的范围（图例按它避让）
     let mut push = |prim: Prim, clip: bool| {
         items.push(Item {
             prim,
             clip: clip.then_some([left, top, pw, ph]),
-        })
+        });
+        items.len()
     };
-    push(
+    let mut data_start = push(
         Prim::Rect {
             x: 0.0,
             y: 0.0,
@@ -593,7 +712,7 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
                 segs.push([x, top, x, top + ph]);
             }
         }
-        push(
+        data_start = push(
             Prim::Segments {
                 segs,
                 color: GRID,
@@ -916,7 +1035,7 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
     }
 
     // 坐标框：四边闭合
-    push(
+    let data_end = push(
         Prim::Rect {
             x: left,
             y: top,
@@ -926,7 +1045,7 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
             stroke: Some((INK, AXIS_WIDTH)),
         },
         false,
-    );
+    ) - 1;
 
     // 刻度：四边都有，朝内；标签只在下边和左边
     let mut ticks = Vec::new();
@@ -1041,90 +1160,58 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
             (left + pw - pad_x - lw, top + ph - pad_y - lhh),
             (left + pad_x, top + ph - pad_y - lhh),
         ];
-        let mut probe: Vec<[f64; 2]> = Vec::new();
-        for (s, st) in series.iter().zip(&styles) {
-            let pts: Vec<[f64; 2]> = s.points.iter().map(|p| [px(p[0]), py(p[1])]).collect();
-            probe.extend(&pts);
-            if st.kind.has_line() {
-                for w2 in pts.windows(2) {
-                    for k in 1..8 {
-                        let f = k as f64 / 8.0;
-                        probe.push([
-                            w2[0][0] + (w2[1][0] - w2[0][0]) * f,
-                            w2[0][1] + (w2[1][1] - w2[0][1]) * f,
-                        ]);
-                    }
-                }
-            }
-        }
-        let score = |(x, y): (f64, f64)| {
-            probe
-                .iter()
-                .filter(|q| q[0] >= x - 4.0 && q[0] <= x + lw + 4.0 && q[1] >= y - 4.0 && q[1] <= y + lhh + 4.0)
-                .count()
-        };
+        // 按本图层实际画出的几何（柱、线、面积、误差棒、符号、标签）给四个角打分
+        let obstacles = obstacles(&items[data_start..data_end]);
+        let score = |(x, y): (f64, f64)| coverage(&obstacles, [x - 4.0, y - 4.0, lw + 8.0, lhh + 8.0]);
         let (lx, ly) = corners.iter().copied().min_by_key(|c| score(*c)).unwrap_or(corners[0]);
-        push(
-            Prim::Rect {
-                x: lx,
-                y: ly,
-                w: lw,
-                h: lhh,
-                fill: Some((PAPER, 1.0)),
-                stroke: None,
-            },
-            false,
-        );
+        // 上面借用过 items，图例图元（都不裁剪）改用新的 push 推入
+        let mut push = |prim: Prim| items.push(Item { prim, clip: None });
+        push(Prim::Rect {
+            x: lx,
+            y: ly,
+            w: lw,
+            h: lhh,
+            fill: Some((PAPER, 1.0)),
+            stroke: None,
+        });
         for (i, (s, st)) in series.iter().zip(&styles).enumerate() {
             let color = st.color.rgb();
             let cy = ly + 2.0 + lh * i as f64 + lh / 2.0;
             let x0 = lx + 4.0;
             if st.kind.is_bar() || st.kind == PlotType::Area {
-                push(
-                    Prim::Rect {
-                        x: x0 + 5.0,
-                        y: cy - 5.5,
-                        w: sw - 10.0,
-                        h: 11.0,
-                        fill: Some((
-                            color,
-                            if st.kind == PlotType::Area {
-                                f64::from(g.area_opacity)
-                            } else {
-                                1.0
-                            },
-                        )),
-                        stroke: Some((INK, 0.8)),
-                    },
-                    false,
-                );
+                push(Prim::Rect {
+                    x: x0 + 5.0,
+                    y: cy - 5.5,
+                    w: sw - 10.0,
+                    h: 11.0,
+                    fill: Some((
+                        color,
+                        if st.kind == PlotType::Area {
+                            f64::from(g.area_opacity)
+                        } else {
+                            1.0
+                        },
+                    )),
+                    stroke: Some((INK, 0.8)),
+                });
             } else {
                 if st.kind.has_line() {
-                    push(
-                        Prim::Polyline {
-                            pts: vec![[x0, cy], [x0 + sw, cy]],
-                            color,
-                            width: g.line_width as f64,
-                        },
-                        false,
-                    );
+                    push(Prim::Polyline {
+                        pts: vec![[x0, cy], [x0 + sw, cy]],
+                        color,
+                        width: g.line_width as f64,
+                    });
                 }
                 if st.kind.has_symbol() {
-                    push(
-                        Prim::Symbols {
-                            sym: st.symbol,
-                            pts: vec![[x0 + sw / 2.0, cy]],
-                            r: g.symbol_size as f64 / 2.0,
-                            color,
-                        },
-                        false,
-                    );
+                    push(Prim::Symbols {
+                        sym: st.symbol,
+                        pts: vec![[x0 + sw / 2.0, cy]],
+                        r: g.symbol_size as f64 / 2.0,
+                        color,
+                    });
                 }
             }
-            push(
-                text(x0 + sw + 6.0, cy, s.name.clone(), LEGEND_FONT, Anchor::Start),
-                false,
-            );
+            push(text(x0 + sw + 6.0, cy, s.name.clone(), LEGEND_FONT, Anchor::Start));
         }
     }
 
