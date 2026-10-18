@@ -13,7 +13,31 @@ use scicanvas_core::stats::{Anova, Correlation, TTest, TTestKind, TukeyPair};
 
 use crate::theme::Palette;
 
+/// 列属性对话框里编辑的内容。
+#[derive(Clone, Debug, PartialEq)]
+pub struct ColumnEdit {
+    pub key: String,
+    pub long_name: String,
+    pub units: String,
+    pub comment: String,
+    pub role: scicanvas_core::Role,
+    pub kind: scicanvas_core::DataKind,
+    pub format: scicanvas_core::format::DisplayFormat,
+}
+
 pub enum Dialog {
+    /// 列属性：编辑内容、第一行的数值（数值列或日期列的毫秒，用于格式预览）、转换失败等错误。
+    ColumnProps {
+        edit: ColumnEdit,
+        sample: Option<f64>,
+        error: Option<String>,
+    },
+    ConvertText {
+        book: u64,
+        key: String,
+        row: usize,
+        value: String,
+    },
     Poly {
         order: usize,
     },
@@ -130,8 +154,10 @@ pub enum Dialog {
 
 /// 对话框里用户做出的选择，由 app.rs 执行。
 pub enum Action {
+    ColumnProps(ColumnEdit),
     None,
     Close,
+    ConvertText(u64, String, usize, String),
     Fit(usize),
     Smooth(SmoothMethod, usize),
     Normalize(NormalizeMethod),
@@ -235,6 +261,151 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
     let mut action = Action::None;
     let esc = ctx.input(|i| i.key_pressed(egui::Key::Escape));
     match dialog {
+        Dialog::ColumnProps { edit, sample, error } => {
+            use scicanvas_core::format::{DateFormat, NumberFormat};
+            use scicanvas_core::{DataKind, Role};
+            let title = format!("列属性 — {}", edit.key);
+            window(ctx, &title).show(ctx, |ui| {
+                egui::Grid::new("column-props")
+                    .num_columns(2)
+                    .spacing([12.0, 8.0])
+                    .show(ui, |ui| {
+                        ui.label("短名");
+                        ui.label(RichText::new(edit.key.as_str()).strong())
+                            .on_hover_text("图形通过短名引用列，创建后不再改变");
+                        ui.end_row();
+                        for (label, field) in [
+                            ("长名称", &mut edit.long_name),
+                            ("单位", &mut edit.units),
+                            ("注释", &mut edit.comment),
+                        ] {
+                            ui.label(label);
+                            ui.add(egui::TextEdit::singleline(field).desired_width(260.0));
+                            ui.end_row();
+                        }
+                        ui.label("列属性");
+                        let roles = [
+                            (Role::X, "X"),
+                            (Role::Y, "Y"),
+                            (Role::XError, "X 误差"),
+                            (Role::YError, "Y 误差"),
+                            (Role::Ignore, "忽略"),
+                        ];
+                        let current = roles.iter().find(|(r, _)| *r == edit.role).map_or("Y", |(_, n)| *n);
+                        egui::ComboBox::from_id_salt("column-role")
+                            .selected_text(current)
+                            .show_ui(ui, |ui| {
+                                for (role, name) in roles {
+                                    ui.selectable_value(&mut edit.role, role, name);
+                                }
+                            });
+                        ui.end_row();
+                        ui.label("数据类型");
+                        egui::ComboBox::from_id_salt("column-kind")
+                            .selected_text(edit.kind.label())
+                            .show_ui(ui, |ui| {
+                                for kind in DataKind::ALL {
+                                    ui.selectable_value(&mut edit.kind, kind, kind.label());
+                                }
+                            });
+                        ui.end_row();
+                        ui.label("显示格式");
+                        match edit.kind {
+                            DataKind::Num => {
+                                ui.horizontal(|ui| {
+                                    let mut index = edit.format.number.index();
+                                    let mut places = edit.format.number.places();
+                                    egui::ComboBox::from_id_salt("column-number-format")
+                                        .selected_text(NumberFormat::KINDS[index])
+                                        .show_ui(ui, |ui| {
+                                            for (i, name) in NumberFormat::KINDS.iter().enumerate() {
+                                                ui.selectable_value(&mut index, i, *name);
+                                            }
+                                        });
+                                    ui.add_enabled_ui(index != 0, |ui| {
+                                        ui.label("小数位");
+                                        ui.add(
+                                            egui::DragValue::new(&mut places)
+                                                .range(0..=scicanvas_core::format::MAX_PLACES)
+                                                .speed(0.1),
+                                        );
+                                    });
+                                    edit.format.number = NumberFormat::from_index(index, places);
+                                });
+                            }
+                            DataKind::DateTime => {
+                                egui::ComboBox::from_id_salt("column-date-format")
+                                    .selected_text(edit.format.date.label())
+                                    .show_ui(ui, |ui| {
+                                        for f in DateFormat::ALL {
+                                            ui.selectable_value(&mut edit.format.date, f, f.label());
+                                        }
+                                    });
+                            }
+                            _ => {
+                                ui.label(RichText::new("文本和分类列按原样显示").color(pal.weak));
+                            }
+                        }
+                        ui.end_row();
+                        let preview = match (edit.kind, sample) {
+                            (DataKind::Num, Some(v)) => {
+                                Some(edit.format.number.apply(*v).unwrap_or_else(|| fmt_num(*v)))
+                            }
+                            (DataKind::DateTime, Some(ms)) => edit.format.date.apply(*ms as i64),
+                            _ => None,
+                        };
+                        if let Some(text) = preview {
+                            ui.label("第 1 行显示为");
+                            ui.label(RichText::new(text).monospace());
+                            ui.end_row();
+                        }
+                    });
+                if let Some(e) = error {
+                    ui.add_space(4.0);
+                    ui.label(RichText::new(e.as_str()).color(ui.visuals().error_fg_color));
+                }
+                ui.label(
+                    RichText::new("显示格式只改变工作表里的显示，存储的数值和原始写法不变；编辑、复制和导出仍用原值。")
+                        .small()
+                        .color(pal.weak),
+                );
+                let (ok, cancel) = buttons(ui, "确定");
+                if ok {
+                    action = Action::ColumnProps(edit.clone());
+                } else if cancel || esc {
+                    action = Action::Close;
+                }
+            });
+        }
+        Dialog::ConvertText { book, key, row, value } => {
+            window(ctx, "转换为文本列？").show(ctx, |ui| {
+                ui.vertical_centered(|ui| {
+                    ui.add_space(4.0);
+                    ui.label(
+                        RichText::new(format!("列 {key} 第 {} 行的输入与当前列类型不符", *row + 1))
+                            .size(14.0)
+                            .strong(),
+                    );
+                    ui.add_space(4.0);
+                    ui.label(RichText::new("转换后整列已有内容原样保留，再写入本次输入；可以撤销。").color(pal.weak));
+                });
+                ui.add_space(10.0);
+                ui.separator();
+                ui.add_space(4.0);
+                ui.horizontal(|ui| {
+                    // 主按钮文字较长，按实际宽度居中
+                    let gap = ui.spacing().item_spacing.x;
+                    let wide = egui::vec2(132.0, BUTTON.y);
+                    ui.add_space(((ui.available_width() - wide.x - BUTTON.x - gap) / 2.0).max(0.0));
+                    if ui.add(primary(ui, "转换为文本并写入").min_size(wide)).clicked() {
+                        action = Action::ConvertText(*book, key.clone(), *row, value.clone());
+                    }
+                    if ui.add(plain("取消")).clicked() || esc {
+                        action = Action::Close;
+                    }
+                });
+            });
+        }
         Dialog::Poly { order } => {
             window(ctx, "多项式拟合").show(ctx, |ui| {
                 ui.horizontal(|ui| {

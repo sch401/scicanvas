@@ -19,7 +19,7 @@ fn project() -> Project {
     book.columns[0].units = "s".into();
     book.columns[1].long_name = "备注,\"引号\"".into();
     book.columns[1].units.clear();
-    book.columns[1].data[0] = " 前后空格 ".into();
+    book.columns[1].data.set_text(0, " 前后空格 ".into());
     p
 }
 

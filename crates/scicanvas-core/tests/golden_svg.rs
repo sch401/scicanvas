@@ -9,7 +9,7 @@ fn cases() -> Vec<(String, String)> {
     let mut project = Project::default();
     let mut book = presets::example();
     // Include negative values and a missing row, not just the positive gallery example.
-    book.columns[1].data = ["-2", "3", "", "5", "-1"].map(str::to_owned).to_vec();
+    book.columns[1].data = ["-2", "3", "", "5", "-1"].map(str::to_owned).to_vec().into();
     project.books.push(book);
     let mut cases = Vec::new();
     for preset in presets::all() {
@@ -24,7 +24,7 @@ fn cases() -> Vec<(String, String)> {
     ] {
         let mut column = Column::new(key, role);
         column.error_for = Some(if role == Role::XError { "A" } else { "B" }.into());
-        column.data = values.map(str::to_owned).to_vec();
+        column.data = values.map(str::to_owned).to_vec().into();
         project.books[0].columns.push(column);
     }
     let mut graph = Graph::new(20, "Errors & labels <baseline>");

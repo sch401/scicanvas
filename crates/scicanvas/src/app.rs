@@ -26,7 +26,9 @@ struct ProjectDrag(u64);
 /// 列标题右键菜单里的操作。
 #[derive(Clone, Copy)]
 enum ColAction {
+    Props,
     SetRole(Role),
+    SetDataKind(scicanvas_core::DataKind),
     InsertRight,
     Clear,
     Delete,
@@ -421,6 +423,61 @@ impl SciApp {
             let key = b.insert_column(at, Role::Y);
             self.status = format!("已添加列 {}", key);
         }
+    }
+
+    /// 打开第一个选中列的属性对话框。
+    pub(crate) fn open_column_props(&mut self) {
+        let Some(id) = self.active_book() else { return };
+        let Some(key) = self.selected_keys(id).into_iter().next() else {
+            self.status = "请先单击列标题选中列".into();
+            return;
+        };
+        let Some(col) = self.project.book(id).and_then(|b| b.column(&key)) else {
+            return;
+        };
+        let sample = (0..col.data.len()).find_map(|r| col.data.f64_at(r).filter(|v| v.is_finite()));
+        self.dialog = Some(Dialog::ColumnProps {
+            edit: dialogs::ColumnEdit {
+                key,
+                long_name: col.long_name.clone(),
+                units: col.units.clone(),
+                comment: col.comment.clone(),
+                role: col.role,
+                kind: col.data.kind(),
+                format: col.format,
+            },
+            sample,
+            error: None,
+        });
+    }
+
+    /// 应用列属性；类型转换失败时不改动任何内容，错误留在对话框里。
+    fn apply_column_props(&mut self, edit: dialogs::ColumnEdit) -> Result<(), String> {
+        let id = self.active_book().ok_or("找不到工作簿")?;
+        let book = self.project.book_mut(id).ok_or("找不到工作簿")?;
+        let col = book.column(&edit.key).ok_or("找不到列")?;
+        if col.data.kind() != edit.kind {
+            book.convert_columns(std::slice::from_ref(&edit.key), edit.kind)?;
+        }
+        if book.column(&edit.key).is_some_and(|c| c.role != edit.role) {
+            book.set_roles(std::slice::from_ref(&edit.key), edit.role);
+        }
+        let col = book.columns.iter_mut().find(|c| c.key == edit.key).unwrap();
+        col.long_name = edit.long_name;
+        col.units = edit.units;
+        col.comment = edit.comment;
+        col.format = edit.format;
+        self.status = format!("已更新列 {} 的属性", edit.key);
+        Ok(())
+    }
+
+    pub(crate) fn set_data_kind(&mut self, kind: scicanvas_core::DataKind) {
+        let Some(id) = self.active_book() else { return };
+        let keys = self.selected_keys(id);
+        self.status = match self.project.book_mut(id).unwrap().convert_columns(&keys, kind) {
+            Ok(()) => format!("已将 {} 设为{}；原始写法保留", keys.join(", "), kind.label()),
+            Err(error) => error,
+        };
     }
 
     pub(crate) fn clear_columns(&mut self) {
@@ -1954,6 +2011,38 @@ impl SciApp {
         match dialogs::show(ctx, d, &self.pal) {
             dialogs::Action::None => {}
             dialogs::Action::Close => self.dialog = None,
+            dialogs::Action::ColumnProps(edit) => {
+                self.finish_edit();
+                self.begin_edit("列属性");
+                match self.apply_column_props(edit) {
+                    Ok(()) => {
+                        self.dialog = None;
+                        self.history.changed();
+                    }
+                    Err(e) => {
+                        if let Some(Dialog::ColumnProps { error, .. }) = &mut self.dialog {
+                            *error = Some(e);
+                        }
+                    }
+                }
+                self.finish_edit();
+            }
+            dialogs::Action::ConvertText(book, key, row, value) => {
+                self.finish_edit();
+                self.begin_edit("转换为文本列并写入");
+                if let Some(column) = self
+                    .project
+                    .book_mut(book)
+                    .and_then(|b| b.columns.iter_mut().find(|c| c.key == key))
+                {
+                    column.data = column.data.converted(scicanvas_core::DataKind::Text).unwrap();
+                    column.set(row, value);
+                    self.history.changed();
+                    self.status = format!("列 {key} 已转换为文本；已有内容保留");
+                }
+                self.dialog = None;
+                self.finish_edit();
+            }
             dialogs::Action::Fit(order) => {
                 self.finish_edit();
                 self.begin_edit("多项式拟合");
@@ -2130,9 +2219,7 @@ impl SciApp {
         let v: Vec<f64> = match self.multi_range(id) {
             Some(r) if sel.is_empty() && !b.columns.is_empty() => b.columns[r.c0()..=r.c1().min(b.columns.len() - 1)]
                 .iter()
-                .flat_map(|c| {
-                    (r.r0()..=r.r1()).map(move |i| c.data.get(i).map_or(f64::NAN, |s| scicanvas_core::parse_num(s)))
-                })
+                .flat_map(|c| (r.r0()..=r.r1()).map(move |i| c.data.f64_at(i).unwrap_or(f64::NAN)))
                 .filter(|x| x.is_finite())
                 .collect(),
             _ => b
@@ -2692,6 +2779,10 @@ impl SciApp {
                                     if resp.clicked() {
                                         clicked = Some(ci);
                                     }
+                                    // 双击列标题打开列属性（与 Origin 相同）
+                                    if resp.double_clicked() {
+                                        action = Some((ci, ColAction::Props));
+                                    }
                                     resp.context_menu(|ui| {
                                         let mut pick = |ui: &mut egui::Ui, label: &str, a: ColAction| {
                                             if ui.button(label).clicked() {
@@ -2699,11 +2790,22 @@ impl SciApp {
                                                 ui.close_menu();
                                             }
                                         };
+                                        pick(ui, "列属性…", ColAction::Props);
+                                        ui.separator();
                                         pick(ui, "设为 X", ColAction::SetRole(Role::X));
                                         pick(ui, "设为 Y", ColAction::SetRole(Role::Y));
                                         pick(ui, "设为 X 误差", ColAction::SetRole(Role::XError));
                                         pick(ui, "设为 Y 误差", ColAction::SetRole(Role::YError));
                                         pick(ui, "设为忽略", ColAction::SetRole(Role::Ignore));
+                                        ui.separator();
+                                        ui.label(format!("数据类型：{}", col.data.kind().label()));
+                                        for kind in scicanvas_core::DataKind::ALL {
+                                            pick(
+                                                ui,
+                                                &format!("转换为{}列", kind.label()),
+                                                ColAction::SetDataKind(kind),
+                                            );
+                                        }
                                         ui.separator();
                                         for t in PlotType::ALL {
                                             pick(ui, t.label(), ColAction::Plot(t));
@@ -2872,7 +2974,8 @@ impl SciApp {
                                         }
                                         painter.line_segment([rect.right_top(), rect.right_bottom()], grid);
                                         painter.line_segment([rect.left_bottom(), rect.right_bottom()], grid);
-                                        if let Some(s) = col.data.get(r).filter(|s| !s.is_empty()) {
+                                        let shown = (r < col.data.len()).then(|| col.display_at(r));
+                                        if let Some(s) = shown.filter(|s| !s.is_empty()) {
                                             ui.painter().with_clip_rect(rect.intersect(ui.clip_rect())).text(
                                                 rect.right_center() - egui::vec2(5.0, 0.0),
                                                 egui::Align2::RIGHT_CENTER,
@@ -2975,8 +3078,18 @@ impl SciApp {
         let mut new_cols: Option<(usize, usize)> = None;
         let mut want_focus = false;
         let mut cell_changed = false;
+        let mut conversion = None;
         let mut commit = |book: &mut scicanvas_core::Book, e: &Edit| {
             if let Some(col) = book.columns.get_mut(e.cell.c) {
+                if !col.data.accepts(&e.buf) {
+                    conversion = Some(Dialog::ConvertText {
+                        book: id,
+                        key: col.key.clone(),
+                        row: e.cell.r,
+                        value: e.buf.clone(),
+                    });
+                    return;
+                }
                 cell_changed = true;
                 col.set(e.cell.r, e.buf.clone());
             }
@@ -3076,7 +3189,7 @@ impl SciApp {
                 .columns
                 .get(c)
                 .and_then(|col| col.data.get(r))
-                .cloned()
+                .map(std::borrow::Cow::into_owned)
                 .unwrap_or_default();
             edit = Some(Edit {
                 cell: Cell { c, r },
@@ -3093,6 +3206,9 @@ impl SciApp {
             }
         }
         st.edit = edit;
+        if let Some(dialog) = conversion {
+            self.dialog = Some(dialog);
+        }
         if cell_changed {
             self.history.changed();
         }
@@ -3157,6 +3273,11 @@ impl SciApp {
             }
             self.active = Some(id);
             let command = match act {
+                ColAction::Props => "col.props",
+                ColAction::SetDataKind(scicanvas_core::DataKind::Num) => "col.type.num",
+                ColAction::SetDataKind(scicanvas_core::DataKind::Text) => "col.type.text",
+                ColAction::SetDataKind(scicanvas_core::DataKind::DateTime) => "col.type.datetime",
+                ColAction::SetDataKind(scicanvas_core::DataKind::Category) => "col.type.category",
                 ColAction::SetRole(Role::X) => "col.setX",
                 ColAction::SetRole(Role::Y) => "col.setY",
                 ColAction::SetRole(Role::XError) => "col.setXError",
@@ -3295,7 +3416,13 @@ impl SciApp {
                             status = Some(range_status(book, &g));
                         }
                         Key::F2 => {
-                            start_edit = Some(book.columns[g.a.c].data.get(g.a.r).cloned().unwrap_or_default());
+                            start_edit = Some(
+                                book.columns[g.a.c]
+                                    .data
+                                    .get(g.a.r)
+                                    .map(std::borrow::Cow::into_owned)
+                                    .unwrap_or_default(),
+                            );
                         }
                         Key::Delete | Key::Backspace => {
                             book.clear_range(g.c0(), g.c1(), g.r0(), g.r1());
@@ -3340,6 +3467,22 @@ impl SciApp {
                     }
                 }
                 Event::Paste(text) => {
+                    let conflicts: Vec<String> = if csv::is_block_paste(&text) {
+                        csv::paste_conflicts(book, g.c0(), g.r0(), &text)
+                    } else {
+                        book.columns[g.c0()..=g.c1()]
+                            .iter()
+                            .filter(|c| !c.data.accepts(text.trim()))
+                            .map(|c| c.key.clone())
+                            .collect()
+                    };
+                    if !conflicts.is_empty() {
+                        status = Some(format!(
+                            "列 {} 与粘贴内容类型不符，数据保持原样。请从列头右键转换为文本列后再粘贴。",
+                            conflicts.join(", ")
+                        ));
+                        continue;
+                    }
                     if csv::is_block_paste(&text) {
                         let (c0, r0) = (g.c0(), g.r0());
                         let (nr, nc) = csv::paste_into(book, c0, r0, &text);
@@ -4845,7 +4988,7 @@ mod history_tests {
             .map(|c| (c.long_name.as_str(), c.units.as_str()))
             .collect();
         assert_eq!(head, [("时间", "s"), ("电压", "mV"), ("备注", "")]);
-        assert_eq!(book.columns[1].data[5], "0.3");
+        assert_eq!(book.columns[1].data.text_at(5), "0.3");
         assert!(app.status.contains("sample-测量（6 行 × 3 列）"));
         roundtrip(&mut app, &before);
     }
@@ -4905,7 +5048,13 @@ mod history_tests {
         let mut app = app();
         app.active = Some(1);
         let before = app.project.clone();
-        let rows = |app: &SciApp| app.project.book(1).unwrap().columns[0].data.clone();
+        let rows = |app: &SciApp| {
+            app.project.book(1).unwrap().columns[0]
+                .data
+                .iter()
+                .map(std::borrow::Cow::into_owned)
+                .collect::<Vec<_>>()
+        };
         let original = rows(&app);
         let select = |app: &mut SciApp| {
             app.sheets.insert(
@@ -5009,7 +5158,7 @@ mod history_tests {
             );
             app.finish_edit();
         }
-        assert_eq!(app.project.books[0].columns[0].data[0], "123");
+        assert_eq!(app.project.books[0].columns[0].data.text_at(0), "123");
         roundtrip(&mut app, &before);
     }
 
@@ -5560,11 +5709,219 @@ mod history_tests {
     }
 
     #[test]
+    fn column_properties_apply_in_one_step_and_failed_conversions_change_nothing() {
+        use scicanvas_core::format::{DisplayFormat, NumberFormat};
+        use scicanvas_core::DataKind;
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["B".into()]);
+        app.run_command("col.props");
+        let Some(Dialog::ColumnProps { edit, sample, .. }) = &app.dialog else {
+            panic!("column properties should open")
+        };
+        let col = app.project.book(1).unwrap().column("B").unwrap();
+        assert_eq!(
+            (edit.key.as_str(), edit.long_name.as_str(), edit.kind),
+            ("B", col.long_name.as_str(), DataKind::Num)
+        );
+        assert_eq!(*sample, col.data.f64_at(0));
+        let mut edit = edit.clone();
+        let raw = col.data.text_at(0).into_owned();
+
+        // 一次确定：名称、单位、注释、角色、格式一起改，作为一步撤销
+        let before = app.project.clone();
+        edit.long_name = "电压".into();
+        edit.units = "V".into();
+        edit.comment = "换算后".into();
+        edit.role = Role::Ignore;
+        edit.format = DisplayFormat {
+            number: NumberFormat::Decimal { places: 1 },
+            ..Default::default()
+        };
+        app.dialog = None;
+        app.begin_edit("列属性");
+        app.apply_column_props(edit.clone()).unwrap();
+        app.history.changed();
+        app.finish_edit();
+        let col = app.project.book(1).unwrap().column("B").unwrap();
+        assert_eq!(
+            (col.long_name.as_str(), col.units.as_str(), col.comment.as_str()),
+            ("电压", "V", "换算后")
+        );
+        assert_eq!(col.role, Role::Ignore);
+        assert_eq!(col.data.text_at(0), raw, "原始写法不变");
+        assert_eq!(col.display_at(0), format!("{:.1}", col.data.f64_at(0).unwrap()));
+        assert_eq!(app.history.undo_label(), Some("列属性"));
+        roundtrip(&mut app, &before);
+
+        // 数值列转日期失败：整次不改，错误留在对话框
+        let before = app.project.clone();
+        let label = app.history.undo_label().map(str::to_owned);
+        edit.kind = DataKind::DateTime;
+        app.open_column_props();
+        app.finish_edit();
+        app.begin_edit("列属性");
+        let err = app.apply_column_props(edit).unwrap_err();
+        app.finish_edit();
+        assert!(err.contains("无法转换"), "{err}");
+        assert_eq!(app.project, before);
+        assert_eq!(
+            app.history.undo_label().map(str::to_owned),
+            label,
+            "失败时不产生撤销步骤"
+        );
+    }
+
+    #[test]
+    fn data_type_commands_are_atomic_and_undoable() {
+        use scicanvas_core::{ColumnData, DataKind};
+        for (command, kind) in [
+            ("col.type.num", DataKind::Num),
+            ("col.type.text", DataKind::Text),
+            ("col.type.category", DataKind::Category),
+            ("col.type.datetime", DataKind::DateTime),
+        ] {
+            let mut app = app();
+            app.active = Some(1);
+            app.selection.insert(1, vec!["A".into()]);
+            // 日期列用常见日期写法；其余用带前导零的数字，检查原始写法保留
+            let first = if kind == DataKind::DateTime { "2026/10/18" } else { "01" };
+            app.project.books[0].columns[0].data = match kind {
+                DataKind::Num => ColumnData::Text(vec![first.into(), "2".into()]),
+                DataKind::DateTime => ColumnData::Text(vec![first.into(), "2026".into()]),
+                _ => vec![first.into(), "2".into()].into(),
+            };
+            let before = app.project.clone();
+            app.run_command(command);
+            assert_eq!(app.project.books[0].columns[0].data.kind(), kind);
+            assert_eq!(app.project.books[0].columns[0].data.text_at(0), first);
+            roundtrip(&mut app, &before);
+        }
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["A".into(), "B".into()]);
+        let before = app.project.clone();
+        app.run_command("col.type.datetime"); // fractional B cells are not millisecond timestamps
+        assert_eq!(app.project, before);
+        assert!(app.history.undo_label().is_none());
+    }
+
+    #[test]
+    fn non_numeric_cell_requires_confirmation_and_can_cancel_or_undo_conversion() {
+        use scicanvas_core::DataKind;
+        for confirm in [false, true] {
+            let ctx = egui::Context::default();
+            crate::fonts::setup(&ctx);
+            let mut app = app();
+            app.active = Some(1);
+            let before = app.project.clone();
+            app.sheets.insert(
+                1,
+                SheetState {
+                    range: Some(Range::single(0, 0)),
+                    edit: Some(Edit {
+                        cell: Cell { c: 0, r: 0 },
+                        buf: "text input".into(),
+                        focused: false,
+                    }),
+                    ..Default::default()
+                },
+            );
+            editor_frame(&mut app, &ctx, vec![], false);
+            editor_frame(
+                &mut app,
+                &ctx,
+                vec![egui::Event::Key {
+                    key: egui::Key::Enter,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+                false,
+            );
+            assert!(matches!(app.dialog, Some(Dialog::ConvertText { .. })));
+            assert_eq!(app.project, before);
+            let frame = |app: &mut SciApp, events| {
+                ctx.run(
+                    egui::RawInput {
+                        events,
+                        screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1000.0, 900.0))),
+                        ..Default::default()
+                    },
+                    |ctx| app.dialogs(ctx),
+                )
+            };
+            frame(&mut app, vec![]);
+            let out = frame(&mut app, vec![]);
+            let label = if confirm { "转换为文本并写入" } else { "取消" };
+            let at = out
+                .shapes
+                .iter()
+                .find_map(|s| match &s.shape {
+                    egui::Shape::Text(t) if t.galley.job.text == label => Some(t.pos + egui::vec2(4.0, 4.0)),
+                    _ => None,
+                })
+                .unwrap();
+            for pressed in [true, false] {
+                frame(
+                    &mut app,
+                    vec![
+                        egui::Event::PointerMoved(at),
+                        egui::Event::PointerButton {
+                            pos: at,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                );
+            }
+            assert!(app.dialog.is_none());
+            if confirm {
+                assert_eq!(app.project.books[0].columns[0].data.kind(), DataKind::Text);
+                assert_eq!(app.project.books[0].columns[0].data.text_at(0), "text input");
+                assert_eq!(
+                    app.project.books[0].columns[0].data.text_at(1),
+                    before.books[0].columns[0].data.text_at(1)
+                );
+                roundtrip(&mut app, &before);
+            } else {
+                assert_eq!(app.project, before);
+                assert!(app.history.undo_label().is_none());
+            }
+        }
+    }
+
+    #[test]
+    fn incompatible_grid_paste_leaves_typed_columns_and_headers_unchanged() {
+        let ctx = egui::Context::default();
+        let mut app = app();
+        app.active = Some(1);
+        let before = app.project.clone();
+        let mut state = SheetState {
+            range: Some(Range::single(0, 1)),
+            ..Default::default()
+        };
+        let _ = ctx.run(
+            egui::RawInput {
+                events: vec![egui::Event::Paste("text\t4\n5\t6".into())],
+                ..Default::default()
+            },
+            |ctx| app.sheet_keys(ctx, 1, &mut state),
+        );
+        app.finish_edit();
+        assert_eq!(app.project, before);
+        assert!(app.status.contains("转换为文本列"));
+        assert!(app.history.undo_label().is_none());
+    }
+
+    #[test]
     fn idle_large_book_opens_no_history_transaction() {
         let ctx = egui::Context::default();
         let mut app = app();
         let mut p = Project::sample();
-        p.books[0].columns[0].data = vec!["1".into(); 100_000];
+        p.books[0].columns[0].data = vec!["1".into(); 100_000].into();
         app.load_project(p, None);
         app.active = Some(1);
         for _ in 0..10 {

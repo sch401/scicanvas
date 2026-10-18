@@ -147,7 +147,7 @@ fn estimated_bytes(p: &Project) -> usize {
                 .iter()
                 .map(|s| s.capacity())
                 .sum::<usize>();
-            bytes += c.data.capacity() * size_of::<String>() + c.data.iter().map(String::capacity).sum::<usize>();
+            bytes += c.data.estimated_bytes();
             bytes += c.derived_from.as_ref().map_or(0, String::capacity);
             bytes += c.error_for.as_ref().map_or(0, String::capacity);
         }
@@ -219,23 +219,22 @@ mod tests {
     #[test]
     fn continuous_large_edit_reuses_snapshot_and_return_to_start_is_noop() {
         let mut p = Project::sample();
-        p.books[0].columns[0].data = vec!["123".into(); 100_000];
+        p.books[0].columns[0].data = vec!["123".into(); 100_000].into();
         let initial = p.clone();
         let mut h = History::default();
         h.begin(&p, "列名称");
-        let data = h.pending.as_ref().unwrap().before.project.books[0].columns[0]
-            .data
-            .as_ptr();
+        let allocation = |p: &Project| {
+            let crate::ColumnData::Num { values, .. } = &p.books[0].columns[0].data else {
+                panic!("numeric column expected")
+            };
+            values.as_ptr()
+        };
+        let data = allocation(&h.pending.as_ref().unwrap().before.project);
         for _ in 0..50 {
             h.begin(&p, "列名称");
             p.books[0].columns[0].long_name.push('a');
             h.changed();
-            assert_eq!(
-                h.pending.as_ref().unwrap().before.project.books[0].columns[0]
-                    .data
-                    .as_ptr(),
-                data
-            );
+            assert_eq!(allocation(&h.pending.as_ref().unwrap().before.project), data);
         }
         assert_eq!(h.undo_label(), Some("列名称"));
         let edited = p.clone();

@@ -1,4 +1,8 @@
 # Golden comparisons use the exact SVG bytes on Windows and in CI.
+# Preserve upstream legal texts and their recorded hashes byte-for-byte.
+licenses/** -text
+THIRD_PARTY_NOTICES.md text eol=lf
+Cargo.lock text eol=lf
 crates/scicanvas-core/tests/golden/*.svg text eol=lf
 
 # .scv samples are zip archives; keep their bytes untouched.

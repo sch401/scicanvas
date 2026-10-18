@@ -1,0 +1,1082 @@
+[src/alpha_runs.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use alloc::vec;
+use alloc::vec::Vec;
+use core::convert::TryFrom;
+use core::num::NonZeroU16;
+
+use crate::color::AlphaU8;
+
+[src/alpha_runs.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use alloc::vec;
+use alloc::vec::Vec;
+use core::convert::TryFrom;
+use core::num::NonZeroU16;
+
+use crate::color::AlphaU8;
+use crate::LengthU32;
+
+[src/blitter.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use crate::geom::ScreenIntRect;
+
+use crate::alpha_runs::AlphaRun;
+use crate::color::AlphaU8;
+use crate::LengthU32;
+
+
+[src/blitter.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use crate::geom::ScreenIntRect;
+
+use crate::alpha_runs::AlphaRun;
+use crate::color::AlphaU8;
+use crate::LengthU32;
+
+/// Mask is used to describe alpha bitmaps.
+
+[src/color.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use tiny_skia_path::{NormalizedF32, Scalar};
+
+/// 8-bit type for an alpha value. 255 is 100% opaque, zero is 100% transparent.
+pub type AlphaU8 = u8;
+
+/// Represents fully transparent AlphaU8 value.
+
+[src/color.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use tiny_skia_path::{NormalizedF32, Scalar};
+
+/// 8-bit type for an alpha value. 255 is 100% opaque, zero is 100% transparent.
+pub type AlphaU8 = u8;
+
+/// Represents fully transparent AlphaU8 value.
+pub const ALPHA_U8_TRANSPARENT: AlphaU8 = 0x00;
+
+[src/edge.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use crate::Point;
+
+use crate::fixed_point::{fdot16, fdot6, FDot16, FDot6};
+use crate::math::left_shift;
+
+/// We store 1<<shift in a (signed) byte, so its maximum value is 1<<6 == 64.
+
+[src/edge.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use crate::Point;
+
+use crate::fixed_point::{fdot16, fdot6, FDot16, FDot6};
+use crate::math::left_shift;
+
+/// We store 1<<shift in a (signed) byte, so its maximum value is 1<<6 == 64.
+///
+
+[src/edge_builder.rs]
+// Copyright 2011 Google Inc.
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use alloc::vec::Vec;
+
+use tiny_skia_path::PathVerb;
+
+use crate::{Path, Point};
+
+
+[src/edge_builder.rs]
+// Copyright 2011 Google Inc.
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use alloc::vec::Vec;
+
+use tiny_skia_path::PathVerb;
+
+use crate::{Path, Point};
+
+use crate::edge::{CubicEdge, Edge, LineEdge, QuadraticEdge};
+
+[src/edge_clipper.rs]
+// Copyright 2009 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use arrayvec::ArrayVec;
+
+use tiny_skia_path::{NormalizedF32Exclusive, SCALAR_MAX};
+
+use crate::{Path, Point, Rect};
+
+
+[src/edge_clipper.rs]
+// Copyright 2009 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use arrayvec::ArrayVec;
+
+use tiny_skia_path::{NormalizedF32Exclusive, SCALAR_MAX};
+
+use crate::{Path, Point, Rect};
+
+use crate::edge_builder::{edge_iter, PathEdge, PathEdgeIter};
+
+[src/fixed_point.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// Skia uses fixed points pretty chaotically, therefore we cannot use
+// strongly typed wrappers. Which is unfortunate.
+
+use tiny_skia_path::SaturateCast;
+
+use crate::math::{bound, left_shift, left_shift64};
+
+[src/fixed_point.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// Skia uses fixed points pretty chaotically, therefore we cannot use
+// strongly typed wrappers. Which is unfortunate.
+
+use tiny_skia_path::SaturateCast;
+
+use crate::math::{bound, left_shift, left_shift64};
+
+
+[src/geom.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use core::convert::TryFrom;
+
+use tiny_skia_path::{IntRect, IntSize, Rect};
+
+use crate::LengthU32;
+
+
+[src/geom.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use core::convert::TryFrom;
+
+use tiny_skia_path::{IntRect, IntSize, Rect};
+
+use crate::LengthU32;
+
+/// A screen `IntRect`.
+
+[src/line_clipper.rs]
+// Copyright 2011 Google Inc.
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use crate::{Point, Rect};
+
+use tiny_skia_path::Scalar;
+
+pub const MAX_POINTS: usize = 4;
+
+
+[src/line_clipper.rs]
+// Copyright 2011 Google Inc.
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use crate::{Point, Rect};
+
+use tiny_skia_path::Scalar;
+
+pub const MAX_POINTS: usize = 4;
+
+/// Clip the line pts[0]...pts[1] against clip, ignoring segments that
+
+[src/mask.rs]
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#[cfg(all(not(feature = "std"), feature = "no-std-float"))]
+use tiny_skia_path::NoStdFloat;
+
+use alloc::vec;
+use alloc::vec::Vec;
+
+use tiny_skia_path::{IntRect, IntSize, Path, Scalar, Transform};
+
+[src/math.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use crate::LengthU32;
+
+// Perfectly safe.
+pub const LENGTH_U32_ONE: LengthU32 = unsafe { LengthU32::new_unchecked(1) };
+
+pub fn left_shift(value: i32, shift: i32) -> i32 {
+
+[src/math.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use crate::LengthU32;
+
+// Perfectly safe.
+pub const LENGTH_U32_ONE: LengthU32 = unsafe { LengthU32::new_unchecked(1) };
+
+pub fn left_shift(value: i32, shift: i32) -> i32 {
+    ((value as u32) << shift) as i32
+
+[src/painter.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use crate::*;
+
+use tiny_skia_path::{PathStroker, Scalar, SCALAR_MAX};
+
+use crate::geom::ScreenIntRect;
+use crate::mask::SubMaskRef;
+
+[src/painter.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use crate::*;
+
+use tiny_skia_path::{PathStroker, Scalar, SCALAR_MAX};
+
+use crate::geom::ScreenIntRect;
+use crate::mask::SubMaskRef;
+use crate::pipeline::{RasterPipelineBlitter, RasterPipelineBuilder};
+
+[src/path64/cubic64.rs]
+// Copyright 2012 Google Inc.
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use super::point64::{Point64, SearchAxis};
+use super::quad64;
+use super::Scalar64;
+
+#[cfg(all(not(feature = "std"), feature = "no-std-float"))]
+use tiny_skia_path::NoStdFloat;
+
+[src/path64/cubic64.rs]
+// Copyright 2012 Google Inc.
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use super::point64::{Point64, SearchAxis};
+use super::quad64;
+use super::Scalar64;
+
+#[cfg(all(not(feature = "std"), feature = "no-std-float"))]
+use tiny_skia_path::NoStdFloat;
+
+
+[src/path64/line_cubic_intersections.rs]
+// Copyright 2012 Google Inc.
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+/*
+Find the intersection of a line and cubic by solving for valid t values.
+
+Analogous to line-quadratic intersection, solve line-cubic intersection by
+representing the cubic as:
+  x = a(1-t)^3 + 2b(1-t)^2t + c(1-t)t^2 + dt^3
+
+[src/path64/line_cubic_intersections.rs]
+// Copyright 2012 Google Inc.
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+/*
+Find the intersection of a line and cubic by solving for valid t values.
+
+Analogous to line-quadratic intersection, solve line-cubic intersection by
+representing the cubic as:
+  x = a(1-t)^3 + 2b(1-t)^2t + c(1-t)t^2 + dt^3
+  y = e(1-t)^3 + 2f(1-t)^2t + g(1-t)t^2 + ht^3
+
+[src/path64/mod.rs]
+// Copyright 2012 Google Inc.
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use tiny_skia_path::{Scalar, SCALAR_MAX};
+
+#[cfg(all(not(feature = "std"), feature = "no-std-float"))]
+use tiny_skia_path::NoStdFloat;
+
+// Must be first, because of macro scope rules.
+
+[src/path64/mod.rs]
+// Copyright 2012 Google Inc.
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use tiny_skia_path::{Scalar, SCALAR_MAX};
+
+#[cfg(all(not(feature = "std"), feature = "no-std-float"))]
+use tiny_skia_path::NoStdFloat;
+
+// Must be first, because of macro scope rules.
+#[macro_use]
+
+[src/path64/point64.rs]
+// Copyright 2012 Google Inc.
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use crate::Point;
+
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub enum SearchAxis {
+    X,
+    Y,
+
+[src/path64/point64.rs]
+// Copyright 2012 Google Inc.
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use crate::Point;
+
+#[derive(Copy, Clone, PartialEq, Debug)]
+pub enum SearchAxis {
+    X,
+    Y,
+}
+
+[src/path64/quad64.rs]
+// Copyright 2012 Google Inc.
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use super::Scalar64;
+
+#[cfg(all(not(feature = "std"), feature = "no-std-float"))]
+use tiny_skia_path::NoStdFloat;
+
+pub fn push_valid_ts(s: &[f64], real_roots: usize, t: &mut [f64]) -> usize {
+
+[src/path64/quad64.rs]
+// Copyright 2012 Google Inc.
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use super::Scalar64;
+
+#[cfg(all(not(feature = "std"), feature = "no-std-float"))]
+use tiny_skia_path::NoStdFloat;
+
+pub fn push_valid_ts(s: &[f64], real_roots: usize, t: &mut [f64]) -> usize {
+    let mut found_roots = 0;
+
+[src/path_geometry.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use tiny_skia_path::{NormalizedF32, NormalizedF32Exclusive, Point};
+
+#[cfg(all(not(feature = "std"), feature = "no-std-float"))]
+use tiny_skia_path::NoStdFloat;
+
+pub use tiny_skia_path::path_geometry::{
+
+[src/path_geometry.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use tiny_skia_path::{NormalizedF32, NormalizedF32Exclusive, Point};
+
+#[cfg(all(not(feature = "std"), feature = "no-std-float"))]
+use tiny_skia_path::NoStdFloat;
+
+pub use tiny_skia_path::path_geometry::{
+    chop_cubic_at2, chop_quad_at, find_cubic_max_curvature, find_unit_quad_roots, new_t_values,
+
+[src/pipeline/blitter.rs]
+// Copyright 2016 Google Inc.
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use crate::{BlendMode, Color, LengthU32, Paint, PixmapRef, PremultipliedColorU8, Shader};
+use crate::{ALPHA_U8_OPAQUE, ALPHA_U8_TRANSPARENT};
+
+use crate::alpha_runs::AlphaRun;
+use crate::blitter::{Blitter, Mask};
+use crate::color::AlphaU8;
+
+[src/pipeline/blitter.rs]
+// Copyright 2016 Google Inc.
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use crate::{BlendMode, Color, LengthU32, Paint, PixmapRef, PremultipliedColorU8, Shader};
+use crate::{ALPHA_U8_OPAQUE, ALPHA_U8_TRANSPARENT};
+
+use crate::alpha_runs::AlphaRun;
+use crate::blitter::{Blitter, Mask};
+use crate::color::AlphaU8;
+use crate::geom::ScreenIntRect;
+
+[src/pipeline/highp.rs]
+// Copyright 2018 Google Inc.
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+/*!
+A high precision raster pipeline implementation.
+
+Unlike lowp, this one implements all stages.
+
+Just like Skia, this pipeline is implemented using f32x8.
+
+[src/pipeline/highp.rs]
+// Copyright 2018 Google Inc.
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+/*!
+A high precision raster pipeline implementation.
+
+Unlike lowp, this one implements all stages.
+
+Just like Skia, this pipeline is implemented using f32x8.
+
+
+[src/pipeline/lowp.rs]
+// Copyright 2018 Google Inc.
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+/*!
+A low precision raster pipeline implementation.
+
+A lowp pipeline uses u16 instead of f32 for math.
+Because of that, it doesn't implement stages that require high precision.
+The pipeline compiler will automatically decide which one to use.
+
+[src/pipeline/lowp.rs]
+// Copyright 2018 Google Inc.
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+/*!
+A low precision raster pipeline implementation.
+
+A lowp pipeline uses u16 instead of f32 for math.
+Because of that, it doesn't implement stages that require high precision.
+The pipeline compiler will automatically decide which one to use.
+
+
+[src/pipeline/mod.rs]
+// Copyright 2016 Google Inc.
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+/*!
+A raster pipeline implementation.
+
+Despite having a lot of changes compared to `SkRasterPipeline`,
+the core principles are the same:
+
+
+[src/pipeline/mod.rs]
+// Copyright 2016 Google Inc.
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+/*!
+A raster pipeline implementation.
+
+Despite having a lot of changes compared to `SkRasterPipeline`,
+the core principles are the same:
+
+1. A pipeline consists of stages.
+
+[src/pixmap.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use alloc::vec;
+use alloc::vec::Vec;
+
+use core::convert::TryFrom;
+use core::num::NonZeroUsize;
+
+
+[src/pixmap.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use alloc::vec;
+use alloc::vec::Vec;
+
+use core::convert::TryFrom;
+use core::num::NonZeroUsize;
+
+use tiny_skia_path::IntSize;
+
+[src/scan/hairline.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use core::convert::TryInto;
+
+use tiny_skia_path::{f32x2, PathVerb, SaturateCast, Scalar};
+
+use crate::{IntRect, LineCap, Path, PathSegment, Point, Rect};
+
+
+[src/scan/hairline.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use core::convert::TryInto;
+
+use tiny_skia_path::{f32x2, PathVerb, SaturateCast, Scalar};
+
+use crate::{IntRect, LineCap, Path, PathSegment, Point, Rect};
+
+use crate::blitter::Blitter;
+
+[src/scan/hairline_aa.rs]
+// Copyright 2011 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use core::convert::TryFrom;
+use core::num::NonZeroU16;
+
+use crate::{IntRect, LengthU32, LineCap, Path, Point, Rect};
+
+use crate::alpha_runs::{AlphaRun, AlphaRuns};
+
+[src/scan/hairline_aa.rs]
+// Copyright 2011 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use core::convert::TryFrom;
+use core::num::NonZeroU16;
+
+use crate::{IntRect, LengthU32, LineCap, Path, Point, Rect};
+
+use crate::alpha_runs::{AlphaRun, AlphaRuns};
+use crate::blitter::Blitter;
+
+[src/scan/mod.rs]
+// Copyright 2011 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+pub mod hairline;
+pub mod hairline_aa;
+pub mod path;
+pub mod path_aa;
+
+use crate::{IntRect, Rect};
+
+[src/scan/mod.rs]
+// Copyright 2011 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+pub mod hairline;
+pub mod hairline_aa;
+pub mod path;
+pub mod path_aa;
+
+use crate::{IntRect, Rect};
+
+
+[src/scan/path.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use core::convert::TryFrom;
+
+use tiny_skia_path::SaturateCast;
+
+use crate::{FillRule, IntRect, LengthU32, Path, Rect};
+
+
+[src/scan/path.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use core::convert::TryFrom;
+
+use tiny_skia_path::SaturateCast;
+
+use crate::{FillRule, IntRect, LengthU32, Path, Rect};
+
+use crate::blitter::Blitter;
+
+[src/scan/path_aa.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use core::convert::TryFrom;
+
+use crate::{FillRule, IntRect, LengthU32, Path, Rect};
+
+use crate::alpha_runs::AlphaRuns;
+use crate::blitter::Blitter;
+
+[src/scan/path_aa.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use core::convert::TryFrom;
+
+use crate::{FillRule, IntRect, LengthU32, Path, Rect};
+
+use crate::alpha_runs::AlphaRuns;
+use crate::blitter::Blitter;
+use crate::color::AlphaU8;
+
+[src/shaders/gradient.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use alloc::vec::Vec;
+
+use tiny_skia_path::{NormalizedF32, Scalar};
+
+use crate::{Color, SpreadMode, Transform};
+
+
+[src/shaders/gradient.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use alloc::vec::Vec;
+
+use tiny_skia_path::{NormalizedF32, Scalar};
+
+use crate::{Color, SpreadMode, Transform};
+
+use crate::pipeline::RasterPipelineBuilder;
+
+[src/shaders/linear_gradient.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use alloc::vec::Vec;
+
+use tiny_skia_path::Scalar;
+
+use crate::{Color, GradientStop, Point, Shader, SpreadMode, Transform};
+
+
+[src/shaders/linear_gradient.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use alloc::vec::Vec;
+
+use tiny_skia_path::Scalar;
+
+use crate::{Color, GradientStop, Point, Shader, SpreadMode, Transform};
+
+use super::gradient::{Gradient, DEGENERATE_THRESHOLD};
+
+[src/shaders/mod.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+mod gradient;
+mod linear_gradient;
+mod pattern;
+mod radial_gradient;
+
+use tiny_skia_path::{NormalizedF32, Scalar};
+
+[src/shaders/mod.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+mod gradient;
+mod linear_gradient;
+mod pattern;
+mod radial_gradient;
+
+use tiny_skia_path::{NormalizedF32, Scalar};
+
+
+[src/shaders/pattern.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use tiny_skia_path::NormalizedF32;
+
+use crate::{BlendMode, PixmapRef, Shader, SpreadMode, Transform};
+
+use crate::pipeline;
+use crate::pipeline::RasterPipelineBuilder;
+
+[src/shaders/pattern.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use tiny_skia_path::NormalizedF32;
+
+use crate::{BlendMode, PixmapRef, Shader, SpreadMode, Transform};
+
+use crate::pipeline;
+use crate::pipeline::RasterPipelineBuilder;
+
+
+[src/shaders/radial_gradient.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use alloc::vec::Vec;
+
+use tiny_skia_path::Scalar;
+
+use crate::{GradientStop, Point, Shader, SpreadMode, Transform};
+
+
+[src/shaders/radial_gradient.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use alloc::vec::Vec;
+
+use tiny_skia_path::Scalar;
+
+use crate::{GradientStop, Point, Shader, SpreadMode, Transform};
+
+use super::gradient::{Gradient, DEGENERATE_THRESHOLD};
+
+[src/wide/f32x16_t.rs]
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use super::{f32x8, u16x16};
+
+#[derive(Copy, Clone, Debug)]
+#[repr(C, align(32))]
+pub struct f32x16(pub f32x8, pub f32x8);
+
+unsafe impl bytemuck::Zeroable for f32x16 {}
+
+[src/wide/f32x4_t.rs]
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// Based on https://github.com/Lokathor/wide (Zlib)
+
+use bytemuck::cast;
+
+#[cfg(all(not(feature = "std"), feature = "no-std-float"))]
+use tiny_skia_path::NoStdFloat;
+
+
+[src/wide/f32x8_t.rs]
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// Based on https://github.com/Lokathor/wide (Zlib)
+
+use bytemuck::cast;
+
+use super::{i32x8, u32x8};
+
+cfg_if::cfg_if! {
+
+[src/wide/i32x4_t.rs]
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// Based on https://github.com/Lokathor/wide (Zlib)
+
+use bytemuck::cast;
+
+use super::f32x4;
+
+cfg_if::cfg_if! {
+
+[src/wide/i32x8_t.rs]
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// Based on https://github.com/Lokathor/wide (Zlib)
+
+use bytemuck::cast;
+
+use super::{f32x8, u32x8};
+
+cfg_if::cfg_if! {
+
+[src/wide/mod.rs]
+
+// This module was written from scratch, therefore there is no Google copyright.
+
+// f32x16, i32x16 and u32x16 are implemented as [Tx8; 2] and not as [T; 16].
+// This way we still can use some SIMD.
+//
+// We doesn't use #[inline] that much in this module.
+// The compiler will inline most of the methods automatically.
+// The only exception is U16x16, were we have to force inlining,
+// otherwise the performance will be horrible.
+
+#![allow(non_camel_case_types)]
+
+
+[src/wide/mod.rs]
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// This module was written from scratch, therefore there is no Google copyright.
+
+// f32x16, i32x16 and u32x16 are implemented as [Tx8; 2] and not as [T; 16].
+// This way we still can use some SIMD.
+//
+// We doesn't use #[inline] that much in this module.
+// The compiler will inline most of the methods automatically.
+
+[src/wide/u16x16_t.rs]
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// No need to use explicit 256bit AVX2 SIMD.
+// `-C target-cpu=native` will autovectorize it better than us.
+// Not even sure why explicit instructions are so slow...
+//
+// On ARM AArch64 we can actually get up to 2x performance boost by using SIMD.
+//
+// We also have to inline all the methods. They are pretty large,
+
+[src/wide/u32x4_t.rs]
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// Based on https://github.com/Lokathor/wide (Zlib)
+
+cfg_if::cfg_if! {
+    if #[cfg(all(feature = "simd", target_feature = "sse2"))] {
+        #[cfg(target_arch = "x86")]
+        use core::arch::x86::*;
+        #[cfg(target_arch = "x86_64")]
+
+[src/wide/u32x8_t.rs]
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// Based on https://github.com/Lokathor/wide (Zlib)
+
+use super::{f32x8, i32x8};
+
+cfg_if::cfg_if! {
+    if #[cfg(all(feature = "simd", target_feature = "avx2"))] {
+        #[cfg(target_arch = "x86")]

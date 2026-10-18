@@ -1,0 +1,97 @@
+[src/deprecated.rs]
+// Copyright 2013-2014 The rust-url developers.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+//! Deprecated API for [*Unicode IDNA Compatibility Processing*
+//! (Unicode Technical Standard #46)](http://www.unicode.org/reports/tr46/)
+
+#![allow(deprecated)]
+
+[src/lib.rs]
+// Copyright 2016 The rust-url developers.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+//! This Rust crate implements IDNA
+//! [per the WHATWG URL Standard](https://url.spec.whatwg.org/#idna).
+//!
+//! It also exposes the underlying algorithms from [*Unicode IDNA Compatibility Processing*
+
+[src/punycode.rs]
+// Copyright 2013 The rust-url developers.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+//! Punycode ([RFC 3492](http://tools.ietf.org/html/rfc3492)) implementation.
+//!
+//! Since Punycode fundamentally works on unicode code points,
+//! `encode` and `decode` take and return slices and vectors of `char`.
+
+[src/uts46.rs]
+// Copyright The rust-url developers.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+//! This module provides the lower-level API for UTS 46.
+//!
+//! [`Uts46::process`] is the core that the other convenience
+//! methods build on.
+
+[tests/deprecated.rs]
+// Copyright 2013-2014 The rust-url developers.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+#![allow(clippy::assigning_clones)]
+#![allow(deprecated)]
+
+use crate::test::TestFn;
+
+[tests/punycode.rs]
+// Copyright 2013 The rust-url developers.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+use crate::test::TestFn;
+use idna::punycode::{decode, decode_to_string, encode_str};
+use serde_json::map::Map;
+use serde_json::Value;
+
+[tests/uts46.rs]
+// Copyright 2013-2014 The rust-url developers.
+//
+// Licensed under the Apache License, Version 2.0 <LICENSE-APACHE or
+// http://www.apache.org/licenses/LICENSE-2.0> or the MIT license
+// <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your
+// option. This file may not be copied, modified, or distributed
+// except according to those terms.
+
+#![allow(clippy::assigning_clones)]
+
+use crate::test::TestFn;
+use std::char;

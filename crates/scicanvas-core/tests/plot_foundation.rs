@@ -22,7 +22,8 @@ fn presets_have_example_data_and_use_the_shared_scene() {
         let sc = scene::build_page(&graph, &project, 800.0, 600.0, None);
         assert!(!sc.items.is_empty());
         assert_eq!(sc.layer_plots.len(), 1);
-        assert!(svg::render_page(&graph, &project).contains("89mm"));
+        // 新图形默认 A4 纸宽、4:3
+        assert!(svg::render_page(&graph, &project).contains(r#"width="210mm" height="157.5mm""#));
         let layout = scene::layout_page(&graph, &project, &[]);
         assert_eq!([layout.w, layout.h], graph.page.logical_size());
         assert!(svg::render_page(&graph, &project).contains(&format!("viewBox=\"0 0 {} {}\"", layout.w, layout.h)));
@@ -138,4 +139,57 @@ fn coordinate_inverse_and_palette_boundaries() {
     let colored = svg::render(&p.graphs[0], p.book(1), 800.0, 600.0);
     assert_ne!(original, colored);
     assert!(colored.contains("#440154"));
+}
+
+fn example_graph(kind: PlotType) -> (Project, Graph) {
+    let book = scicanvas_core::presets::example();
+    let mut project = Project::default();
+    project.books.push(book.clone());
+    let mut graph = Graph::new(20, "示例");
+    graph.first_layer_mut().spec = PlotSpec::from_selection(&book, &[], kind).unwrap();
+    (project, graph)
+}
+
+#[test]
+fn legend_moves_outside_when_every_corner_covers_data() {
+    // 百分比堆叠柱占满整个高度：四个角都会压住柱子，图例放到坐标框右侧
+    let (project, graph) = example_graph(PlotType::PercentStackedBar);
+    let sc = scene::layout_page(&graph, &project, &[]);
+    let [l, _, w, _] = sc.plot;
+    let legend = sc
+        .items
+        .iter()
+        .filter_map(|i| match i.prim {
+            scene::Prim::Rect {
+                x,
+                w: rw,
+                fill: Some((c, _)),
+                stroke: None,
+                ..
+            } if c == scene::PAPER && rw < sc.w * 0.5 => Some(x),
+            _ => None,
+        })
+        .next_back()
+        .unwrap();
+    assert!(legend >= l + w, "legend at {legend}, plot ends at {}", l + w);
+    // 有空角的图仍放在坐标框内
+    let (project, graph) = example_graph(PlotType::Line);
+    let sc = scene::layout_page(&graph, &project, &[]);
+    let [l, _, w, _] = sc.plot;
+    assert!(sc.items.iter().any(|i| matches!(i.prim,
+        scene::Prim::Rect { x, fill: Some((c, _)), stroke: None, .. } if c == scene::PAPER && x > l && x < l + w)));
+}
+
+#[test]
+fn symbols_at_auto_axis_ends_get_a_margin_but_lines_do_not() {
+    // 示例数据 X 为 0–4、Y 的最小值和最大值正好落在整刻度上
+    let (project, graph) = example_graph(PlotType::Scatter);
+    let sc = scene::layout_page(&graph, &project, &[]);
+    assert!(sc.xa.lo < 0.0 && sc.xa.hi > 4.0, "{:?}", (sc.xa.lo, sc.xa.hi));
+    assert_eq!((sc.xa.ticks.first(), sc.xa.ticks.last()), (Some(&0.0), Some(&4.0)));
+    assert!(sc.ya.lo < *sc.ya.ticks.first().unwrap() && sc.ya.hi > *sc.ya.ticks.last().unwrap());
+    // 纯折线保持到整刻度为止
+    let (project, graph) = example_graph(PlotType::Line);
+    let sc = scene::layout_page(&graph, &project, &[]);
+    assert_eq!((sc.xa.lo, sc.xa.hi), (0.0, 4.0));
 }

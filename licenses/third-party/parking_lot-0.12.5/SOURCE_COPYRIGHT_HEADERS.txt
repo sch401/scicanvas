@@ -1,0 +1,167 @@
+[src/condvar.rs]
+// Copyright 2016 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+use crate::mutex::MutexGuard;
+use crate::raw_mutex::{RawMutex, TOKEN_HANDOFF, TOKEN_NORMAL};
+use crate::{deadlock, util};
+use core::{
+    fmt, ptr,
+
+[src/elision.rs]
+// Copyright 2016 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+use std::sync::atomic::AtomicUsize;
+
+// Extension trait to add lock elision primitives to atomic types
+pub trait AtomicElisionExt {
+    type IntType;
+
+[src/fair_mutex.rs]
+// Copyright 2016 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+use crate::raw_fair_mutex::RawFairMutex;
+
+/// A mutual exclusive primitive that is always fair, useful for protecting shared data
+///
+/// This mutex will block threads waiting for the lock to become available. The
+
+[src/lib.rs]
+// Copyright 2016 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+//! This library provides implementations of `Mutex`, `RwLock`, `Condvar` and
+//! `Once` that are smaller, faster and more flexible than those in the Rust
+//! standard library. It also provides a `ReentrantMutex` type.
+
+#![warn(missing_docs)]
+
+[src/mutex.rs]
+// Copyright 2016 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+use crate::raw_mutex::RawMutex;
+
+/// A mutual exclusion primitive useful for protecting shared data
+///
+/// This mutex will block threads waiting for the lock to become available. The
+
+[src/once.rs]
+// Copyright 2016 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+use crate::util::UncheckedOptionExt;
+use core::{
+    fmt, mem,
+    sync::atomic::{fence, AtomicU8, Ordering},
+};
+
+[src/raw_fair_mutex.rs]
+// Copyright 2016 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+use crate::raw_mutex::RawMutex;
+use lock_api::RawMutexFair;
+
+/// Raw fair mutex type backed by the parking lot.
+pub struct RawFairMutex(RawMutex);
+
+[src/raw_mutex.rs]
+// Copyright 2016 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+use crate::{deadlock, util};
+use core::{
+    sync::atomic::{AtomicU8, Ordering},
+    time::Duration,
+};
+
+[src/raw_rwlock.rs]
+// Copyright 2016 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+use crate::elision::{have_elision, AtomicElisionExt};
+use crate::raw_mutex::{TOKEN_HANDOFF, TOKEN_NORMAL};
+use crate::util;
+use core::{
+    cell::Cell,
+
+[src/remutex.rs]
+// Copyright 2016 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+use crate::raw_mutex::RawMutex;
+use core::num::NonZeroUsize;
+use lock_api::{self, GetThreadId};
+
+/// Implementation of the `GetThreadId` trait for `lock_api::ReentrantMutex`.
+
+[src/rwlock.rs]
+// Copyright 2016 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+use crate::raw_rwlock::RawRwLock;
+
+/// A reader-writer lock
+///
+/// This type of lock allows a number of readers or at most one writer at any
+
+[src/util.rs]
+// Copyright 2016 Amanieu d'Antras
+//
+// Licensed under the Apache License, Version 2.0, <LICENSE-APACHE or
+// http://apache.org/licenses/LICENSE-2.0> or the MIT license <LICENSE-MIT or
+// http://opensource.org/licenses/MIT>, at your option. This file may not be
+// copied, modified, or distributed except according to those terms.
+
+use std::time::{Duration, Instant};
+
+// Option::unchecked_unwrap
+pub trait UncheckedOptionExt<T> {
+    unsafe fn unchecked_unwrap(self) -> T;

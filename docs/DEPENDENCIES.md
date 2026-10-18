@@ -4,6 +4,8 @@
 安装包来自 [官方 release](https://github.com/EmbarkStudios/cargo-deny/releases/tag/0.20.2)，SHA-256 固定在安装脚本中；工具和下载缓存位于忽略的 `target/tools/cargo-deny`。校验失败立即停止。
 Windows CI 使用同一脚本和 `deny.toml`，审计失败会使检查失败。
 
+发行材料另由 `python tools/third_party.py` 从原始 crate 归档生成：187 个 Windows normal/build 依赖的原始声明、内嵌字体声明和 5 个 MPL 完整源码包；依赖树变化时数量随之更新。`--check` 已接入本地统一检查和 CI。取得缺失于 crate 的上游原文时保留准确提交 URL 与 SHA-256，完整记录见 [COPYRIGHT_AUDIT.md](COPYRIGHT_AUDIT.md)。`cargo-deny` 的许可判定与发行材料生成分别检查。
+
 审计范围是当前发布目标 `x86_64-pc-windows-msvc` 的完整特性依赖图，使用 `Cargo.lock`。
 检查 RustSec 告警、撤回版本、许可证、通配符依赖和未知 Git/注册表来源。
 已有依赖多版本作为警告列出；漏洞、未允许的许可证与未知来源为错误。
@@ -35,3 +37,5 @@ GPL/LGPL 未列入允许列表。新增直接依赖继续优先 MIT / Apache-2.0
 
 这三条通知均无已修复版本。新告警仍会触发审计；已失效的告警例外也会触发检查，提醒清理配置。
 配置语义见 [cargo-deny 官方文档](https://embarkstudios.github.io/cargo-deny/checks/cfg.html)。
+
+类型化列新增 chrono 0.4.45，仅启用 std 做 UTC 日期解析/显示，许可 MIT OR Apache-2.0；数值 v9 编码复用 base64 0.21.7。第三方声明已重新生成。

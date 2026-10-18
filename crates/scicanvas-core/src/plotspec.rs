@@ -159,14 +159,15 @@ impl PlotSpec {
     /// 取出 X 列和每条曲线的有效数据点（X、Y 都是有限数值的行）。
     pub fn series<'a>(&self, book: &'a Book) -> (Option<&'a Column>, Vec<Series>) {
         let xcol = self.x_key.as_deref().and_then(|k| book.column(k));
-        let main_xv = xcol.map(|c| c.values());
+        use crate::ColumnView;
+        let main_xv = xcol;
         let mut out = Vec::new();
         for key in &self.y_keys {
             let Some(c) = book.column(key) else { continue };
             if matches!(c.role, crate::Role::XError | crate::Role::YError) {
                 continue;
             }
-            let yv = c.values();
+            let yv = c;
             let base_values = if self.plot_type == PlotType::FloatingBar && !self.line_only.contains(key) {
                 let Some(base) = self
                     .base_by_y
@@ -177,12 +178,12 @@ impl PlotSpec {
                 else {
                     continue;
                 };
-                Some(base.values())
+                Some(base)
             } else {
                 None
             };
             let own_x = self.x_by_y.get(key).and_then(|k| book.column(k));
-            let own_xv = own_x.map(|c| c.values());
+            let own_xv = own_x;
             let xv = if own_x.is_some() { &own_xv } else { &main_xv };
             let n = yv.len().max(xv.as_ref().map_or(0, |v| v.len()));
             let (i0, i1) = match (self.rows, own_x) {
@@ -199,7 +200,7 @@ impl PlotSpec {
                         .iter()
                         .enumerate()
                         .find(|(i, col)| col.role == role && book.error_source(*i) == Some(source))
-                        .map(|(_, col)| col.values())
+                        .map(|(_, col)| col)
                 };
                 find(key).or_else(|| {
                     if role == crate::Role::XError {
@@ -214,13 +215,11 @@ impl PlotSpec {
             let mut bases = Vec::with_capacity(pts.capacity());
             for i in i0..i1 {
                 let x = match xv {
-                    Some(v) => v.get(i).copied().unwrap_or(f64::NAN),
+                    Some(v) => v.f64_at(i).unwrap_or(f64::NAN),
                     None => (i + 1) as f64,
                 };
-                let y = yv.get(i).copied().unwrap_or(f64::NAN);
-                let base = base_values
-                    .as_ref()
-                    .map_or(0.0, |v| v.get(i).copied().unwrap_or(f64::NAN));
+                let y = yv.f64_at(i).unwrap_or(f64::NAN);
+                let base = base_values.as_ref().map_or(0.0, |v| v.f64_at(i).unwrap_or(f64::NAN));
                 if x.is_finite() && y.is_finite() && base.is_finite() {
                     pts.push([x, y]);
                     rows.push(i);
@@ -228,15 +227,19 @@ impl PlotSpec {
                     errors.push(error_values.each_ref().map(|values| {
                         values
                             .as_ref()
-                            .and_then(|v| v.get(i))
-                            .copied()
+                            .and_then(|v| v.f64_at(i))
                             .filter(|v| v.is_finite() && *v >= 0.0)
                     }));
                 }
             }
+            // 浮动柱表示下端到上端的范围，图例写出两列
+            let name = match base_values {
+                Some(base) => format!("{} – {}", base.display_name(), c.display_name()),
+                None => c.display_name().to_string(),
+            };
             out.push(Series {
                 key: c.key.clone(),
-                name: c.display_name().to_string(),
+                name,
                 points: pts,
                 errors,
                 rows,

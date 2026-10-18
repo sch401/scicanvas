@@ -267,6 +267,48 @@ fn compose<'a>(g: &Graph, book: impl Fn(u64) -> Option<&'a Book>, w: f64, h: f64
     let cols = g.page.columns.min(grid_count).max(1);
     let rows = grid_count.div_ceil(cols);
     let (cw, ch) = (w / cols as f64, h / rows as f64);
+    // 各图层先按 89 mm 一栏的参考尺寸排版，再把坐标、字号、线宽和符号同乘 k：
+    // A4 等宽页面上的文字、点和线与单栏图成比例，版面相同只是整体放大。
+    let k = g.page.scale();
+    // 网格面板：先各自排版取自然边距，同一行取最大的上下边距、同一列取最大的左右边距，
+    // 再按统一边距排版，使各面板的坐标框对齐（标题、刻度文字宽度不同也一样）。插图不参与。
+    let mut cells = Vec::new();
+    let mut aligned = vec![[0.0; 4]; g.page.layers().len()];
+    if grid_count > 1 {
+        let mut natural = Vec::new();
+        for (i, layer) in g.page.layers().iter().enumerate() {
+            if layer.placement.is_none() {
+                let (rw, rh) = (cw / k, ch / k);
+                let sc = build_layer(
+                    layer,
+                    layer.book_id.and_then(&book),
+                    rw,
+                    rh,
+                    views.get(i).copied().flatten(),
+                );
+                let [l, t, pw, ph] = sc.plot;
+                let index = cells.len();
+                cells.push((i, index / cols, index % cols));
+                natural.push([l, t, rw - l - pw, rh - t - ph]);
+            }
+        }
+        for &(i, row, col) in &cells {
+            let same = |f: &dyn Fn(usize, usize) -> bool, k: usize| {
+                cells
+                    .iter()
+                    .zip(&natural)
+                    .filter(|((_, r, c), _)| f(*r, *c))
+                    .map(|(_, m)| m[k])
+                    .fold(0.0, f64::max)
+            };
+            aligned[i] = [
+                same(&|_, c| c == col, 0),
+                same(&|r, _| r == row, 1),
+                same(&|_, c| c == col, 2),
+                same(&|r, _| r == row, 3),
+            ];
+        }
+    }
     let mut grid_index = 0;
     let mut scenes = g.page.layers().iter().enumerate().map(|(i, layer)| {
         let [dx, dy, lw, lh] = match layer.placement {
@@ -277,20 +319,24 @@ fn compose<'a>(g: &Graph, book: impl Fn(u64) -> Option<&'a Book>, w: f64, h: f64
                 [(index % cols) as f64 * cw, (index / cols) as f64 * ch, cw, ch]
             }
         };
-        let mut sc = build_layer(
+        let mut sc = build_layer_min(
             layer,
             layer.book_id.and_then(&book),
-            lw,
-            lh,
+            lw / k,
+            lh / k,
             views.get(i).copied().flatten(),
+            aligned[i],
         );
         for item in &mut sc.items {
+            scale_prim(&mut item.prim, k);
             translate(&mut item.prim, dx, dy);
             if let Some(rect) = &mut item.clip {
+                *rect = rect.map(|v| v * k);
                 rect[0] += dx;
                 rect[1] += dy;
             }
         }
+        sc.plot = sc.plot.map(|v| v * k);
         sc.plot[0] += dx;
         sc.plot[1] += dy;
         sc.layers[0].plot = sc.plot;
@@ -325,6 +371,55 @@ fn compose<'a>(g: &Graph, book: impl Fn(u64) -> Option<&'a Book>, w: f64, h: f64
         page.items.extend(sc.items);
     }
     page
+}
+
+/// 端点上有数据点时把线性轴的这一端外扩 4%（刻度不变）。
+fn pad_ends(a: &mut Axis, vals: impl Iterator<Item = f64>) {
+    let span = a.hi - a.lo;
+    if a.log || !span.is_finite() || span <= 0.0 {
+        return;
+    }
+    let (mut lo, mut hi) = (false, false);
+    for v in vals {
+        lo |= (v - a.lo).abs() <= span * 1e-9;
+        hi |= (v - a.hi).abs() <= span * 1e-9;
+    }
+    if lo {
+        a.lo -= span * 0.04;
+    }
+    if hi {
+        a.hi += span * 0.04;
+    }
+}
+
+/// 整体放大一个图元：坐标、尺寸、字号、线宽、符号半径同乘 k。
+fn scale_prim(prim: &mut Prim, k: f64) {
+    if k == 1.0 {
+        return;
+    }
+    let scale_pts = |pts: &mut Vec<[f64; 2]>| pts.iter_mut().for_each(|p| *p = p.map(|v| v * k));
+    match prim {
+        Prim::Rect { x, y, w, h, stroke, .. } => {
+            (*x, *y, *w, *h) = (*x * k, *y * k, *w * k, *h * k);
+            if let Some((_, width)) = stroke {
+                *width *= k;
+            }
+        }
+        Prim::Text { x, y, size, .. } => (*x, *y, *size) = (*x * k, *y * k, *size * k),
+        Prim::Polyline { pts, width, .. } => {
+            scale_pts(pts);
+            *width *= k;
+        }
+        Prim::Triangles { pts, .. } => scale_pts(pts),
+        Prim::Symbols { pts, r, .. } => {
+            scale_pts(pts);
+            *r *= k;
+        }
+        Prim::Segments { segs, width, .. } => {
+            segs.iter_mut().for_each(|s| *s = s.map(|v| v * k));
+            *width *= k;
+        }
+    }
 }
 
 fn translate(prim: &mut Prim, dx: f64, dy: f64) {
@@ -367,7 +462,8 @@ fn area_triangles(points: &[[f64; 2]], base: f64) -> Vec<[f64; 2]> {
     out
 }
 
-fn data_runs(s: &crate::Series) -> Vec<Vec<[f64; 2]>> {
+/// 按原始行连续的段：缺失值、无效值或对数轴筛掉的行把曲线断开。所有连线图型共用。
+fn row_runs(s: &crate::Series) -> Vec<std::ops::Range<usize>> {
     let mut out = Vec::new();
     let mut start = 0;
     while start < s.points.len() {
@@ -375,12 +471,22 @@ fn data_runs(s: &crate::Series) -> Vec<Vec<[f64; 2]>> {
         while end < s.points.len() && s.rows[end] == s.rows[end - 1] + 1 {
             end += 1;
         }
-        let mut run = s.points[start..end].to_vec();
-        run.sort_by(|a, b| a[0].total_cmp(&b[0]));
-        out.push(run);
+        out.push(start..end);
         start = end;
     }
     out
+}
+
+/// 面积和样条用的分段：每段按 X 排序。
+fn data_runs(s: &crate::Series) -> Vec<Vec<[f64; 2]>> {
+    row_runs(s)
+        .into_iter()
+        .map(|range| {
+            let mut run = s.points[range].to_vec();
+            run.sort_by(|a, b| a[0].total_cmp(&b[0]));
+            run
+        })
+        .collect()
 }
 
 fn spline_paths(s: &crate::Series) -> Vec<Vec<[f64; 2]>> {
@@ -518,6 +624,24 @@ fn coverage(obstacles: &[Obstacle], [x, y, w, h]: [f64; 4]) -> usize {
 }
 
 fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View>) -> Scene {
+    build_layer_min(g, book, w, h, view, [0.0; 4])
+}
+
+/// `min` 为绘图区四周的最小边距 [左, 上, 右, 下]，用于多面板对齐。
+fn build_layer_min(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View>, min: [f64; 4]) -> Scene {
+    build_layer_full(g, book, w, h, view, min, false)
+}
+
+/// `legend_outside` 为真时，图例放在坐标框右侧（右边距已按图例宽度留出）。
+fn build_layer_full(
+    g: &Layer,
+    book: Option<&Book>,
+    w: f64,
+    h: f64,
+    view: Option<View>,
+    min: [f64; 4],
+    legend_outside: bool,
+) -> Scene {
     let horizontal = g.plot_type == PlotType::HorizontalBar;
     // 数据（对数轴去掉非正值）
     let (_, mut series) = match book {
@@ -535,7 +659,8 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
         }
     }
     for s in &mut series {
-        if (g.plot_type == PlotType::Area || g.plot_type.is_spline())
+        // 均值变换后的点没有原始行，按顺序编号，连线不在组之间断开
+        if (g.plot_type == PlotType::Area || g.plot_type.is_spline() || g.plot_type.has_line())
             && g.transform == crate::plotspec::Transform::Mean
             && !s.line_only
         {
@@ -651,6 +776,23 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
                         || matches!(g.plot_type, PlotType::Area | PlotType::VerticalDrop),
                 )
             };
+            let (mut xa, mut ya) = (xa, ya);
+            // 带符号的曲线：数据点正好落在自动范围的端点时，这一端向外留 4% 边距，
+            // 免得符号压在坐标轴上；刻度保持不变，手动范围和对数轴不动
+            let marks: Vec<[f64; 2]> = series
+                .iter()
+                .zip(&styles)
+                .filter(|(s, st)| !s.line_only && st.kind.has_symbol())
+                .flat_map(|(s, _)| s.points.iter().copied())
+                .collect();
+            if !marks.is_empty() {
+                if g.x_auto {
+                    pad_ends(&mut xa, marks.iter().map(|p| p[0]));
+                }
+                if g.y_auto {
+                    pad_ends(&mut ya, marks.iter().map(|p| p[1]));
+                }
+            }
             (xa, ya)
         }
     };
@@ -662,10 +804,14 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
         .map(|t| text_width(&format_tick(*t), TICK_FONT))
         .fold(8.0, f64::max);
     let has_title = !g.title.trim().is_empty();
-    let left = (MAJOR_TICK + TICK_GAP + ylab_w + 5.0 + LABEL_FONT + 4.0).round();
-    let right = 14.0;
-    let top = if has_title { 12.0 + TITLE_FONT + 6.0 } else { 10.0 };
-    let bottom = (MAJOR_TICK + TICK_GAP + TICK_FONT + 5.0 + LABEL_FONT + 5.0).round();
+    let left = (MAJOR_TICK + TICK_GAP + ylab_w + 5.0 + LABEL_FONT + 4.0)
+        .round()
+        .max(min[0]);
+    let right = 14.0f64.max(min[2]);
+    let top = (if has_title { 12.0 + TITLE_FONT + 6.0 } else { 10.0f64 }).max(min[1]);
+    let bottom = (MAJOR_TICK + TICK_GAP + TICK_FONT + 5.0 + LABEL_FONT + 5.0)
+        .round()
+        .max(min[3]);
     let pw = (w - left - right).max(20.0);
     let ph = (h - top - bottom).max(20.0);
     let coord = Cartesian {
@@ -839,31 +985,34 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
                     }
                 }
             }
-        } else if st.kind.has_line() && s.points.len() > 1 {
-            let pts = if matches!(st.kind, PlotType::StepHorizontal | PlotType::StepVertical) {
-                let first = s.points[0];
-                let mut pts = vec![[px(first[0]), py(first[1])]];
-                for pair in s.points.windows(2) {
-                    let bend = if st.kind == PlotType::StepHorizontal {
-                        [pair[1][0], pair[0][1]]
-                    } else {
-                        [pair[0][0], pair[1][1]]
-                    };
-                    pts.push([px(bend[0]), py(bend[1])]);
-                    pts.push([px(pair[1][0]), py(pair[1][1])]);
-                }
-                pts
-            } else {
-                s.points.iter().map(|p| [px(p[0]), py(p[1])]).collect()
-            };
-            push(
-                Prim::Polyline {
-                    pts,
-                    color,
-                    width: g.line_width as f64,
-                },
-                true,
-            );
+        } else if st.kind.has_line() {
+            // 与面积、样条一致：遇到缺失行断开，不跨过缺失值连线
+            for range in row_runs(s).into_iter().filter(|r| r.len() > 1) {
+                let run = &s.points[range];
+                let pts = if matches!(st.kind, PlotType::StepHorizontal | PlotType::StepVertical) {
+                    let mut pts = vec![[px(run[0][0]), py(run[0][1])]];
+                    for pair in run.windows(2) {
+                        let bend = if st.kind == PlotType::StepHorizontal {
+                            [pair[1][0], pair[0][1]]
+                        } else {
+                            [pair[0][0], pair[1][1]]
+                        };
+                        pts.push([px(bend[0]), py(bend[1])]);
+                        pts.push([px(pair[1][0]), py(pair[1][1])]);
+                    }
+                    pts
+                } else {
+                    run.iter().map(|p| [px(p[0]), py(p[1])]).collect()
+                };
+                push(
+                    Prim::Polyline {
+                        pts,
+                        color,
+                        width: g.line_width as f64,
+                    },
+                    true,
+                );
+            }
         }
         if st.kind.has_symbol() {
             let pts: Vec<[f64; 2]> = s
@@ -988,7 +1137,7 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
                         .as_deref()
                         .and_then(|k| book.and_then(|b| b.column(k)))
                         .and_then(|c| c.data.get(s.rows[i]))
-                        .cloned()
+                        .map(std::borrow::Cow::into_owned)
                         .unwrap_or_default(),
                     _ => String::new(),
                 };
@@ -1001,7 +1150,24 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
                 } else {
                     value >= 0.0
                 };
-                let delta = f64::from(g.labels.offset) + f64::from(g.labels.size) / 2.0;
+                // 有误差棒时，标签放到误差棒端点以外，不压在误差棒和端帽上
+                let reach = if g.error_bars.visible {
+                    s.errors[i][usize::from(!horizontal)].map_or(0.0, |e| {
+                        let d = if horizontal {
+                            px(if positive { x + e } else { x - e }) - px(x)
+                        } else {
+                            py(if positive { y + e } else { y - e }) - py(y)
+                        };
+                        if d.is_finite() {
+                            d.abs()
+                        } else {
+                            0.0
+                        }
+                    })
+                } else {
+                    0.0
+                };
+                let delta = f64::from(g.labels.offset) + f64::from(g.labels.size) / 2.0 + reach;
                 let (xx, yy, anchor) = if horizontal {
                     (
                         px(x) + if positive { delta } else { -delta },
@@ -1161,7 +1327,16 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
         // 按本图层实际画出的几何（柱、线、面积、误差棒、符号、标签）给四个角打分
         let obstacles = obstacles(&items[data_start..data_end]);
         let score = |(x, y): (f64, f64)| coverage(&obstacles, [x - 4.0, y - 4.0, lw + 8.0, lhh + 8.0]);
-        let (lx, ly) = corners.iter().copied().min_by_key(|c| score(*c)).unwrap_or(corners[0]);
+        let (mut lx, mut ly) = corners.iter().copied().min_by_key(|c| score(*c)).unwrap_or(corners[0]);
+        // 四个角都会压住数据（如百分比堆叠柱占满整个高度）：重排，图例放到坐标框右侧
+        let gap = 10.0;
+        if legend_outside {
+            (lx, ly) = (left + pw + gap, top);
+        } else if score((lx, ly)) > 0 && lw + gap + 14.0 < w * 0.35 {
+            let mut wider = min;
+            wider[2] = wider[2].max(lw + gap + 14.0);
+            return build_layer_full(g, book, w, h, view, wider, true);
+        }
         // 上面借用过 items，图例图元（都不裁剪）改用新的 push 推入
         let mut push = |prim: Prim| items.push(Item { prim, clip: None });
         push(Prim::Rect {
@@ -1242,7 +1417,8 @@ mod tests {
         let [l, t, w, h] = sc.plot;
         // 只有左轴和下轴：一条三点折线，没有闭合的坐标框
         assert!(sc.items.iter().any(|i| matches!(&i.prim,
-            Prim::Polyline { pts, color, .. } if *color == INK && *pts == vec![[l, t], [l, t + h], [l + w, t + h]])));
+            Prim::Polyline { pts, color, .. } if *color == INK && pts.len() == 3
+                && pts.iter().zip([[l, t], [l, t + h], [l + w, t + h]]).all(|(a, b)| (a[0] - b[0]).abs() < 1e-9 && (a[1] - b[1]).abs() < 1e-9))));
         assert!(!sc.items.iter().any(|i| matches!(
             i.prim,
             Prim::Rect {
@@ -1264,14 +1440,17 @@ mod tests {
             .flatten()
             .collect();
         assert!(!segs.is_empty());
+        // 版面按页宽整体放大：刻度长度乘同一倍数，坐标允许末位舍入差异
+        let k = p.graph(2).unwrap().page.scale();
+        let eq = |a: f64, b: f64| (a - b).abs() < 1e-9;
         for s in segs {
-            let bottom = s[1] == t + h && s[3] > t + h && s[0] == s[2] && s[0] >= l - 1e-9 && s[0] <= l + w + 1e-9;
-            let left = s[0] == l && s[2] < l && s[1] == s[3] && s[1] >= t - 1e-9 && s[1] <= t + h + 1e-9;
+            let bottom = eq(s[1], t + h) && s[3] > t + h && eq(s[0], s[2]) && s[0] >= l - 1e-9 && s[0] <= l + w + 1e-9;
+            let left = eq(s[0], l) && s[2] < l && eq(s[1], s[3]) && s[1] >= t - 1e-9 && s[1] <= t + h + 1e-9;
             assert!(
                 bottom || left,
                 "tick {s:?} should point outward from the left or bottom axis"
             );
-            assert!(s[3] - s[1] <= MAJOR_TICK + 1e-9 && s[0] - s[2] <= MAJOR_TICK + 1e-9);
+            assert!(s[3] - s[1] <= MAJOR_TICK * k + 1e-9 && s[0] - s[2] <= MAJOR_TICK * k + 1e-9);
         }
     }
 

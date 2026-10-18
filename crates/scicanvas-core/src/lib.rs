@@ -8,7 +8,9 @@ pub mod baseline;
 pub mod colormap;
 pub mod coord;
 pub mod csv;
+pub mod data;
 pub mod fft;
+pub mod format;
 pub mod formula;
 pub mod history;
 pub mod interpolate;
@@ -30,4 +32,5 @@ pub mod ticks;
 #[cfg(feature = "xlsx")]
 pub mod xlsx;
 
+pub use data::{ColumnData, ColumnView, DataKind};
 pub use model::*;

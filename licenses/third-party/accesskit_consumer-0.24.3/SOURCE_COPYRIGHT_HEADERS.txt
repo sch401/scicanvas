@@ -1,0 +1,113 @@
+[src/filters.rs]
+// Copyright 2023 The AccessKit Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (found in
+// the LICENSE-APACHE file) or the MIT license (found in
+// the LICENSE-MIT file), at your option.
+
+use accesskit::Role;
+
+use crate::node::Node;
+
+#[derive(Clone, Copy, Debug, Hash, PartialEq, Eq, PartialOrd, Ord)]
+pub enum FilterResult {
+    Include,
+
+[src/iterators.rs]
+// Copyright 2021 The AccessKit Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (found in
+// the LICENSE-APACHE file) or the MIT license (found in
+// the LICENSE-MIT file), at your option.
+
+// Derived from Chromium's accessibility abstraction.
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE.chromium file.
+
+use std::iter::FusedIterator;
+
+
+[src/iterators.rs]
+// Derived from Chromium's accessibility abstraction.
+// Copyright 2018 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE.chromium file.
+
+use std::iter::FusedIterator;
+
+use accesskit::NodeId;
+
+use crate::{filters::FilterResult, node::Node, tree::State as TreeState};
+
+/// An iterator that yields following siblings of a node.
+///
+
+[src/lib.rs]
+// Copyright 2021 The AccessKit Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (found in
+// the LICENSE-APACHE file) or the MIT license (found in
+// the LICENSE-MIT file), at your option.
+
+pub(crate) mod tree;
+pub use tree::{ChangeHandler as TreeChangeHandler, State as TreeState, Tree};
+
+pub(crate) mod node;
+pub use node::Node;
+
+pub(crate) mod filters;
+
+[src/node.rs]
+// Copyright 2021 The AccessKit Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (found in
+// the LICENSE-APACHE file) or the MIT license (found in
+// the LICENSE-MIT file), at your option.
+
+// Derived from Chromium's accessibility abstraction.
+// Copyright 2021 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE.chromium file.
+
+use std::{iter::FusedIterator, sync::Arc};
+
+
+[src/node.rs]
+// Derived from Chromium's accessibility abstraction.
+// Copyright 2021 The Chromium Authors. All rights reserved.
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE.chromium file.
+
+use std::{iter::FusedIterator, sync::Arc};
+
+use accesskit::{
+    Action, Affine, DefaultActionVerb, Live, Node as NodeData, NodeId, Orientation, Point, Rect,
+    Role, TextSelection, Toggled,
+};
+
+use crate::filters::FilterResult;
+
+[src/text.rs]
+// Copyright 2022 The AccessKit Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (found in
+// the LICENSE-APACHE file) or the MIT license (found in
+// the LICENSE-MIT file), at your option.
+
+use accesskit::{
+    NodeId, Point, Rect, Role, TextDirection, TextPosition as WeakPosition, TextSelection,
+};
+use std::{cmp::Ordering, iter::FusedIterator};
+
+use crate::{FilterResult, Node, TreeState};
+
+
+[src/tree.rs]
+// Copyright 2021 The AccessKit Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (found in
+// the LICENSE-APACHE file) or the MIT license (found in
+// the LICENSE-MIT file), at your option.
+
+use accesskit::{Node as NodeData, NodeId, Tree as TreeData, TreeUpdate};
+use immutable_chunkmap::map::MapM as ChunkMap;
+use std::{
+    collections::{HashMap, HashSet},
+    sync::Arc,
+};
+

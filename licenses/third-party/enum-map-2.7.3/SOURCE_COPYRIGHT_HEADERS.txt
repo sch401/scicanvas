@@ -1,0 +1,413 @@
+[src/arbitrary.rs]
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+// SPDX-FileCopyrightText: 2021 Kamila Borowska <kamila@borowska.pw>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+use crate::{enum_map, EnumArray, EnumMap};
+use arbitrary::{Arbitrary, Result, Unstructured};
+
+/// Requires crate feature `"arbitrary"`
+impl<'a, K: EnumArray<V>, V: Arbitrary<'a>> Arbitrary<'a> for EnumMap<K, V> {
+    fn arbitrary(u: &mut Unstructured<'a>) -> Result<EnumMap<K, V>> {
+        Ok(enum_map! {
+
+[src/arbitrary.rs]
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+// SPDX-FileCopyrightText: 2021 Kamila Borowska <kamila@borowska.pw>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+use crate::{enum_map, EnumArray, EnumMap};
+use arbitrary::{Arbitrary, Result, Unstructured};
+
+/// Requires crate feature `"arbitrary"`
+impl<'a, K: EnumArray<V>, V: Arbitrary<'a>> Arbitrary<'a> for EnumMap<K, V> {
+    fn arbitrary(u: &mut Unstructured<'a>) -> Result<EnumMap<K, V>> {
+        Ok(enum_map! {
+            _ => Arbitrary::arbitrary(u)?,
+
+[src/enum_map_impls.rs]
+// SPDX-FileCopyrightText: 2017 - 2021 Kamila Borowska <kamila@borowska.pw>
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+// SPDX-FileCopyrightText: 2021 micycle
+// SPDX-FileCopyrightText: 2023 Nicolas Carranza <nicarran@yandex.com>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+use crate::{enum_map, EnumArray, EnumMap};
+use core::fmt::{self, Debug, Formatter};
+use core::hash::{Hash, Hasher};
+use core::iter::{Extend, FromIterator};
+use core::ops::{Index, IndexMut};
+
+[src/enum_map_impls.rs]
+// SPDX-FileCopyrightText: 2017 - 2021 Kamila Borowska <kamila@borowska.pw>
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+// SPDX-FileCopyrightText: 2021 micycle
+// SPDX-FileCopyrightText: 2023 Nicolas Carranza <nicarran@yandex.com>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+use crate::{enum_map, EnumArray, EnumMap};
+use core::fmt::{self, Debug, Formatter};
+use core::hash::{Hash, Hasher};
+use core::iter::{Extend, FromIterator};
+use core::ops::{Index, IndexMut};
+
+
+[src/enum_map_impls.rs]
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+// SPDX-FileCopyrightText: 2021 micycle
+// SPDX-FileCopyrightText: 2023 Nicolas Carranza <nicarran@yandex.com>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+use crate::{enum_map, EnumArray, EnumMap};
+use core::fmt::{self, Debug, Formatter};
+use core::hash::{Hash, Hasher};
+use core::iter::{Extend, FromIterator};
+use core::ops::{Index, IndexMut};
+
+impl<K: EnumArray<V> + Debug, V: Debug> Debug for EnumMap<K, V> {
+
+[src/enum_map_impls.rs]
+// SPDX-FileCopyrightText: 2021 micycle
+// SPDX-FileCopyrightText: 2023 Nicolas Carranza <nicarran@yandex.com>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+use crate::{enum_map, EnumArray, EnumMap};
+use core::fmt::{self, Debug, Formatter};
+use core::hash::{Hash, Hasher};
+use core::iter::{Extend, FromIterator};
+use core::ops::{Index, IndexMut};
+
+impl<K: EnumArray<V> + Debug, V: Debug> Debug for EnumMap<K, V> {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+
+[src/internal.rs]
+// SPDX-FileCopyrightText: 2017 - 2023 Kamila Borowska <kamila@borowska.pw>
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+// SPDX-FileCopyrightText: 2022 philipp <descpl@yahoo.de>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+use core::cmp::Ordering;
+use core::convert::Infallible;
+
+/// Enum mapping type.
+///
+/// This trait is implemented by `#[derive(Enum)]`.
+
+[src/internal.rs]
+// SPDX-FileCopyrightText: 2017 - 2023 Kamila Borowska <kamila@borowska.pw>
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+// SPDX-FileCopyrightText: 2022 philipp <descpl@yahoo.de>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+use core::cmp::Ordering;
+use core::convert::Infallible;
+
+/// Enum mapping type.
+///
+/// This trait is implemented by `#[derive(Enum)]`.
+///
+
+[src/internal.rs]
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+// SPDX-FileCopyrightText: 2022 philipp <descpl@yahoo.de>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+use core::cmp::Ordering;
+use core::convert::Infallible;
+
+/// Enum mapping type.
+///
+/// This trait is implemented by `#[derive(Enum)]`.
+///
+/// This trait is also implemented by `bool` and `u8`. While `u8` is
+
+[src/iter.rs]
+
+// SPDX-FileCopyrightText: 2017 - 2022 Kamila Borowska <kamila@borowska.pw>
+// SPDX-FileCopyrightText: 2020 Amanieu d'Antras <amanieu@gmail.com>
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+use crate::{EnumArray, EnumMap};
+use core::iter::{Enumerate, FusedIterator};
+use core::marker::PhantomData;
+use core::mem::ManuallyDrop;
+use core::ops::Range;
+use core::ptr;
+
+[src/iter.rs]
+// SPDX-FileCopyrightText: 2017 - 2022 Kamila Borowska <kamila@borowska.pw>
+// SPDX-FileCopyrightText: 2020 Amanieu d'Antras <amanieu@gmail.com>
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+use crate::{EnumArray, EnumMap};
+use core::iter::{Enumerate, FusedIterator};
+use core::marker::PhantomData;
+use core::mem::ManuallyDrop;
+use core::ops::Range;
+use core::ptr;
+use core::slice;
+
+[src/iter.rs]
+// SPDX-FileCopyrightText: 2020 Amanieu d'Antras <amanieu@gmail.com>
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+use crate::{EnumArray, EnumMap};
+use core::iter::{Enumerate, FusedIterator};
+use core::marker::PhantomData;
+use core::mem::ManuallyDrop;
+use core::ops::Range;
+use core::ptr;
+use core::slice;
+
+
+[src/lib.rs]
+// SPDX-FileCopyrightText: 2017 - 2023 Kamila Borowska <kamila@borowska.pw>
+// SPDX-FileCopyrightText: 2019 Riey <creeper844@gmail.com>
+// SPDX-FileCopyrightText: 2021 Alex Sayers <alex@asayers.com>
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+// SPDX-FileCopyrightText: 2022 Cass Fridkin <cass@cloudflare.com>
+// SPDX-FileCopyrightText: 2022 Mateusz Kowalczyk <fuuzetsu@fuuzetsu.co.uk>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+//! An enum mapping type.
+//!
+//! It is implemented using an array type, so using it is as fast as using Rust
+
+[src/lib.rs]
+// SPDX-FileCopyrightText: 2017 - 2023 Kamila Borowska <kamila@borowska.pw>
+// SPDX-FileCopyrightText: 2019 Riey <creeper844@gmail.com>
+// SPDX-FileCopyrightText: 2021 Alex Sayers <alex@asayers.com>
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+// SPDX-FileCopyrightText: 2022 Cass Fridkin <cass@cloudflare.com>
+// SPDX-FileCopyrightText: 2022 Mateusz Kowalczyk <fuuzetsu@fuuzetsu.co.uk>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+//! An enum mapping type.
+//!
+//! It is implemented using an array type, so using it is as fast as using Rust
+//! arrays.
+
+[src/lib.rs]
+// SPDX-FileCopyrightText: 2019 Riey <creeper844@gmail.com>
+// SPDX-FileCopyrightText: 2021 Alex Sayers <alex@asayers.com>
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+// SPDX-FileCopyrightText: 2022 Cass Fridkin <cass@cloudflare.com>
+// SPDX-FileCopyrightText: 2022 Mateusz Kowalczyk <fuuzetsu@fuuzetsu.co.uk>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+//! An enum mapping type.
+//!
+//! It is implemented using an array type, so using it is as fast as using Rust
+//! arrays.
+//!
+
+[src/lib.rs]
+// SPDX-FileCopyrightText: 2021 Alex Sayers <alex@asayers.com>
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+// SPDX-FileCopyrightText: 2022 Cass Fridkin <cass@cloudflare.com>
+// SPDX-FileCopyrightText: 2022 Mateusz Kowalczyk <fuuzetsu@fuuzetsu.co.uk>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+//! An enum mapping type.
+//!
+//! It is implemented using an array type, so using it is as fast as using Rust
+//! arrays.
+//!
+//! # Examples
+
+[src/lib.rs]
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+// SPDX-FileCopyrightText: 2022 Cass Fridkin <cass@cloudflare.com>
+// SPDX-FileCopyrightText: 2022 Mateusz Kowalczyk <fuuzetsu@fuuzetsu.co.uk>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+//! An enum mapping type.
+//!
+//! It is implemented using an array type, so using it is as fast as using Rust
+//! arrays.
+//!
+//! # Examples
+//!
+
+[src/lib.rs]
+// SPDX-FileCopyrightText: 2022 Cass Fridkin <cass@cloudflare.com>
+// SPDX-FileCopyrightText: 2022 Mateusz Kowalczyk <fuuzetsu@fuuzetsu.co.uk>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+//! An enum mapping type.
+//!
+//! It is implemented using an array type, so using it is as fast as using Rust
+//! arrays.
+//!
+//! # Examples
+//!
+//! ```
+
+[src/serde.rs]
+// SPDX-FileCopyrightText: 2017 - 2023 Kamila Borowska <kamila@borowska.pw>
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+use crate::{enum_map, EnumArray, EnumMap};
+use core::fmt;
+use core::marker::PhantomData;
+use serde::de::{self, Deserialize, Deserializer, Error, MapAccess, SeqAccess};
+use serde::ser::{Serialize, SerializeTuple, Serializer};
+
+/// Requires crate feature `"serde"`
+
+[src/serde.rs]
+// SPDX-FileCopyrightText: 2017 - 2023 Kamila Borowska <kamila@borowska.pw>
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+use crate::{enum_map, EnumArray, EnumMap};
+use core::fmt;
+use core::marker::PhantomData;
+use serde::de::{self, Deserialize, Deserializer, Error, MapAccess, SeqAccess};
+use serde::ser::{Serialize, SerializeTuple, Serializer};
+
+/// Requires crate feature `"serde"`
+impl<K: EnumArray<V> + Serialize, V: Serialize> Serialize for EnumMap<K, V> {
+
+[tests/serde.rs]
+
+// SPDX-FileCopyrightText: 2017 - 2022 Kamila Borowska <kamila@borowska.pw>
+// SPDX-FileCopyrightText: 2022 Cass Fridkin <cass@cloudflare.com>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+use enum_map::{enum_map, Enum, EnumMap};
+use serde::{Deserialize, Serialize};
+use serde_test::{assert_de_tokens_error, assert_tokens, Compact, Configure, Token};
+
+#[derive(Debug, Enum, Deserialize, Serialize)]
+enum Example {
+    A,
+
+[tests/serde.rs]
+// SPDX-FileCopyrightText: 2017 - 2022 Kamila Borowska <kamila@borowska.pw>
+// SPDX-FileCopyrightText: 2022 Cass Fridkin <cass@cloudflare.com>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+use enum_map::{enum_map, Enum, EnumMap};
+use serde::{Deserialize, Serialize};
+use serde_test::{assert_de_tokens_error, assert_tokens, Compact, Configure, Token};
+
+#[derive(Debug, Enum, Deserialize, Serialize)]
+enum Example {
+    A,
+    B,
+
+[tests/test.rs]
+// SPDX-FileCopyrightText: 2018 - 2022 Kamila Borowska <kamila@borowska.pw>
+// SPDX-FileCopyrightText: 2019 Riey <creeper844@gmail.com>
+// SPDX-FileCopyrightText: 2020 Amanieu d'Antras <amanieu@gmail.com>
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+// SPDX-FileCopyrightText: 2021 micycle
+// SPDX-FileCopyrightText: 2022 Cass Fridkin <cass@cloudflare.com>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+#[macro_use]
+extern crate enum_map;
+
+
+[tests/test.rs]
+// SPDX-FileCopyrightText: 2018 - 2022 Kamila Borowska <kamila@borowska.pw>
+// SPDX-FileCopyrightText: 2019 Riey <creeper844@gmail.com>
+// SPDX-FileCopyrightText: 2020 Amanieu d'Antras <amanieu@gmail.com>
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+// SPDX-FileCopyrightText: 2021 micycle
+// SPDX-FileCopyrightText: 2022 Cass Fridkin <cass@cloudflare.com>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+#[macro_use]
+extern crate enum_map;
+
+use enum_map::{Enum, EnumArray, EnumMap, IntoIter};
+
+[tests/test.rs]
+// SPDX-FileCopyrightText: 2019 Riey <creeper844@gmail.com>
+// SPDX-FileCopyrightText: 2020 Amanieu d'Antras <amanieu@gmail.com>
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+// SPDX-FileCopyrightText: 2021 micycle
+// SPDX-FileCopyrightText: 2022 Cass Fridkin <cass@cloudflare.com>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+#[macro_use]
+extern crate enum_map;
+
+use enum_map::{Enum, EnumArray, EnumMap, IntoIter};
+
+
+[tests/test.rs]
+// SPDX-FileCopyrightText: 2020 Amanieu d'Antras <amanieu@gmail.com>
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+// SPDX-FileCopyrightText: 2021 micycle
+// SPDX-FileCopyrightText: 2022 Cass Fridkin <cass@cloudflare.com>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+#[macro_use]
+extern crate enum_map;
+
+use enum_map::{Enum, EnumArray, EnumMap, IntoIter};
+
+use std::cell::{Cell, RefCell};
+
+[tests/test.rs]
+// SPDX-FileCopyrightText: 2021 Bruno Corrêa Zimmermann <brunoczim@gmail.com>
+// SPDX-FileCopyrightText: 2021 micycle
+// SPDX-FileCopyrightText: 2022 Cass Fridkin <cass@cloudflare.com>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+#[macro_use]
+extern crate enum_map;
+
+use enum_map::{Enum, EnumArray, EnumMap, IntoIter};
+
+use std::cell::{Cell, RefCell};
+use std::collections::HashSet;
+
+[tests/test.rs]
+// SPDX-FileCopyrightText: 2021 micycle
+// SPDX-FileCopyrightText: 2022 Cass Fridkin <cass@cloudflare.com>
+//
+// SPDX-License-Identifier: MIT OR Apache-2.0
+
+#[macro_use]
+extern crate enum_map;
+
+use enum_map::{Enum, EnumArray, EnumMap, IntoIter};
+
+use std::cell::{Cell, RefCell};
+use std::collections::HashSet;
+use std::convert::Infallible;

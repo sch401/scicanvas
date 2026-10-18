@@ -608,8 +608,10 @@ mod tests {
                     _ => None,
                 })
                 .unwrap();
-            assert!((stroke / scale - scene::AXIS_WIDTH as f32).abs() < 1e-4);
-            assert!((font / scale - scene::TICK_FONT as f32).abs() < 1e-4);
+            // 页面版面按页宽整体放大 k 倍，再按窗口缩放 scale 倍
+            let k = p.graphs[0].page.scale() as f32;
+            assert!((stroke / scale - scene::AXIS_WIDTH as f32 * k).abs() < 1e-4);
+            assert!((font / scale - scene::TICK_FONT as f32 * k).abs() < 1e-4);
             let transform = page_transform(rect, [sc.w, sc.h]);
             let page_point = pos2(sc.px(10.0) as f32, sc.py(0.0) as f32);
             let recovered = transform.inverse() * (transform * page_point);

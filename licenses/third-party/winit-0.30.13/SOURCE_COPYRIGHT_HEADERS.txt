@@ -1,0 +1,54 @@
+[src/keyboard.rs]
+//
+// THIS WORK IS PROVIDED "AS IS," AND COPYRIGHT HOLDERS MAKE NO REPRESENTATIONS OR WARRANTIES,
+// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO, WARRANTIES OF MERCHANTABILITY OR FITNESS FOR
+
+[src/keyboard.rs]
+//   document such as "This software or document includes material copied from or derived from
+//   [title and URI of the W3C document]. Copyright © [YEAR] W3C® (MIT, ERCIM, Keio, Beihang)."
+//
+// Disclaimers
+//
+// THIS WORK IS PROVIDED "AS IS," AND COPYRIGHT HOLDERS MAKE NO REPRESENTATIONS OR WARRANTIES,
+// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO, WARRANTIES OF MERCHANTABILITY OR FITNESS FOR
+
+[src/keyboard.rs]
+//   exist, the W3C Software and Document Short Notice should be included.
+// - Notice of any changes or modifications, through a copyright statement on the new code or
+//   document such as "This software or document includes material copied from or derived from
+//   [title and URI of the W3C document]. Copyright © [YEAR] W3C® (MIT, ERCIM, Keio, Beihang)."
+//
+// Disclaimers
+//
+// THIS WORK IS PROVIDED "AS IS," AND COPYRIGHT HOLDERS MAKE NO REPRESENTATIONS OR WARRANTIES,
+// EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO, WARRANTIES OF MERCHANTABILITY OR FITNESS FOR
+
+[src/keyboard.rs]
+// https://www.w3.org/TR/2017/CR-uievents-code-20170601/
+// Copyright © 2017 W3C® (MIT, ERCIM, Keio, Beihang).
+//
+// These documents were used under the terms of the following license. This W3C license as well as
+// the W3C short notice apply to the `Key` and `KeyCode` enums and their variants and the
+// documentation attached to their variants.
+
+// --------- BEGINNING OF W3C LICENSE --------------------------------------------------------------
+//
+// License
+//
+// By obtaining and/or copying this work, you (the licensee) agree that you have read, understood,
+// and will comply with the following terms and conditions.
+
+[src/keyboard.rs]
+// https://www.w3.org/TR/2017/CR-uievents-key-20170601/
+// Copyright © 2017 W3C® (MIT, ERCIM, Keio, Beihang).
+//
+// ### For `KeyCode`
+// UI Events KeyboardEvent code Values
+// https://www.w3.org/TR/2017/CR-uievents-code-20170601/
+// Copyright © 2017 W3C® (MIT, ERCIM, Keio, Beihang).
+//
+// These documents were used under the terms of the following license. This W3C license as well as
+// the W3C short notice apply to the `Key` and `KeyCode` enums and their variants and the
+// documentation attached to their variants.
+
+// --------- BEGINNING OF W3C LICENSE --------------------------------------------------------------

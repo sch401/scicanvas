@@ -3,6 +3,8 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+pub const PROJECT_VERSION: u32 = 9;
+
 /// 列的绘图角色，对应 Origin 里的 X / Y / 忽略。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -26,7 +28,7 @@ impl Role {
     }
 }
 
-/// 工作表中的一列。数据按字符串保存，保留用户输入的原样，绘图时再解析成数值。
+/// 工作表中的一列。类型化存储，稀疏文本保留用户输入的原样。
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Column {
@@ -36,13 +38,19 @@ pub struct Column {
     pub long_name: String,
     pub units: String,
     pub comment: String,
-    pub data: Vec<String>,
+    pub data: crate::ColumnData,
     /// 由哪一列计算得来（拟合、平滑等结果列），新的结果列会排在同一来源的结果列后面。
     #[cfg_attr(feature = "serde", serde(default))]
     pub derived_from: Option<String>,
     /// 误差列关联的 X/Y 列；空字符串表示来源已删除，None 按列顺序自动关联。
     #[cfg_attr(feature = "serde", serde(default))]
     pub error_for: Option<String>,
+    /// 显示格式：只影响工作表里的显示。全部为“原样”时不写入文件。
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "crate::format::DisplayFormat::is_auto")
+    )]
+    pub format: crate::format::DisplayFormat,
 }
 
 impl Column {
@@ -53,15 +61,29 @@ impl Column {
             long_name: String::new(),
             units: String::new(),
             comment: String::new(),
-            data: Vec::new(),
+            data: crate::ColumnData::default(),
             derived_from: None,
             error_for: None,
+            format: Default::default(),
         }
+    }
+
+    /// 工作表里显示的文字：按显示格式写数值和日期；缺失、文本、分类和“原样”格式显示原始写法。
+    pub fn display_at(&self, row: usize) -> std::borrow::Cow<'_, str> {
+        use crate::ColumnData;
+        let formatted = match &self.data {
+            ColumnData::Num { .. } => self.data.f64_at(row).and_then(|v| self.format.number.apply(v)),
+            ColumnData::DateTime { .. } => self.data.f64_at(row).and_then(|v| self.format.date.apply(v as i64)),
+            _ => None,
+        };
+        formatted.map_or_else(|| self.data.text_at(row), std::borrow::Cow::Owned)
     }
 
     /// 解析为数值；空单元格或非数值为 NaN。
     pub fn values(&self) -> Vec<f64> {
-        self.data.iter().map(|s| parse_num(s)).collect()
+        (0..self.data.len())
+            .map(|row| self.data.f64_at(row).unwrap_or(f64::NAN))
+            .collect()
     }
 
     /// 图例里用的名字：有长名称用长名称，否则用列标识。
@@ -74,6 +96,21 @@ impl Column {
     }
 
     /// 坐标轴标题：长名称 (单位)。
+    /// 两列构成的范围（如浮动柱的下端到上端）：单位相同时只写一次。
+    pub fn range_label(&self, top: &Column) -> String {
+        let (a, b) = (self.units.trim(), top.units.trim());
+        if a == b {
+            let names = format!("{} – {}", self.display_name(), top.display_name());
+            if a.is_empty() {
+                names
+            } else {
+                format!("{names} ({a})")
+            }
+        } else {
+            format!("{} – {}", self.axis_label(), top.axis_label())
+        }
+    }
+
     pub fn axis_label(&self) -> String {
         let n = self.display_name();
         if self.units.trim().is_empty() {
@@ -85,16 +122,25 @@ impl Column {
 
     /// 写入一个单元格；写空值时会去掉末尾多余的空行。
     pub fn set(&mut self, row: usize, value: String) {
-        if row >= self.data.len() {
-            if value.trim().is_empty() {
-                return;
-            }
-            self.data.resize(row + 1, String::new());
+        if row >= self.data.len() && value.trim().is_empty() {
+            return;
         }
-        self.data[row] = value;
+        self.data.set_text(row, value);
         while self.data.last().is_some_and(|s| s.trim().is_empty()) {
             self.data.pop();
         }
+    }
+}
+
+impl crate::ColumnView for Column {
+    fn len(&self) -> usize {
+        self.data.len()
+    }
+    fn f64_at(&self, row: usize) -> Option<f64> {
+        self.data.f64_at(row)
+    }
+    fn text_at(&self, row: usize) -> std::borrow::Cow<'_, str> {
+        self.data.text_at(row)
     }
 }
 
@@ -166,6 +212,20 @@ impl Book {
 
     pub fn nrows(&self) -> usize {
         self.columns.iter().map(|c| c.data.len()).max().unwrap_or(0)
+    }
+
+    pub fn convert_columns(&mut self, keys: &[String], kind: crate::DataKind) -> Result<(), String> {
+        let converted = keys
+            .iter()
+            .map(|key| {
+                let i = self.column_index(key).ok_or_else(|| format!("找不到列 {key}"))?;
+                Ok((i, self.columns[i].data.converted(kind)?))
+            })
+            .collect::<Result<Vec<_>, String>>()?;
+        for (i, data) in converted {
+            self.columns[i].data = data;
+        }
+        Ok(())
     }
 
     /// 下一个没用过的列标识。
@@ -251,7 +311,7 @@ impl Book {
         (r0..=r1)
             .map(|r| {
                 (c0..=c1)
-                    .map(|c| self.columns[c].data.get(r).map(String::as_str).unwrap_or(""))
+                    .map(|c| self.columns[c].data.text_at(r))
                     .collect::<Vec<_>>()
                     .join("\t")
             })
@@ -314,9 +374,10 @@ impl Panels {
     }
     pub fn page_mm(self) -> (f64, f64) {
         match self {
-            Panels::Stacked => (89.0, 120.0),
-            Panels::SideBySide => (183.0, 70.0),
-            Panels::Grid4 => (183.0, 140.0),
+            // 页宽统一为 A4 纸宽；上下两面板每块 3:2，整页仍可放进 A4 竖版
+            Panels::Stacked => (210.0, 280.0),
+            Panels::SideBySide => (210.0, 105.0),
+            Panels::Grid4 => (210.0, 157.5),
         }
     }
 }
@@ -605,7 +666,7 @@ pub struct Project {
 impl Default for Project {
     fn default() -> Self {
         Project {
-            version: 8,
+            version: PROJECT_VERSION,
             books: Vec::new(),
             graphs: Vec::new(),
             folders: Vec::new(),
@@ -734,7 +795,7 @@ impl Project {
         for col in &mut b.columns {
             // 插入点在数据末尾之后时，那里本来就是空行，不必补齐
             if at < col.data.len() {
-                col.data.splice(at..at, std::iter::repeat_n(String::new(), n));
+                col.data.insert_empty(at, n);
             }
         }
         self.shift_row_ranges(book_id, |r| if r >= at { Some(r + n) } else { Some(r) });
@@ -748,7 +809,7 @@ impl Project {
         }
         for col in &mut b.columns {
             if r0 < col.data.len() {
-                col.data.drain(r0..=r1.min(col.data.len() - 1));
+                col.data.delete_rows(r0, r1);
             }
             while col.data.last().is_some_and(|s| s.trim().is_empty()) {
                 col.data.pop();
@@ -1014,8 +1075,8 @@ mod tests {
     fn panels_split_y_columns_in_order_and_lay_out_on_a_grid() {
         let mut p = Project::sample();
         for (panels, columns, size) in [
-            (Panels::Stacked, 1, (89.0, 120.0)),
-            (Panels::SideBySide, 2, (183.0, 70.0)),
+            (Panels::Stacked, 1, (210.0, 280.0)),
+            (Panels::SideBySide, 2, (210.0, 105.0)),
         ] {
             let (id, _) = p.plot_panels(1, &[], PlotType::Line, panels).unwrap();
             let page = &p.graph(id).unwrap().page;
@@ -1057,8 +1118,16 @@ mod tests {
         p.insert_rows(1, 3, 2);
         let col = &p.book(1).unwrap().columns[0].data;
         assert_eq!(col.len(), a.len() + 2);
-        assert_eq!((&col[..3], &col[3], &col[4]), (&a[..3], &String::new(), &String::new()));
-        assert_eq!(&col[5..], &a[3..]);
+        assert_eq!(
+            col.iter().take(3).collect::<Vec<_>>(),
+            a.iter().take(3).collect::<Vec<_>>()
+        );
+        assert_eq!(col.text_at(3), "");
+        assert_eq!(col.text_at(4), "");
+        assert_eq!(
+            col.iter().skip(5).collect::<Vec<_>>(),
+            a.iter().skip(3).collect::<Vec<_>>()
+        );
         assert_eq!(p.graph(2).unwrap().first_layer().rows, Some((7, 12)));
 
         p.delete_rows(1, 3, 4);
@@ -1067,7 +1136,7 @@ mod tests {
 
         // 删掉范围的起点：范围从删除段之后的第一行开始
         p.delete_rows(1, 4, 6);
-        assert_eq!(p.book(1).unwrap().columns[0].data[4], a[7]);
+        assert_eq!(p.book(1).unwrap().columns[0].data.text_at(4), a.text_at(7));
         assert_eq!(p.graph(2).unwrap().first_layer().rows, Some((4, 7)));
         // 整段删除：改回使用全部行
         p.delete_rows(1, 3, 9);
@@ -1090,14 +1159,17 @@ mod tests {
 
         let book = p.book_mut(1).unwrap();
         let last = book.columns[0].data.len() - 1;
-        book.columns[0].data[last] = String::new();
+        book.columns[0].data.set_text(last, String::new());
         p.delete_rows(1, 0, 0);
         let book = p.book(1).unwrap();
         assert!(book
             .columns
             .iter()
             .all(|c| c.data.last().is_none_or(|s| !s.trim().is_empty())));
-        assert_eq!(book.columns[2].data, short[1..]);
+        assert_eq!(
+            book.columns[2].data.iter().collect::<Vec<_>>(),
+            short.iter().skip(1).collect::<Vec<_>>()
+        );
         // 区间倒置、插入 0 行都不改动数据
         let before = p.clone();
         p.delete_rows(1, 5, 2);

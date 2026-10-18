@@ -55,8 +55,9 @@ fn signed_stacks_keep_missing_rows_aligned_and_expand_the_axis() {
     assert_eq!(rects.len(), 11);
     assert_eq!(rects[0][0], rects[3][0]);
     assert_eq!(rects[0][2], rects[3][2]);
-    assert_eq!(rects[3][1], sc.py(7.0));
-    assert_eq!(rects[3][3], sc.py(2.0) - sc.py(7.0));
+    // 版面按页宽整体放大后坐标会有末位舍入差异
+    assert!((rects[3][1] - sc.py(7.0)).abs() < 1e-9);
+    assert!((rects[3][3] - (sc.py(2.0) - sc.py(7.0))).abs() < 1e-9);
 }
 
 #[test]
@@ -139,7 +140,7 @@ fn invalid_floating_selection_is_atomic_and_mapping_can_be_adjusted() {
 #[test]
 fn means_align_by_x_and_floating_means_use_the_same_complete_rows() {
     let (mut p, id) = project(PlotType::StackedBar, &[&["2", "4", "6"], &["10", "", "30"]]);
-    p.book_mut(1).unwrap().columns[0].data = ["2", "1", "2"].map(str::to_string).to_vec();
+    p.book_mut(1).unwrap().columns[0].data = ["2", "1", "2"].map(str::to_string).to_vec().into();
     p.graph_mut(id).unwrap().first_layer_mut().transform = Transform::Mean;
     let s = series(&p, id);
     assert_eq!(s[0].points, [[1.0, 4.0], [2.0, 4.0]]);
@@ -180,7 +181,7 @@ fn error_bars_follow_stack_endpoints_and_percentage_scaling() {
     let (mut p, id) = project(PlotType::PercentStackedBar, &[&["1"], &["3"]]);
     let b = p.book_mut(1).unwrap();
     let key = b.push_column(Role::YError);
-    b.columns.iter_mut().find(|c| c.key == key).unwrap().data = vec!["0.3".into()];
+    b.columns.iter_mut().find(|c| c.key == key).unwrap().data = vec!["0.3".into()].into();
     let s = series(&p, id);
     assert_eq!(s[1].errors[0][0], None);
     assert!((s[1].errors[0][1].unwrap() - 7.5).abs() < 1e-12);

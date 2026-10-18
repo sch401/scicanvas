@@ -1,0 +1,118 @@
+[src/libm.rs]
+// Copyright (c) 2018 Jorge Aparicio
+// Copyright © 2005-2020 Rich Felker, et al.
+// Copyright © 1993,2004 Sun Microsystems or
+// Copyright © 2003-2011 David Schultz or
+// Copyright © 2003-2009 Steven G. Kargl or
+// Copyright © 2003-2009 Bruce D. Evans or
+// Copyright © 2008 Stephen L. Moshier or
+// Copyright © 2017-2018 Arm Limited
+// SPDX-License-Identifier: MIT
+// This file is licensed solely under the terms discussed in LICENSE-LIBM-MIT at the crate root.
+// See the package-level README for full details.
+
+
+[src/libm.rs]
+// Copyright (c) 2018 Jorge Aparicio
+// Copyright © 2005-2020 Rich Felker, et al.
+// Copyright © 1993,2004 Sun Microsystems or
+// Copyright © 2003-2011 David Schultz or
+// Copyright © 2003-2009 Steven G. Kargl or
+// Copyright © 2003-2009 Bruce D. Evans or
+// Copyright © 2008 Stephen L. Moshier or
+// Copyright © 2017-2018 Arm Limited
+// SPDX-License-Identifier: MIT
+// This file is licensed solely under the terms discussed in LICENSE-LIBM-MIT at the crate root.
+// See the package-level README for full details.
+
+// Taken from https://github.com/rust-lang/libm/blob/master/src/math/mod.rs#L1
+
+[src/libm.rs]
+// Copyright © 1993,2004 Sun Microsystems or
+// Copyright © 2003-2011 David Schultz or
+// Copyright © 2003-2009 Steven G. Kargl or
+// Copyright © 2003-2009 Bruce D. Evans or
+// Copyright © 2008 Stephen L. Moshier or
+// Copyright © 2017-2018 Arm Limited
+// SPDX-License-Identifier: MIT
+// This file is licensed solely under the terms discussed in LICENSE-LIBM-MIT at the crate root.
+// See the package-level README for full details.
+
+// Taken from https://github.com/rust-lang/libm/blob/master/src/math/mod.rs#L1
+macro_rules! force_eval {
+    ($e:expr) => {
+
+[src/libm.rs]
+// Copyright © 2003-2009 Bruce D. Evans or
+// Copyright © 2008 Stephen L. Moshier or
+// Copyright © 2017-2018 Arm Limited
+// SPDX-License-Identifier: MIT
+// This file is licensed solely under the terms discussed in LICENSE-LIBM-MIT at the crate root.
+// See the package-level README for full details.
+
+// Taken from https://github.com/rust-lang/libm/blob/master/src/math/mod.rs#L1
+macro_rules! force_eval {
+    ($e:expr) => {
+        unsafe { ::core::ptr::read_volatile(&$e) }
+    };
+}
+
+[src/libm.rs]
+// Copyright © 2003-2009 Steven G. Kargl or
+// Copyright © 2003-2009 Bruce D. Evans or
+// Copyright © 2008 Stephen L. Moshier or
+// Copyright © 2017-2018 Arm Limited
+// SPDX-License-Identifier: MIT
+// This file is licensed solely under the terms discussed in LICENSE-LIBM-MIT at the crate root.
+// See the package-level README for full details.
+
+// Taken from https://github.com/rust-lang/libm/blob/master/src/math/mod.rs#L1
+macro_rules! force_eval {
+    ($e:expr) => {
+        unsafe { ::core::ptr::read_volatile(&$e) }
+    };
+
+[src/libm.rs]
+// Copyright © 2003-2011 David Schultz or
+// Copyright © 2003-2009 Steven G. Kargl or
+// Copyright © 2003-2009 Bruce D. Evans or
+// Copyright © 2008 Stephen L. Moshier or
+// Copyright © 2017-2018 Arm Limited
+// SPDX-License-Identifier: MIT
+// This file is licensed solely under the terms discussed in LICENSE-LIBM-MIT at the crate root.
+// See the package-level README for full details.
+
+// Taken from https://github.com/rust-lang/libm/blob/master/src/math/mod.rs#L1
+macro_rules! force_eval {
+    ($e:expr) => {
+        unsafe { ::core::ptr::read_volatile(&$e) }
+
+[src/libm.rs]
+// Copyright © 2005-2020 Rich Felker, et al.
+// Copyright © 1993,2004 Sun Microsystems or
+// Copyright © 2003-2011 David Schultz or
+// Copyright © 2003-2009 Steven G. Kargl or
+// Copyright © 2003-2009 Bruce D. Evans or
+// Copyright © 2008 Stephen L. Moshier or
+// Copyright © 2017-2018 Arm Limited
+// SPDX-License-Identifier: MIT
+// This file is licensed solely under the terms discussed in LICENSE-LIBM-MIT at the crate root.
+// See the package-level README for full details.
+
+// Taken from https://github.com/rust-lang/libm/blob/master/src/math/mod.rs#L1
+macro_rules! force_eval {
+
+[src/libm.rs]
+// Copyright © 2008 Stephen L. Moshier or
+// Copyright © 2017-2018 Arm Limited
+// SPDX-License-Identifier: MIT
+// This file is licensed solely under the terms discussed in LICENSE-LIBM-MIT at the crate root.
+// See the package-level README for full details.
+
+// Taken from https://github.com/rust-lang/libm/blob/master/src/math/mod.rs#L1
+macro_rules! force_eval {
+    ($e:expr) => {
+        unsafe { ::core::ptr::read_volatile(&$e) }
+    };
+}
+

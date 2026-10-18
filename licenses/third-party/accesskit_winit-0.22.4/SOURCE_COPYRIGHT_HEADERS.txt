@@ -1,0 +1,83 @@
+[src/lib.rs]
+// Copyright 2022 The AccessKit Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (found in
+// the LICENSE-APACHE file).
+
+/// ## Compatibility with async runtimes
+///
+/// The following only applies on Linux/Unix:
+///
+/// While this crate's API is purely blocking, it internally spawns asynchronous tasks on an executor.
+///
+/// - If you use tokio, make sure to enable the `tokio` feature of this crate.
+/// - If you use another async runtime or if you don't use one at all, the default feature will suit your needs.
+
+[src/platform_impl/macos.rs]
+// Copyright 2022 The AccessKit Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (found in
+// the LICENSE-APACHE file).
+#[cfg(feature = "rwh_05")]
+use crate::raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
+#[cfg(feature = "rwh_06")]
+use crate::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+use accesskit::{ActionHandler, ActivationHandler, DeactivationHandler, TreeUpdate};
+use accesskit_macos::SubclassingAdapter;
+use winit::{event::WindowEvent, window::Window};
+
+
+[src/platform_impl/mod.rs]
+// Copyright 2022 The AccessKit Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (found in
+// the LICENSE-APACHE file).
+
+// Based loosely on winit's src/platform_impl/mod.rs.
+
+pub use self::platform::*;
+
+#[cfg(target_os = "windows")]
+#[path = "windows.rs"]
+mod platform;
+
+
+[src/platform_impl/null.rs]
+// Copyright 2022 The AccessKit Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (found in
+// the LICENSE-APACHE file).
+
+use accesskit::{ActionHandler, ActivationHandler, DeactivationHandler, TreeUpdate};
+use winit::{event::WindowEvent, window::Window};
+
+pub struct Adapter;
+
+impl Adapter {
+    pub fn new(
+        _window: &Window,
+
+[src/platform_impl/unix.rs]
+// Copyright 2022 The AccessKit Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (found in
+// the LICENSE-APACHE file).
+
+use accesskit::{ActionHandler, ActivationHandler, DeactivationHandler, Rect, TreeUpdate};
+use accesskit_unix::Adapter as UnixAdapter;
+use winit::{event::WindowEvent, window::Window};
+
+pub struct Adapter {
+    adapter: UnixAdapter,
+}
+
+
+[src/platform_impl/windows.rs]
+// Copyright 2022 The AccessKit Authors. All rights reserved.
+// Licensed under the Apache License, Version 2.0 (found in
+// the LICENSE-APACHE file).
+#[cfg(feature = "rwh_05")]
+use crate::raw_window_handle::{HasRawWindowHandle, RawWindowHandle};
+#[cfg(feature = "rwh_06")]
+use crate::raw_window_handle::{HasWindowHandle, RawWindowHandle};
+
+use accesskit::{ActionHandler, ActivationHandler, DeactivationHandler, TreeUpdate};
+use accesskit_windows::{SubclassingAdapter, HWND};
+use winit::{event::WindowEvent, window::Window};
+

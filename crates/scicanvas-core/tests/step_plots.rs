@@ -8,8 +8,8 @@ use scicanvas_core::{
 fn project(kind: PlotType) -> (Project, u64) {
     let mut p = Project::sample();
     let book = p.book_mut(1).unwrap();
-    book.columns[0].data = vec!["0".into(), "1".into(), "2".into()];
-    book.columns[1].data = vec!["10".into(), "20".into(), "15".into()];
+    book.columns[0].data = vec!["0".into(), "1".into(), "2".into()].into();
+    book.columns[1].data = vec!["10".into(), "20".into(), "15".into()].into();
     let spec = PlotSpec::from_selection(book, &["B".into()], kind).unwrap();
     let id = p.plot_spec(spec).unwrap();
     (p, id)
@@ -39,7 +39,15 @@ fn horizontal_and_vertical_steps_preserve_the_sample_values() {
             })
             .unwrap();
         let expected: Vec<_> = expected.into_iter().map(|p| [sc.px(p[0]), sc.py(p[1])]).collect();
-        assert_eq!(actual, &expected);
+        // 版面按页宽整体放大后坐标有末位舍入差异
+        assert_eq!(actual.len(), expected.len());
+        assert!(
+            actual
+                .iter()
+                .zip(&expected)
+                .all(|(a, b)| (a[0] - b[0]).abs() < 1e-9 && (a[1] - b[1]).abs() < 1e-9),
+            "{actual:?} vs {expected:?}"
+        );
     }
 }
 

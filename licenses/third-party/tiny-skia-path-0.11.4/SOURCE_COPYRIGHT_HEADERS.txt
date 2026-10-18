@@ -1,0 +1,316 @@
+[src/dash.rs]
+// Copyright 2014 Google Inc.
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// This module is a mix of SkDashPath, SkDashPathEffect, SkContourMeasure and SkPathMeasure.
+
+use alloc::vec::Vec;
+
+use arrayref::array_ref;
+
+
+[src/dash.rs]
+// Copyright 2014 Google Inc.
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// This module is a mix of SkDashPath, SkDashPathEffect, SkContourMeasure and SkPathMeasure.
+
+use alloc::vec::Vec;
+
+use arrayref::array_ref;
+
+use crate::{Path, Point};
+
+[src/f32x2_t.rs]
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+#[cfg(all(not(feature = "std"), feature = "no-std-float"))]
+use crate::NoStdFloat;
+
+// Right now, there are no visible benefits of using SIMD for f32x2. So we don't.
+/// A pair of f32 numbers.
+///
+/// Mainly for internal use. Do not rely on it!
+
+[src/f32x4_t.rs]
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// Right now, there are no visible benefits of using SIMD for f32x4. So we don't.
+#[derive(Default, Clone, Copy, PartialEq, Debug)]
+#[repr(C, align(16))]
+pub struct f32x4(pub [f32; 4]);
+
+impl f32x4 {
+    pub fn max(self, rhs: Self) -> Self {
+
+[src/floating_point.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use crate::scalar::Scalar;
+
+pub use strict_num::{FiniteF32, NonZeroPositiveF32, NormalizedF32};
+
+#[cfg(all(not(feature = "std"), feature = "no-std-float"))]
+use crate::NoStdFloat;
+
+[src/floating_point.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use crate::scalar::Scalar;
+
+pub use strict_num::{FiniteF32, NonZeroPositiveF32, NormalizedF32};
+
+#[cfg(all(not(feature = "std"), feature = "no-std-float"))]
+use crate::NoStdFloat;
+
+
+[src/lib.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+//! A [tiny-skia](https://github.com/RazrFalcon/tiny-skia) Bezier path implementation.
+//!
+//! Provides a memory-efficient Bezier path container, path builder, path stroker and path dasher.
+//!
+//! Also provides some basic geometry types, but they will be moved to an external crate eventually.
+//!
+
+[src/lib.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+//! A [tiny-skia](https://github.com/RazrFalcon/tiny-skia) Bezier path implementation.
+//!
+//! Provides a memory-efficient Bezier path container, path builder, path stroker and path dasher.
+//!
+//! Also provides some basic geometry types, but they will be moved to an external crate eventually.
+//!
+//! Note that all types use single precision floats (`f32`), just like [Skia](https://skia.org/).
+
+[src/path.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use alloc::vec::Vec;
+
+use crate::path_builder::PathBuilder;
+use crate::transform::Transform;
+use crate::{Point, Rect};
+
+
+[src/path.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use alloc::vec::Vec;
+
+use crate::path_builder::PathBuilder;
+use crate::transform::Transform;
+use crate::{Point, Rect};
+
+#[cfg(all(not(feature = "std"), feature = "no-std-float"))]
+
+[src/path_builder.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// NOTE: this is not SkPathBuilder, but rather a reimplementation of SkPath.
+
+use alloc::vec;
+use alloc::vec::Vec;
+
+use crate::{Path, Point, Rect};
+
+[src/path_builder.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// NOTE: this is not SkPathBuilder, but rather a reimplementation of SkPath.
+
+use alloc::vec;
+use alloc::vec::Vec;
+
+use crate::{Path, Point, Rect};
+
+
+[src/path_geometry.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+//! A collection of functions to work with Bezier paths.
+//!
+//! Mainly for internal use. Do not rely on it!
+
+#![allow(missing_docs)]
+
+
+[src/path_geometry.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+//! A collection of functions to work with Bezier paths.
+//!
+//! Mainly for internal use. Do not rely on it!
+
+#![allow(missing_docs)]
+
+use crate::{Point, Transform};
+
+[src/rect.rs]
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use core::convert::TryFrom;
+
+use crate::{FiniteF32, IntSize, LengthU32, PathBuilder, Point, SaturateRound, Size, Transform};
+
+#[cfg(all(not(feature = "std"), feature = "no-std-float"))]
+use crate::NoStdFloat;
+
+
+[src/scalar.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use crate::floating_point::f32_as_2s_compliment;
+
+#[allow(missing_docs)]
+pub const SCALAR_MAX: f32 = 3.402823466e+38;
+#[allow(missing_docs)]
+pub const SCALAR_NEARLY_ZERO: f32 = 1.0 / (1 << 12) as f32;
+
+[src/scalar.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use crate::floating_point::f32_as_2s_compliment;
+
+#[allow(missing_docs)]
+pub const SCALAR_MAX: f32 = 3.402823466e+38;
+#[allow(missing_docs)]
+pub const SCALAR_NEARLY_ZERO: f32 = 1.0 / (1 << 12) as f32;
+#[allow(missing_docs)]
+
+[src/size.rs]
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use strict_num::NonZeroPositiveF32;
+
+use crate::{IntRect, LengthU32, NonZeroRect, Rect};
+
+#[cfg(all(not(feature = "std"), feature = "no-std-float"))]
+use crate::NoStdFloat;
+
+
+[src/stroker.rs]
+// Copyright 2008 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// Based on SkStroke.cpp
+
+use crate::{Path, Point, Transform};
+
+use crate::dash::StrokeDash;
+use crate::floating_point::{NonZeroPositiveF32, NormalizedF32, NormalizedF32Exclusive};
+
+[src/stroker.rs]
+// Copyright 2008 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+// Based on SkStroke.cpp
+
+use crate::{Path, Point, Transform};
+
+use crate::dash::StrokeDash;
+use crate::floating_point::{NonZeroPositiveF32, NormalizedF32, NormalizedF32Exclusive};
+use crate::path::{PathSegment, PathSegmentsIter};
+
+[src/transform.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use crate::{NonZeroRect, Point};
+
+use crate::scalar::{Scalar, SCALAR_NEARLY_ZERO};
+
+#[cfg(all(not(feature = "std"), feature = "no-std-float"))]
+use crate::NoStdFloat;
+
+[src/transform.rs]
+// Copyright 2006 The Android Open Source Project
+// Copyright 2020 Yevhenii Reizner
+//
+// Use of this source code is governed by a BSD-style license that can be
+// found in the LICENSE file.
+
+use crate::{NonZeroRect, Point};
+
+use crate::scalar::{Scalar, SCALAR_NEARLY_ZERO};
+
+#[cfg(all(not(feature = "std"), feature = "no-std-float"))]
+use crate::NoStdFloat;
+
