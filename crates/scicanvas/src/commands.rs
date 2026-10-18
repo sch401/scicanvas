@@ -1278,11 +1278,11 @@ fn build() -> Vec<Command> {
     );
     commands.push(c(
         "note.export",
-        "导出 Note 文本",
+        "导出 Note",
         "book",
         "",
         "导出",
-        "note txt 文本",
+        "note txt md markdown 文本",
         |a| {
             a.active
                 .and_then(|id| a.project.note(id))

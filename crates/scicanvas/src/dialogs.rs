@@ -549,7 +549,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                         ui.ctx().copy_text(fit_text(reports));
                     }
                     if ui.add(plain("保存为 Note")).clicked() {
-                        action = Action::SaveNote("拟合结果".into(), fit_text(reports));
+                        action = Action::SaveNote("拟合结果".into(), fit_markdown(reports));
                     }
                     if ui.add(primary(ui, "关闭")).clicked() {
                         action = Action::Close;
@@ -702,16 +702,12 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                     if ui.add(plain("保存为 Note")).clicked() {
                         let (table, groups) = anova_rows(result, names);
                         let pairs = tukey_rows(tukey, names);
-                        // 与“复制结果”相同：三张表之间空一行
-                        let text = table
-                            .iter()
-                            .chain([vec![]].iter())
-                            .chain(groups.iter())
-                            .chain([vec![]].iter())
-                            .chain(pairs.iter())
-                            .map(|r| r.join("\t"))
-                            .collect::<Vec<_>>()
-                            .join("\n");
+                        let text = format!(
+                            "## 单因素方差分析\n\n{}\n### 各组统计量\n\n{}\n### Tukey HSD 多重比较\n\n{}",
+                            md_table(&table),
+                            md_table(&groups),
+                            md_table(&pairs)
+                        );
                         action = Action::SaveNote("方差分析结果".into(), text);
                     }
                     if ui.add(primary(ui, "关闭")).clicked() {
@@ -767,9 +763,10 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                         ui.ctx().copy_text(lines.join("\n"));
                     }
                     if ui.add(plain("保存为 Note")).clicked() {
-                        let mut lines = vec![correlation_header().join("\t")];
-                        lines.extend(correlation_rows(pairs).into_iter().map(|r| r.join("\t")));
-                        action = Action::SaveNote("相关系数结果".into(), lines.join("\n"));
+                        let mut rows = vec![correlation_header().map(String::from).to_vec()];
+                        rows.extend(correlation_rows(pairs));
+                        let text = format!("## 相关系数\n\n{}", md_table(&rows));
+                        action = Action::SaveNote("相关系数结果".into(), text);
                     }
                     if ui.add(primary(ui, "关闭")).clicked() {
                         action = Action::Close;
@@ -875,7 +872,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                         ui.ctx().copy_text(nlfit_text(reports));
                     }
                     if ui.add(plain("保存为 Note")).clicked() {
-                        action = Action::SaveNote("非线性拟合结果".into(), nlfit_text(reports));
+                        action = Action::SaveNote("非线性拟合结果".into(), nlfit_markdown(reports));
                     }
                     if ui.add(primary(ui, "关闭")).clicked() {
                         action = Action::Close;
@@ -1016,8 +1013,8 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                         ui.ctx().copy_text(text.join("\n"));
                     }
                     if ui.add(plain("保存为 Note")).clicked() {
-                        let text = rows.iter().map(|r| r.join("\t")).collect::<Vec<_>>().join("\n");
-                        action = Action::SaveNote(title.clone(), format!("{title}\n\n{text}\n\n{note}"));
+                        let text = format!("## {title}\n\n{}\n{note}", md_table(rows));
+                        action = Action::SaveNote(title.clone(), text.trim_end().to_string());
                     }
                     if ui.add(primary(ui, "关闭")).clicked() {
                         action = Action::Close;
@@ -1349,11 +1346,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                         ui.ctx().copy_text(text.join("\n"));
                     }
                     if ui.add(plain("保存为 Note")).clicked() {
-                        let text = rows
-                            .iter()
-                            .map(|(k, v)| format!("{k}\t{v}"))
-                            .collect::<Vec<_>>()
-                            .join("\n");
+                        let text = format!("## t 检验\n\n{}", md_pairs(["项目", "值"], &rows));
                         action = Action::SaveNote("t 检验结果".into(), text);
                     }
                     if ui.add(primary(ui, "关闭")).clicked() {
@@ -1504,6 +1497,95 @@ fn nlfit_stats(f: &scicanvas_core::nlfit::NlFit) -> Vec<(&'static str, String)> 
     ]
 }
 
+/// Markdown 表格单元格：竖线转义，换行改成空格。
+fn md_cell(s: &str) -> String {
+    s.replace('|', "\\|").replace(['\r', '\n'], " ")
+}
+
+/// Markdown 表格（首行为表头），末尾带换行；空表返回空串。
+pub(crate) fn md_table(rows: &[Vec<String>]) -> String {
+    let Some(head) = rows.first() else { return String::new() };
+    let line = |r: &Vec<String>| {
+        let cells: Vec<String> = (0..head.len())
+            .map(|i| md_cell(r.get(i).map_or("", String::as_str)))
+            .collect();
+        format!("| {} |\n", cells.join(" | "))
+    };
+    let mut out = line(head);
+    out.push_str(&format!("|{}\n", " --- |".repeat(head.len())));
+    for r in &rows[1..] {
+        out.push_str(&line(r));
+    }
+    out
+}
+
+/// 两列“名称 | 值”的 Markdown 表格。
+fn md_pairs(head: [&str; 2], rows: &[(String, String)]) -> String {
+    let mut table = vec![head.map(String::from).to_vec()];
+    table.extend(rows.iter().map(|(k, v)| vec![k.clone(), v.clone()]));
+    md_table(&table)
+}
+
+fn nlfit_markdown(reports: &[NlFitReport]) -> String {
+    reports
+        .iter()
+        .map(|r| {
+            let f = &r.fit;
+            let mut params = vec![["参数", "值", "标准误"].map(String::from).to_vec()];
+            for (k, name) in f.model.params().iter().enumerate() {
+                let se = if f.fixed[k] {
+                    "固定".to_string()
+                } else {
+                    fmt_num(f.se[k])
+                };
+                params.push(vec![name.to_string(), fmt_num(f.params[k]), se]);
+            }
+            let stats: Vec<(String, String)> = nlfit_stats(f).into_iter().map(|(k, v)| (k.to_string(), v)).collect();
+            format!(
+                "## {} — {}\n\n`{}`\n\n{}\n{}",
+                md_cell(&r.name),
+                f.model.name(),
+                f.model.formula(),
+                md_table(&params),
+                md_pairs(["统计量", "值"], &stats)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim_end()
+        .to_string()
+}
+
+fn fit_markdown(reports: &[FitReport]) -> String {
+    reports
+        .iter()
+        .map(|r| {
+            let mut params = vec![["参数", "值", "标准误"].map(String::from).to_vec()];
+            for (k, (c, se)) in r.fit.coef.iter().zip(&r.fit.se).enumerate() {
+                params.push(vec![format!("B{k}"), fmt_num(*c), fmt_num(*se)]);
+            }
+            let stats = [
+                ("R²", fmt_num(r.fit.r2)),
+                ("调整后 R²", fmt_num(r.fit.adj_r2)),
+                ("残差平方和", fmt_num(r.fit.rss)),
+                ("N", r.fit.n.to_string()),
+            ]
+            .map(|(k, v)| (k.to_string(), v));
+            format!(
+                "## {} — {}\n\n`{}`\n\n{}\n{}",
+                md_cell(&r.name),
+                r.kind,
+                r.fit.equation(),
+                md_table(&params),
+                md_pairs(["统计量", "值"], &stats)
+            )
+        })
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim_end()
+        .to_string()
+}
+
 fn nlfit_text(reports: &[NlFitReport]) -> String {
     let mut lines = vec![];
     for r in reports {
@@ -1542,4 +1624,27 @@ fn fit_text(reports: &[FitReport]) -> String {
         })
         .collect::<Vec<_>>()
         .join("\n\n")
+}
+
+#[cfg(test)]
+mod markdown_tests {
+    use super::*;
+
+    #[test]
+    fn markdown_tables_escape_cells_and_pad_short_rows() {
+        let rows = vec![
+            vec!["列 A".to_string(), "p".to_string()],
+            vec!["a|b".to_string(), "0.01".to_string()],
+            vec!["两\n行".to_string()],
+        ];
+        assert_eq!(
+            md_table(&rows),
+            "| 列 A | p |\n| --- | --- |\n| a\\|b | 0.01 |\n| 两 行 |  |\n"
+        );
+        assert_eq!(md_table(&[]), "");
+        assert_eq!(
+            md_pairs(["项目", "值"], &[("t".into(), "2".into())]),
+            "| 项目 | 值 |\n| --- | --- |\n| t | 2 |\n"
+        );
+    }
 }

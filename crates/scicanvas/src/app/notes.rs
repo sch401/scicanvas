@@ -4,6 +4,10 @@ use super::*;
 impl SciApp {
     pub(crate) fn new_note(&mut self) {
         self.save_note("Note", String::new());
+        // 空白 Note 直接进入编辑
+        if let Some(id) = self.active {
+            self.note_editing.insert(id);
+        }
     }
 
     pub(super) fn save_note(&mut self, title: &str, text: String) {
@@ -19,23 +23,47 @@ impl SciApp {
             return;
         };
         if let Some(path) = rfd::FileDialog::new()
-            .set_file_name(format!("{}.txt", note.name))
+            .set_file_name(format!("{}.md", note.name))
+            .add_filter("Markdown", &["md"])
             .add_filter("UTF-8 文本", &["txt"])
             .save_file()
         {
             self.status = match std::fs::write(path, &note.text) {
-                Ok(()) => "已导出 Note 文本".into(),
+                Ok(()) => "已导出 Note".into(),
                 Err(error) => format!("导出失败：{error}"),
             };
         }
     }
 
     pub(super) fn note_ui(&mut self, ui: &mut egui::Ui, id: u64) {
-        if ui.button("导出文本…").clicked() {
-            self.active = Some(id);
-            self.run_command("note.export");
+        let mut editing = self.note_editing.contains(&id);
+        ui.horizontal(|ui| {
+            ui.selectable_value(&mut editing, false, "预览");
+            ui.selectable_value(&mut editing, true, "编辑");
+            ui.separator();
+            if ui.button("导出…").clicked() {
+                self.active = Some(id);
+                self.run_command("note.export");
+            }
+        });
+        if editing {
+            self.note_editing.insert(id);
+        } else {
+            self.note_editing.remove(&id);
         }
         let Some(note) = self.project.note(id) else { return };
+        if !editing {
+            let pal = self.pal;
+            egui::ScrollArea::vertical()
+                .id_salt(("note-view", id))
+                .auto_shrink(false)
+                .show(ui, |ui| {
+                    egui::Frame::none()
+                        .inner_margin(egui::Margin::symmetric(10.0, 6.0))
+                        .show(ui, |ui| crate::markdown::show(ui, &note.text, &pal));
+                });
+            return;
+        }
         let mut text = note.text.clone();
         let response = egui::ScrollArea::vertical()
             .id_salt(("note-scroll", id))
@@ -138,5 +166,186 @@ mod tests {
         assert!(app.open[&id]);
         assert_eq!(app.project.note(id).unwrap().text, "斜率 = 2\nR² = 0.99");
         let _ = ctx.run(egui::RawInput::default(), |ctx| app.ui_frame(ctx));
+    }
+
+    #[test]
+    fn saved_markdown_notes_render_as_tables_and_switch_to_editing() {
+        let mut app = SciApp::initial(theme::palette(egui::Theme::Light));
+        app.save_note(
+            "拟合结果",
+            "## 电压 A\n\n| 参数 | 值 |\n| --- | --- |\n| B0 | 1.5 |".into(),
+        );
+        let id = app.active.unwrap();
+        assert!(!app.note_editing.contains(&id));
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        let mut time = 0.0;
+        let mut frame = |app: &mut SciApp, events| {
+            time += 0.02;
+            ctx.run(
+                egui::RawInput {
+                    time: Some(time),
+                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0))),
+                    events,
+                    ..Default::default()
+                },
+                |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| app.note_ui(ui, id));
+                },
+            )
+        };
+        let texts = |output: &egui::FullOutput| -> Vec<(String, egui::Pos2)> {
+            output
+                .shapes
+                .iter()
+                .filter_map(|s| match &s.shape {
+                    egui::Shape::Text(t) => Some((t.galley.job.text.clone(), t.pos + egui::vec2(4.0, 4.0))),
+                    _ => None,
+                })
+                .collect()
+        };
+        frame(&mut app, vec![]);
+        let shown = texts(&frame(&mut app, vec![]));
+        let has = |t: &str| shown.iter().any(|(s, _)| s == t);
+        // 预览：标题和单元格分别显示，不出现 Markdown 原文
+        assert!(has("电压 A") && has("参数") && has("B0") && has("1.5"), "{shown:?}");
+        assert!(
+            !shown.iter().any(|(s, _)| s.contains('|') || s.contains("##")),
+            "{shown:?}"
+        );
+        let pos = shown.iter().find(|(s, _)| s == "编辑").unwrap().1;
+        for pressed in [true, false] {
+            frame(
+                &mut app,
+                vec![
+                    egui::Event::PointerMoved(pos),
+                    egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+            );
+        }
+        assert!(app.note_editing.contains(&id));
+        let shown = texts(&frame(&mut app, vec![]));
+        assert!(shown.iter().any(|(s, _)| s.contains("| 参数 | 值 |")), "{shown:?}");
+    }
+
+    #[test]
+    fn note_preview_text_can_be_selected_and_copied_but_not_edited() {
+        let mut app = SciApp::initial(theme::palette(egui::Theme::Light));
+        let text = "## 电压 A\n\ny = 1 + 2·x\n\n| 参数 | 值 |\n| --- | --- |\n| B0 | 1.5 |";
+        app.save_note("拟合结果", text.into());
+        let id = app.active.unwrap();
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        let mut time = 0.0;
+        let mut frame = |app: &mut SciApp, events| {
+            time += 0.02;
+            ctx.run(
+                egui::RawInput {
+                    time: Some(time),
+                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0))),
+                    events,
+                    ..Default::default()
+                },
+                |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| app.note_ui(ui, id));
+                },
+            )
+        };
+        frame(&mut app, vec![]);
+        let output = frame(&mut app, vec![]);
+        let at = |label: &str| {
+            output
+                .shapes
+                .iter()
+                .find_map(|s| match &s.shape {
+                    egui::Shape::Text(t) if t.galley.job.text == label => Some(t.pos + t.galley.rect.size()),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("missing {label}"))
+        };
+        // 从标题左上角拖到表格最后一个单元格右下角
+        let start = at("电压 A") - egui::vec2(60.0, 20.0);
+        let end = at("1.5");
+        let press = |pos, pressed| egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        frame(&mut app, vec![egui::Event::PointerMoved(start), press(start, true)]);
+        for k in 1..=10 {
+            let p = start + (end - start) * (k as f32 / 10.0);
+            frame(&mut app, vec![egui::Event::PointerMoved(p)]);
+        }
+        frame(&mut app, vec![press(end, false)]);
+        let copied = frame(&mut app, vec![egui::Event::Copy]).platform_output.copied_text;
+        for part in ["电压 A", "y = 1 + 2·x", "参数", "B0", "1.5"] {
+            assert!(copied.contains(part), "{copied:?}");
+        }
+        // 预览只读：键入文字不改内容
+        frame(&mut app, vec![egui::Event::Text("改".into())]);
+        assert_eq!(app.project.note(id).unwrap().text, text);
+    }
+
+    #[test]
+    fn double_clicking_a_table_cell_selects_the_whole_number() {
+        let mut app = SciApp::initial(theme::palette(egui::Theme::Light));
+        let text = "| 参数 | 值 |\n| --- | --- |\n| B1 | -0.061816028 |";
+        app.save_note("拟合结果", text.into());
+        let id = app.active.unwrap();
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        let mut time = 0.0;
+        let mut frame = |app: &mut SciApp, events| {
+            time += 0.02;
+            ctx.run(
+                egui::RawInput {
+                    time: Some(time),
+                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0))),
+                    events,
+                    ..Default::default()
+                },
+                |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| app.note_ui(ui, id));
+                },
+            )
+        };
+        frame(&mut app, vec![]);
+        let output = frame(&mut app, vec![]);
+        // 点在“0618”中间：egui 自带的双击选词只会选中小数点后的一段
+        let pos = output
+            .shapes
+            .iter()
+            .find_map(|s| match &s.shape {
+                egui::Shape::Text(t) if t.galley.job.text == "-0.061816028" => {
+                    Some(t.pos + egui::vec2(t.galley.rect.width() * 0.6, t.galley.rect.height() / 2.0))
+                }
+                _ => None,
+            })
+            .unwrap();
+        let press = |pressed| egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        frame(&mut app, vec![egui::Event::PointerMoved(pos)]);
+        for _ in 0..2 {
+            frame(&mut app, vec![press(true)]);
+            frame(&mut app, vec![press(false)]);
+        }
+        for _ in 0..3 {
+            frame(&mut app, vec![]);
+        }
+        let copied = frame(&mut app, vec![egui::Event::Copy]).platform_output.copied_text;
+        assert_eq!(copied, "-0.061816028");
+        // 只读：键入文字不改内容
+        frame(&mut app, vec![egui::Event::Text("9".into())]);
+        assert_eq!(app.project.note(id).unwrap().text, text);
     }
 }

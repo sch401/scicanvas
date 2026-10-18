@@ -5,7 +5,7 @@ mod notes;
 mod worksheet;
 mod workspace;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use eframe::egui::{self, RichText};
@@ -56,6 +56,8 @@ pub struct SciApp {
     explorer_anchor: Option<u64>,
     explorer_visible: Vec<u64>,
     explorer_sort: workspace::ExplorerSort,
+    /// 处于编辑状态的 Note（其余显示 Markdown 预览）。
+    note_editing: HashSet<u64>,
     pub(crate) folder_destination: Option<u64>,
     pub(crate) project_name: String,
     explorer_click: Option<(u64, f64)>,
@@ -149,6 +151,7 @@ impl SciApp {
             explorer_anchor: None,
             explorer_visible: Vec::new(),
             explorer_sort: workspace::ExplorerSort::default(),
+            note_editing: HashSet::new(),
             folder_destination: None,
             project_name: String::new(),
             explorer_click: None,
@@ -2873,7 +2876,15 @@ mod history_tests {
             }
             let note = app.project.notes.last().expect("saved Note");
             assert!(note.text.contains("R"));
-            assert!(note.text.contains('\t'));
+            // 保存为 Markdown：标题、参数表和统计量表
+            assert!(note.text.starts_with("## "), "{}", note.text);
+            assert!(
+                note.text.contains("| 参数 | 值 | 标准误 |\n| --- | --- | --- |"),
+                "{}",
+                note.text
+            );
+            assert!(note.text.contains("| 统计量 | 值 |"), "{}", note.text);
+            assert!(!note.text.contains('\t'));
             assert_eq!(app.active, Some(note.id));
             assert!(app.dialog.is_none());
             let saved =

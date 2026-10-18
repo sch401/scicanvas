@@ -11,6 +11,7 @@ mod examples;
 mod export;
 mod fonts;
 mod icons;
+mod markdown;
 mod mdi;
 mod plot;
 mod ribbon;
