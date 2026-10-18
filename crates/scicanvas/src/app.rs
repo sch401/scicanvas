@@ -1289,12 +1289,13 @@ impl SciApp {
     pub(crate) fn open_nlfit_dialog(&mut self) {
         self.dialog = Some(Dialog::NlFit {
             model: scicanvas_core::nlfit::Model::Gauss,
+            fixed: [(false, 0.0); 4],
         });
     }
 
-    fn nlfit(&mut self, model: scicanvas_core::nlfit::Model) {
+    fn nlfit(&mut self, model: scicanvas_core::nlfit::Model, fixed: &[Option<f64>]) {
         let Some(src) = self.analysis_source() else { return };
-        match self.project.nlfit(&src, model) {
+        match self.project.nlfit(&src, model, fixed) {
             Ok((gid, reports)) => {
                 self.after_analysis(Some(gid));
                 let unconverged = reports.iter().filter(|r| !r.fit.converged).count();
@@ -1577,11 +1578,11 @@ impl SciApp {
                 self.finish_edit();
             }
             dialogs::Action::TTest(kind, level) => self.run_ttest(kind, level),
-            dialogs::Action::NlFit(model) => {
+            dialogs::Action::NlFit(model, fixed) => {
                 self.finish_edit();
                 self.begin_edit("非线性拟合");
                 self.dialog = None;
-                self.nlfit(model);
+                self.nlfit(model, &fixed);
                 self.history.changed();
                 self.finish_edit();
             }
@@ -4010,11 +4011,17 @@ mod history_tests {
         app.selection.insert(1, vec!["C".into()]);
         let before = app.project.clone();
         app.open_nlfit_dialog();
-        assert!(matches!(app.dialog, Some(Dialog::NlFit { model: Model::Gauss })));
+        assert!(matches!(
+            app.dialog,
+            Some(Dialog::NlFit {
+                model: Model::Gauss,
+                ..
+            })
+        ));
         app.finish_edit();
         app.begin_edit("非线性拟合");
         app.dialog = None;
-        app.nlfit(Model::ExpDec1);
+        app.nlfit(Model::ExpDec1, &[]);
         app.history.changed();
         app.finish_edit();
         match &app.dialog {

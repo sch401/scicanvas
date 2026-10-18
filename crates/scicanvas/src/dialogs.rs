@@ -32,9 +32,10 @@ pub enum Dialog {
         from: f64,
         to: f64,
     },
-    /// 非线性拟合：选择内置函数。
+    /// 非线性拟合：选择内置函数；每个参数可固定为指定值（最多 4 个参数）。
     NlFit {
         model: Model,
+        fixed: [(bool, f64); 4],
     },
     /// 非线性拟合结果。
     NlFitReport(Vec<NlFitReport>),
@@ -90,7 +91,7 @@ pub enum Action {
     TTest(TTestKind, f64),
     Frequency(Option<usize>, Option<(f64, f64)>),
     Fft(FftWindow),
-    NlFit(Model),
+    NlFit(Model, Vec<Option<f64>>),
     /// 运算符，以及常数（为空时用列 B）。
     ColumnMath(ColumnOp, Option<f64>),
 }
@@ -372,7 +373,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                 }
             });
         }
-        Dialog::NlFit { model } => {
+        Dialog::NlFit { model, fixed } => {
             window("非线性拟合").show(ctx, |ui| {
                 egui::Grid::new("nlfit-models")
                     .num_columns(3)
@@ -393,9 +394,23 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                     .small()
                     .color(pal.weak),
                 );
+                ui.add_space(4.0);
+                ui.horizontal_wrapped(|ui| {
+                    for (name, (on, value)) in model.params().iter().zip(fixed.iter_mut()) {
+                        ui.checkbox(on, format!("固定 {name}"));
+                        ui.add_enabled(*on, egui::DragValue::new(value).speed(0.01));
+                        ui.add_space(8.0);
+                    }
+                });
                 let (ok, cancel) = buttons(ui, "拟合");
                 if ok {
-                    action = Action::NlFit(*model);
+                    let held = model
+                        .params()
+                        .iter()
+                        .zip(fixed.iter())
+                        .map(|(_, (on, v))| on.then_some(*v))
+                        .collect();
+                    action = Action::NlFit(*model, held);
                 } else if cancel {
                     action = Action::Close;
                 }
@@ -423,10 +438,14 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                                 ui.label(RichText::new("值").color(pal.weak));
                                 ui.label(RichText::new("标准误").color(pal.weak));
                                 ui.end_row();
-                                for ((name, v), se) in f.model.params().iter().zip(&f.params).zip(&f.se) {
+                                for (k, name) in f.model.params().iter().enumerate() {
                                     ui.label(*name);
-                                    ui.label(RichText::new(fmt_num(*v)).monospace());
-                                    ui.label(RichText::new(fmt_num(*se)).monospace());
+                                    ui.label(RichText::new(fmt_num(f.params[k])).monospace());
+                                    if f.fixed[k] {
+                                        ui.label(RichText::new("固定").color(pal.weak));
+                                    } else {
+                                        ui.label(RichText::new(fmt_num(f.se[k])).monospace());
+                                    }
                                     ui.end_row();
                                 }
                                 for (k, v) in nlfit_stats(f) {
@@ -723,8 +742,13 @@ fn nlfit_text(reports: &[NlFitReport]) -> String {
         let f = &r.fit;
         lines.push(format!("{}\t{}\t{}", r.name, f.model.name(), f.model.formula()));
         lines.push("参数\t值\t标准误".into());
-        for ((name, v), se) in f.model.params().iter().zip(&f.params).zip(&f.se) {
-            lines.push(format!("{name}\t{}\t{}", fmt_num(*v), fmt_num(*se)));
+        for (k, name) in f.model.params().iter().enumerate() {
+            let se = if f.fixed[k] {
+                "固定".to_string()
+            } else {
+                fmt_num(f.se[k])
+            };
+            lines.push(format!("{name}\t{}\t{se}", fmt_num(f.params[k])));
         }
         for (k, v) in nlfit_stats(f) {
             lines.push(format!("{k}\t{v}"));

@@ -1505,9 +1505,9 @@
   "feature": "参数固定、上下界、线性约束",
   "ref": "Parameters,Bounds,Constraints and Weighting",
   "pri": "P0",
-  "status": "未开始",
-  "how": "",
-  "verify": "与 Origin 比较",
+  "status": "部分实现",
+  "how": "非线性拟合对话框可把任意参数固定为指定值，固定参数不计入自由度、标准误标为“固定”；上下界与线性约束待做",
+  "verify": "与 SciPy curve_fit 固定参数后的拟合一致（参数 1e-6、标准误 1e-4）；上下界待做",
   "id": "F136",
   "milestone": "M1 日常够用"
  },

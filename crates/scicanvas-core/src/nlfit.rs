@@ -175,6 +175,8 @@ pub struct NlFit {
     pub n: usize,
     pub iterations: usize,
     pub converged: bool,
+    /// 被固定的参数（标准误记为 0，不计入自由度）。
+    pub fixed: Vec<bool>,
     pub x_min: f64,
     pub x_max: f64,
 }
@@ -194,23 +196,30 @@ fn rss(model: Model, xs: &[f64], ys: &[f64], p: &[f64]) -> f64 {
     }
 }
 
-/// 中心差分雅可比 ∂f/∂p，n × m。
-fn jacobian(model: Model, xs: &[f64], p: &[f64]) -> Vec<Vec<f64>> {
-    let mut j = vec![vec![0.0; p.len()]; xs.len()];
-    for k in 0..p.len() {
+/// 中心差分雅可比 ∂f/∂p，只对 `free` 中的参数求导，n × free.len()。
+fn jacobian(model: Model, xs: &[f64], p: &[f64], free: &[usize]) -> Vec<Vec<f64>> {
+    let mut j = vec![vec![0.0; free.len()]; xs.len()];
+    for (col, &k) in free.iter().enumerate() {
         let h = 1e-6 * p[k].abs().max(1e-6);
         let (mut up, mut down) = (p.to_vec(), p.to_vec());
         up[k] += h;
         down[k] -= h;
         for (i, x) in xs.iter().enumerate() {
-            j[i][k] = (model.eval(*x, &up) - model.eval(*x, &down)) / (2.0 * h);
+            j[i][col] = (model.eval(*x, &up) - model.eval(*x, &down)) / (2.0 * h);
         }
     }
     j
 }
 
-/// 拟合 `model`；`initial` 为空时自动估计初值。非有限的点会被跳过。
-pub fn fit(model: Model, xs: &[f64], ys: &[f64], initial: Option<&[f64]>) -> Result<NlFit, String> {
+/// 拟合 `model`；`initial` 为空时自动估计初值。`fixed` 为空或逐个参数给出固定值（`Some`）。
+/// 非有限的点会被跳过。
+pub fn fit(
+    model: Model,
+    xs: &[f64],
+    ys: &[f64],
+    initial: Option<&[f64]>,
+    fixed: &[Option<f64>],
+) -> Result<NlFit, String> {
     let mut pts: Vec<(f64, f64)> = xs
         .iter()
         .zip(ys)
@@ -219,7 +228,16 @@ pub fn fit(model: Model, xs: &[f64], ys: &[f64], initial: Option<&[f64]>) -> Res
         .collect();
     pts.sort_by(|a, b| a.0.total_cmp(&b.0));
     let (xs, ys): (Vec<f64>, Vec<f64>) = pts.into_iter().unzip();
-    let m = model.params().len();
+    let all = model.params().len();
+    let is_fixed = |k: usize| fixed.get(k).is_some_and(|v| v.is_some());
+    let free: Vec<usize> = (0..all).filter(|k| !is_fixed(*k)).collect();
+    let m = free.len();
+    if m == 0 {
+        return Err("至少要有一个参数不固定".into());
+    }
+    if fixed.iter().flatten().any(|v| !v.is_finite()) {
+        return Err("固定参数的值必须是有限数".into());
+    }
     let n = xs.len();
     if n <= m {
         return Err(format!(
@@ -233,6 +251,11 @@ pub fn fit(model: Model, xs: &[f64], ys: &[f64], initial: Option<&[f64]>) -> Res
         Some(v) => v.to_vec(),
         None => model.guess(&xs, &ys),
     };
+    for (k, v) in fixed.iter().enumerate() {
+        if let Some(v) = v {
+            p[k] = *v;
+        }
+    }
     let mut cost = rss(model, &xs, &ys, &p);
     if !cost.is_finite() {
         return Err("初值处函数值无效，请检查数据是否适合该函数".into());
@@ -242,7 +265,7 @@ pub fn fit(model: Model, xs: &[f64], ys: &[f64], initial: Option<&[f64]>) -> Res
     let mut iterations = 0;
     while iterations < 500 {
         iterations += 1;
-        let j = jacobian(model, &xs, &p);
+        let j = jacobian(model, &xs, &p, &free);
         let r: Vec<f64> = xs.iter().zip(&ys).map(|(x, y)| y - model.eval(*x, &p)).collect();
         let mut a = vec![vec![0.0; m]; m];
         let mut g = vec![0.0; m];
@@ -265,10 +288,16 @@ pub fn fit(model: Model, xs: &[f64], ys: &[f64], initial: Option<&[f64]>) -> Res
                 continue;
             };
             let delta: Vec<f64> = (0..m).map(|u| (0..m).map(|v| inv[u][v] * g[v]).sum()).collect();
-            let trial: Vec<f64> = p.iter().zip(&delta).map(|(a, d)| a + d).collect();
+            let mut trial = p.clone();
+            for (d, &k) in delta.iter().zip(&free) {
+                trial[k] += d;
+            }
             let new_cost = rss(model, &xs, &ys, &trial);
             if new_cost < cost {
-                let small_step = delta.iter().zip(&p).all(|(d, v)| d.abs() <= 1e-10 * v.abs().max(1e-10));
+                let small_step = delta
+                    .iter()
+                    .zip(&free)
+                    .all(|(d, &k)| d.abs() <= 1e-10 * p[k].abs().max(1e-10));
                 let small_gain = cost - new_cost <= 1e-14 * cost.max(1e-300);
                 p = trial;
                 cost = new_cost;
@@ -287,7 +316,7 @@ pub fn fit(model: Model, xs: &[f64], ys: &[f64], initial: Option<&[f64]>) -> Res
             break;
         }
     }
-    let j = jacobian(model, &xs, &p);
+    let j = jacobian(model, &xs, &p, &free);
     let mut a = vec![vec![0.0; m]; m];
     for row in &j {
         for u in 0..m {
@@ -298,10 +327,19 @@ pub fn fit(model: Model, xs: &[f64], ys: &[f64], initial: Option<&[f64]>) -> Res
     }
     let dof = (n - m) as f64;
     let reduced = cost / dof;
-    let se = match mat_inv(&a) {
-        Some(inv) => (0..m).map(|u| (inv[u][u] * reduced).max(0.0).sqrt()).collect(),
-        None => vec![f64::NAN; m],
-    };
+    let mut se = vec![0.0; all];
+    match mat_inv(&a) {
+        Some(inv) => {
+            for (u, &k) in free.iter().enumerate() {
+                se[k] = (inv[u][u] * reduced).max(0.0).sqrt();
+            }
+        }
+        None => {
+            for &k in &free {
+                se[k] = f64::NAN;
+            }
+        }
+    }
     let mean = ys.iter().sum::<f64>() / n as f64;
     let tss: f64 = ys.iter().map(|y| (y - mean).powi(2)).sum();
     let r2 = if tss > 0.0 { 1.0 - cost / tss } else { f64::NAN };
@@ -316,6 +354,7 @@ pub fn fit(model: Model, xs: &[f64], ys: &[f64], initial: Option<&[f64]>) -> Res
         n,
         iterations,
         converged,
+        fixed: (0..all).map(is_fixed).collect(),
         x_min: xs[0],
         x_max: xs[n - 1],
     })
@@ -454,7 +493,7 @@ mod tests {
         ];
         for (model, from, to, truth, amp, params, se, rss) in cases {
             let (xs, ys) = data(model, from, to, truth, amp);
-            let f = fit(model, &xs, &ys, None).unwrap_or_else(|e| panic!("{}: {e}", model.name()));
+            let f = fit(model, &xs, &ys, None, &[]).unwrap_or_else(|e| panic!("{}: {e}", model.name()));
             assert!(f.converged, "{}", model.name());
             for (g, w) in f.params.iter().zip(params) {
                 close(*g, *w, 1e-6);
@@ -468,19 +507,41 @@ mod tests {
     }
 
     #[test]
+    fn fixed_parameters_match_scipy_with_the_parameter_held() {
+        // 参考值：curve_fit 对去掉固定参数后的函数拟合（SciPy 1.17.1）
+        let (xs, ys) = data(Model::Gauss, 0.0, 10.0, &[1.0, 4.2, 1.5, 6.0], 0.05);
+        let f = fit(Model::Gauss, &xs, &ys, None, &[Some(1.0), None, None, None]).unwrap();
+        assert_eq!(f.fixed, [true, false, false, false]);
+        assert_eq!((f.params[0], f.se[0]), (1.0, 0.0));
+        let want = [4.200180465074677, 1.4982909982647807, 6.0112335219205635];
+        let se = [0.004078720331065471, 0.008157440762355455, 0.02834340061698604];
+        for k in 0..3 {
+            close(f.params[k + 1], want[k], 1e-6);
+            close(f.se[k + 1], se[k], 1e-4);
+        }
+        let (xs, ys) = data(Model::ExpDec1, 0.0, 8.0, &[0.3, 5.0, 1.7], 0.05);
+        let f = fit(Model::ExpDec1, &xs, &ys, None, &[Some(0.3)]).unwrap();
+        close(f.params[1], 5.01261358915415, 1e-6);
+        close(f.params[2], 1.7010939158349043, 1e-6);
+        close(f.se[2], 0.008672307488815372, 1e-4);
+        assert!(fit(Model::Allometric1, &xs, &ys, None, &[Some(1.0), Some(1.0)]).is_err());
+        assert!(fit(Model::ExpDec1, &xs, &ys, None, &[Some(f64::NAN)]).is_err());
+    }
+
+    #[test]
     fn too_few_points_and_bad_initial_values_are_reported() {
-        assert!(fit(Model::Gauss, &[1.0, 2.0, 3.0], &[1.0, 2.0, 1.0], None)
+        assert!(fit(Model::Gauss, &[1.0, 2.0, 3.0], &[1.0, 2.0, 1.0], None, &[])
             .unwrap_err()
             .contains("至少需要 5 个"));
         let (xs, ys) = data(Model::ExpDec1, 0.0, 8.0, &[0.3, 5.0, 1.7], 0.05);
-        assert!(fit(Model::ExpDec1, &xs, &ys, Some(&[0.0, 1.0, 0.0])).is_err());
+        assert!(fit(Model::ExpDec1, &xs, &ys, Some(&[0.0, 1.0, 0.0]), &[]).is_err());
         // 无序输入先按 X 排序
         let mut rev = xs.clone();
         rev.reverse();
         let mut rys = ys.clone();
         rys.reverse();
-        let a = fit(Model::ExpDec1, &xs, &ys, None).unwrap();
-        let b = fit(Model::ExpDec1, &rev, &rys, None).unwrap();
+        let a = fit(Model::ExpDec1, &xs, &ys, None, &[]).unwrap();
+        let b = fit(Model::ExpDec1, &rev, &rys, None, &[]).unwrap();
         close(a.params[2], b.params[2], 1e-9);
         close(
             a.eval(2.0),
