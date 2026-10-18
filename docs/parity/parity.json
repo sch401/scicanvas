@@ -752,9 +752,9 @@
   "feature": "拖放文件导入",
   "ref": "Importing Data by Drag-and-Drop",
   "pri": "P0",
-  "status": "未开始",
-  "how": "eframe dropped_files",
-  "verify": "手动操作",
+  "status": "已实现待验收",
+  "how": "把文件拖进窗口：数据文件逐个导入为工作簿并合为一步撤销，项目文件（.scv / .scproj）直接打开；拖动时显示提示层",
+  "verify": "拖放事件回归（导入、撤销、打开项目）；资源管理器实际拖放待人工验收",
   "id": "F069",
   "milestone": "M1 日常够用"
  },

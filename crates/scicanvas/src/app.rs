@@ -462,7 +462,12 @@ impl SciApp {
         else {
             return;
         };
-        let bytes = match std::fs::read(&path) {
+        self.import_path(&path);
+    }
+
+    /// 把一个数据文件导入成新工作簿，放在当前文件夹里。
+    fn import_path(&mut self, path: &std::path::Path) {
+        let bytes = match std::fs::read(path) {
             Ok(b) => b,
             Err(e) => {
                 self.status = format!("无法读取 {}：{}", path.display(), e);
@@ -505,13 +510,85 @@ impl SciApp {
         else {
             return;
         };
-        let result = scicanvas_core::project_file::load(&path);
-        match result {
+        self.open_path(&path);
+    }
+
+    fn open_path(&mut self, path: &std::path::Path) {
+        match scicanvas_core::project_file::load(path) {
             Ok(p) => {
-                self.load_project(p, Some(path.clone()));
+                self.load_project(p, Some(path.to_path_buf()));
                 self.status = format!("已打开 {}", path.display());
             }
             Err(e) => self.status = format!("无法打开项目：{}", e),
+        }
+    }
+
+    fn is_project_file(path: &std::path::Path) -> bool {
+        path.extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| e.eq_ignore_ascii_case("scv") || e.eq_ignore_ascii_case("scproj"))
+    }
+
+    /// 拖放到窗口的文件：项目文件直接打开（只打开第一个），其余文件逐个导入为工作簿，作为一步撤销。
+    fn open_dropped(&mut self, paths: Vec<PathBuf>) {
+        if let Some(project) = paths.iter().find(|p| Self::is_project_file(p)) {
+            self.open_path(project);
+            if paths.len() > 1 {
+                self.status.push_str("（一次只打开一个项目，其余文件已忽略）");
+            }
+            return;
+        }
+        if paths.is_empty() {
+            return;
+        }
+        self.finish_edit();
+        self.begin_edit("导入数据");
+        let mut done = Vec::new();
+        for path in &paths {
+            self.import_path(path);
+            done.push(std::mem::take(&mut self.status));
+        }
+        self.history.changed();
+        self.finish_edit();
+        self.status = done.join("；");
+    }
+
+    /// 处理拖入窗口的文件，拖动经过时显示提示层。
+    fn dropped_files(&mut self, ctx: &egui::Context) {
+        let (hovered, dropped) = ctx.input(|i| {
+            (
+                i.raw
+                    .hovered_files
+                    .iter()
+                    .filter_map(|f| f.path.clone())
+                    .collect::<Vec<_>>(),
+                i.raw
+                    .dropped_files
+                    .iter()
+                    .filter_map(|f| f.path.clone())
+                    .collect::<Vec<_>>(),
+            )
+        });
+        if !hovered.is_empty() {
+            let text = if hovered.iter().any(|p| Self::is_project_file(p)) {
+                "松开以打开项目".to_string()
+            } else {
+                format!("松开以导入 {} 个数据文件", hovered.len())
+            };
+            let screen = ctx.screen_rect();
+            let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("drop-hint")));
+            painter.rect_filled(screen, 0.0, egui::Color32::from_black_alpha(110));
+            painter.rect_stroke(screen.shrink(10.0), 8.0, egui::Stroke::new(3.0_f32, self.pal.accent));
+            painter.text(
+                screen.center(),
+                egui::Align2::CENTER_CENTER,
+                text,
+                egui::FontId::proportional(24.0),
+                egui::Color32::WHITE,
+            );
+        }
+        if !dropped.is_empty() {
+            self.open_dropped(dropped);
         }
     }
 
@@ -3100,6 +3177,7 @@ impl eframe::App for SciApp {
 
 impl SciApp {
     fn ui_frame(&mut self, ctx: &egui::Context) {
+        self.dropped_files(ctx);
         if self.last_history_group.is_some()
             && ctx.input(|i| {
                 i.pointer.any_pressed()
@@ -3633,6 +3711,56 @@ mod history_tests {
         assert_ne!(app.active, Some(id));
         app.run_command("edit.redo");
         assert_eq!(app.open.get(&id), Some(&true));
+    }
+
+    #[test]
+    fn dropped_data_files_import_as_one_step_and_project_files_open() {
+        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("../../target/file-tests")
+            .join(format!("drop-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let a = dir.join("温度.csv");
+        let b = dir.join("压力.txt");
+        std::fs::write(&a, "时间 (s),温度 (°C)\n0,20\n1,21.5\n").unwrap();
+        std::fs::write(&b, "1\t2\n3\t4\n5\t6\n").unwrap();
+
+        let mut app = app();
+        let before = app.project.clone();
+        let ctx = egui::Context::default();
+        let drop = |app: &mut SciApp, paths: &[&std::path::Path]| {
+            let input = egui::RawInput {
+                dropped_files: paths
+                    .iter()
+                    .map(|p| egui::DroppedFile {
+                        path: Some(p.to_path_buf()),
+                        ..Default::default()
+                    })
+                    .collect(),
+                ..Default::default()
+            };
+            let _ = ctx.run(input, |ctx| app.dropped_files(ctx));
+        };
+        drop(&mut app, &[&a, &b]);
+        let names: Vec<_> = app.project.books.iter().map(|b| b.name.as_str()).collect();
+        assert_eq!(names, ["Book1", "温度", "压力"]);
+        let t = app.project.books[1].clone();
+        assert_eq!(
+            (t.columns[1].long_name.as_str(), t.columns[1].units.as_str()),
+            ("温度", "°C")
+        );
+        assert_eq!(app.project.books[2].nrows(), 3);
+        assert_eq!(app.history.undo_label(), Some("导入数据"));
+        roundtrip(&mut app, &before);
+
+        let scv = dir.join("项目.scv");
+        let mut other = Project::sample();
+        other.books[0].name = "拖入的项目".into();
+        scicanvas_core::project_file::save(&scv, &other).unwrap();
+        drop(&mut app, &[&a, &scv]);
+        assert_eq!(app.project, other, "a project file wins over data files");
+        assert_eq!(app.project_path.as_deref(), Some(scv.as_path()));
+        assert!(app.history.undo_label().is_none());
+        std::fs::remove_dir_all(dir).unwrap();
     }
 
     #[test]

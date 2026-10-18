@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 98 项，P1 146 项，P2 259 项，不做 11 项。
-状态：已完成 27 项，已实现待验收 29 项，部分实现 16 项，未开始 431 项，不做 11 项。
+状态：已完成 27 项，已实现待验收 30 项，部分实现 16 项，未开始 430 项，不做 11 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -109,7 +109,7 @@
 | F066 | 导入 Excel（.xlsx / .xls） | Importing from Excel | P0 | 未开始 | calamine | 与原表逐格比较 | — |
 | F067 | 导出 Excel | Exporting Worksheets and Matrices | P1 | 未开始 | rust_xlsxwriter | 用 Excel 打开检查 | — |
 | F068 | 导出 CSV | Exporting Worksheets and Matrices | P0 | 已实现待验收 | 工作表 → 导出 CSV：UTF-8 BOM、CRLF，表头为“长名称 (单位)”，与 .scv 内的 CSV 同一实现 | 导出后重新导入的往返测试；Excel 打开待人工验收 | — |
-| F069 | 拖放文件导入 | Importing Data by Drag-and-Drop | P0 | 未开始 | eframe dropped_files | 手动操作 | — |
+| F069 | 拖放文件导入 | Importing Data by Drag-and-Drop | P0 | 已实现待验收 | 把文件拖进窗口：数据文件逐个导入为工作簿并合为一步撤销，项目文件（.scv / .scproj）直接打开；拖动时显示提示层 | 拖放事件回归（导入、撤销、打开项目）；资源管理器实际拖放待人工验收 | — |
 | F070 | 批量导入多个文件 | Importing Simple ASCII Data Files | P1 | 未开始 | — | 手动操作 | — |
 | F071 | 从文件名和表头提取变量 | Extracting Variables from the File Name and Header | P2 | 未开始 | — | 单元测试 | — |
 | F072 | 二进制数据导入 | Importing Simple Binary Files with the Import Wizard | P2 | 未开始 | — | 单元测试 | — |
