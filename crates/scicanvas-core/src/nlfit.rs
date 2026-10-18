@@ -3,7 +3,8 @@
 
 use crate::analysis::mat_inv;
 
-/// 内置拟合函数，公式与参数名与 Origin 相同。
+/// 内置拟合函数。峰、指数、S 形和幂函数的公式与参数名与 Origin 相同；
+/// 吸附与酶动力学函数使用文献通用写法（x 为浓度或时间）。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Model {
     Gauss,
@@ -12,16 +13,26 @@ pub enum Model {
     Boltzmann,
     Logistic,
     Allometric1,
+    Langmuir,
+    Freundlich,
+    PseudoFirstOrder,
+    PseudoSecondOrder,
+    MichaelisMenten,
 }
 
 impl Model {
-    pub const ALL: [Model; 6] = [
+    pub const ALL: [Model; 11] = [
         Model::Gauss,
         Model::Lorentz,
         Model::ExpDec1,
         Model::Boltzmann,
         Model::Logistic,
         Model::Allometric1,
+        Model::Langmuir,
+        Model::Freundlich,
+        Model::PseudoFirstOrder,
+        Model::PseudoSecondOrder,
+        Model::MichaelisMenten,
     ];
 
     pub fn name(self) -> &'static str {
@@ -32,6 +43,11 @@ impl Model {
             Model::Boltzmann => "Boltzmann",
             Model::Logistic => "Logistic",
             Model::Allometric1 => "Allometric1",
+            Model::Langmuir => "Langmuir",
+            Model::Freundlich => "Freundlich",
+            Model::PseudoFirstOrder => "准一级动力学",
+            Model::PseudoSecondOrder => "准二级动力学",
+            Model::MichaelisMenten => "MichaelisMenten",
         }
     }
 
@@ -41,6 +57,9 @@ impl Model {
             Model::ExpDec1 => "指数",
             Model::Boltzmann | Model::Logistic => "S 形",
             Model::Allometric1 => "幂函数",
+            Model::Langmuir | Model::Freundlich => "吸附等温线",
+            Model::PseudoFirstOrder | Model::PseudoSecondOrder => "吸附动力学",
+            Model::MichaelisMenten => "酶动力学",
         }
     }
 
@@ -52,6 +71,11 @@ impl Model {
             Model::Boltzmann => "y = A2 + (A1 − A2)/(1 + exp((x − x0)/dx))",
             Model::Logistic => "y = A2 + (A1 − A2)/(1 + (x/x0)^p)",
             Model::Allometric1 => "y = a·x^b",
+            Model::Langmuir => "q = qm·KL·C/(1 + KL·C)",
+            Model::Freundlich => "q = KF·C^(1/n)",
+            Model::PseudoFirstOrder => "qt = qe·(1 − exp(−k1·t))",
+            Model::PseudoSecondOrder => "qt = qe²·k2·t/(1 + qe·k2·t)",
+            Model::MichaelisMenten => "v = Vmax·S/(Km + S)",
         }
     }
 
@@ -62,6 +86,11 @@ impl Model {
             Model::Boltzmann => &["A1", "A2", "x0", "dx"],
             Model::Logistic => &["A1", "A2", "x0", "p"],
             Model::Allometric1 => &["a", "b"],
+            Model::Langmuir => &["qm", "KL"],
+            Model::Freundlich => &["KF", "n"],
+            Model::PseudoFirstOrder => &["qe", "k1"],
+            Model::PseudoSecondOrder => &["qe", "k2"],
+            Model::MichaelisMenten => &["Vmax", "Km"],
         }
     }
 
@@ -79,6 +108,11 @@ impl Model {
             Model::Boltzmann => p[1] + (p[0] - p[1]) / (1.0 + ((x - p[2]) / p[3]).exp()),
             Model::Logistic => p[1] + (p[0] - p[1]) / (1.0 + (x / p[2]).powf(p[3])),
             Model::Allometric1 => p[0] * x.powf(p[1]),
+            Model::Langmuir => p[0] * p[1] * x / (1.0 + p[1] * x),
+            Model::Freundlich => p[0] * x.powf(1.0 / p[1]),
+            Model::PseudoFirstOrder => p[0] * (1.0 - (-p[1] * x).exp()),
+            Model::PseudoSecondOrder => p[0] * p[0] * p[1] * x / (1.0 + p[0] * p[1] * x),
+            Model::MichaelisMenten => p[0] * x / (p[1] + x),
         }
     }
 
@@ -157,8 +191,87 @@ impl Model {
                 let b = pts.iter().map(|p| (p.0 - mx) * (p.1 - my)).sum::<f64>() / sxx;
                 vec![(my - b * mx).exp(), b]
             }
+            Model::Langmuir | Model::MichaelisMenten => {
+                // 线性化：x/y = 1/(qm·KL) + x/qm（Hanes–Woolf）
+                let (slope, intercept) = linreg(
+                    xs.iter()
+                        .zip(ys)
+                        .filter(|(x, y)| **x > 0.0 && **y > 0.0)
+                        .map(|(x, y)| (*x, x / y)),
+                );
+                let (top, half) = if slope > 0.0 && intercept > 0.0 {
+                    (1.0 / slope, intercept / slope)
+                } else {
+                    (hi, crossing(0.5 * hi).abs().max(1e-12))
+                };
+                if self == Model::Langmuir {
+                    vec![top, 1.0 / half]
+                } else {
+                    vec![top, half]
+                }
+            }
+            Model::Freundlich => {
+                // ln q = ln KF + (1/n)·ln C
+                let (slope, intercept) = linreg(
+                    xs.iter()
+                        .zip(ys)
+                        .filter(|(x, y)| **x > 0.0 && **y > 0.0)
+                        .map(|(x, y)| (x.ln(), y.ln())),
+                );
+                let n = if slope > 0.0 { 1.0 / slope } else { 2.0 };
+                vec![intercept.exp(), n]
+            }
+            Model::PseudoFirstOrder => {
+                let qe = hi * 1.02;
+                // ln(qe − qt) = ln qe − k1·t
+                let (slope, _) = linreg(
+                    xs.iter()
+                        .zip(ys)
+                        .filter(|(_, y)| **y < qe)
+                        .map(|(x, y)| (*x, (qe - y).ln())),
+                );
+                let k1 = if slope < 0.0 {
+                    -slope
+                } else {
+                    3.0 / (xs[n - 1] - xs[0]).max(1e-12)
+                };
+                vec![qe, k1]
+            }
+            Model::PseudoSecondOrder => {
+                // t/qt = 1/(k2·qe²) + t/qe
+                let (slope, intercept) = linreg(
+                    xs.iter()
+                        .zip(ys)
+                        .filter(|(x, y)| **x > 0.0 && **y > 0.0)
+                        .map(|(x, y)| (*x, x / y)),
+                );
+                if slope > 0.0 && intercept > 0.0 {
+                    vec![1.0 / slope, slope * slope / intercept]
+                } else {
+                    vec![hi, 1.0 / (hi * (xs[n - 1] - xs[0]).max(1e-12))]
+                }
+            }
         }
     }
+}
+
+/// 最小二乘直线 (斜率, 截距)；点数不足或 x 不变时返回 (NaN, NaN)。
+fn linreg(points: impl Iterator<Item = (f64, f64)>) -> (f64, f64) {
+    let pts: Vec<(f64, f64)> = points.filter(|(x, y)| x.is_finite() && y.is_finite()).collect();
+    if pts.len() < 2 {
+        return (f64::NAN, f64::NAN);
+    }
+    let m = pts.len() as f64;
+    let (mx, my) = (
+        pts.iter().map(|p| p.0).sum::<f64>() / m,
+        pts.iter().map(|p| p.1).sum::<f64>() / m,
+    );
+    let sxx: f64 = pts.iter().map(|p| (p.0 - mx).powi(2)).sum();
+    if sxx <= 0.0 {
+        return (f64::NAN, f64::NAN);
+    }
+    let slope = pts.iter().map(|p| (p.0 - mx) * (p.1 - my)).sum::<f64>() / sxx;
+    (slope, my - slope * mx)
 }
 
 /// 拟合结果。
@@ -504,6 +617,80 @@ mod tests {
             close(f.rss, rss, 1e-8);
             assert!(f.r2 > 0.99, "{} r2 {}", model.name(), f.r2);
         }
+    }
+
+    #[test]
+    fn adsorption_and_kinetics_models_match_scipy_from_automatic_starts() {
+        // 参考值：scipy.optimize.curve_fit（SciPy 1.17.1，p0 取真值）
+        let cases: [Case; 5] = [
+            (
+                Model::Langmuir,
+                0.5,
+                200.0,
+                &[45.0, 0.03],
+                0.5,
+                &[44.97634745234103, 0.030183478087933875],
+                &[0.1522995827714246, 0.0003879665171647043],
+                3.0473473280763974,
+            ),
+            (
+                Model::Freundlich,
+                0.5,
+                200.0,
+                &[6.0, 2.5],
+                0.3,
+                &[6.032052384932666, 2.506398449728879],
+                &[0.03619766608481412, 0.00787496285918195],
+                1.0853667639848175,
+            ),
+            (
+                Model::PseudoFirstOrder,
+                0.0,
+                300.0,
+                &[32.0, 0.02],
+                0.4,
+                &[32.01391575943531, 0.020055996739953872],
+                &[0.05556218278874523, 0.00014929094003738433],
+                1.9534535473442134,
+            ),
+            (
+                Model::PseudoSecondOrder,
+                0.0,
+                300.0,
+                &[35.0, 0.001],
+                0.4,
+                &[35.00119576266527, 0.0010050576101159605],
+                &[0.08793642812072777, 1.5166045776723856e-05],
+                1.9524552085415017,
+            ),
+            (
+                Model::MichaelisMenten,
+                0.1,
+                20.0,
+                &[12.0, 2.5],
+                0.1,
+                &[11.99732714274374, 2.4887804519721763],
+                &[0.025429546861139248, 0.023329314484644446],
+                0.12179256523091592,
+            ),
+        ];
+        for (model, from, to, truth, amp, params, se, rss) in cases {
+            let (xs, ys) = data(model, from, to, truth, amp);
+            let f = fit(model, &xs, &ys, None, &[]).unwrap_or_else(|e| panic!("{}: {e}", model.name()));
+            assert!(f.converged, "{}", model.name());
+            for (g, w) in f.params.iter().zip(params) {
+                close(*g, *w, 1e-6);
+            }
+            for (g, w) in f.se.iter().zip(se) {
+                close(*g, *w, 1e-4);
+            }
+            close(f.rss, rss, 1e-8);
+        }
+        assert_eq!(Model::ALL.len(), 11);
+        assert!(
+            Model::ALL.iter().all(|m| m.params().len() <= 4),
+            "the dialog holds up to 4 parameters"
+        );
     }
 
     #[test]

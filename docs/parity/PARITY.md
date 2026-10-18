@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 98 项，P1 146 项，P2 259 项，不做 11 项。
-状态：已完成 27 项，已实现待验收 39 项，部分实现 25 项，未开始 412 项，不做 11 项。
+状态：已完成 27 项，已实现待验收 39 项，部分实现 27 项，未开始 410 项，不做 11 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -212,8 +212,8 @@
 | F151 | 内置拟合函数：幂函数与对数（Power、Allometric、Log 等） | Curve Fitting Functions（共 239 个） | P0 | 部分实现 | 幂函数：Allometric1；Power、Log 等待做 | 与 SciPy 1.17.1 curve_fit 的参数（1e-6）、标准误（1e-4）一致，从自动初值收敛；Origin 对照待做 | — |
 | F152 | 内置拟合函数：多项式与有理函数（Poly、Rational 等） | Curve Fitting Functions（共 239 个） | P0 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 | — |
 | F153 | 内置拟合函数：波形（Sine、SineDamp、Pulse、SquareWave 等） | Curve Fitting Functions（共 239 个） | P1 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 | — |
-| F154 | 内置拟合函数：酶动力学（MichaelisMenten、各类抑制模型等） | Curve Fitting Functions（共 239 个） | P1 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 | — |
-| F155 | 内置拟合函数：吸附与结合（Langmuir、Freundlich、BET、OneSiteBind 等） | Curve Fitting Functions（共 239 个） | P1 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 | — |
+| F154 | 内置拟合函数：酶动力学（MichaelisMenten、各类抑制模型等） | Curve Fitting Functions（共 239 个） | P1 | 部分实现 | 酶动力学：MichaelisMenten（Hanes–Woolf 线性化估计初值）；各类抑制模型待做 | 与 SciPy 1.17.1 curve_fit 的参数（1e-6）、标准误（1e-4）一致，从自动初值（线性化回归）收敛；Origin 对照待做 | — |
+| F155 | 内置拟合函数：吸附与结合（Langmuir、Freundlich、BET、OneSiteBind 等） | Curve Fitting Functions（共 239 个） | P1 | 部分实现 | 吸附：Langmuir、Freundlich 等温线，准一级、准二级吸附动力学（线性化估计初值）；BET、OneSiteBind 等待做 | 与 SciPy 1.17.1 curve_fit 的参数（1e-6）、标准误（1e-4）一致，从自动初值（线性化回归）收敛；Origin 对照待做 | — |
 | F156 | 内置拟合函数：其余专业函数（流变、热力学、统计分布等） | Curve Fitting Functions（共 239 个） | P2 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 | — |
 | F157 | 寻峰分析专用函数（Bigaussian、FraserSuzuki 等 7 个） | Peak Analyzer Functions | P2 | 未开始 | — | 与 Origin 比较 | 寻峰函数：已完成 0/7，待验收 0，部分实现 0；第三阶段路线参考数量，目录待逐项核对 |
 | F514 | 内置拟合函数库总览 | Fitting Function Library | P1 | 未开始 | 汇总 F148–F156；239 为第三阶段路线参考基数，函数目录待逐项核对 | 逐函数测试与认证数据对照；现有线性/多项式回归单独计数 | 显函数参考目录：已完成 0/239，待验收 0，部分实现 0；第三阶段路线参考数量；与 F148–F156 重叠，不能相加；当前通用回归不计入内置库 |
