@@ -3,7 +3,7 @@
 use eframe::egui::{self, Align2, RichText};
 use scicanvas_core::analysis::{NormalizeMethod, SmoothMethod};
 use scicanvas_core::baseline::BaselineMethod;
-use scicanvas_core::fft::Window as FftWindow;
+use scicanvas_core::fft::{FilterKind, Window as FftWindow};
 use scicanvas_core::fmt_num;
 use scicanvas_core::interpolate::InterpMethod;
 use scicanvas_core::nlfit::Model;
@@ -49,6 +49,13 @@ pub enum Dialog {
     },
     /// 非线性拟合结果。
     NlFitReport(Vec<NlFitReport>),
+    /// FFT 滤波：类型（0 低通、1 高通、2 带通、3 带阻）、截止频率与奈奎斯特频率（仅作提示）。
+    FftFilter {
+        kind: u8,
+        lo: f64,
+        hi: f64,
+        nyquist: f64,
+    },
     /// 通用结果表：标题、表头、各行和说明，可复制到 Excel。
     Table {
         title: String,
@@ -127,6 +134,7 @@ pub enum Action {
     /// 最小突出度（占 Y 范围的比例）。
     Peaks(f64),
     Baseline(BaselineMethod),
+    FftFilter(FilterKind),
     SetValues(String),
     NlFit(Model, Vec<Option<f64>>),
     /// 运算符，以及常数（为空时用列 B）。
@@ -620,6 +628,46 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                         action = Action::Close;
                     }
                 });
+            });
+        }
+        Dialog::FftFilter { kind, lo, hi, nyquist } => {
+            window("FFT 滤波").show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    for (i, name) in ["低通", "高通", "带通", "带阻"].into_iter().enumerate() {
+                        ui.radio_value(kind, i as u8, name);
+                    }
+                });
+                let band = *kind >= 2;
+                egui::Grid::new("fft-filter-grid").num_columns(2).spacing([10.0, 6.0]).show(ui, |ui| {
+                    ui.label(if band { "下限频率" } else { "截止频率" });
+                    ui.add(egui::DragValue::new(lo).range(0.0..=f64::MAX).speed(*nyquist / 200.0));
+                    ui.end_row();
+                    if band {
+                        ui.label("上限频率");
+                        ui.add(egui::DragValue::new(hi).range(0.0..=f64::MAX).speed(*nyquist / 200.0));
+                        ui.end_row();
+                    }
+                });
+                ui.label(
+                    RichText::new(format!(
+                        "奈奎斯特频率 {}（频率单位为 1/X，X 以 s 为单位时为 Hz）。\n对当前图形的数据曲线，或工作簿里选中的 Y 列做理想滤波：变换后把不通过的频率分量置零再逆变换。\n结果写成新列；来源是图形时也画进图里。X 需要等间距。",
+                        fmt_num(*nyquist)
+                    ))
+                    .small()
+                    .color(pal.weak),
+                );
+                let (ok, cancel) = buttons(ui, "滤波");
+                if ok {
+                    let (a, b) = (lo.min(*hi), lo.max(*hi));
+                    action = Action::FftFilter(match kind {
+                        0 => FilterKind::LowPass(*lo),
+                        1 => FilterKind::HighPass(*lo),
+                        2 => FilterKind::BandPass(a, b),
+                        _ => FilterKind::BandStop(a, b),
+                    });
+                } else if cancel {
+                    action = Action::Close;
+                }
             });
         }
         Dialog::Table { title, rows, note } => {

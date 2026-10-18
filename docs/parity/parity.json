@@ -2263,9 +2263,9 @@
   "feature": "FFT 滤波（低通、高通、带通、带阻）",
   "ref": "FFT Filters",
   "pri": "P1",
-  "status": "未开始",
-  "how": "rustfft / realfft",
-  "verify": "与 Origin 及 SciPy.signal 结果比较",
+  "status": "已实现待验收",
+  "how": "分析 → 信号处理 → FFT 滤波：低通、高通、带通、带阻理想滤波（频域置零后逆变换），结果写成新列，来源是图形时画进图里",
+  "verify": "与 numpy rfft / irfft 掩模滤波逐点一致（1e-12）；带通 + 带阻 = 原信号",
   "id": "F202",
   "milestone": "M2 论文全流程"
  },

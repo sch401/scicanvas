@@ -1509,6 +1509,38 @@ impl SciApp {
         Some((id, keys))
     }
 
+    pub(crate) fn open_fft_filter_dialog(&mut self) {
+        // 用第一条曲线的采样间隔估计奈奎斯特频率，给出默认截止频率
+        let dt = self
+            .analysis_source()
+            .and_then(|src| self.project.resolve(&src).ok())
+            .and_then(|r| {
+                let book = self.project.book(r.book_id)?;
+                let item = r.items.first()?;
+                let (xs, _, _) = scicanvas_core::ops::get_xy(book, item);
+                match item.x {
+                    Some(_) => scicanvas_core::fft::sample_interval(&xs).ok(),
+                    None => Some(1.0),
+                }
+            })
+            .unwrap_or(1.0);
+        let nyquist = 0.5 / dt;
+        self.dialog = Some(Dialog::FftFilter {
+            kind: 0,
+            lo: round_sig(nyquist / 10.0, 3),
+            hi: round_sig(nyquist / 4.0, 3),
+            nyquist,
+        });
+    }
+
+    fn fft_filter(&mut self, kind: scicanvas_core::fft::FilterKind) {
+        let Some(src) = self.analysis_source() else { return };
+        match self.project.fft_filter(&src, kind) {
+            Ok(keys) => self.status = format!("已 FFT 滤波（{}），结果在新列 {}", kind.label(), keys.join(", ")),
+            Err(e) => self.status = e,
+        }
+    }
+
     /// 点选的各列分别做 Shapiro–Wilk 正态性检验。
     pub(crate) fn normality(&mut self) {
         let Some((id, keys)) = self.ttest_columns() else { return };
@@ -1853,6 +1885,14 @@ impl SciApp {
                     self.dialog = None;
                     self.history.changed();
                 }
+                self.finish_edit();
+            }
+            dialogs::Action::FftFilter(kind) => {
+                self.finish_edit();
+                self.begin_edit("FFT 滤波");
+                self.dialog = None;
+                self.fft_filter(kind);
+                self.history.changed();
                 self.finish_edit();
             }
             dialogs::Action::Baseline(method) => {

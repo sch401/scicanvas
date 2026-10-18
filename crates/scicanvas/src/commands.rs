@@ -926,6 +926,16 @@ fn build() -> Vec<Command> {
             |a| a.open_peaks_dialog(),
         ),
         c(
+            "signal.filter",
+            "FFT 滤波",
+            "smooth",
+            "",
+            "分析",
+            "fft filter low pass high pass band pass band stop frequency 滤波 低通 高通 带通 带阻 去噪",
+            need_data,
+            |a| a.open_fft_filter_dialog(),
+        ),
+        c(
             "signal.fft",
             "FFT",
             "diff",

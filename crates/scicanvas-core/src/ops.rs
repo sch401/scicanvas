@@ -626,6 +626,49 @@ impl Project {
         Ok(made)
     }
 
+    /// FFT 滤波：每条曲线的滤波结果写成新列；来源是图形时也加到图里。X 需要等间距。
+    pub fn fft_filter(&mut self, src: &Source, kind: crate::fft::FilterKind) -> Result<Vec<String>, String> {
+        let r = self.resolve(src)?;
+        let book = self.book(r.book_id).unwrap();
+        for item in &r.items {
+            let (xs, _, _) = get_xy(book, item);
+            if item.x.is_some() && xs.len() >= 2 {
+                crate::fft::sample_interval(&xs).map_err(|e| format!("{}：{e}", name_of(book, &item.y)))?;
+            }
+        }
+        let (r, made) = self.per_item_column(src, |book, item, xs, ys| {
+            let y = book.column(&item.y).unwrap();
+            let dt = if item.x.is_some() {
+                crate::fft::sample_interval(xs).unwrap_or(1.0)
+            } else {
+                1.0
+            };
+            (
+                crate::fft::filter(ys, dt, kind).unwrap_or_else(|_| vec![f64::NAN; ys.len()]),
+                format!(
+                    "{} {}",
+                    y.display_name(),
+                    kind.label().split(' ').next().unwrap_or("滤波")
+                ),
+                y.units.clone(),
+                format!("FFT 滤波：{}", kind.label()),
+            )
+        })?;
+        if let Some(gid) = r.graph_id {
+            let g = &mut self.graph_mut(gid).unwrap().page.layers_mut()[r.layer_index];
+            for (item, key) in &made {
+                g.y_keys.push(key.clone());
+                g.line_only.push(key.clone());
+                if item.x != g.x_key {
+                    if let Some(x) = &item.x {
+                        g.x_by_y.insert(key.clone(), x.clone());
+                    }
+                }
+            }
+        }
+        Ok(made.into_iter().map(|(_, k)| k).collect())
+    }
+
     /// 数值微分，结果写成新列 d(Y)/dX。
     pub fn differentiate(&mut self, src: &Source) -> Result<Vec<String>, String> {
         let (_, made) = self.per_item_column(src, |book, item, xs, ys| {
@@ -1499,6 +1542,40 @@ mod tests {
         assert!((ci.values()[0] - 0.21355306685211103).abs() < 1e-6);
         assert!(x0.comment.contains("R²"));
         assert!(p.calibrate(1, "A", "B", "Z").is_err());
+    }
+
+    #[test]
+    fn fft_filter_adds_a_filtered_column_and_curve() {
+        use crate::fft::FilterKind;
+        let mut p = Project::sample();
+        let book = p.book_mut(1).unwrap();
+        book.columns[0].data = (0..32).map(|i| fmt_num(i as f64 * 0.1)).collect();
+        book.columns[1].data = (0..32)
+            .map(|i| {
+                fmt_num(
+                    1.0 + (2.0 * std::f64::consts::PI * i as f64 / 32.0).sin()
+                        + 0.3 * (i as f64 * std::f64::consts::PI).cos(),
+                )
+            })
+            .collect();
+        let keys = p.fft_filter(&book_src(&["B"]), FilterKind::LowPass(1.0)).unwrap();
+        let c = p.book(1).unwrap().column(&keys[0]).unwrap();
+        assert_eq!(c.long_name, "电压 A 低通");
+        // 低通去掉了奈奎斯特频率处的 0.3·cos(πi)，留下直流与 1 周期正弦
+        for (i, v) in c.values().iter().enumerate() {
+            let want = 1.0 + (2.0 * std::f64::consts::PI * i as f64 / 32.0).sin();
+            assert!((v - want).abs() < 1e-6, "{i}: {v} vs {want}");
+        }
+        let mut p = Project::sample();
+        let keys = p.fft_filter(&Source::Graph(2), FilterKind::HighPass(0.1)).unwrap();
+        assert!(keys
+            .iter()
+            .all(|k| p.graph(2).unwrap().first_layer().line_only.contains(k)));
+        p.book_mut(1).unwrap().columns[0].data[2] = "9".into();
+        assert!(p
+            .fft_filter(&book_src(&["B"]), FilterKind::LowPass(1.0))
+            .unwrap_err()
+            .contains("等间距"));
     }
 
     #[test]

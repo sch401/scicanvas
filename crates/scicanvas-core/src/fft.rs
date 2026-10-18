@@ -177,6 +177,56 @@ pub fn spectrum(ys: &[f64], dt: f64, window: Window) -> Result<Spectrum, String>
 }
 
 /// 由 X 列求采样间隔；不等间距（相对偏差超过 1e-6）时报错。
+/// FFT 滤波类型；频率单位与 1/X 相同（X 以 s 为单位时为 Hz）。
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum FilterKind {
+    LowPass(f64),
+    HighPass(f64),
+    BandPass(f64, f64),
+    BandStop(f64, f64),
+}
+
+impl FilterKind {
+    pub fn label(self) -> String {
+        match self {
+            FilterKind::LowPass(f) => format!("低通 ≤ {f}"),
+            FilterKind::HighPass(f) => format!("高通 ≥ {f}"),
+            FilterKind::BandPass(a, b) => format!("带通 {a}–{b}"),
+            FilterKind::BandStop(a, b) => format!("带阻 {a}–{b}"),
+        }
+    }
+
+    fn passes(self, f: f64) -> bool {
+        match self {
+            FilterKind::LowPass(c) => f <= c,
+            FilterKind::HighPass(c) => f >= c,
+            FilterKind::BandPass(a, b) => f >= a && f <= b,
+            FilterKind::BandStop(a, b) => f < a || f > b,
+        }
+    }
+}
+
+/// 理想 FFT 滤波：变换后把不通过的频率分量置零再逆变换（与 numpy rfft / irfft 掩模相同）。
+/// `dt` 是采样间隔。
+pub fn filter(ys: &[f64], dt: f64, kind: FilterKind) -> Result<Vec<f64>, String> {
+    let n = ys.len();
+    if n < 2 {
+        return Err("至少需要 2 个数据点".into());
+    }
+    let (mut re, mut im) = dft(ys, &vec![0.0; n]);
+    for k in 0..n {
+        let f = k.min(n - k) as f64 / (n as f64 * dt);
+        if !kind.passes(f) {
+            re[k] = 0.0;
+            im[k] = 0.0;
+        }
+    }
+    // 逆变换：共轭后正变换再共轭，除以 n
+    let neg: Vec<f64> = im.iter().map(|v| -v).collect();
+    let (out, _) = dft(&re, &neg);
+    Ok(out.iter().map(|v| v / n as f64).collect())
+}
+
 pub fn sample_interval(xs: &[f64]) -> Result<f64, String> {
     if xs.len() < 2 {
         return Err("FFT 至少需要 2 个数据点".into());
@@ -194,6 +244,57 @@ pub fn sample_interval(xs: &[f64]) -> Result<f64, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn filters_match_numpy_masked_rfft() {
+        let ys: Vec<f64> = (0..64)
+            .map(|i| {
+                let t = i as f64 * 0.01;
+                (2.0 * std::f64::consts::PI * 3.0 * t).sin() + 0.5 * (2.0 * std::f64::consts::PI * 30.0 * t).sin() + 0.2
+            })
+            .collect();
+        // numpy.fft.irfft(np.where(mask, rfft(y), 0))
+        for (kind, want) in [
+            (
+                FilterKind::LowPass(10.0),
+                [
+                    -0.0017716005757181623,
+                    1.0586138974607586,
+                    0.1392815482693044,
+                    -0.2634090143164475,
+                ],
+            ),
+            (
+                FilterKind::HighPass(10.0),
+                [
+                    0.20177160057571816,
+                    -0.04959690308581079,
+                    0.29182055834761683,
+                    -0.467907601578485,
+                ],
+            ),
+            (
+                FilterKind::BandPass(2.0, 20.0),
+                [
+                    -0.21660408898630626,
+                    0.7557373300394807,
+                    -0.004729463128946093,
+                    -0.6059354982932909,
+                ],
+            ),
+        ] {
+            let out = filter(&ys, 0.01, kind).unwrap();
+            for (i, w) in [0, 5, 17, 63].into_iter().zip(want) {
+                assert!((out[i] - w).abs() < 1e-12, "{kind:?} {i}: {} vs {w}", out[i]);
+            }
+        }
+        // 带阻与带通互补
+        let pass = filter(&ys, 0.01, FilterKind::BandPass(2.0, 20.0)).unwrap();
+        let stop = filter(&ys, 0.01, FilterKind::BandStop(2.0, 20.0)).unwrap();
+        for i in 0..64 {
+            assert!((pass[i] + stop[i] - ys[i]).abs() < 1e-12);
+        }
+    }
 
     fn signal(n: usize) -> Vec<f64> {
         (0..n)
