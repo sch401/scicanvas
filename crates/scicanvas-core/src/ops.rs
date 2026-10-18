@@ -100,6 +100,10 @@ pub struct FitReport {
     pub name: String,
     pub kind: String,
     pub fit: PolyFit,
+    /// 残差列所在工作簿、对应的 X 列和残差列（与原数据逐行对齐）。
+    pub book_id: u64,
+    pub x_key: Option<String>,
+    pub residual_key: String,
 }
 
 #[derive(Clone, Debug)]
@@ -291,8 +295,9 @@ impl Project {
         let mut skipped = vec![];
         for item in &r.items {
             let book = self.book(r.book_id).unwrap();
-            let (xs, ys, _) = get_xy(book, item);
+            let (xs, ys, rows) = get_xy(book, item);
             let name = name_of(book, &item.y);
+            let nrows = book.nrows();
             let Some(fit) = analysis::polyfit(&xs, &ys, order) else {
                 skipped.push(name);
                 continue;
@@ -304,6 +309,17 @@ impl Project {
                 .map(|c| c.units.clone())
                 .unwrap_or_default();
             let y_units = book.column(&item.y).map(|c| c.units.clone()).unwrap_or_default();
+            // 逐点残差 Y − 拟合值，与原数据同一行；参与拟合之外的行留空
+            let mut residual = vec![String::new(); nrows];
+            for ((x, y), row) in xs.iter().zip(&ys).zip(&rows) {
+                residual[*row] = fmt_num(y - fit.eval(*x));
+            }
+            let mut cr = Column::new("", Role::Y);
+            cr.long_name = format!("{} 残差", name);
+            cr.units = y_units.clone();
+            cr.comment = format!("{kind}：Y − 拟合值");
+            cr.data = residual.into_iter().collect();
+            let kr = self.insert_result_column(r.book_id, &item.y, cr).unwrap();
             const N: usize = 200;
             let fx: Vec<f64> = (0..N)
                 .map(|i| fit.x_min + (fit.x_max - fit.x_min) * i as f64 / (N - 1) as f64)
@@ -333,6 +349,9 @@ impl Project {
                 name,
                 kind: kind.clone(),
                 fit,
+                book_id: r.book_id,
+                x_key: item.x.clone(),
+                residual_key: kr,
             });
         }
         match graph {
@@ -344,6 +363,28 @@ impl Project {
                 order + 2
             )),
         }
+    }
+
+    /// 残差图：各条拟合的残差对 X 的散点图，新建在工作簿所在目录。
+    pub fn residual_plot(&mut self, reports: &[FitReport]) -> Result<u64, String> {
+        let first = reports.first().ok_or("没有拟合结果")?;
+        let mut spec = crate::plotspec::PlotSpec {
+            book_id: Some(first.book_id),
+            x_key: first.x_key.clone(),
+            plot_type: PlotType::Scatter,
+            ..Default::default()
+        };
+        let book = self.book(first.book_id).ok_or("找不到工作簿")?;
+        for r in reports {
+            if r.book_id != first.book_id || book.column(&r.residual_key).is_none() {
+                return Err("残差列已被删除或不在同一工作簿".into());
+            }
+            spec.y_keys.push(r.residual_key.clone());
+            if let Some(x) = &r.x_key {
+                spec.x_by_y.insert(r.residual_key.clone(), x.clone());
+            }
+        }
+        self.plot_spec(spec)
     }
 
     /// 分析输入里全部有效点的 X 范围（插值对话框的默认范围）。
@@ -1495,21 +1536,39 @@ mod tests {
         assert_eq!(gid, 2);
         assert_eq!(reps.len(), 2);
         let book = p.book(1).unwrap();
-        // 原来 A B C，现在 B 后面跟着 B 的拟合 X 和拟合值，C 后面同理
+        // 原来 A B C，现在 B 后面跟着 B 的残差、拟合 X 和拟合值，C 后面同理
         let keys: Vec<&str> = book.columns.iter().map(|c| c.key.as_str()).collect();
-        assert_eq!(keys, vec!["A", "B", "D", "E", "C", "F", "G"]);
-        assert_eq!(book.column("D").unwrap().role, Role::X);
-        assert_eq!(book.column("E").unwrap().data.len(), 200);
+        assert_eq!(keys, vec!["A", "B", "D", "E", "F", "C", "G", "H", "I"]);
+        assert_eq!(book.column("E").unwrap().role, Role::X);
+        assert_eq!(book.column("F").unwrap().data.len(), 200);
+        // 残差逐行对齐：残差 = Y − 拟合值，残差之和为 0（含截距的最小二乘）
+        let (xs, ys) = (book.column("A").unwrap().values(), book.column("B").unwrap().values());
+        let res = book.column("D").unwrap().values();
+        assert_eq!(res.len(), ys.len());
+        for i in 0..ys.len() {
+            assert!((res[i] - (ys[i] - reps[0].fit.eval(xs[i]))).abs() < 1e-6 * (1.0 + ys[i].abs()));
+        }
+        assert!(res.iter().sum::<f64>().abs() < 1e-6 * ys.iter().map(|y| y.abs()).sum::<f64>());
+        assert_eq!(
+            (reps[0].residual_key.as_str(), reps[0].x_key.as_deref()),
+            ("D", Some("A"))
+        );
         let g = p.graph(2).unwrap().first_layer();
-        assert_eq!(g.y_keys, vec!["B", "C", "E", "G"]);
-        assert_eq!(g.x_by_y.get("E").map(|s| s.as_str()), Some("D"));
-        assert!(g.line_only.contains(&"G".to_string()));
+        assert_eq!(g.y_keys, vec!["B", "C", "F", "I"]);
+        assert_eq!(g.x_by_y.get("F").map(|s| s.as_str()), Some("E"));
+        assert!(g.line_only.contains(&"I".to_string()));
         // 拟合曲线不再参与下一次分析
         assert_eq!(p.resolve(&Source::Graph(2)).unwrap().items.len(), 2);
         // 图形曲线：结果曲线标记为只画线，并记录来源
         let (_, s) = g.series(p.book(1).unwrap());
         assert!(s[2].line_only && s[2].source.as_deref() == Some("B"));
         assert_eq!(s[2].points.len(), 200);
+        // 残差图：残差对原 X 的散点图
+        let rid = p.residual_plot(&reps).unwrap();
+        let rg = p.graph(rid).unwrap().first_layer();
+        assert_eq!(rg.plot_type, PlotType::Scatter);
+        assert_eq!(rg.y_keys, vec!["D", "G"]);
+        assert_eq!(rg.x_by_y.get("G").map(|s| s.as_str()), Some("A"));
     }
 
     #[test]

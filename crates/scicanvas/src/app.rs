@@ -1526,6 +1526,19 @@ impl SciApp {
                 self.finish_edit();
                 self.dialog = None;
             }
+            dialogs::Action::ResidualPlot(reports) => {
+                self.finish_edit();
+                self.begin_edit("残差图");
+                match self.project.residual_plot(&reports) {
+                    Ok(id) => {
+                        self.show_item(id);
+                        self.status = "已生成残差图（残差 = Y − 拟合值）".into();
+                        self.history.changed();
+                    }
+                    Err(error) => self.status = error,
+                }
+                self.finish_edit();
+            }
             dialogs::Action::None => {}
             dialogs::Action::Close => self.dialog = None,
             dialogs::Action::ColumnProps(edit) => {
@@ -2822,6 +2835,63 @@ mod history_tests {
         ui.click(&mut app, note_pos);
         assert_eq!(app.explorer_selection, vec![folder, 2, note]);
         assert!(app.history.undo_label().is_none());
+    }
+
+    #[test]
+    fn fit_report_residual_plot_button_creates_scatter_and_undoes() {
+        let mut app = app();
+        app.active = Some(1);
+        app.fit(1);
+        let before = app.project.clone();
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        ctx.style_mut(|style| style.animation_time = 0.0);
+        let mut time = 0.0;
+        let mut frame = |app: &mut SciApp, events| {
+            time += 0.02;
+            ctx.run(
+                egui::RawInput {
+                    time: Some(time),
+                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1400.0, 1000.0))),
+                    events,
+                    ..Default::default()
+                },
+                |ctx| app.dialogs(ctx),
+            )
+        };
+        frame(&mut app, vec![]);
+        frame(&mut app, vec![]);
+        let output = frame(&mut app, vec![]);
+        let pos = output
+            .shapes
+            .iter()
+            .find_map(|s| match &s.shape {
+                egui::Shape::Text(t) if t.galley.job.text == "残差图" => Some(t.pos + egui::vec2(5.0, 5.0)),
+                _ => None,
+            })
+            .expect("residual plot button");
+        frame(&mut app, vec![egui::Event::PointerMoved(pos)]);
+        for pressed in [true, false] {
+            frame(
+                &mut app,
+                vec![egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+            );
+        }
+        let graph = app.project.graphs.last().unwrap();
+        assert_eq!(app.active, Some(graph.id));
+        assert_eq!(graph.first_layer().plot_type, PlotType::Scatter);
+        let book = app.project.book(1).unwrap();
+        for key in &graph.first_layer().y_keys {
+            assert!(book.column(key).unwrap().long_name.ends_with("残差"));
+        }
+        // 对话框保留，可以继续保存或复制
+        assert!(app.dialog.is_some());
+        roundtrip(&mut app, &before);
     }
 
     #[test]

@@ -155,6 +155,7 @@ pub enum Dialog {
 /// 对话框里用户做出的选择，由 app.rs 执行。
 pub enum Action {
     SaveNote(String, String),
+    ResidualPlot(Vec<FitReport>),
     ColumnProps(ColumnEdit),
     None,
     Close,
@@ -540,13 +541,16 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                 ui.separator();
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
-                    center_buttons(ui, 3);
+                    center_buttons(ui, 4);
                     if ui
                         .add(plain("复制结果"))
                         .on_hover_text("复制为制表符分隔的文本，可粘贴到 Excel")
                         .clicked()
                     {
                         ui.ctx().copy_text(fit_text(reports));
+                    }
+                    if ui.add(plain("残差图")).clicked() {
+                        action = Action::ResidualPlot(reports.clone());
                     }
                     if ui.add(plain("保存为 Note")).clicked() {
                         action = Action::SaveNote("拟合结果".into(), fit_markdown(reports));
