@@ -48,6 +48,27 @@ pub enum Transform {
     Mean,
 }
 impl PlotSpec {
+    /// 换用另一张表作图：`defaults` 是该表的默认映射（`from_selection` 选中全部列的结果，没有 Y 列时为 None）。
+    /// 保留图类型（新表不适用时用默认类型）、统计变换和配色；没有 Y 列时只关联表，列留空待选。
+    pub fn rebound(&self, book_id: u64, defaults: Option<&PlotSpec>) -> PlotSpec {
+        let mut next = defaults.cloned().unwrap_or_else(|| PlotSpec {
+            book_id: Some(book_id),
+            ..Default::default()
+        });
+        next.book_id = Some(book_id);
+        if next.y_keys.is_empty() {
+            next.plot_type = self.plot_type;
+        } else {
+            let mut typed = next.clone();
+            if typed.set_plot_type(self.plot_type).is_ok() {
+                next = typed;
+            }
+        }
+        next.transform = self.transform;
+        next.color_map = self.color_map;
+        next
+    }
+
     pub fn from_selection(book: &Book, selected: &[String], plot_type: PlotType) -> Result<Self, String> {
         let cols: Vec<&Column> = book
             .columns

@@ -702,7 +702,16 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                     if ui.add(plain("保存为 Note")).clicked() {
                         let (table, groups) = anova_rows(result, names);
                         let pairs = tukey_rows(tukey, names);
-                        let text = table.iter().chain(groups.iter()).chain(pairs.iter()).map(|r| r.join("\t")).collect::<Vec<_>>().join("\n");
+                        // 与“复制结果”相同：三张表之间空一行
+                        let text = table
+                            .iter()
+                            .chain([vec![]].iter())
+                            .chain(groups.iter())
+                            .chain([vec![]].iter())
+                            .chain(pairs.iter())
+                            .map(|r| r.join("\t"))
+                            .collect::<Vec<_>>()
+                            .join("\n");
                         action = Action::SaveNote("方差分析结果".into(), text);
                     }
                     if ui.add(primary(ui, "关闭")).clicked() {

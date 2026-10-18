@@ -1867,6 +1867,16 @@ impl SciApp {
                 )
             })
             .collect();
+        // 每个工作簿的默认列映射（与“选中工作簿后作图”相同），切换数据来源时套用
+        let book_specs: Vec<(u64, String, Option<scicanvas_core::plotspec::PlotSpec>)> = self
+            .project
+            .books
+            .iter()
+            .map(|b| {
+                let spec = scicanvas_core::plotspec::PlotSpec::from_selection(b, &[], PlotType::LineSymbol).ok();
+                (b.id, b.name.clone(), spec)
+            })
+            .collect();
         let mut props_layer = self.layer_index(gid);
         let title = format!("绘图属性 — {}", g0.name);
         let history_group = &mut self.history_group;
@@ -1984,6 +1994,27 @@ impl SciApp {
                     .num_columns(2)
                     .spacing([12.0, 8.0])
                     .show(ui, |ui| {
+                        ui.label("数据工作簿");
+                        let current = book_specs
+                            .iter()
+                            .find(|(id, _, _)| Some(*id) == g.book_id)
+                            .map_or("（未选择）", |(_, name, _)| name.as_str());
+                        egui::ComboBox::from_id_salt("props-book")
+                            .selected_text(current)
+                            .show_ui(ui, |ui| {
+                                for (id, name, spec) in &book_specs {
+                                    if ui.selectable_label(g.book_id == Some(*id), name).clicked()
+                                        && g.book_id != Some(*id)
+                                    {
+                                        // 换用该工作簿的默认 X/Y 列，保留图类型、统计变换和配色
+                                        g.spec = g.spec.rebound(*id, spec.as_ref());
+                                    }
+                                }
+                            })
+                            .response
+                            .on_hover_text("图层使用的数据表；切换后按该表的 X 列和全部 Y 列作图，可再在下方调整");
+                        ui.end_row();
+
                         ui.label("图类型");
                         egui::ComboBox::from_id_salt("props-type")
                             .selected_text(g.plot_type.label())
@@ -4248,6 +4279,29 @@ mod history_tests {
             app.run_command("edit.undo");
             assert!(app.history.undo_label().is_none());
         }
+    }
+
+    #[test]
+    fn blank_graphs_can_be_bound_to_a_book_and_examples_use_the_default_page() {
+        let mut app = app();
+        app.run_command("graph.new");
+        let gid = app.active.unwrap();
+        assert_eq!(app.project.graph(gid).unwrap().first_layer().book_id, None);
+        // 绘图属性里选择工作簿：与界面相同，用该表的默认映射
+        let book = app.project.book(1).unwrap();
+        let defaults = scicanvas_core::plotspec::PlotSpec::from_selection(book, &[], PlotType::LineSymbol).ok();
+        let layer = app.project.graph_mut(gid).unwrap().first_layer_mut();
+        layer.spec = layer.spec.rebound(1, defaults.as_ref());
+        let graph = app.project.graph(gid).unwrap();
+        let (_, series) = graph.first_layer().series(app.project.book(1).unwrap());
+        assert!(!series.is_empty() && series.iter().all(|s| !s.points.is_empty()));
+
+        // 打开示例：页面与新建图形相同（A4 宽），不沿用示例文件里的旧 89 mm
+        app.run_command("example.line");
+        let gid = app.active.unwrap();
+        let page = &app.project.graph(gid).unwrap().page;
+        let default = scicanvas_core::page::Page::default();
+        assert_eq!((page.width_mm, page.height_mm), (default.width_mm, default.height_mm));
     }
 
     #[test]

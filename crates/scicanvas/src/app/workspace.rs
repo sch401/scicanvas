@@ -96,6 +96,9 @@ impl SciApp {
         for layer in graph.page.layers_mut() {
             layer.book_id = Some(book.id);
         }
+        // 示例文件按旧的 89 mm 单栏页面保存；打开时与新建图形一样使用当前默认页面
+        let page = scicanvas_core::page::Page::default();
+        (graph.page.width_mm, graph.page.height_mm) = (page.width_mm, page.height_mm);
         let (book_id, graph_id) = (book.id, graph.id);
         self.project.books.push(book);
         self.project.graphs.push(graph);

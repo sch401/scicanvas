@@ -24,7 +24,7 @@ T1.1 已实现待验收：数值、文本、UTC 日期时间、分类字典及�
 
 百万行十列同机基准：导入 **1461.616 ms**、单曲线排版 **184.746 ms**、整表排序 **54.457 ms**。原基线为 2367/175/685 ms。容量测试验证单列百万规范数值 <12 MiB，完整首帧和峰值内存另行验收，详见 `docs/perf.md`。稀疏原文在整列特殊写法时仍保留逐格文本，后续统一格式可优化。
 
-当前日期/分类功能属于基础列能力。完整显示格式、本地时区/日历函数、分类轴与类别顺序编辑仍在后续任务。项目数据版本为 **v9**，v10–v12 仍为后续设计版本。
+当前日期/分类功能属于基础列能力。完整显示格式、本地时区/日历函数、分类轴与类别顺序编辑仍在后续任务。项目数据版本为 **v10**（v10 加入 Note），v11–v12 仍为后续设计版本（v11 图层多曲线，v12 操作对象）。
 
 ## 最新代码核对（2026-10-18）
 
@@ -44,7 +44,7 @@ T1.1 已实现待验收：数值、文本、UTC 日期时间、分类字典及�
 
 **状态口径**：已实现待验收＝当前条目范围已接入，剩参考软件、专项数值、人工或性能验收；部分实现＝条目范围有明确缺口；未开始＝缺少对应可用工作流。保留已有已完成项的验收口径，F082 因独立曲线结构尚未完成改为部分实现。函数库以当前 11 模型和 239 项参考目录分开记录，公式为 24 个调用名/23 个独立函数，不将别名重复计数。
 
-**底层进度**：`Column.data` 已为四种类型化存储，`Layer` 仍持有单个 `PlotSpec`，项目数据版本为 v9。公式已能计算但没有保存为依赖；PNG 已实现但 A6 真实字体测宽、富文本、PDF/TIFF 尚待推进。A1-a 类型化列/v9 已接入，A1-b 列属性/格式及 A2/A3/A5/A6 的剩余任务继续推进，v10–v12 为规划版本。
+**底层进度**：`Column.data` 已为四种类型化存储，`Layer` 仍持有单个 `PlotSpec`，项目数据版本为 v10。公式已能计算但没有保存为依赖；PNG 已实现但 A6 真实字体测宽、富文本、PDF/TIFF 尚待推进。A1-a 类型化列/v9 已接入，A1-b 列属性/格式及 A2/A3/A5/A6 的剩余任务继续推进，v10–v12 为规划版本。
 
 **下一步**：先验收 v9 类型化列并完善独立表的列属性/格式；按依赖推进 A3/A2 和 A6；现有分析功能补专项数值/Origin 验收。各项剩余范围以清单和下文任务卡为准。
 
@@ -283,7 +283,7 @@ pub struct AxisLink { pub to: (LayerId, AxisId), pub kind: LinkKind /* Straight 
 
 - 图层之间轴链接（Origin 的 Layer Link）用 `AxisLink`；多面板共享 X 轴就靠这个。
 - 现有 14 种 `PlotType` 变成"预设"：生成一组 `Plot`（如 StackedBar = N 个 Bar mark + Stack stat）。
-- 旧 `PlotSpec` 迁移（v10）：一个 spec → N 个 Plot（每个 y_key 一条）。
+- 旧 `PlotSpec` 迁移（v11）：一个 spec → N 个 Plot（每个 y_key 一条）。
 - 命令：`plot.add_curve`、`plot.remove_curve`、`plot.change_type`、`plot.move_to_axis`、`layer.add_right_y`、`layer.link_axes`。
 - UI：图层内容对话框（Layer Contents，左边数据列表，右边图层曲线列表，中间加/删按钮）。
 
@@ -291,7 +291,7 @@ pub struct AxisLink { pub to: (LayerId, AxisId), pub kind: LinkKind /* Straight 
 - 同一图层：柱（左 Y）+ 线+符号（右 Y），可以导出 SVG 并与参考图像素差异 < 1%。
 - 图层内增删曲线、改单条曲线类型，可撤销。
 - 两个图层共享 X 轴，缩放一个另一个跟着变。
-- v9 → v10 迁移测试。
+- v10 → v11 迁移测试（v10 已用于 Note）。
 
 ### A3 Mark / Stat / Coord 可组合渲染
 
@@ -355,7 +355,7 @@ pub struct Report { pub title: String, pub sections: Vec<ReportSection> }  // Ta
 - 每个分析功能实现 `Analysis`，参数对话框由 `DialogSchema` 自动生成（字段类型、范围、默认值），不要每个分析手写 UI。
 - 报告表作为 Book 的一种特殊 Sheet（`SheetKind::Report`），只读，带锁形图标；"Change Parameters" 重新打开对话框。
 - 数据编辑时标记依赖 Operation 为 stale；Auto 模式下一帧末尾重算，Manual 模式显示黄色锁。
-- 文件格式 v11：存 Operation 列表。
+- 文件格式 v12：存 Operation 列表。
 
 **验收**：
 - 线性拟合改为 Operation：改源数据后报告和拟合曲线自动更新；Manual 模式下锁变黄，点击后更新。
@@ -571,7 +571,7 @@ pub struct Report { pub title: String, pub sections: Vec<ReportSection> }  // Ta
 | T1.1 | A1-a：`ColumnData` 类型化列 + `ColumnView` + v9 迁移 | T0.1 | 2 | 已实现待验收：四种存储、ColumnView、v9 迁移/旧 SVG 回归已接入，人工与峰值内存待验收 |
 | T1.2 | A1-b：独立工作表的列属性对话框 + 数字格式（F032）；F049 多 Sheet 按用户要求不做 | T1.1 | 1 | 已实现待验收：列属性对话框（长名称、单位、注释、列角色、数据类型、显示格式，一步撤销）与数值/日期显示格式（F032）已接入；各表独立 Book |
 | T1.3 | A3：scene 拆分为 Mark/Stat/Position/Coord，14 种图迁移到预设，golden 不变 | T0.1 | 2 | 未开始：保留 PlotType 场景分支 |
-| T1.4 | A2：Layer → Vec\<Plot\> + AxisSet + v10 迁移；图层内容对话框（F083）；双 Y（F305） | T1.3 | 2 | 未开始：单 PlotSpec，无 AxisSet |
+| T1.4 | A2：Layer → Vec\<Plot\> + AxisSet + v11 迁移；图层内容对话框（F083）；双 Y（F305） | T1.3 | 2 | 未开始：单 PlotSpec，无 AxisSet |
 | T1.5 | A6-a：fontdb + rustybuzz 真实测宽，替换 `text_width`；内置回退字体 | T1.3 | 1 | 未开始：PNG 栅格字体不等同共享场景测宽 |
 
 > T1.1 与 T1.3 可并行。

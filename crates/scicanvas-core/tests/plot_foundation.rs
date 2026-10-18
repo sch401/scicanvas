@@ -193,3 +193,36 @@ fn symbols_at_auto_axis_ends_get_a_margin_but_lines_do_not() {
     let sc = scene::layout_page(&graph, &project, &[]);
     assert_eq!((sc.xa.lo, sc.xa.hi), (0.0, 4.0));
 }
+
+#[test]
+fn rebinding_a_blank_layer_uses_the_book_defaults_and_keeps_its_settings() {
+    let book = scicanvas_core::presets::example();
+    let defaults = PlotSpec::from_selection(&book, &[], PlotType::LineSymbol).ok();
+    // 空白图形：没有关联表，换成示例表后使用它的 X 列和全部 Y 列
+    let blank = PlotSpec {
+        plot_type: PlotType::Scatter,
+        transform: Transform::Mean,
+        ..Default::default()
+    };
+    let next = blank.rebound(book.id, defaults.as_ref());
+    assert_eq!(next.book_id, Some(book.id));
+    assert_eq!(next.x_key.as_deref(), Some("A"));
+    assert_eq!(next.y_keys, ["B", "C"]);
+    assert_eq!((next.plot_type, next.transform), (PlotType::Scatter, Transform::Mean));
+    // 新表没有 Y 列：只关联表，保留图类型，列留空
+    let next = blank.rebound(99, None);
+    assert_eq!(
+        (next.book_id, next.y_keys.len(), next.plot_type),
+        (Some(99), 0, PlotType::Scatter)
+    );
+    // 图类型不适用于新表（浮动柱需要成对的 Y 列）时用默认类型
+    let mut one_y = book.clone();
+    one_y.columns.truncate(2);
+    let defaults = PlotSpec::from_selection(&one_y, &[], PlotType::LineSymbol).ok();
+    let floating = PlotSpec {
+        plot_type: PlotType::FloatingBar,
+        ..Default::default()
+    };
+    let next = floating.rebound(one_y.id, defaults.as_ref());
+    assert_eq!((next.y_keys.len(), next.plot_type), (1, PlotType::LineSymbol));
+}
