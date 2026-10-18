@@ -1541,6 +1541,15 @@ impl SciApp {
         }
     }
 
+    /// 对点选的各列逐行统计（平行样的均值、标准差等）。
+    pub(crate) fn row_stats(&mut self) {
+        let Some((id, keys)) = self.ttest_columns() else { return };
+        match self.project.row_stats(id, &keys) {
+            Ok(made) => self.status = format!("行统计结果在新列 {}（标准差已设为 Y 误差列）", made.join(", ")),
+            Err(e) => self.status = format!("{e}：请 Ctrl+单击选中平行样的各列"),
+        }
+    }
+
     /// 点选的各列分别做 Shapiro–Wilk 正态性检验。
     pub(crate) fn normality(&mut self) {
         let Some((id, keys)) = self.ttest_columns() else { return };
@@ -4483,6 +4492,32 @@ mod history_tests {
         assert!(app.status.contains("2 个峰"), "{}", app.status);
         app.undo();
         assert_eq!(app.project.books.len(), books);
+    }
+
+    #[test]
+    fn row_stats_and_fft_filter_add_columns_in_one_undo_step() {
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["B".into(), "C".into()]);
+        let cols = app.project.book(1).unwrap().columns.len();
+        app.begin_edit("行统计");
+        app.row_stats();
+        app.history.changed();
+        app.finish_edit();
+        assert_eq!(app.project.book(1).unwrap().columns.len(), cols + 4, "{}", app.status);
+        app.undo();
+        assert_eq!(app.project.book(1).unwrap().columns.len(), cols);
+
+        app.selection.insert(1, vec!["B".into()]);
+        app.open_fft_filter_dialog();
+        let Some(Dialog::FftFilter { lo, nyquist, .. }) = &app.dialog else {
+            panic!("filter dialog should open")
+        };
+        let (lo, nyquist) = (*lo, *nyquist);
+        assert!(lo > 0.0 && lo < nyquist);
+        app.dialog = None;
+        app.fft_filter(scicanvas_core::fft::FilterKind::LowPass(lo));
+        assert_eq!(app.project.book(1).unwrap().columns.len(), cols + 1, "{}", app.status);
     }
 
     #[test]

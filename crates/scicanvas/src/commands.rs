@@ -1008,6 +1008,17 @@ fn build() -> Vec<Command> {
             |a| a.open_frequency_dialog(),
         ),
         c(
+            "stats.rows",
+            "行统计",
+            "stats",
+            "",
+            "统计",
+            "row statistics mean sd replicates 行统计 平行样 均值 标准差 误差棒",
+            need_book,
+            |a| a.row_stats(),
+        )
+        .modifies(),
+        c(
             "stats.normality",
             "正态性检验",
             "stats",

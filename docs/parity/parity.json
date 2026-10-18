@@ -1958,9 +1958,9 @@
   "feature": "行统计",
   "ref": "Statistics on Rows",
   "pri": "P1",
-  "status": "未开始",
-  "how": "statrs 分布函数 + 自写检验",
-  "verify": "与 Origin 及 SciPy / R 结果比较（统计量、p 值）",
+  "status": "已实现待验收",
+  "how": "统计 → 行统计：对点选的各列逐行求均值、标准差、标准误、N，写在最后一列右边；标准差设为 Y 误差列，可直接画误差棒",
+  "verify": "单元测试覆盖缺失值、单值行与列属性",
   "id": "F175",
   "milestone": "M2 论文全流程"
  },

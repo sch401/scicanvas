@@ -669,6 +669,65 @@ impl Project {
         Ok(made.into_iter().map(|(_, k)| k).collect())
     }
 
+    /// 行统计：对选中的列逐行求均值、标准差、标准误和 N（如平行样），写在最后一列右边。
+    /// 均值为 Y 列、标准差为 Y 误差列，可直接画带误差棒的图。返回新列标识。
+    pub fn row_stats(&mut self, book_id: u64, keys: &[String]) -> Result<Vec<String>, String> {
+        if keys.len() < 2 {
+            return Err("行统计至少需要选中两列".into());
+        }
+        let book = self.book(book_id).ok_or("找不到工作簿")?;
+        let cols: Vec<Vec<f64>> = keys
+            .iter()
+            .map(|k| {
+                book.column(k)
+                    .map(|c| c.values())
+                    .ok_or_else(|| format!("找不到列 {k}"))
+            })
+            .collect::<Result<_, _>>()?;
+        let units = book.column(&keys[0]).unwrap().units.clone();
+        let names = format!("{}–{}", name_of(book, &keys[0]), name_of(book, keys.last().unwrap()));
+        let rows = cols.iter().map(Vec::len).max().unwrap_or(0);
+        let mut out: [Vec<String>; 4] = Default::default();
+        for r in 0..rows {
+            let v: Vec<f64> = cols
+                .iter()
+                .filter_map(|c| c.get(r).copied())
+                .filter(|v| v.is_finite())
+                .collect();
+            let n = v.len();
+            let mean = v.iter().sum::<f64>() / n as f64;
+            let sd = if n > 1 {
+                (v.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / (n - 1) as f64).sqrt()
+            } else {
+                f64::NAN
+            };
+            let cell = |x: f64| if x.is_finite() { fmt_num(x) } else { String::new() };
+            out[0].push(cell(mean));
+            out[1].push(cell(sd));
+            out[2].push(cell(sd / (n as f64).sqrt()));
+            out[3].push(n.to_string());
+        }
+        let defs = [
+            ("均值", Role::Y, units.clone()),
+            ("标准差", Role::YError, units.clone()),
+            ("标准误", Role::Ignore, units),
+            ("N", Role::Ignore, String::new()),
+        ];
+        let mut made = vec![];
+        for ((label, role, units), mut data) in defs.into_iter().zip(out) {
+            while data.last().is_some_and(|s| s.is_empty()) {
+                data.pop();
+            }
+            let mut c = Column::new("", role);
+            c.long_name = format!("行{label}");
+            c.units = units;
+            c.comment = format!("{names} 共 {} 列逐行统计", keys.len());
+            c.data = data;
+            made.push(self.insert_result_column(book_id, keys.last().unwrap(), c).unwrap());
+        }
+        Ok(made)
+    }
+
     /// 数值微分，结果写成新列 d(Y)/dX。
     pub fn differentiate(&mut self, src: &Source) -> Result<Vec<String>, String> {
         let (_, made) = self.per_item_column(src, |book, item, xs, ys| {
@@ -1576,6 +1635,28 @@ mod tests {
             .fft_filter(&book_src(&["B"]), FilterKind::LowPass(1.0))
             .unwrap_err()
             .contains("等间距"));
+    }
+
+    #[test]
+    fn row_stats_writes_mean_sd_se_and_n_after_the_last_column() {
+        let mut p = Project::sample();
+        let book = p.book_mut(1).unwrap();
+        let set = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
+        book.columns[0].data = set(&["1", "4", ""]);
+        book.columns[1].data = set(&["2", "", ""]);
+        book.columns[2].data = set(&["6", "5", ""]);
+        let keys: Vec<String> = ["A", "B", "C"].iter().map(|s| s.to_string()).collect();
+        let made = p.row_stats(1, &keys).unwrap();
+        let book = p.book(1).unwrap();
+        assert_eq!(book.column_index(&made[0]), Some(3));
+        let col = |i: usize| book.column(&made[i]).unwrap();
+        assert_eq!((col(0).role, col(1).role), (Role::Y, Role::YError));
+        assert_eq!(col(0).data, ["3", "4.5"]);
+        // 行 1：1、2、6 的样本标准差 √7，标准误 √(7/3)
+        assert_eq!(col(1).data[0], fmt_num(7f64.sqrt()));
+        assert_eq!(col(2).data[1], fmt_num(0.5));
+        assert_eq!(col(3).data, ["3", "2", "0"]);
+        assert!(p.row_stats(1, &keys[..1]).is_err());
     }
 
     #[test]
