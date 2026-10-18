@@ -262,6 +262,17 @@ fn build() -> Vec<Command> {
         )
         .modifies(),
         c(
+            "graph.new",
+            "新建空白图形",
+            "graph",
+            "",
+            "文件",
+            "new graph 空白图 新建图",
+            always,
+            |a| a.new_graph(),
+        )
+        .modifies(),
+        c(
             "file.import",
             "导入数据",
             "import",

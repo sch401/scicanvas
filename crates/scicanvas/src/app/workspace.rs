@@ -136,6 +136,17 @@ impl SciApp {
 
     // ---------------------------------------------------------------- 操作
 
+    pub(crate) fn new_graph(&mut self) {
+        let parent = self.current_folder();
+        let id = self.project.alloc_id();
+        self.project
+            .graphs
+            .push(scicanvas_core::Graph::new(id, self.project.unique_name("Graph")));
+        self.project.move_project_item(id, parent).unwrap();
+        self.show_item(id);
+        self.status = "已新建空白图形，可在绘图属性中选择数据".into();
+    }
+
     pub(crate) fn new_book(&mut self) {
         let parent = self.current_folder();
         let id = self.project.new_book();
@@ -593,12 +604,11 @@ impl SciApp {
             visible.push(id);
             let shown = self.open.get(&id).copied().unwrap_or(false);
             ui.horizontal(|ui| {
-                ui.label(
-                    RichText::new(["表", "图", "N"][kind])
-                        .small()
-                        .strong()
-                        .color(if kind == 0 { self.pal.book } else { self.pal.graph }),
-                );
+                ui.add(
+                    crate::icons::icon(["book", "graph", "note"][kind], self.pal.dark)
+                        .fit_to_exact_size(egui::vec2(16.0, 16.0)),
+                )
+                .on_hover_text(["数据表", "图形", "Note 笔记"][kind]);
                 self.explorer_label(
                     ui,
                     id,
@@ -617,7 +627,12 @@ impl SciApp {
             self.explorer_focus = ui.max_rect().contains(pos) && ui.ctx().layer_id_at(pos) == Some(ui.layer_id());
         }
         ui.add_space(4.0);
-        ui.label(RichText::new("项目管理器").strong());
+        ui.horizontal(|ui| {
+            ui.label(RichText::new("项目管理器").strong());
+            if self.explorer_selection.len() > 1 {
+                ui.weak(format!("{} 项", self.explorer_selection.len()));
+            }
+        });
         ui.horizontal(|ui| {
             let root = ui.button("项目根目录");
             if root.clicked() {
@@ -633,10 +648,22 @@ impl SciApp {
                 self.run_command("project.folder.new");
             }
         });
-        ui.horizontal(|ui| {
+        ui.horizontal_wrapped(|ui| {
+            if ui.button("新建表").clicked() {
+                self.run_command("book.new");
+            }
+            if ui
+                .button("新建图")
+                .on_hover_text("新建空白图形，随后在绘图属性中选择数据")
+                .clicked()
+            {
+                self.run_command("graph.new");
+            }
             if ui.button("新建 Note").clicked() {
                 self.run_command("note.new");
             }
+        });
+        ui.horizontal(|ui| {
             egui::ComboBox::from_id_salt("explorer-sort")
                 .selected_text(if self.explorer_sort == ExplorerSort::Type {
                     "按类型排序"
@@ -657,11 +684,6 @@ impl SciApp {
             }
         }
         ui.separator();
-        ui.label(if self.explorer_selection.len() > 1 {
-            format!("已选 {} 项", self.explorer_selection.len())
-        } else {
-            "Ctrl 多选 · Shift 连续选择".into()
-        });
         let mut visible = Vec::new();
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])

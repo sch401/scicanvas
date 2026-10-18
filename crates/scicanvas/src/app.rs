@@ -2711,6 +2711,35 @@ mod history_tests {
     }
 
     #[test]
+    fn explorer_new_table_and_graph_buttons_use_folder_and_history() {
+        for (label, command) in [("新建表", "book.new"), ("新建图", "graph.new")] {
+            let mut app = app();
+            let folder = app.project.add_folder(None).unwrap();
+            app.explorer_target = Some(folder);
+            let before = app.project.clone();
+            let mut ui = ExplorerUi::new();
+            let pos = ui.at(&mut app, label);
+            ui.click(&mut app, pos);
+            let id = app.active.unwrap();
+            assert_eq!(app.project.folder_of(id), Some(folder));
+            assert!(app.open[&id]);
+            if command == "graph.new" {
+                let graph = app.project.graph(id).unwrap();
+                assert_eq!(graph.first_layer().book_id, None);
+                assert_eq!(app.project.books, before.books);
+            } else {
+                assert!(app.project.book(id).is_some());
+            }
+            roundtrip(&mut app, &before);
+        }
+        let mut app = app();
+        app.load_project(Project::default(), None);
+        app.run_command("graph.new");
+        assert_eq!(app.project.graphs.len(), 1);
+        assert!(app.project.books.is_empty());
+    }
+
+    #[test]
     fn explorer_shift_ranges_follow_sort_order_and_skip_collapsed_contents() {
         let mut app = app();
         let note = app.project.add_note("M-Note", "结果".into());
