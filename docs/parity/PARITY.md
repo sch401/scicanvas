@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 98 项，P1 146 项，P2 259 项，不做 11 项。
-状态：已完成 27 项，已实现待验收 41 项，部分实现 29 项，未开始 406 项，不做 11 项。
+状态：已完成 27 项，已实现待验收 43 项，部分实现 30 项，未开始 403 项，不做 11 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -237,7 +237,7 @@
 | F170 | 多边形面积 | Polygon Area | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
 | F171 | 反函数（交换 X、Y 求逆） | Inverse | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
 | F172 | 自定义滤波 / 中值滤波 | Median Filter | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
-| F173 | 扣除直线基线 | Subtract Straight Line | P1 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
+| F173 | 扣除直线基线 | Subtract Straight Line | P1 | 已实现待验收 | 扣除基线对话框选“两端连线”：首末两点连线作为基线 | 单元测试；Origin 对照待做 | — |
 | F509 | 列公式函数库 | Set Column Values / Functions | P0 | 未开始 | A4 目标 120 个函数，分批登记定义与参考值 | 逐函数参考值、向量/缺失值和依赖重算 | 规划函数：已完成 0/120，待验收 0，部分实现 0；SciCanvas 首批目标 120，不代表 Origin 约 300 个函数的完整覆盖 |
 
 ## 统计
@@ -300,8 +300,8 @@
 
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
 |---|---|---|---|---|---|---|---|
-| F216 | 基线：锚点法、自动基线（ALS、多项式等） | Peak Analyzer | P1 | 未开始 | 复用拟合引擎 | 与 Origin Peak Analyzer 结果比较 | — |
-| F217 | 扣除基线 | Peak Analyzer | P1 | 未开始 | 复用拟合引擎 | 与 Origin Peak Analyzer 结果比较 | — |
+| F216 | 基线：锚点法、自动基线（ALS、多项式等） | Peak Analyzer | P1 | 部分实现 | 分析 → 信号处理 → 扣除基线：两端连线与 ALS 自动基线（非对称最小二乘，五对角 LDLᵀ 求解）；锚点法、多项式基线待做 | ALS 与 numpy 稠密求解结果一致（1e-9） | — |
+| F217 | 扣除基线 | Peak Analyzer | P1 | 已实现待验收 | 每条曲线在 Y 右边写入“基线”和“扣除基线”两列；来源是图形时基线画进图里，一步撤销 | 单元测试覆盖缺失行、列位置与图层曲线 | — |
 | F218 | 寻峰（局部极值、导数法、阈值） | Peak Analyzer | P1 | 部分实现 | 分析 → 信号处理 → 寻峰：局部极大值（平顶取中点）+ 最小突出度阈值（占 Y 范围百分比），算法同 scipy.signal.find_peaks；导数法待做 | 单元测试与 SciPy 1.17.1 find_peaks / peak_prominences 逐值一致（含平顶峰） | — |
 | F219 | 峰积分（面积、半峰宽、质心） | Peak Analyzer | P1 | 已实现待验收 | 峰表给出峰高、突出度、半峰宽（半突出度处，同 peak_widths）、线性基线以上的面积与质心；积分区间到相邻峰之间的最低点 | 单元测试与 SciPy peak_widths、numpy.trapezoid 一致；高斯峰面积与 A·s·√π 吻合 | — |
 | F220 | 多峰拟合（重叠峰分峰） | Peak Analyzer | P1 | 未开始 | 复用拟合引擎 | 与 Origin Peak Analyzer 结果比较 | — |

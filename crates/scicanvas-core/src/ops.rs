@@ -572,6 +572,60 @@ impl Project {
         Ok(made.into_iter().map(|(_, k)| k).collect())
     }
 
+    /// 扣除基线：每条曲线在 Y 右边写两列（基线、扣除基线后的 Y）。来源是图形时，基线也加到图里。
+    /// 返回 (基线列, 扣除后列) 标识。
+    pub fn subtract_baseline(
+        &mut self,
+        src: &Source,
+        method: crate::baseline::BaselineMethod,
+    ) -> Result<Vec<(String, String)>, String> {
+        let (r, base) = self.per_item_column(src, |book, item, xs, ys| {
+            let y = book.column(&item.y).unwrap();
+            (
+                crate::baseline::baseline(xs, ys, method),
+                format!("{} 基线", y.display_name()),
+                y.units.clone(),
+                method.label(),
+            )
+        })?;
+        let mut made = vec![];
+        for (item, bkey) in &base {
+            let book = self.book(r.book_id).unwrap();
+            let (_, ys, idx) = get_xy(book, item);
+            let bv = book.column(bkey).unwrap().values();
+            let y = book.column(&item.y).unwrap();
+            let mut c = Column::new("", Role::Y);
+            c.long_name = format!("{} 扣除基线", y.display_name());
+            c.units = y.units.clone();
+            c.comment = method.label();
+            c.data = vec![String::new(); book.nrows()];
+            for (k, &row) in idx.iter().enumerate() {
+                let v = ys[k] - bv.get(row).copied().unwrap_or(f64::NAN);
+                if v.is_finite() {
+                    c.data[row] = fmt_num(v);
+                }
+            }
+            while c.data.last().is_some_and(|s| s.is_empty()) {
+                c.data.pop();
+            }
+            let key = self.insert_result_column(r.book_id, &item.y, c).unwrap();
+            made.push((bkey.clone(), key));
+        }
+        if let Some(gid) = r.graph_id {
+            let g = &mut self.graph_mut(gid).unwrap().page.layers_mut()[r.layer_index];
+            for (item, key) in &base {
+                g.y_keys.push(key.clone());
+                g.line_only.push(key.clone());
+                if item.x != g.x_key {
+                    if let Some(x) = &item.x {
+                        g.x_by_y.insert(key.clone(), x.clone());
+                    }
+                }
+            }
+        }
+        Ok(made)
+    }
+
     /// 数值微分，结果写成新列 d(Y)/dX。
     pub fn differentiate(&mut self, src: &Source) -> Result<Vec<String>, String> {
         let (_, made) = self.per_item_column(src, |book, item, xs, ys| {
@@ -1276,6 +1330,34 @@ mod tests {
         assert!(p.find_peaks(&book_src(&["B"]), 1.5).unwrap_err().contains("没有"));
         p.book_mut(1).unwrap().columns[0].data[5] = "200".into();
         assert!(p.find_peaks(&book_src(&["B"]), 0.05).unwrap_err().contains("单调"));
+    }
+
+    #[test]
+    fn baseline_subtraction_adds_baseline_and_corrected_columns() {
+        use crate::baseline::BaselineMethod;
+        let mut p = Project::sample();
+        let book = p.book_mut(1).unwrap();
+        book.columns[0].data = (0..5).map(|i| fmt_num(i as f64)).collect();
+        book.columns[1].data = ["1", "3", "", "6", "5"].iter().map(|s| s.to_string()).collect();
+        let made = p.subtract_baseline(&book_src(&["B"]), BaselineMethod::Line).unwrap();
+        let book = p.book(1).unwrap();
+        let (b, c) = (book.column(&made[0].0).unwrap(), book.column(&made[0].1).unwrap());
+        assert_eq!(book.column_index(&made[0].0), Some(2));
+        assert_eq!(book.column_index(&made[0].1), Some(3));
+        // 基线是 (0, 1) 到 (4, 5) 的连线；缺失行留空
+        assert_eq!(b.data, ["1", "2", "", "4", "5"]);
+        assert_eq!(c.data, ["0", "1", "", "2", "0"]);
+        assert_eq!((c.long_name.as_str(), c.units.as_str()), ("电压 A 扣除基线", "mV"));
+
+        // 来源是图形时，基线画进图里
+        let mut p = Project::sample();
+        let made = p
+            .subtract_baseline(&Source::Graph(2), BaselineMethod::Als { lambda: 100.0, p: 0.05 })
+            .unwrap();
+        let layer = p.graph(2).unwrap().first_layer();
+        assert!(made
+            .iter()
+            .all(|(b, _)| layer.y_keys.contains(b) && layer.line_only.contains(b)));
     }
 
     #[test]

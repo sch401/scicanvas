@@ -1321,6 +1321,25 @@ impl SciApp {
         });
     }
 
+    pub(crate) fn open_baseline_dialog(&mut self) {
+        self.dialog = Some(Dialog::Baseline {
+            als: true,
+            log_lambda: 5.0,
+            p: 0.01,
+        });
+    }
+
+    fn subtract_baseline(&mut self, method: scicanvas_core::baseline::BaselineMethod) {
+        let Some(src) = self.analysis_source() else { return };
+        match self.project.subtract_baseline(&src, method) {
+            Ok(made) => {
+                let keys: Vec<&str> = made.iter().map(|(_, k)| k.as_str()).collect();
+                self.status = format!("已扣除基线（{}），结果在新列 {}", method.label(), keys.join(", "));
+            }
+            Err(e) => self.status = e,
+        }
+    }
+
     pub(crate) fn open_peaks_dialog(&mut self) {
         self.dialog = Some(Dialog::Peaks { percent: 5.0 });
     }
@@ -1669,6 +1688,14 @@ impl SciApp {
                 self.begin_edit("非线性拟合");
                 self.dialog = None;
                 self.nlfit(model, &fixed);
+                self.history.changed();
+                self.finish_edit();
+            }
+            dialogs::Action::Baseline(method) => {
+                self.finish_edit();
+                self.begin_edit("扣除基线");
+                self.dialog = None;
+                self.subtract_baseline(method);
                 self.history.changed();
                 self.finish_edit();
             }
@@ -4182,6 +4209,24 @@ mod history_tests {
             app.project.books.last().map(|b| b.id),
             "the new table is shown"
         );
+    }
+
+    #[test]
+    fn baseline_subtraction_runs_on_picked_columns_in_one_undo_step() {
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["B".into()]);
+        let cols = app.project.book(1).unwrap().columns.len();
+        app.begin_edit("扣除基线");
+        app.subtract_baseline(scicanvas_core::baseline::BaselineMethod::Line);
+        app.history.changed();
+        app.finish_edit();
+        let book = app.project.book(1).unwrap();
+        assert_eq!(book.columns.len(), cols + 2);
+        assert_eq!(book.columns[3].long_name, "电压 A 扣除基线");
+        assert!(app.status.contains("两端连线"), "{}", app.status);
+        app.undo();
+        assert_eq!(app.project.book(1).unwrap().columns.len(), cols);
     }
 
     #[test]

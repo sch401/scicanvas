@@ -896,6 +896,16 @@ fn build() -> Vec<Command> {
             |a| a.open_smooth_dialog(),
         ),
         c(
+            "signal.baseline",
+            "扣除基线",
+            "fitlin",
+            "",
+            "分析",
+            "baseline subtract als asymmetric least squares background correction 基线 扣除基线 背景 自动基线",
+            need_data,
+            |a| a.open_baseline_dialog(),
+        ),
+        c(
             "signal.peaks",
             "寻峰",
             "integ",

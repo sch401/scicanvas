@@ -4,6 +4,7 @@
 //! 界面层（egui）、命令行工具、将来的 Python 绑定都调用这一层。
 
 pub mod analysis;
+pub mod baseline;
 pub mod colormap;
 pub mod coord;
 pub mod csv;
