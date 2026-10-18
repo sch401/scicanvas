@@ -221,6 +221,18 @@ fn sources() -> Vec<(&'static str, String)> {
             ),
         ),
         (
+            "colleft",
+            wrap(
+                r##"<rect x="12.5" y="3.5" width="8" height="17" rx="1" fill="IC_PAPER"/><path d="M12.5 8h8"/><path d="M10 12H3.5M6.5 9L3.5 12l3 3" stroke="IC_B" stroke-width="1.8"/>"##,
+            ),
+        ),
+        (
+            "colright",
+            wrap(
+                r##"<rect x="3.5" y="3.5" width="8" height="17" rx="1" fill="IC_PAPER"/><path d="M3.5 8h8"/><path d="M14 12h6.5M17.5 9l3 3-3 3" stroke="IC_B" stroke-width="1.8"/>"##,
+            ),
+        ),
+        (
             "colclear",
             wrap(
                 r##"<rect x="3.5" y="3.5" width="8" height="17" rx="1" fill="IC_PAPER"/><path d="M3.5 8h8"/><path d="M14 18h7M14.5 15l3.5-3.5 2 2-3.5 3.5z" stroke="IC_O"/>"##,

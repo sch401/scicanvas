@@ -190,6 +190,25 @@ impl SciApp {
         self.status = format!("已清空 {} 列", sel.join(", "));
     }
 
+    pub(crate) fn move_columns(&mut self, to: scicanvas_core::ColumnMove) {
+        let Some(bid) = self.active_book() else { return };
+        let sel = self.selected_keys(bid);
+        if sel.is_empty() {
+            self.status = "请先单击列标题选中要移动的列".into();
+            return;
+        }
+        let moved = self.project.book_mut(bid).is_some_and(|b| b.move_columns(&sel, to));
+        if moved {
+            // 选中的列不变，单元格选区按列号记录，移动后清掉
+            if let Some(s) = self.sheets.get_mut(&bid) {
+                s.range = None;
+            }
+            self.status = format!("已移动 {} 列", sel.join(", "));
+        } else {
+            self.status = "已在边上，无法再移动".into();
+        }
+    }
+
     pub(crate) fn delete_columns(&mut self) {
         let Some(bid) = self.active_book() else { return };
         let sel = self.selected_keys(bid);
@@ -495,6 +514,12 @@ impl SciApp {
                                             pick(ui, t.label(), ColAction::Plot(t));
                                         }
                                         ui.separator();
+                                        ui.menu_button("移动列", |ui| {
+                                            pick(ui, "左移", ColAction::Move(scicanvas_core::ColumnMove::Left));
+                                            pick(ui, "右移", ColAction::Move(scicanvas_core::ColumnMove::Right));
+                                            pick(ui, "移到最前", ColAction::Move(scicanvas_core::ColumnMove::First));
+                                            pick(ui, "移到最后", ColAction::Move(scicanvas_core::ColumnMove::Last));
+                                        });
                                         pick(ui, "在右侧插入列", ColAction::InsertRight);
                                         pick(ui, "清空", ColAction::Clear);
                                         pick(ui, "删除列", ColAction::Delete);
@@ -968,6 +993,10 @@ impl SciApp {
                 ColAction::SetRole(Role::YError) => "col.setYError",
                 ColAction::SetRole(Role::Ignore) => "col.setIgnore",
                 ColAction::InsertRight => "col.insert",
+                ColAction::Move(scicanvas_core::ColumnMove::Left) => "col.left",
+                ColAction::Move(scicanvas_core::ColumnMove::Right) => "col.right",
+                ColAction::Move(scicanvas_core::ColumnMove::First) => "col.first",
+                ColAction::Move(scicanvas_core::ColumnMove::Last) => "col.last",
                 ColAction::Clear => "col.clear",
                 ColAction::Delete => "col.delete",
                 ColAction::Plot(PlotType::Line) => "plot.line",

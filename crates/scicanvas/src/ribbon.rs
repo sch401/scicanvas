@@ -199,6 +199,7 @@ pub static TABS: &[Tab] = &[
                     Big("col.setvalues"),
                     Big("col.fill"),
                     Smalls(&["col.insert", "col.delete", "col.clear"]),
+                    Smalls(&["col.left", "col.right"]),
                 ],
             },
             Group {

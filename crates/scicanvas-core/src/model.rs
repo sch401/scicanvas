@@ -28,6 +28,15 @@ impl Role {
     }
 }
 
+/// 列移动的目标位置。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ColumnMove {
+    Left,
+    Right,
+    First,
+    Last,
+}
+
 /// 工作表中的一列。类型化存储，稀疏文本保留用户输入的原样。
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -292,6 +301,46 @@ impl Book {
         let index = index.min(self.columns.len());
         self.columns.insert(index, Column::new(key.clone(), role));
         key
+    }
+
+    /// 移动选中的列（左移、右移一格，或移到最前、最后），选中列之间的相对顺序不变。
+    /// 误差列先固定所属数据列，移动后仍关联原来的列。返回列顺序是否改变。
+    pub fn move_columns(&mut self, keys: &[String], to: ColumnMove) -> bool {
+        let picked = |c: &Column| keys.contains(&c.key);
+        if !self.columns.iter().any(picked) {
+            return false;
+        }
+        let before: Vec<String> = self.columns.iter().map(|c| c.key.clone()).collect();
+        self.freeze_error_sources();
+        let n = self.columns.len();
+        match to {
+            ColumnMove::Left => {
+                for i in 1..n {
+                    if picked(&self.columns[i]) && !picked(&self.columns[i - 1]) {
+                        self.columns.swap(i, i - 1);
+                    }
+                }
+            }
+            ColumnMove::Right => {
+                for i in (0..n.saturating_sub(1)).rev() {
+                    if picked(&self.columns[i]) && !picked(&self.columns[i + 1]) {
+                        self.columns.swap(i, i + 1);
+                    }
+                }
+            }
+            ColumnMove::First | ColumnMove::Last => {
+                let (mut sel, mut rest): (Vec<Column>, Vec<Column>) =
+                    std::mem::take(&mut self.columns).into_iter().partition(|c| picked(c));
+                if to == ColumnMove::First {
+                    sel.append(&mut rest);
+                    self.columns = sel;
+                } else {
+                    rest.append(&mut sel);
+                    self.columns = rest;
+                }
+            }
+        }
+        self.columns.iter().map(|c| &c.key).ne(before.iter())
     }
 
     pub fn push_column(&mut self, role: Role) -> String {
@@ -1031,6 +1080,32 @@ impl Project {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn moving_columns_keeps_selection_order_and_error_links() {
+        let mut b = Book::new(1, "Book1");
+        for role in [Role::X, Role::Y, Role::YError, Role::Y, Role::Y] {
+            b.push_column(role);
+        }
+        let order = |b: &Book| b.columns.iter().map(|c| c.key.clone()).collect::<Vec<_>>().join("");
+        assert_eq!(order(&b), "ABCDE");
+        // C 是 B 的误差列；把 B 右移到 D 后面，C 仍关联 B
+        assert!(b.move_columns(&["B".into()], ColumnMove::Right));
+        assert_eq!(order(&b), "ACBDE");
+        assert!(b.move_columns(&["B".into()], ColumnMove::Right));
+        assert_eq!(order(&b), "ACDBE");
+        let c = b.column_index("C").unwrap();
+        assert_eq!(b.error_source(c), Some("B"));
+        // 不相邻的多列一起左移，相对顺序不变；已在最左的不动
+        assert!(b.move_columns(&["A".into(), "B".into(), "E".into()], ColumnMove::Left));
+        assert_eq!(order(&b), "ACBED");
+        assert!(b.move_columns(&["B".into(), "E".into()], ColumnMove::First));
+        assert_eq!(order(&b), "BEACD");
+        assert!(b.move_columns(&["B".into(), "E".into()], ColumnMove::Last));
+        assert_eq!(order(&b), "ACDBE");
+        assert!(!b.move_columns(&["B".into(), "E".into()], ColumnMove::Last));
+        assert!(!b.move_columns(&["Z".into()], ColumnMove::Left));
+    }
 
     #[test]
     fn range_copy_clear_fill() {

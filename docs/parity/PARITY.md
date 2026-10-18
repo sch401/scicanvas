@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 97 项，P1 146 项，P2 259 项，不做 12 项。
-状态：已完成 26 项，已实现待验收 53 项，部分实现 44 项，未开始 379 项，不做 12 项。
+状态：已完成 26 项，已实现待验收 54 项，部分实现 43 项，未开始 379 项，不做 12 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -55,7 +55,7 @@
 | F024 | 长名称 / 单位 / 注释表头行 | Displaying Supporting Data in Worksheet Header Rows | P0 | 已完成 | 列元数据 | 轴标题自动取“长名称 (单位)” | — |
 | F025 | 自定义表头行（参数、采样间隔、迷你图等） | Displaying Supporting Data in Worksheet Header Rows | P1 | 未开始 | 可扩展的表头行定义 | 手动操作 | — |
 | F026 | 列属性：X / Y / Z / X误差 / Y误差 / 标签 / 忽略 | Setting Column Designation | P0 | 部分实现 | X/Y/X误差/Y误差/忽略及误差自动关联已实现；Z 与专用标签列角色待做 | 误差关联、删除/插列与撤销回归已通过；补齐其余角色后验收 | — |
-| F027 | 插入 / 删除 / 移动列 | Arranging the Worksheet: Columns and Rows | P0 | 部分实现 | 列插入、删除、清空与稳定列标识已实现；移动列待做 | 列操作、引用清理与撤销回归已通过；列移动待实现 | — |
+| F027 | 插入 / 删除 / 移动列 | Arranging the Worksheet: Columns and Rows | P0 | 已实现待验收 | 列插入、删除、清空与稳定列标识；选中列可左移、右移、移到最前/最后（功能区“列”分组、列标题右键“移动列”），多列一起移动保持相对顺序，误差列移动后仍关联原数据列，一步撤销 | 列移动单元测试（相对顺序、边界不动、误差列关联）与列命令撤销/重做回归；Windows 人工验收待做 | — |
 | F028 | 插入 / 删除行 | Arranging the Worksheet: Columns and Rows | P0 | 已实现待验收 | 工作表“行”分组与单元格右键菜单：在选区上方插入同数量空行、删除选区覆盖的整行；图形行范围随之平移，整段删除时改回全部行；一步撤销 | 核心库行操作与行范围回归、命令撤销重做回归；界面手动操作待验收 | — |
 | F029 | 从 Excel 复制粘贴（多单元格） | Copying and Pasting Worksheet Data | P0 | 已完成 | 制表符解析 | 单元测试 | — |
 | F030 | 鼠标拖动框选单元格、Shift 扩展、复制选区 | Scrolling and Simple Data Selection in the Worksheet | P0 | 已实现待验收 | Rust app.rs/sheet.rs 已接入拖动框选、Shift 扩展、复制/剪切/粘贴与清空选区 | 选区边界、键盘、剪贴板及撤销回归已通过；真实鼠标与长表人工验收待做 | — |

@@ -35,6 +35,7 @@ enum ColAction {
     SetRole(Role),
     SetDataKind(scicanvas_core::DataKind),
     InsertRight,
+    Move(scicanvas_core::ColumnMove),
     Clear,
     Delete,
     Plot(PlotType),
@@ -3144,6 +3145,10 @@ mod history_tests {
     fn commands_restore_columns_graphs_fits_and_sorting() {
         for command in [
             "col.delete",
+            "col.left",
+            "col.right",
+            "col.first",
+            "col.last",
             "sort.desc",
             "fit.linear",
             "plot.bar",

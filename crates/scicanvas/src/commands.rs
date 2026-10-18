@@ -865,6 +865,22 @@ fn build() -> Vec<Command> {
             |a| a.delete_columns(),
         )
         .modifies(),
+        c("col.left", "左移列", "colleft", "", "列", "move column left 移动列", need_cols, |a| {
+            a.move_columns(scicanvas_core::ColumnMove::Left)
+        })
+        .modifies(),
+        c("col.right", "右移列", "colright", "", "列", "move column right 移动列", need_cols, |a| {
+            a.move_columns(scicanvas_core::ColumnMove::Right)
+        })
+        .modifies(),
+        c("col.first", "列移到最前", "colleft", "", "列", "move column first 移动列 最前", need_cols, |a| {
+            a.move_columns(scicanvas_core::ColumnMove::First)
+        })
+        .modifies(),
+        c("col.last", "列移到最后", "colright", "", "列", "move column last 移动列 最后", need_cols, |a| {
+            a.move_columns(scicanvas_core::ColumnMove::Last)
+        })
+        .modifies(),
         c(
             "col.clear",
             "清空列",
