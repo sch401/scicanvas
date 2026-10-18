@@ -22,6 +22,8 @@ GPL/LGPL 未列入允许列表。新增直接依赖继续优先 MIT / Apache-2.0
 
 界面层的 PNG 导出和复制图形直接依赖 resvg 0.37（与 egui 图标同一版本，MPL-2.0 例外已覆盖），额外开启 `text` 与 `system-fonts`，引入 fontdb、rustybuzz、ttf-parser 等 MIT / Apache-2.0 排版库；剪贴板位图用 arboard 3.6 的 `image-data`，复用依赖树里已有的 image 0.25（Windows 只编译 PNG / BMP 编码）。
 
+核心库的 `xlsx` 特性自写 Excel 读取：复用 zip 9，XML 用依赖树里已有的 roxmltree 0.20（MIT / Apache-2.0），不引入新包。calamine 0.36 依赖 zip 8.x（RUSTSEC-2026-0369 未修复版本），按漏洞零忽略的规则没有采用。
+
 基础白名单还包含现有传递依赖使用的 ISC、Zlib、Unicode-3.0。
 上述字体和 MPL 例外按包及精确版本配置，其他包使用这些许可时仍需单独核对。
 

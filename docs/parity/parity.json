@@ -719,9 +719,9 @@
   "feature": "导入 Excel（.xlsx / .xls）",
   "ref": "Importing from Excel",
   "pri": "P0",
-  "status": "未开始",
-  "how": "calamine",
-  "verify": "与原表逐格比较",
+  "status": "部分实现",
+  "how": "导入 .xlsx / .xlsm：自写读取（zip + roxmltree），共享 / 内联 / 富文本字符串、公式缓存值、布尔与错误值，每张非空工作表一个工作簿；.xls、日期格式与合并单元格待做",
+  "verify": "openpyxl 生成文件与手工构造的边界文件回归、拖放导入回归；Excel 实际保存文件逐格比较待做",
   "id": "F066",
   "milestone": "M1 日常够用"
  },

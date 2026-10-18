@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 98 项，P1 146 项，P2 259 项，不做 11 项。
-状态：已完成 27 项，已实现待验收 39 项，部分实现 23 项，未开始 414 项，不做 11 项。
+状态：已完成 27 项，已实现待验收 39 项，部分实现 24 项，未开始 413 项，不做 11 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -106,7 +106,7 @@
 | F063 | GBK / UTF-8 编码识别 | Customizing the ASCII Import Options | P0 | 已完成 | encoding_rs | 单元测试 | — |
 | F064 | 表头自动拆分长名称与单位 | Customizing the ASCII Import Options | P0 | 已完成 | — | 单元测试 | — |
 | F065 | 导入向导（跳过表头行、指定分隔符、预览） | The Import Wizard | P0 | 未开始 | 预览对话框 | 手动操作 | — |
-| F066 | 导入 Excel（.xlsx / .xls） | Importing from Excel | P0 | 未开始 | calamine | 与原表逐格比较 | — |
+| F066 | 导入 Excel（.xlsx / .xls） | Importing from Excel | P0 | 部分实现 | 导入 .xlsx / .xlsm：自写读取（zip + roxmltree），共享 / 内联 / 富文本字符串、公式缓存值、布尔与错误值，每张非空工作表一个工作簿；.xls、日期格式与合并单元格待做 | openpyxl 生成文件与手工构造的边界文件回归、拖放导入回归；Excel 实际保存文件逐格比较待做 | — |
 | F067 | 导出 Excel | Exporting Worksheets and Matrices | P1 | 未开始 | rust_xlsxwriter | 用 Excel 打开检查 | — |
 | F068 | 导出 CSV | Exporting Worksheets and Matrices | P0 | 已实现待验收 | 工作表 → 导出 CSV：UTF-8 BOM、CRLF，表头为“长名称 (单位)”，与 .scv 内的 CSV 同一实现 | 导出后重新导入的往返测试；Excel 打开待人工验收 | — |
 | F069 | 拖放文件导入 | Importing Data by Drag-and-Drop | P0 | 已实现待验收 | 把文件拖进窗口：数据文件逐个导入为工作簿并合为一步撤销，项目文件（.scv / .scproj）直接打开；拖动时显示提示层 | 拖放事件回归（导入、撤销、打开项目）；资源管理器实际拖放待人工验收 | — |

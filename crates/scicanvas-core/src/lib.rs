@@ -24,5 +24,7 @@ pub mod spline;
 pub mod stats;
 pub mod svg;
 pub mod ticks;
+#[cfg(feature = "xlsx")]
+pub mod xlsx;
 
 pub use model::*;

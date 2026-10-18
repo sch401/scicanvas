@@ -474,7 +474,8 @@ impl SciApp {
     pub(crate) fn import_csv(&mut self) {
         let Some(path) = rfd::FileDialog::new()
             .set_title("导入数据")
-            .add_filter("数据文件", &["csv", "txt", "tsv", "dat"])
+            .add_filter("数据文件", &["csv", "txt", "tsv", "dat", "xlsx", "xlsm"])
+            .add_filter("Excel 工作簿", &["xlsx", "xlsm"])
             .add_filter("所有文件", &["*"])
             .pick_file()
         else {
@@ -483,7 +484,7 @@ impl SciApp {
         self.import_path(&path);
     }
 
-    /// 把一个数据文件导入成新工作簿，放在当前文件夹里。
+    /// 把一个数据文件导入成新工作簿，放在当前文件夹里。Excel 工作簿的每张非空工作表各成一个工作簿。
     fn import_path(&mut self, path: &std::path::Path) {
         let bytes = match std::fs::read(path) {
             Ok(b) => b,
@@ -492,32 +493,64 @@ impl SciApp {
                 return;
             }
         };
-        let rows = csv::parse_table(&csv::decode(&bytes));
-        if rows.is_empty() {
-            self.status = "文件里没有数据".into();
-            return;
-        }
         let stem = path
             .file_stem()
             .map(|s| s.to_string_lossy().to_string())
             .unwrap_or_else(|| "Book".into());
-        let name = if self.project.books.iter().any(|b| b.name == stem) {
-            self.project.unique_name(&format!("{}_", stem))
+        let excel = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| ["xlsx", "xlsm", "xls"].iter().any(|x| e.eq_ignore_ascii_case(x)));
+        let tables: Vec<(String, Vec<Vec<String>>)> = if excel {
+            match scicanvas_core::xlsx::read(&bytes) {
+                Ok(sheets) => {
+                    let sheets: Vec<_> = sheets.into_iter().filter(|s| !s.rows.is_empty()).collect();
+                    let single = sheets.len() == 1;
+                    sheets
+                        .into_iter()
+                        .map(|s| {
+                            let name = if single {
+                                stem.clone()
+                            } else {
+                                format!("{stem}-{}", s.name)
+                            };
+                            (name, s.rows)
+                        })
+                        .collect()
+                }
+                Err(e) => {
+                    self.status = format!("无法导入 {}：{e}", path.display());
+                    return;
+                }
+            }
         } else {
-            stem
+            vec![(stem, csv::parse_table(&csv::decode(&bytes)))]
         };
-        let id = self.project.alloc_id();
-        let book = csv::book_from_table(id, &name, rows);
-        self.status = format!(
-            "已导入 {}：{} 行 × {} 列",
-            path.display(),
-            book.nrows(),
-            book.columns.len()
-        );
-        self.project.books.push(book);
-        let parent = self.current_folder();
-        self.project.move_project_item(id, parent).unwrap();
-        self.show_item(id);
+        let tables: Vec<_> = tables.into_iter().filter(|(_, rows)| !rows.is_empty()).collect();
+        if tables.is_empty() {
+            self.status = "文件里没有数据".into();
+            return;
+        }
+        let mut done = vec![];
+        let mut last = None;
+        for (base, rows) in tables {
+            let name = if self.project.books.iter().any(|b| b.name == base) {
+                self.project.unique_name(&format!("{}_", base))
+            } else {
+                base
+            };
+            let id = self.project.alloc_id();
+            let book = csv::book_from_table(id, &name, rows);
+            done.push(format!("{}（{} 行 × {} 列）", name, book.nrows(), book.columns.len()));
+            self.project.books.push(book);
+            let parent = self.current_folder();
+            self.project.move_project_item(id, parent).unwrap();
+            last = Some(id);
+        }
+        if let Some(id) = last {
+            self.show_item(id);
+        }
+        self.status = format!("已导入 {}：{}", path.display(), done.join("、"));
     }
 
     pub(crate) fn open_project(&mut self) {
@@ -4083,6 +4116,31 @@ mod history_tests {
         app.selection.insert(1, vec!["B".into()]);
         app.open_ttest_dialog();
         assert!(matches!(app.dialog, Some(Dialog::TTest { kind: 0, .. })));
+    }
+
+    #[test]
+    fn excel_workbooks_import_each_non_empty_sheet() {
+        let path =
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../scicanvas-core/tests/fixtures/sample.xlsx");
+        let mut app = app();
+        let before = app.project.clone();
+        app.open_dropped(vec![path]);
+        let names: Vec<_> = app.project.books.iter().map(|b| b.name.as_str()).collect();
+        assert_eq!(
+            names,
+            ["Book1", "sample-测量", "sample-对照"],
+            "the empty sheet is skipped"
+        );
+        let book = &app.project.books[1];
+        let head: Vec<_> = book
+            .columns
+            .iter()
+            .map(|c| (c.long_name.as_str(), c.units.as_str()))
+            .collect();
+        assert_eq!(head, [("时间", "s"), ("电压", "mV"), ("备注", "")]);
+        assert_eq!(book.columns[1].data[5], "0.3");
+        assert!(app.status.contains("sample-测量（6 行 × 3 列）"));
+        roundtrip(&mut app, &before);
     }
 
     #[test]
