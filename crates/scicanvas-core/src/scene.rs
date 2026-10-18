@@ -373,6 +373,25 @@ fn compose<'a>(g: &Graph, book: impl Fn(u64) -> Option<&'a Book>, w: f64, h: f64
     page
 }
 
+/// 端点上有数据点时把线性轴的这一端外扩 4%（刻度不变）。
+fn pad_ends(a: &mut Axis, vals: impl Iterator<Item = f64>) {
+    let span = a.hi - a.lo;
+    if a.log || !span.is_finite() || span <= 0.0 {
+        return;
+    }
+    let (mut lo, mut hi) = (false, false);
+    for v in vals {
+        lo |= (v - a.lo).abs() <= span * 1e-9;
+        hi |= (v - a.hi).abs() <= span * 1e-9;
+    }
+    if lo {
+        a.lo -= span * 0.04;
+    }
+    if hi {
+        a.hi += span * 0.04;
+    }
+}
+
 /// 整体放大一个图元：坐标、尺寸、字号、线宽、符号半径同乘 k。
 fn scale_prim(prim: &mut Prim, k: f64) {
     if k == 1.0 {
@@ -610,6 +629,19 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
 
 /// `min` 为绘图区四周的最小边距 [左, 上, 右, 下]，用于多面板对齐。
 fn build_layer_min(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View>, min: [f64; 4]) -> Scene {
+    build_layer_full(g, book, w, h, view, min, false)
+}
+
+/// `legend_outside` 为真时，图例放在坐标框右侧（右边距已按图例宽度留出）。
+fn build_layer_full(
+    g: &Layer,
+    book: Option<&Book>,
+    w: f64,
+    h: f64,
+    view: Option<View>,
+    min: [f64; 4],
+    legend_outside: bool,
+) -> Scene {
     let horizontal = g.plot_type == PlotType::HorizontalBar;
     // 数据（对数轴去掉非正值）
     let (_, mut series) = match book {
@@ -744,6 +776,23 @@ fn build_layer_min(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<
                         || matches!(g.plot_type, PlotType::Area | PlotType::VerticalDrop),
                 )
             };
+            let (mut xa, mut ya) = (xa, ya);
+            // 带符号的曲线：数据点正好落在自动范围的端点时，这一端向外留 4% 边距，
+            // 免得符号压在坐标轴上；刻度保持不变，手动范围和对数轴不动
+            let marks: Vec<[f64; 2]> = series
+                .iter()
+                .zip(&styles)
+                .filter(|(s, st)| !s.line_only && st.kind.has_symbol())
+                .flat_map(|(s, _)| s.points.iter().copied())
+                .collect();
+            if !marks.is_empty() {
+                if g.x_auto {
+                    pad_ends(&mut xa, marks.iter().map(|p| p[0]));
+                }
+                if g.y_auto {
+                    pad_ends(&mut ya, marks.iter().map(|p| p[1]));
+                }
+            }
             (xa, ya)
         }
     };
@@ -1278,7 +1327,16 @@ fn build_layer_min(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<
         // 按本图层实际画出的几何（柱、线、面积、误差棒、符号、标签）给四个角打分
         let obstacles = obstacles(&items[data_start..data_end]);
         let score = |(x, y): (f64, f64)| coverage(&obstacles, [x - 4.0, y - 4.0, lw + 8.0, lhh + 8.0]);
-        let (lx, ly) = corners.iter().copied().min_by_key(|c| score(*c)).unwrap_or(corners[0]);
+        let (mut lx, mut ly) = corners.iter().copied().min_by_key(|c| score(*c)).unwrap_or(corners[0]);
+        // 四个角都会压住数据（如百分比堆叠柱占满整个高度）：重排，图例放到坐标框右侧
+        let gap = 10.0;
+        if legend_outside {
+            (lx, ly) = (left + pw + gap, top);
+        } else if score((lx, ly)) > 0 && lw + gap + 14.0 < w * 0.35 {
+            let mut wider = min;
+            wider[2] = wider[2].max(lw + gap + 14.0);
+            return build_layer_full(g, book, w, h, view, wider, true);
+        }
         // 上面借用过 items，图例图元（都不裁剪）改用新的 push 推入
         let mut push = |prim: Prim| items.push(Item { prim, clip: None });
         push(Prim::Rect {
