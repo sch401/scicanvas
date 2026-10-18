@@ -49,6 +49,13 @@ pub enum Dialog {
     },
     /// 非线性拟合结果。
     NlFitReport(Vec<NlFitReport>),
+    /// 设置列值：目标列名、公式和可引用的列（短名、显示名）。
+    SetValues {
+        target: String,
+        formula: String,
+        columns: Vec<(String, String)>,
+        error: Option<String>,
+    },
     /// 扣除基线：是否用 ALS、log10 λ 与非对称系数 p。
     Baseline {
         als: bool,
@@ -114,6 +121,7 @@ pub enum Action {
     /// 最小突出度（占 Y 范围的比例）。
     Peaks(f64),
     Baseline(BaselineMethod),
+    SetValues(String),
     NlFit(Model, Vec<Option<f64>>),
     /// 运算符，以及常数（为空时用列 B）。
     ColumnMath(ColumnOp, Option<f64>),
@@ -606,6 +614,55 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                         action = Action::Close;
                     }
                 });
+            });
+        }
+        Dialog::SetValues {
+            target,
+            formula,
+            columns,
+            error,
+        } => {
+            window("设置列值").show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label(RichText::new(format!("{target} =")).strong());
+                    let edit = ui.add(
+                        egui::TextEdit::singleline(formula)
+                            .desired_width(340.0)
+                            .font(egui::TextStyle::Monospace)
+                            .hint_text("例如 A * 2 + sin(B)"),
+                    );
+                    if edit.changed() {
+                        *error = None;
+                    }
+                    if edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                        action = Action::SetValues(formula.clone());
+                    }
+                });
+                if let Some(e) = error {
+                    ui.label(RichText::new(e.as_str()).color(ui.visuals().error_fg_color));
+                }
+                ui.add_space(4.0);
+                ui.label(RichText::new("点击插入列").small().color(pal.weak));
+                ui.horizontal_wrapped(|ui| {
+                    for (key, name) in columns.iter() {
+                        if ui.small_button(key.as_str()).on_hover_text(name.as_str()).clicked() {
+                            formula.push_str(key);
+                        }
+                    }
+                });
+                ui.label(
+                    RichText::new(
+                        "列用短名引用（A、B 或 col(A)），i 是行号（从 1 开始），常数 pi、e。\n运算符 + − × ÷ ^ 与括号；函数 sin cos tan asin acos atan sinh cosh tanh exp ln log10 sqrt abs\nfloor ceil round sign，以及两个参数的 pow atan2 min max mod。\n结果覆盖目标列；缺失值或无意义的结果（如负数开方）处留空，可撤销。",
+                    )
+                    .small()
+                    .color(pal.weak),
+                );
+                let (ok, cancel) = buttons(ui, "计算");
+                if ok {
+                    action = Action::SetValues(formula.clone());
+                } else if cancel {
+                    action = Action::Close;
+                }
             });
         }
         Dialog::Baseline { als, log_lambda, p } => {

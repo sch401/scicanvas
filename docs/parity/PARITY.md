@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 98 项，P1 146 项，P2 259 项，不做 11 项。
-状态：已完成 27 项，已实现待验收 43 项，部分实现 30 项，未开始 403 项，不做 11 项。
+状态：已完成 27 项，已实现待验收 44 项，部分实现 30 项，未开始 402 项，不做 11 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -63,7 +63,7 @@
 | F032 | 数值显示格式（小数位、科学计数、工程单位） | Controlling How Numeric Data Display in the Worksheet Column | P0 | 未开始 | 列格式属性 | 单元测试 | — |
 | F033 | 日期时间列与计算 | Dates and Times in the Worksheet | P1 | 未开始 | chrono / jiff | 单元测试 | — |
 | F034 | 文本列与分类数据 | Setting Column Designation | P1 | 未开始 | 列数据类型 | 分类轴绘图 | — |
-| F035 | 设置列值（公式列） | Using Formulae to Set or Transform Worksheet Column Values | P0 | 未开始 | 自写表达式解析器（col(A)*2+sin(col(B))） | 与 Origin 同公式结果逐行比较 | — |
+| F035 | 设置列值（公式列） | Using Formulae to Set or Transform Worksheet Column Values | P0 | 已实现待验收 | 工作表 → 设置列值（Ctrl+Q）：自写表达式解析器，列用短名或 col(A)，行号 i，常数 pi / e，+ − × ÷ ^ 与 24 个常用函数；结果覆盖目标列，可撤销 | 单元测试覆盖运算优先级（-2^2 = -4、^ 右结合）、函数、缺失值与错误提示；Origin 同公式对照待做 | — |
 | F036 | 单元格公式（=A1+B1） | Using a Formula to Set Cell Values | P2 | 未开始 | 依赖图 + 增量重算 | 单元测试 | — |
 | F037 | 生成数据序列（等差、随机数、正态分布） | Generating Simple Worksheet Datasets | P1 | 未开始 | rand / rand_distr | 统计检验分布 | — |
 | F038 | 排序（列、工作表、按多列） | Sorting Worksheet Data | P0 | 部分实现 | 按一列稳定排序整张工作表，同行联动，数值/文本/空值规则已实现；独立列排序与多关键字排序待做 | sort_book 行对齐、升降序与撤销回归已通过；其余排序模式待实现 | — |

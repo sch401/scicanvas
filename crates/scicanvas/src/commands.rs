@@ -799,6 +799,16 @@ fn build() -> Vec<Command> {
         )
         .modifies(),
         c(
+            "col.setvalues",
+            "设置列值",
+            "colins",
+            "Ctrl+Q",
+            "列",
+            "set column values formula expression calculate 设置列值 公式 计算列 表达式",
+            need_book,
+            |a| a.open_set_values_dialog(),
+        ),
+        c(
             "col.insert",
             "插入列",
             "colins",

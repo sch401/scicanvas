@@ -174,7 +174,7 @@ pub static TABS: &[Tab] = &[
             },
             Group {
                 label: "列",
-                items: &[Smalls(&["col.insert", "col.delete", "col.clear"])],
+                items: &[Big("col.setvalues"), Smalls(&["col.insert", "col.delete", "col.clear"])],
             },
             Group {
                 label: "排序",

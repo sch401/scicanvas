@@ -936,6 +936,47 @@ impl Project {
         Ok(made)
     }
 
+    /// 设置列值：按公式逐行计算，写入 `target` 列（覆盖原有内容）。公式里的列用短名引用，
+    /// 可以引用目标列自身（用的是计算前的值）。结果不是有限数的单元格留空。返回写入的行数。
+    pub fn set_column_values(&mut self, book_id: u64, target: &str, formula: &str) -> Result<usize, String> {
+        let expr = crate::formula::parse(formula)?;
+        let book = self.book(book_id).ok_or("找不到工作簿")?;
+        book.column(target).ok_or("找不到目标列")?;
+        let mut cols = std::collections::HashMap::new();
+        for k in expr.columns() {
+            let c = book
+                .column(&k)
+                .ok_or_else(|| format!("工作簿里没有列 {k}（列用短名引用，如 A、B）"))?;
+            cols.insert(k, c.values());
+        }
+        let rows = if cols.is_empty() {
+            book.nrows()
+        } else {
+            cols.values().map(Vec::len).max().unwrap_or(0)
+        };
+        if rows == 0 {
+            return Err("没有可计算的行：公式不引用列时按工作簿已有的行数计算".into());
+        }
+        let mut data: Vec<String> = (0..rows)
+            .map(|i| {
+                let v = expr.eval(i, &|k| cols.get(k).and_then(|v| v.get(i)).copied().unwrap_or(f64::NAN));
+                if v.is_finite() {
+                    fmt_num(v)
+                } else {
+                    String::new()
+                }
+            })
+            .collect();
+        while data.last().is_some_and(|s| s.is_empty()) {
+            data.pop();
+        }
+        let n = data.len();
+        let book = self.book_mut(book_id).unwrap();
+        book.freeze_error_sources();
+        book.columns.iter_mut().find(|c| c.key == target).unwrap().data = data;
+        Ok(n)
+    }
+
     /// 列运算：A op B，结果写成新列放在 A 右边。B 与 A 对应同一 X 列时逐行计算；
     /// 对应不同 X 列时（如原始曲线减拟合曲线）先把 B 线性插值到 A 的 X 上，超出 B 的 X 范围处留空。
     /// 结果不是有限数（除以 0、缺失值）的单元格留空。
@@ -1358,6 +1399,29 @@ mod tests {
         assert!(made
             .iter()
             .all(|(b, _)| layer.y_keys.contains(b) && layer.line_only.contains(b)));
+    }
+
+    #[test]
+    fn set_column_values_evaluates_row_by_row() {
+        let mut p = Project::sample();
+        let book = p.book_mut(1).unwrap();
+        book.columns[0].data = ["1", "2", "3", "4"].iter().map(|s| s.to_string()).collect();
+        book.columns[1].data = ["10", "", "30", "-5"].iter().map(|s| s.to_string()).collect();
+        // 引用自身：用计算前的值；缺失、负数开方处留空
+        assert_eq!(p.set_column_values(1, "B", "B + sqrt(B) * A - i").unwrap(), 3);
+        let b = &p.book(1).unwrap().columns[1].data;
+        let want = 10.0 + 10f64.sqrt() - 1.0;
+        assert_eq!(b[0], fmt_num(want));
+        assert_eq!(b[1], "");
+        assert_eq!(b[2], fmt_num(30.0 + 30f64.sqrt() * 3.0 - 3.0));
+        assert_eq!(b.len(), 3, "trailing blanks trimmed");
+        // 不引用列时按已有行数
+        let rows = p.book(1).unwrap().nrows();
+        assert_eq!(p.set_column_values(1, "C", "i^2").unwrap(), rows);
+        assert_eq!(p.book(1).unwrap().columns[2].data[3], "16");
+        assert!(p.set_column_values(1, "C", "Z * 2").unwrap_err().contains("没有列 Z"));
+        assert!(p.set_column_values(1, "C", "2 +").is_err());
+        assert!(p.set_column_values(1, "Q", "1").unwrap_err().contains("目标列"));
     }
 
     #[test]

@@ -1321,6 +1321,48 @@ impl SciApp {
         });
     }
 
+    pub(crate) fn open_set_values_dialog(&mut self) {
+        let Some((id, keys)) = self.ttest_columns() else { return };
+        let Some(book) = self.project.book(id) else { return };
+        let Some(target) = keys.first().and_then(|k| book.column(k)) else {
+            self.status = "请先单击列标题选中要设置的列".into();
+            return;
+        };
+        self.dialog = Some(Dialog::SetValues {
+            target: format!("{}（{}）", target.key, target.display_name()),
+            formula: String::new(),
+            columns: book
+                .columns
+                .iter()
+                .map(|c| (c.key.clone(), c.display_name().to_owned()))
+                .collect(),
+            error: None,
+        });
+    }
+
+    /// 按公式设置第一个点选列的值；公式有误时留在对话框里显示错误。
+    fn set_column_values(&mut self, formula: &str) -> bool {
+        let Some((id, keys)) = self.ttest_columns() else {
+            return false;
+        };
+        let Some(target) = keys.first().cloned() else {
+            return false;
+        };
+        match self.project.set_column_values(id, &target, formula) {
+            Ok(n) => {
+                self.status = format!("已按公式设置列 {target}（{n} 行）");
+                true
+            }
+            Err(e) => {
+                if let Some(Dialog::SetValues { error, .. }) = &mut self.dialog {
+                    *error = Some(e.clone());
+                }
+                self.status = e;
+                false
+            }
+        }
+    }
+
     pub(crate) fn open_baseline_dialog(&mut self) {
         self.dialog = Some(Dialog::Baseline {
             als: true,
@@ -1689,6 +1731,15 @@ impl SciApp {
                 self.dialog = None;
                 self.nlfit(model, &fixed);
                 self.history.changed();
+                self.finish_edit();
+            }
+            dialogs::Action::SetValues(formula) => {
+                self.finish_edit();
+                self.begin_edit("设置列值");
+                if self.set_column_values(&formula) {
+                    self.dialog = None;
+                    self.history.changed();
+                }
                 self.finish_edit();
             }
             dialogs::Action::Baseline(method) => {
@@ -4209,6 +4260,31 @@ mod history_tests {
             app.project.books.last().map(|b| b.id),
             "the new table is shown"
         );
+    }
+
+    #[test]
+    fn set_values_keeps_the_dialog_open_on_errors_and_undoes_in_one_step() {
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["C".into()]);
+        app.open_set_values_dialog();
+        assert!(matches!(&app.dialog, Some(Dialog::SetValues { target, .. }) if target.starts_with('C')));
+        assert!(!app.set_column_values("B *"));
+        assert!(matches!(&app.dialog, Some(Dialog::SetValues { error: Some(_), .. })));
+        let before = app.project.book(1).unwrap().columns[2].data.clone();
+        app.begin_edit("设置列值");
+        assert!(app.set_column_values("B * 2"));
+        app.history.changed();
+        app.finish_edit();
+        let book = app.project.book(1).unwrap();
+        let b = book.column("B").unwrap().values();
+        let c = book.column("C").unwrap().values();
+        assert!(b
+            .iter()
+            .zip(&c)
+            .all(|(b, c)| (b * 2.0 - c).abs() < 1e-9 * b.abs().max(1.0)));
+        app.undo();
+        assert_eq!(app.project.book(1).unwrap().columns[2].data, before);
     }
 
     #[test]
