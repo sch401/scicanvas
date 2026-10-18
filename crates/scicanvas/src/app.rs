@@ -1554,6 +1554,34 @@ impl SciApp {
         }
     }
 
+    pub(crate) fn open_fill_dialog(&mut self) {
+        let Some((id, keys)) = self.ttest_columns() else { return };
+        let Some(book) = self.project.book(id) else { return };
+        let Some(target) = keys.first().and_then(|k| book.column(k)) else {
+            self.status = "请先单击列标题选中要填充的列".into();
+            return;
+        };
+        self.dialog = Some(Dialog::Fill {
+            target: format!("{}（{}）", target.key, target.display_name()),
+            kind: 0,
+            a: 1.0,
+            b: 1.0,
+            rows: if book.nrows() > 0 { book.nrows() } else { 10 },
+        });
+    }
+
+    fn fill_sequence(&mut self, kind: scicanvas_core::stats::Sequence, rows: usize) {
+        let Some((id, keys)) = self.ttest_columns() else { return };
+        let Some(target) = keys.first().cloned() else { return };
+        let seed = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos() as u64);
+        match self.project.fill_sequence(id, &target, kind, rows, seed) {
+            Ok(()) => self.status = format!("已填充列 {target}（{rows} 行）"),
+            Err(e) => self.status = e,
+        }
+    }
+
     /// 对点选的各列逐行统计（平行样的均值、标准差等）。
     pub(crate) fn row_stats(&mut self) {
         let Some((id, keys)) = self.ttest_columns() else { return };
@@ -1953,6 +1981,14 @@ impl SciApp {
                     self.dialog = None;
                     self.history.changed();
                 }
+                self.finish_edit();
+            }
+            dialogs::Action::Fill(kind, rows) => {
+                self.finish_edit();
+                self.begin_edit("填充数据序列");
+                self.dialog = None;
+                self.fill_sequence(kind, rows);
+                self.history.changed();
                 self.finish_edit();
             }
             dialogs::Action::FftFilter(kind) => {

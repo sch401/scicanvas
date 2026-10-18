@@ -768,6 +768,29 @@ impl Project {
         Ok((id, gid))
     }
 
+    /// 按公式之外的方式填充列：等差序列或随机数，覆盖目标列，`n` 行。
+    pub fn fill_sequence(
+        &mut self,
+        book_id: u64,
+        target: &str,
+        kind: crate::stats::Sequence,
+        n: usize,
+        seed: u64,
+    ) -> Result<(), String> {
+        if n == 0 {
+            return Err("行数必须大于 0".into());
+        }
+        let book = self.book_mut(book_id).ok_or("找不到工作簿")?;
+        book.column(target).ok_or("找不到目标列")?;
+        book.freeze_error_sources();
+        let data = crate::stats::sequence(kind, n, seed)
+            .iter()
+            .map(|v| fmt_num(*v))
+            .collect();
+        book.columns.iter_mut().find(|c| c.key == target).unwrap().data = data;
+        Ok(())
+    }
+
     /// 数值微分，结果写成新列 d(Y)/dX。
     pub fn differentiate(&mut self, src: &Source) -> Result<Vec<String>, String> {
         let (_, made) = self.per_item_column(src, |book, item, xs, ys| {
@@ -1714,6 +1737,21 @@ mod tests {
         let r = p.book(bid).unwrap().columns[1].values();
         assert_eq!(r[r.len() / 2], 1.0, "autocorrelation peaks at lag 0");
         assert!(p.correlation_function(1, &[]).is_err());
+    }
+
+    #[test]
+    fn fill_sequence_overwrites_the_target_column() {
+        use crate::stats::Sequence;
+        let mut p = Project::sample();
+        p.fill_sequence(1, "C", Sequence::Arithmetic { start: 1.0, step: 2.0 }, 5, 0)
+            .unwrap();
+        assert_eq!(p.book(1).unwrap().column("C").unwrap().data, ["1", "3", "5", "7", "9"]);
+        assert!(p
+            .fill_sequence(1, "C", Sequence::Arithmetic { start: 1.0, step: 2.0 }, 0, 0)
+            .is_err());
+        assert!(p
+            .fill_sequence(1, "Q", Sequence::Uniform { min: 0.0, max: 1.0 }, 3, 0)
+            .is_err());
     }
 
     #[test]

@@ -910,6 +910,47 @@ pub fn cross_correlation(x: &[f64], y: &[f64]) -> Result<(Vec<i64>, Vec<f64>), S
     Ok((lags, r))
 }
 
+/// 数据序列的类型。
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Sequence {
+    /// 等差：首项与公差。
+    Arithmetic { start: f64, step: f64 },
+    /// 均匀分布随机数 [min, max)。
+    Uniform { min: f64, max: f64 },
+    /// 正态分布随机数。
+    Normal { mean: f64, sd: f64 },
+}
+
+/// SplitMix64 伪随机数，给出 [0, 1) 的均匀数。
+struct SplitMix(u64);
+
+impl SplitMix {
+    fn next(&mut self) -> f64 {
+        self.0 = self.0.wrapping_add(0x9E37_79B9_7F4A_7C15);
+        let mut z = self.0;
+        z = (z ^ (z >> 30)).wrapping_mul(0xBF58_476D_1CE4_E5B9);
+        z = (z ^ (z >> 27)).wrapping_mul(0x94D0_49BB_1331_11EB);
+        z ^= z >> 31;
+        (z >> 11) as f64 / (1u64 << 53) as f64
+    }
+}
+
+/// 生成 `n` 个数据。随机序列由 `seed` 决定，相同种子给出相同结果。
+pub fn sequence(kind: Sequence, n: usize, seed: u64) -> Vec<f64> {
+    let mut rng = SplitMix(seed);
+    (0..n)
+        .map(|i| match kind {
+            Sequence::Arithmetic { start, step } => start + step * i as f64,
+            Sequence::Uniform { min, max } => min + (max - min) * rng.next(),
+            Sequence::Normal { mean, sd } => {
+                // Box–Muller；1 − u 避免 ln 0
+                let (u, v) = (1.0 - rng.next(), rng.next());
+                mean + sd * (-2.0 * u.ln()).sqrt() * (2.0 * std::f64::consts::PI * v).cos()
+            }
+        })
+        .collect()
+}
+
 /// 多元线性回归 y = b0 + b1·x1 + … + bk·xk 的结果。系数顺序为截距在前。
 #[derive(Clone, Debug, PartialEq)]
 pub struct Regression {
@@ -1345,6 +1386,24 @@ mod tests {
         assert!(cross_correlation(&x, &y[..7]).is_err());
         assert!(cross_correlation(&[1.0, f64::NAN], &[1.0, 2.0]).is_err());
         assert!(cross_correlation(&[1.0, 1.0], &[1.0, 2.0]).is_err());
+    }
+
+    #[test]
+    fn sequences_are_reproducible_and_have_the_right_moments() {
+        assert_eq!(
+            sequence(Sequence::Arithmetic { start: 2.0, step: 0.5 }, 4, 0),
+            [2.0, 2.5, 3.0, 3.5]
+        );
+        let u = sequence(Sequence::Uniform { min: 1.0, max: 3.0 }, 20_000, 7);
+        assert!(u.iter().all(|v| (1.0..3.0).contains(v)));
+        let mean = u.iter().sum::<f64>() / u.len() as f64;
+        assert!((mean - 2.0).abs() < 0.02, "{mean}");
+        let g = sequence(Sequence::Normal { mean: 5.0, sd: 2.0 }, 20_000, 11);
+        let m = g.iter().sum::<f64>() / g.len() as f64;
+        let sd = (g.iter().map(|v| (v - m).powi(2)).sum::<f64>() / (g.len() - 1) as f64).sqrt();
+        assert!((m - 5.0).abs() < 0.05 && (sd - 2.0).abs() < 0.05, "{m} {sd}");
+        assert_eq!(g[..5], sequence(Sequence::Normal { mean: 5.0, sd: 2.0 }, 5, 11)[..]);
+        assert_ne!(g[..5], sequence(Sequence::Normal { mean: 5.0, sd: 2.0 }, 5, 12)[..]);
     }
 
     #[test]

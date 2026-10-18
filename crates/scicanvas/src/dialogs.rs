@@ -8,6 +8,7 @@ use scicanvas_core::fmt_num;
 use scicanvas_core::interpolate::InterpMethod;
 use scicanvas_core::nlfit::Model;
 use scicanvas_core::ops::{AreaReport, ColumnOp, FitReport, NlFitReport};
+use scicanvas_core::stats::Sequence;
 use scicanvas_core::stats::{Anova, Correlation, TTest, TTestKind, TukeyPair};
 
 use crate::theme::Palette;
@@ -55,6 +56,14 @@ pub enum Dialog {
         lo: f64,
         hi: f64,
         nyquist: f64,
+    },
+    /// 填充序列：目标列名、类型（0 等差、1 均匀随机、2 正态随机）、两个参数与行数。
+    Fill {
+        target: String,
+        kind: u8,
+        a: f64,
+        b: f64,
+        rows: usize,
     },
     /// 通用结果表：标题、表头、各行和说明，可复制到 Excel。
     Table {
@@ -135,6 +144,7 @@ pub enum Action {
     Peaks(f64),
     Baseline(BaselineMethod),
     FftFilter(FilterKind),
+    Fill(Sequence, usize),
     SetValues(String),
     NlFit(Model, Vec<Option<f64>>),
     /// 运算符，以及常数（为空时用列 B）。
@@ -665,6 +675,61 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                         2 => FilterKind::BandPass(a, b),
                         _ => FilterKind::BandStop(a, b),
                     });
+                } else if cancel {
+                    action = Action::Close;
+                }
+            });
+        }
+        Dialog::Fill {
+            target,
+            kind,
+            a,
+            b,
+            rows,
+        } => {
+            window("填充数据序列").show(ctx, |ui| {
+                ui.label(RichText::new(format!("目标列：{target}")).strong());
+                ui.horizontal(|ui| {
+                    for (i, name) in ["等差序列", "均匀分布随机数", "正态分布随机数"].into_iter().enumerate()
+                    {
+                        ui.radio_value(kind, i as u8, name);
+                    }
+                });
+                let (la, lb) = match kind {
+                    0 => ("首项", "公差"),
+                    1 => ("最小值", "最大值"),
+                    _ => ("均值", "标准差"),
+                };
+                egui::Grid::new("fill-grid")
+                    .num_columns(2)
+                    .spacing([10.0, 6.0])
+                    .show(ui, |ui| {
+                        ui.label(la);
+                        ui.add(egui::DragValue::new(a).speed(0.1));
+                        ui.end_row();
+                        ui.label(lb);
+                        ui.add(egui::DragValue::new(b).speed(0.1));
+                        ui.end_row();
+                        ui.label("行数");
+                        ui.add(egui::DragValue::new(rows).range(1..=1_000_000).speed(1.0));
+                        ui.end_row();
+                    });
+                ui.label(
+                    RichText::new("结果覆盖目标列，可撤销。随机数每次生成都不同。")
+                        .small()
+                        .color(pal.weak),
+                );
+                let (ok, cancel) = buttons(ui, "填充");
+                if ok {
+                    let seq = match kind {
+                        0 => Sequence::Arithmetic { start: *a, step: *b },
+                        1 => Sequence::Uniform {
+                            min: a.min(*b),
+                            max: a.max(*b),
+                        },
+                        _ => Sequence::Normal { mean: *a, sd: b.abs() },
+                    };
+                    action = Action::Fill(seq, *rows);
                 } else if cancel {
                     action = Action::Close;
                 }

@@ -799,6 +799,16 @@ fn build() -> Vec<Command> {
         )
         .modifies(),
         c(
+            "col.fill",
+            "填充序列",
+            "colins",
+            "",
+            "列",
+            "fill sequence arithmetic random uniform normal 填充 序列 等差 随机数 正态",
+            need_book,
+            |a| a.open_fill_dialog(),
+        ),
+        c(
             "col.setvalues",
             "设置列值",
             "colins",

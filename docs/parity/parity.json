@@ -400,9 +400,9 @@
   "feature": "生成数据序列（等差、随机数、正态分布）",
   "ref": "Generating Simple Worksheet Datasets",
   "pri": "P1",
-  "status": "未开始",
-  "how": "rand / rand_distr",
-  "verify": "统计检验分布",
+  "status": "已实现待验收",
+  "how": "工作表 → 填充序列：等差序列、均匀分布、正态分布随机数（SplitMix64 + Box–Muller），覆盖目标列，可撤销",
+  "verify": "单元测试：等差值精确；20000 个随机数的均值、标准差落在理论值附近；同种子可复现",
   "id": "F037",
   "milestone": "M2 论文全流程"
  },
