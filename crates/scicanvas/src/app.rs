@@ -1582,6 +1582,19 @@ impl SciApp {
         }
     }
 
+    /// 当前图形的各条曲线（或选中的 Y 列）插值到公共 X 上求平均。
+    pub(crate) fn average_curves(&mut self) {
+        let Some(src) = self.analysis_source() else { return };
+        match self.project.average_curves(&src) {
+            Ok((bid, gid)) => {
+                let name = self.project.name_of(bid).unwrap_or_default().to_owned();
+                self.show_item(gid);
+                self.status = format!("平均曲线在 {name}（标准差为 Y 误差列）");
+            }
+            Err(e) => self.status = e,
+        }
+    }
+
     /// 对点选的各列逐行统计（平行样的均值、标准差等）。
     pub(crate) fn row_stats(&mut self) {
         let Some((id, keys)) = self.ttest_columns() else { return };
@@ -4587,6 +4600,35 @@ mod history_tests {
         assert!(app.status.contains("2 个峰"), "{}", app.status);
         app.undo();
         assert_eq!(app.project.books.len(), books);
+    }
+
+    #[test]
+    fn correlation_fill_and_average_create_results() {
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["B".into(), "C".into()]);
+        let (books, graphs) = (app.project.books.len(), app.project.graphs.len());
+        app.correlation_function();
+        assert_eq!(
+            (app.project.books.len(), app.project.graphs.len()),
+            (books + 1, graphs + 1),
+            "{}",
+            app.status
+        );
+        app.active = Some(1);
+        app.average_curves();
+        assert_eq!(app.project.books.len(), books + 2, "{}", app.status);
+
+        app.active = Some(1);
+        app.selection.insert(1, vec!["C".into()]);
+        app.open_fill_dialog();
+        assert!(matches!(&app.dialog, Some(Dialog::Fill { target, .. }) if target.starts_with('C')));
+        app.dialog = None;
+        app.fill_sequence(scicanvas_core::stats::Sequence::Arithmetic { start: 0.0, step: 0.5 }, 3);
+        assert_eq!(
+            app.project.book(1).unwrap().column("C").unwrap().data,
+            ["0", "0.5", "1"]
+        );
     }
 
     #[test]

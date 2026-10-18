@@ -947,6 +947,17 @@ fn build() -> Vec<Command> {
         )
         .modifies(),
         c(
+            "math.average",
+            "曲线平均",
+            "norm",
+            "",
+            "分析",
+            "average curves mean of curves interpolate 曲线平均 多条曲线 平均",
+            need_data,
+            |a| a.average_curves(),
+        )
+        .modifies(),
+        c(
             "signal.filter",
             "FFT 滤波",
             "smooth",

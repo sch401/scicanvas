@@ -791,6 +791,83 @@ impl Project {
         Ok(())
     }
 
+    /// 多条曲线平均：把各曲线线性插值到公共 X 区间（各曲线 X 范围的交集）上的等间距点，
+    /// 点数取最长曲线的点数；结果工作簿含 X、平均 Y、标准差（Y 误差）与 N，并画成线图。
+    pub fn average_curves(&mut self, src: &Source) -> Result<(u64, u64), String> {
+        let r = self.resolve(src)?;
+        if r.items.len() < 2 {
+            return Err("至少需要两条曲线".into());
+        }
+        let book = self.book(r.book_id).unwrap();
+        let mut curves = vec![];
+        for item in &r.items {
+            let (xs, ys, _) = get_xy(book, item);
+            if xs.len() < 2 {
+                return Err(format!("{}：数据点太少", name_of(book, &item.y)));
+            }
+            curves.push((xs, ys));
+        }
+        let lo = curves
+            .iter()
+            .map(|(x, _)| x.iter().copied().fold(f64::INFINITY, f64::min))
+            .fold(f64::NEG_INFINITY, f64::max);
+        let hi = curves
+            .iter()
+            .map(|(x, _)| x.iter().copied().fold(f64::NEG_INFINITY, f64::max))
+            .fold(f64::INFINITY, f64::min);
+        if hi.is_nan() || lo.is_nan() || hi <= lo {
+            return Err("各曲线的 X 范围没有重叠".into());
+        }
+        let n = curves.iter().map(|(x, _)| x.len()).max().unwrap();
+        let grid = interpolate::grid(lo, hi, n);
+        let mut ys = vec![];
+        for (x, y) in &curves {
+            ys.push(interpolate::interpolate(x, y, InterpMethod::Linear, &grid)?);
+        }
+        let k = ys.len() as f64;
+        let mean: Vec<f64> = (0..n).map(|i| ys.iter().map(|v| v[i]).sum::<f64>() / k).collect();
+        let sd: Vec<f64> = (0..n)
+            .map(|i| (ys.iter().map(|v| (v[i] - mean[i]).powi(2)).sum::<f64>() / (k - 1.0)).sqrt())
+            .collect();
+        let first = &r.items[0];
+        let x_units = first
+            .x
+            .as_deref()
+            .and_then(|k| book.column(k))
+            .map(|c| c.units.clone())
+            .unwrap_or_default();
+        let y_units = book.column(&first.y).map(|c| c.units.clone()).unwrap_or_default();
+        let note = format!(
+            "{} 条曲线在 X ∈ [{}, {}] 上线性插值后平均",
+            r.items.len(),
+            fmt_num(lo),
+            fmt_num(hi)
+        );
+        let folder = self.folder_of(r.book_id);
+        let id = self.alloc_id();
+        let mut nb = Book::new(id, self.unique_name("曲线平均"));
+        let mut mean_key = String::new();
+        for (role, name, units, values) in [
+            (Role::X, "X", &x_units, &grid),
+            (Role::Y, "平均", &y_units, &mean),
+            (Role::YError, "标准差", &y_units, &sd),
+        ] {
+            let key = nb.push_column(role);
+            let c = nb.columns.iter_mut().find(|c| c.key == key).unwrap();
+            c.long_name = name.into();
+            c.units = units.clone();
+            c.comment = note.clone();
+            c.data = values.iter().map(|v| fmt_num(*v)).collect();
+            if name == "平均" {
+                mean_key = key;
+            }
+        }
+        self.books.push(nb);
+        self.move_project_item(id, folder)?;
+        let (gid, _) = self.plot_from_selection(id, &[mean_key], PlotType::Line)?;
+        Ok((id, gid))
+    }
+
     /// 数值微分，结果写成新列 d(Y)/dX。
     pub fn differentiate(&mut self, src: &Source) -> Result<Vec<String>, String> {
         let (_, made) = self.per_item_column(src, |book, item, xs, ys| {
@@ -1752,6 +1829,31 @@ mod tests {
         assert!(p
             .fill_sequence(1, "Q", Sequence::Uniform { min: 0.0, max: 1.0 }, 3, 0)
             .is_err());
+    }
+
+    #[test]
+    fn average_curves_matches_numpy_interp_on_the_overlap() {
+        let mut p = Project::sample();
+        let book = p.book_mut(1).unwrap();
+        let set = |v: &[f64]| v.iter().map(|x| fmt_num(*x)).collect::<Vec<_>>();
+        // A、B 为第一条曲线；在 B 后插入第二条曲线的 X 与 Y
+        book.columns[0].data = set(&[0.0, 1.0, 2.0, 3.0, 4.0]);
+        book.columns[1].data = set(&[0.0, 2.0, 4.0, 6.0, 8.0]);
+        book.columns[2].role = Role::X;
+        book.columns[2].data = set(&[0.5, 1.5, 2.5, 3.5, 4.5]);
+        let k = book.push_column(Role::Y);
+        book.columns.iter_mut().find(|c| c.key == k).unwrap().data = set(&[1.0; 5]);
+        let (bid, gid) = p.average_curves(&book_src(&["B", &k])).unwrap();
+        let out = p.book(bid).unwrap();
+        // numpy.interp 在 linspace(0.5, 4.0, 5) 上平均：((2x) + 1) / 2
+        let grid = out.columns[0].values();
+        assert_eq!(grid, [0.5, 1.375, 2.25, 3.125, 4.0]);
+        for (x, m) in grid.iter().zip(out.columns[1].values()) {
+            assert!((m - (2.0 * x + 1.0) / 2.0).abs() < 1e-12);
+        }
+        assert_eq!(out.columns[2].role, Role::YError);
+        assert!(p.graph(gid).is_some());
+        assert!(p.average_curves(&book_src(&["B"])).unwrap_err().contains("两条"));
     }
 
     #[test]

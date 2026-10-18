@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 98 项，P1 146 项，P2 259 项，不做 11 项。
-状态：已完成 27 项，已实现待验收 49 项，部分实现 33 项，未开始 394 项，不做 11 项。
+状态：已完成 27 项，已实现待验收 50 项，部分实现 33 项，未开始 393 项，不做 11 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -231,7 +231,7 @@
 | F164 | 数值积分（梯形法、曲线下面积） | Integrate | P0 | 已实现待验收 | analysis.rs/ops.rs 已实现梯形积分、累计积分结果与绝对面积选项 | 解析积分、行对齐与结果写回回归已通过；Origin/SciPy 多组参考对照待做 | — |
 | F165 | 二维体积积分 | 2D Volume Integrate (Pro Only) | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
 | F166 | 数值微分（含 Savitzky-Golay 平滑求导） | Differentiate | P0 | 部分实现 | 有限差分微分和独立 Savitzky–Golay 平滑已实现；直接 SG 平滑求导入口待做 | 解析函数微分与结果列回归已通过；组合求导功能待补齐 | — |
-| F167 | 多条曲线平均 / 合并 | Average/Merge Multiple Curves | P1 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
+| F167 | 多条曲线平均 / 合并 | Average/Merge Multiple Curves | P1 | 已实现待验收 | 分析 → 曲线平均：各曲线线性插值到 X 范围交集上的等间距点后求平均与标准差（Y 误差），结果表与线图 | 与 numpy.interp 插值后平均一致（1e-12） | — |
 | F168 | 简单列运算（加减乘除、两曲线相减） | Simple Column/Curve Math | P0 | 已实现待验收 | 分析 → 列运算：两列或列与常数的加减乘除，结果新列与单位推导；不同 X 网格的曲线先线性插值后相减，范围外留空；一步撤销 | 逐行、常数、单位、除零与“原始减拟合”残差回归；Origin 对照待做 | — |
 | F169 | 归一化（最大值、Z 分数、区间缩放） | Normalize | P0 | 已实现待验收 | 已接入除以最大值、Z 分数、区间缩放，结果写入派生列并支持撤销 | 算法参考值、写回及撤销回归已通过；Origin/SciPy 多组数值验收待做 | — |
 | F170 | 多边形面积 | Polygon Area | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
