@@ -1425,6 +1425,42 @@ impl SciApp {
         Some((id, keys))
     }
 
+    /// 点选的列两两计算 Pearson、Spearman、Kendall 相关系数。
+    pub(crate) fn correlations(&mut self) {
+        use scicanvas_core::stats::{correlation, CorrMethod};
+        let Some((id, keys)) = self.ttest_columns() else { return };
+        if keys.len() < 2 {
+            self.status = "请先在工作表里单击选中至少两列（Ctrl+单击多选）".into();
+            return;
+        }
+        let book = self.project.book(id).unwrap();
+        let mut pairs = vec![];
+        let mut problems = vec![];
+        for i in 0..keys.len() {
+            for j in i + 1..keys.len() {
+                let (a, b) = (book.column(&keys[i]).unwrap(), book.column(&keys[j]).unwrap());
+                let found: Result<Vec<_>, String> = CorrMethod::ALL
+                    .iter()
+                    .map(|m| correlation(&a.values(), &b.values(), *m))
+                    .collect();
+                match found {
+                    Ok(cs) => pairs.push((a.display_name().to_owned(), b.display_name().to_owned(), cs)),
+                    Err(e) => problems.push(format!("{} 与 {}：{e}", a.display_name(), b.display_name())),
+                }
+            }
+        }
+        if pairs.is_empty() {
+            self.status = problems.join("；");
+            return;
+        }
+        self.status = if problems.is_empty() {
+            format!("已计算 {} 对列的相关系数", pairs.len())
+        } else {
+            format!("已计算 {} 对列；{}", pairs.len(), problems.join("；"))
+        };
+        self.dialog = Some(Dialog::Correlations(pairs));
+    }
+
     pub(crate) fn open_ttest_dialog(&mut self) {
         let Some((id, keys)) = self.ttest_columns() else { return };
         let book = self.project.book(id).unwrap();
@@ -4088,6 +4124,32 @@ mod history_tests {
             app.project.books.last().map(|b| b.id),
             "the new table is shown"
         );
+    }
+
+    #[test]
+    fn correlations_cover_every_pair_of_picked_columns() {
+        use scicanvas_core::stats::{correlation, CorrMethod};
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["A".into(), "B".into(), "C".into()]);
+        app.correlations();
+        let Some(Dialog::Correlations(pairs)) = &app.dialog else {
+            panic!("report should open")
+        };
+        let names: Vec<_> = pairs.iter().map(|(a, b, _)| (a.as_str(), b.as_str())).collect();
+        assert_eq!(names, [("时间", "电压 A"), ("时间", "电压 B"), ("电压 A", "电压 B")]);
+        let book = app.project.book(1).unwrap();
+        let want = correlation(
+            &book.column("A").unwrap().values(),
+            &book.column("C").unwrap().values(),
+            CorrMethod::Spearman,
+        )
+        .unwrap();
+        assert_eq!(pairs[1].2[1], want);
+        app.dialog = None;
+        app.selection.insert(1, vec!["A".into()]);
+        app.correlations();
+        assert!(app.dialog.is_none() && app.status.contains("至少两列"));
     }
 
     #[test]

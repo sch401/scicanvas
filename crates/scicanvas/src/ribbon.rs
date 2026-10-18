@@ -148,7 +148,7 @@ pub static TABS: &[Tab] = &[
             },
             Group {
                 label: "假设检验",
-                items: &[Big("stats.ttest")],
+                items: &[Big("stats.ttest"), Big("stats.correlation")],
             },
         ],
     },

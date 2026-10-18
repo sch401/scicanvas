@@ -7,7 +7,7 @@ use scicanvas_core::fmt_num;
 use scicanvas_core::interpolate::InterpMethod;
 use scicanvas_core::nlfit::Model;
 use scicanvas_core::ops::{AreaReport, ColumnOp, FitReport, NlFitReport};
-use scicanvas_core::stats::{TTest, TTestKind};
+use scicanvas_core::stats::{Correlation, TTest, TTestKind};
 
 use crate::theme::Palette;
 
@@ -32,6 +32,8 @@ pub enum Dialog {
         from: f64,
         to: f64,
     },
+    /// 相关系数：每一对列（名称 A、名称 B）的三种相关系数。
+    Correlations(Vec<(String, String, Vec<Correlation>)>),
     /// 非线性拟合：选择内置函数；每个参数可固定为指定值（最多 4 个参数）。
     NlFit {
         model: Model,
@@ -371,6 +373,54 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                 } else if cancel {
                     action = Action::Close;
                 }
+            });
+        }
+        Dialog::Correlations(pairs) => {
+            window("相关系数").show(ctx, |ui| {
+                egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
+                    egui::Grid::new("corr-grid")
+                        .striped(true)
+                        .num_columns(9)
+                        .spacing([14.0, 4.0])
+                        .show(ui, |ui| {
+                            for h in correlation_header() {
+                                ui.label(RichText::new(h).color(pal.weak));
+                            }
+                            ui.end_row();
+                            for row in correlation_rows(pairs) {
+                                for (i, cell) in row.iter().enumerate() {
+                                    if i < 2 {
+                                        ui.label(cell);
+                                    } else {
+                                        ui.label(RichText::new(cell).monospace());
+                                    }
+                                }
+                                ui.end_row();
+                            }
+                        });
+                });
+                ui.label(
+                    RichText::new(
+                        "p 值为双侧。Pearson 和 Spearman 的 p 值用 t 分布，Kendall τ-b 用含并列校正的正态近似；\n只用两列都有数值的行。",
+                    )
+                    .small()
+                    .color(pal.weak),
+                );
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    if ui
+                        .button("复制结果")
+                        .on_hover_text("复制为制表符分隔的文本，可粘贴到 Excel")
+                        .clicked()
+                    {
+                        let mut lines = vec![correlation_header().join("\t")];
+                        lines.extend(correlation_rows(pairs).into_iter().map(|r| r.join("\t")));
+                        ui.ctx().copy_text(lines.join("\n"));
+                    }
+                    if ui.button(RichText::new("关闭").strong()).clicked() {
+                        action = Action::Close;
+                    }
+                });
             });
         }
         Dialog::NlFit { model, fixed } => {
@@ -723,6 +773,38 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
         action = Action::Close;
     }
     action
+}
+
+fn correlation_header() -> [&'static str; 9] {
+    [
+        "列 A",
+        "列 B",
+        "N",
+        "Pearson r",
+        "p",
+        "Spearman ρ",
+        "p",
+        "Kendall τ-b",
+        "p",
+    ]
+}
+
+fn correlation_rows(pairs: &[(String, String, Vec<Correlation>)]) -> Vec<Vec<String>> {
+    pairs
+        .iter()
+        .map(|(a, b, cs)| {
+            let mut row = vec![
+                a.clone(),
+                b.clone(),
+                cs.first().map_or(String::new(), |c| c.n.to_string()),
+            ];
+            for c in cs {
+                row.push(fmt_num(c.r));
+                row.push(fmt_num(c.p));
+            }
+            row
+        })
+        .collect()
 }
 
 fn nlfit_stats(f: &scicanvas_core::nlfit::NlFit) -> Vec<(&'static str, String)> {

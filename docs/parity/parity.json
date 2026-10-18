@@ -2013,9 +2013,9 @@
   "feature": "相关系数（Pearson、Spearman、Kendall）",
   "ref": "Correlation Coefficient (Pro Only)",
   "pri": "P1",
-  "status": "未开始",
-  "how": "statrs 分布函数 + 自写检验",
-  "verify": "与 Origin 及 SciPy / R 结果比较（统计量、p 值）",
+  "status": "已实现待验收",
+  "how": "统计 → 相关系数：点选列两两计算 Pearson、Spearman（平均秩）、Kendall τ-b（并列校正）及双侧 p 值",
+  "verify": "与 SciPy 1.17.1 pearsonr、spearmanr、kendalltau(method=\"asymptotic\") 一致（1e-9），含并列值与负相关；Origin 对照待做",
   "id": "F180",
   "milestone": "M2 论文全流程"
  },

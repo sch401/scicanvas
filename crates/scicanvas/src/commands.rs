@@ -968,6 +968,16 @@ fn build() -> Vec<Command> {
             |a| a.open_frequency_dialog(),
         ),
         c(
+            "stats.correlation",
+            "相关系数",
+            "stats",
+            "",
+            "统计",
+            "correlation pearson spearman kendall rank 相关 相关系数 秩相关",
+            need_book,
+            |a| a.correlations(),
+        ),
+        c(
             "stats.ttest",
             "t 检验",
             "stats",

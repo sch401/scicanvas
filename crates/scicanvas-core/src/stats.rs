@@ -249,6 +249,192 @@ pub fn t_test(kind: TTestKind, a: &[f64], b: &[f64], level: f64) -> Result<TTest
     })
 }
 
+/// 正则化上不完全 Gamma 函数 Q(a, x)：x < a + 1 时用级数，否则用连分式。
+fn gamma_q(a: f64, x: f64) -> f64 {
+    if x <= 0.0 {
+        return 1.0;
+    }
+    let front = (-x + a * x.ln() - ln_gamma(a)).exp();
+    if x < a + 1.0 {
+        let (mut term, mut sum, mut ap) = (1.0 / a, 1.0 / a, a);
+        for _ in 0..1000 {
+            ap += 1.0;
+            term *= x / ap;
+            sum += term;
+            if term.abs() < sum.abs() * 1e-17 {
+                break;
+            }
+        }
+        1.0 - sum * front
+    } else {
+        const TINY: f64 = 1e-300;
+        let mut b = x + 1.0 - a;
+        let mut c = 1.0 / TINY;
+        let mut d = 1.0 / b;
+        let mut h = d;
+        for i in 1..1000 {
+            let an = -(i as f64) * (i as f64 - a);
+            b += 2.0;
+            d = an * d + b;
+            d = if d.abs() < TINY { TINY } else { d };
+            c = b + an / c;
+            c = if c.abs() < TINY { TINY } else { c };
+            d = 1.0 / d;
+            let del = d * c;
+            h *= del;
+            if (del - 1.0).abs() < 1e-16 {
+                break;
+            }
+        }
+        front * h
+    }
+}
+
+/// 互补误差函数 erfc(x) = Q(1/2, x²)。
+pub fn erfc(x: f64) -> f64 {
+    if x < 0.0 {
+        2.0 - erfc(-x)
+    } else {
+        gamma_q(0.5, x * x)
+    }
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum CorrMethod {
+    Pearson,
+    Spearman,
+    Kendall,
+}
+
+impl CorrMethod {
+    pub const ALL: [CorrMethod; 3] = [CorrMethod::Pearson, CorrMethod::Spearman, CorrMethod::Kendall];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            CorrMethod::Pearson => "Pearson r",
+            CorrMethod::Spearman => "Spearman ρ",
+            CorrMethod::Kendall => "Kendall τ-b",
+        }
+    }
+}
+
+/// 相关系数与双侧 p 值。
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Correlation {
+    pub method: CorrMethod,
+    pub n: usize,
+    pub r: f64,
+    pub p: f64,
+}
+
+/// 平均秩（并列值取平均名次），从 1 开始。
+fn ranks(v: &[f64]) -> Vec<f64> {
+    let mut idx: Vec<usize> = (0..v.len()).collect();
+    idx.sort_by(|a, b| v[*a].total_cmp(&v[*b]));
+    let mut out = vec![0.0; v.len()];
+    let mut i = 0;
+    while i < idx.len() {
+        let mut j = i;
+        while j + 1 < idx.len() && v[idx[j + 1]] == v[idx[i]] {
+            j += 1;
+        }
+        let rank = (i + j) as f64 / 2.0 + 1.0;
+        for k in &idx[i..=j] {
+            out[*k] = rank;
+        }
+        i = j + 1;
+    }
+    out
+}
+
+fn pearson_r(x: &[f64], y: &[f64]) -> f64 {
+    let n = x.len() as f64;
+    let (mx, my) = (x.iter().sum::<f64>() / n, y.iter().sum::<f64>() / n);
+    let sxy: f64 = x.iter().zip(y).map(|(a, b)| (a - mx) * (b - my)).sum();
+    let sxx: f64 = x.iter().map(|a| (a - mx).powi(2)).sum();
+    let syy: f64 = y.iter().map(|b| (b - my).powi(2)).sum();
+    (sxy / (sxx * syy).sqrt()).clamp(-1.0, 1.0)
+}
+
+/// 并列组大小的三个求和：Σt(t−1)、Σt(t−1)(t−2)、Σt(t−1)(2t+5)。
+fn tie_sums(v: &[f64]) -> (f64, f64, f64) {
+    let mut sorted = v.to_vec();
+    sorted.sort_by(|a, b| a.total_cmp(b));
+    let (mut a, mut b, mut c) = (0.0, 0.0, 0.0);
+    let mut i = 0;
+    while i < sorted.len() {
+        let mut j = i;
+        while j + 1 < sorted.len() && sorted[j + 1] == sorted[i] {
+            j += 1;
+        }
+        let t = (j - i + 1) as f64;
+        a += t * (t - 1.0);
+        b += t * (t - 1.0) * (t - 2.0);
+        c += t * (t - 1.0) * (2.0 * t + 5.0);
+        i = j + 1;
+    }
+    (a, b, c)
+}
+
+/// 相关系数。只用两组都有值的行；Pearson、Spearman 的 p 值用 t 分布，
+/// Kendall τ-b 用含并列校正的正态近似（与 SciPy `kendalltau(method="asymptotic")` 相同）。
+pub fn correlation(x: &[f64], y: &[f64], method: CorrMethod) -> Result<Correlation, String> {
+    let (x, y): (Vec<f64>, Vec<f64>) = x
+        .iter()
+        .zip(y)
+        .filter(|(a, b)| a.is_finite() && b.is_finite())
+        .map(|(a, b)| (*a, *b))
+        .unzip();
+    let n = x.len();
+    if n < 3 {
+        return Err("相关系数至少需要 3 对有效数值".into());
+    }
+    let constant = |v: &[f64]| v.iter().all(|a| *a == v[0]);
+    if constant(&x) || constant(&y) {
+        return Err("有一列数值全部相同，相关系数没有定义".into());
+    }
+    let t_test = |r: f64| {
+        let df = (n - 2) as f64;
+        if r.abs() >= 1.0 {
+            0.0
+        } else {
+            let t = r * (df / (1.0 - r * r)).sqrt();
+            (2.0 * t_cdf(-t.abs(), df)).min(1.0)
+        }
+    };
+    let (r, p) = match method {
+        CorrMethod::Pearson => {
+            let r = pearson_r(&x, &y);
+            (r, t_test(r))
+        }
+        CorrMethod::Spearman => {
+            let r = pearson_r(&ranks(&x), &ranks(&y));
+            (r, t_test(r))
+        }
+        CorrMethod::Kendall => {
+            let mut s = 0.0;
+            for i in 0..n {
+                for j in i + 1..n {
+                    s += ((x[i] - x[j]).signum() * f64::from(x[i] != x[j]))
+                        * ((y[i] - y[j]).signum() * f64::from(y[i] != y[j]));
+                }
+            }
+            let (xt, x0, x1) = tie_sums(&x);
+            let (yt, y0, y1) = tie_sums(&y);
+            let nf = n as f64;
+            let pairs = nf * (nf - 1.0) / 2.0;
+            let tau = s / ((pairs - xt / 2.0) * (pairs - yt / 2.0)).sqrt();
+            let m = nf * (nf - 1.0);
+            let var = (m * (2.0 * nf + 5.0) - x1 - y1) / 18.0
+                + 2.0 * (xt / 2.0) * (yt / 2.0) / m
+                + x0 * y0 / (9.0 * m * (nf - 2.0));
+            let z = s / var.sqrt();
+            (tau, erfc(z.abs() / std::f64::consts::SQRT_2).min(1.0))
+        }
+    };
+    Ok(Correlation { method, n, r, p })
+}
+
 /// 频数统计的一个区间 `[lo, hi)`；最后一个区间包含右端点。
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Bin {
@@ -307,6 +493,55 @@ pub fn histogram(values: &[f64], bins: usize, range: Option<(f64, f64)>) -> Resu
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn correlations_match_scipy_with_ties_and_negative_trends() {
+        let near = |got: f64, want: f64| assert!((got - want).abs() <= 1e-9 * want.abs().max(1e-12), "{got} vs {want}");
+        for (z, want) in [
+            (0.1, 0.8875370839817152),
+            (1.0, 0.15729920705028516),
+            (2.5, 0.00040695201744495886),
+            (5.0, 1.5374597944280347e-12),
+        ] {
+            near(erfc(z), want);
+        }
+        let x = [1.2, 2.4, 2.4, 3.1, 4.8, 5.0, 5.5, 6.1, 7.3, 7.3, 8.0, 9.6];
+        let y = [2.0, 2.9, 3.5, 3.1, 4.2, 6.0, 5.1, 6.6, 6.6, 8.1, 7.7, 9.0];
+        let w = [3.0, 1.0, 2.5, 4.0, 2.0, 3.5];
+        let v = [1.0, 2.0, 1.5, 0.5, 2.2, 0.9];
+        // SciPy 1.17.1：pearsonr、spearmanr、kendalltau(method="asymptotic")
+        for (method, a, b) in [
+            (
+                CorrMethod::Pearson,
+                (0.9684776256889684, 2.3248265725276443e-07),
+                (-0.9180549521652276, 0.00979735617315806),
+            ),
+            (
+                CorrMethod::Spearman,
+                (0.9648521051838397, 3.9823058062772386e-07),
+                (-0.942857142857143, 0.004804664723032055),
+            ),
+            (
+                CorrMethod::Kendall,
+                (0.8837474839481103, 8.27769245515797e-05),
+                (-0.8666666666666666, 0.014595034919316668),
+            ),
+        ] {
+            let c = correlation(&x, &y, method).unwrap();
+            near(c.r, a.0);
+            near(c.p, a.1);
+            let c = correlation(&w, &v, method).unwrap();
+            near(c.r, b.0);
+            near(c.p, b.1);
+        }
+        let mut xs = x.to_vec();
+        xs.push(f64::NAN);
+        let mut ys = y.to_vec();
+        ys.push(1.0);
+        assert_eq!(correlation(&xs, &ys, CorrMethod::Pearson).unwrap().n, 12);
+        assert!(correlation(&[1.0, 2.0], &[1.0, 2.0], CorrMethod::Pearson).is_err());
+        assert!(correlation(&[1.0, 1.0, 1.0], &[1.0, 2.0, 3.0], CorrMethod::Spearman).is_err());
+    }
 
     #[test]
     fn histogram_matches_numpy() {
