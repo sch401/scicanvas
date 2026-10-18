@@ -1,7 +1,7 @@
 //! 字体。
 //!
-//! - egui 自带字体没有中文，从系统里找一个中文字体作为后备字体；也可以用环境变量
-//!   SCICANVAS_FONT 指定字体文件路径。
+//! - 界面字体用微软雅黑（Microsoft YaHei UI），中英文统一；没有时找其他中文字体，
+//!   都没有时退回 egui 自带字体。也可以用环境变量 SCICANVAS_FONT 指定字体文件路径。
 //! - 图形里的文字用 Arial（SCI 期刊插图常用），找不到时用相近的 Liberation Sans / Helvetica，
 //!   再找不到就用界面字体。中文同样落到中文字体上。
 
@@ -60,6 +60,20 @@ fn load(paths: &[&str]) -> Option<Vec<u8>> {
     paths.iter().find_map(|p| std::fs::read(p).ok())
 }
 
+/// 界面字体：微软雅黑字体集里的第 2 个字体是行距更紧凑的 “Microsoft YaHei UI”。
+fn ui_font() -> Option<egui::FontData> {
+    for p in [r"C:\Windows\Fonts\msyh.ttc", r"C:\Windows\Fonts\msyh.ttf"] {
+        if let Ok(bytes) = std::fs::read(p) {
+            let mut data = egui::FontData::from_owned(bytes);
+            if p.ends_with(".ttc") {
+                data.index = 1;
+            }
+            return Some(data);
+        }
+    }
+    None
+}
+
 pub fn setup(ctx: &egui::Context) {
     let mut fonts = egui::FontDefinitions::default();
     let ui_fonts = fonts
@@ -75,9 +89,17 @@ pub fn setup(ctx: &egui::Context) {
         fonts
             .font_data
             .insert("cjk".to_owned(), egui::FontData::from_owned(bytes));
-        // 放在默认字体后面：英文数字仍用 egui 默认字体，中文落到这个字体上
+        // 界面中英文都用微软雅黑（放在最前）；指定了 SCICANVAS_FONT 时用指定的字体。
+        // egui 自带字体留在后面，补齐雅黑里没有的符号。
+        let ui = match (env.is_some(), ui_font()) {
+            (false, Some(data)) => {
+                fonts.font_data.insert("ui".to_owned(), data);
+                "ui"
+            }
+            _ => "cjk",
+        };
         for family in [FontFamily::Proportional, FontFamily::Monospace] {
-            fonts.families.entry(family).or_default().push("cjk".to_owned());
+            fonts.families.entry(family).or_default().insert(0, ui.to_owned());
         }
     } else {
         eprintln!("SciCanvas: 没有找到中文字体，中文会显示成方框。可以设置环境变量 SCICANVAS_FONT=字体文件路径");

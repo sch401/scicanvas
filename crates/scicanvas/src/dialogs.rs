@@ -184,20 +184,49 @@ fn ttest_rows(r: &TTest, names: &[String]) -> Vec<(String, String)> {
     rows
 }
 
-fn window(title: &str) -> egui::Window<'_> {
-    egui::Window::new(title)
-        .id(egui::Id::new("scicanvas-dialog"))
+/// 对话框窗口：首次出现在屏幕中央，可以拖动标题栏移动（每种对话框各自记住位置）。
+pub(crate) fn window(ctx: &egui::Context, title: &str) -> egui::Window<'static> {
+    egui::Window::new(RichText::new(title).strong())
+        .id(egui::Id::new(("scicanvas-dialog", title)))
         .collapsible(false)
         .resizable(false)
-        .anchor(Align2::CENTER_CENTER, [0.0, 0.0])
+        .pivot(Align2::CENTER_CENTER)
+        .default_pos(ctx.screen_rect().center())
+        .min_width(380.0)
+        .frame(egui::Frame::window(&ctx.style()).inner_margin(egui::Margin::symmetric(18.0, 14.0)))
+}
+
+/// 对话框按钮的统一尺寸。
+pub(crate) const BUTTON: egui::Vec2 = egui::vec2(84.0, 28.0);
+
+/// 让接下来 `n` 个统一尺寸的按钮在这一行里居中。
+pub(crate) fn center_buttons(ui: &mut egui::Ui, n: usize) {
+    let gap = ui.spacing().item_spacing.x;
+    let used = n as f32 * BUTTON.x + n.saturating_sub(1) as f32 * gap;
+    ui.add_space(((ui.available_width() - used) / 2.0).max(0.0));
+}
+
+/// 主按钮：强调色底、白字。
+pub(crate) fn primary(ui: &egui::Ui, text: &str) -> egui::Button<'static> {
+    egui::Button::new(RichText::new(text).color(egui::Color32::WHITE).strong())
+        .fill(ui.visuals().selection.stroke.color)
+        .min_size(BUTTON)
+}
+
+/// 普通按钮。
+pub(crate) fn plain(text: impl Into<egui::WidgetText>) -> egui::Button<'static> {
+    egui::Button::new(text).min_size(BUTTON)
 }
 
 fn buttons(ui: &mut egui::Ui, ok: &str) -> (bool, bool) {
     let mut res = (false, false);
-    ui.add_space(6.0);
+    ui.add_space(10.0);
+    ui.separator();
+    ui.add_space(4.0);
     ui.horizontal(|ui| {
-        res.0 = ui.button(RichText::new(ok).strong()).clicked();
-        res.1 = ui.button("取消").clicked();
+        center_buttons(ui, 2);
+        res.0 = ui.add(primary(ui, ok)).clicked();
+        res.1 = ui.add(plain("取消")).clicked();
     });
     res
 }
@@ -207,7 +236,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
     let esc = ctx.input(|i| i.key_pressed(egui::Key::Escape));
     match dialog {
         Dialog::Poly { order } => {
-            window("多项式拟合").show(ctx, |ui| {
+            window(ctx, "多项式拟合").show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label("阶数");
                     egui::ComboBox::from_id_salt("poly-order")
@@ -234,7 +263,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
             });
         }
         Dialog::Smooth { method, window: w } => {
-            window("平滑").show(ctx, |ui| {
+            window(ctx, "平滑").show(ctx, |ui| {
                 egui::Grid::new("smooth-grid")
                     .num_columns(2)
                     .spacing([12.0, 8.0])
@@ -266,7 +295,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
             });
         }
         Dialog::Normalize { method } => {
-            window("归一化").show(ctx, |ui| {
+            window(ctx, "归一化").show(ctx, |ui| {
                 for m in NormalizeMethod::ALL {
                     ui.radio_value(method, m, m.label());
                 }
@@ -279,7 +308,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
             });
         }
         Dialog::FitReport(reports) => {
-            window("拟合结果").show(ctx, |ui| {
+            window(ctx, "拟合结果").show(ctx, |ui| {
                 egui::ScrollArea::vertical().max_height(480.0).show(ui, |ui| {
                     for (ri, r) in reports.iter().enumerate() {
                         ui.label(RichText::new(format!("{} · {}", r.name, r.kind)).strong());
@@ -335,22 +364,26 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                         .color(pal.weak),
                 );
                 ui.add_space(6.0);
+                ui.add_space(10.0);
+                ui.separator();
+                ui.add_space(4.0);
                 ui.horizontal(|ui| {
+                    center_buttons(ui, 2);
                     if ui
-                        .button("复制结果")
+                        .add(plain("复制结果"))
                         .on_hover_text("复制为制表符分隔的文本，可粘贴到 Excel")
                         .clicked()
                     {
                         ui.ctx().copy_text(fit_text(reports));
                     }
-                    if ui.button(RichText::new("关闭").strong()).clicked() {
+                    if ui.add(primary(ui, "关闭")).clicked() {
                         action = Action::Close;
                     }
                 });
             });
         }
         Dialog::Areas(areas) => {
-            window("积分结果").show(ctx, |ui| {
+            window(ctx, "积分结果").show(ctx, |ui| {
                 egui::Grid::new("area-grid")
                     .striped(true)
                     .num_columns(4)
@@ -385,7 +418,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
             from,
             to,
         } => {
-            window("插值").show(ctx, |ui| {
+            window(ctx, "插值").show(ctx, |ui| {
                 egui::Grid::new("interp-grid")
                     .num_columns(2)
                     .spacing([12.0, 8.0])
@@ -429,7 +462,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
             });
         }
         Dialog::Anova { result, names, tukey } => {
-            window("单因素方差分析").show(ctx, |ui| {
+            window(ctx, "单因素方差分析").show(ctx, |ui| {
                 let (table, groups) = anova_rows(result, names);
                 let pairs = tukey_rows(tukey, names);
                 for (gi, rows) in [table, groups, pairs].iter().enumerate() {
@@ -469,9 +502,13 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                     .color(pal.weak),
                 );
                 ui.add_space(6.0);
-                ui.horizontal(|ui| {
+                ui.add_space(10.0);
+                    ui.separator();
+                    ui.add_space(4.0);
+                    ui.horizontal(|ui| {
+                    center_buttons(ui, 2);
                     if ui
-                        .button("复制结果")
+                        .add(plain("复制结果"))
                         .on_hover_text("复制为制表符分隔的文本，可粘贴到 Excel")
                         .clicked()
                     {
@@ -487,14 +524,14 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                             .collect();
                         ui.ctx().copy_text(text.join("\n"));
                     }
-                    if ui.button(RichText::new("关闭").strong()).clicked() {
+                    if ui.add(primary(ui, "关闭")).clicked() {
                         action = Action::Close;
                     }
                 });
             });
         }
         Dialog::Correlations(pairs) => {
-            window("相关系数").show(ctx, |ui| {
+            window(ctx, "相关系数").show(ctx, |ui| {
                 egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
                     egui::Grid::new("corr-grid")
                         .striped(true)
@@ -525,9 +562,13 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                     .color(pal.weak),
                 );
                 ui.add_space(6.0);
-                ui.horizontal(|ui| {
+                ui.add_space(10.0);
+                    ui.separator();
+                    ui.add_space(4.0);
+                    ui.horizontal(|ui| {
+                    center_buttons(ui, 2);
                     if ui
-                        .button("复制结果")
+                        .add(plain("复制结果"))
                         .on_hover_text("复制为制表符分隔的文本，可粘贴到 Excel")
                         .clicked()
                     {
@@ -535,14 +576,14 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                         lines.extend(correlation_rows(pairs).into_iter().map(|r| r.join("\t")));
                         ui.ctx().copy_text(lines.join("\n"));
                     }
-                    if ui.button(RichText::new("关闭").strong()).clicked() {
+                    if ui.add(primary(ui, "关闭")).clicked() {
                         action = Action::Close;
                     }
                 });
             });
         }
         Dialog::NlFit { model, fixed } => {
-            window("非线性拟合").show(ctx, |ui| {
+            window(ctx, "非线性拟合").show(ctx, |ui| {
                 egui::Grid::new("nlfit-models")
                     .num_columns(3)
                     .spacing([12.0, 6.0])
@@ -585,7 +626,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
             });
         }
         Dialog::NlFitReport(reports) => {
-            window("非线性拟合结果").show(ctx, |ui| {
+            window(ctx, "非线性拟合结果").show(ctx, |ui| {
                 egui::ScrollArea::vertical().max_height(480.0).show(ui, |ui| {
                     for (ri, r) in reports.iter().enumerate() {
                         let f = &r.fit;
@@ -626,22 +667,26 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                         ui.add_space(10.0);
                     }
                 });
+                ui.add_space(10.0);
+                ui.separator();
+                ui.add_space(4.0);
                 ui.horizontal(|ui| {
+                    center_buttons(ui, 2);
                     if ui
-                        .button("复制结果")
+                        .add(plain("复制结果"))
                         .on_hover_text("复制为制表符分隔的文本，可粘贴到 Excel")
                         .clicked()
                     {
                         ui.ctx().copy_text(nlfit_text(reports));
                     }
-                    if ui.button(RichText::new("关闭").strong()).clicked() {
+                    if ui.add(primary(ui, "关闭")).clicked() {
                         action = Action::Close;
                     }
                 });
             });
         }
         Dialog::FftFilter { kind, lo, hi, nyquist } => {
-            window("FFT 滤波").show(ctx, |ui| {
+            window(ctx, "FFT 滤波").show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     for (i, name) in ["低通", "高通", "带通", "带阻"].into_iter().enumerate() {
                         ui.radio_value(kind, i as u8, name);
@@ -687,7 +732,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
             b,
             rows,
         } => {
-            window("填充数据序列").show(ctx, |ui| {
+            window(ctx, "填充数据序列").show(ctx, |ui| {
                 ui.label(RichText::new(format!("目标列：{target}")).strong());
                 ui.horizontal(|ui| {
                     for (i, name) in ["等差序列", "均匀分布随机数", "正态分布随机数"].into_iter().enumerate()
@@ -736,7 +781,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
             });
         }
         Dialog::Table { title, rows, note } => {
-            window(title).show(ctx, |ui| {
+            window(ctx, title).show(ctx, |ui| {
                 egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
                     egui::Grid::new("result-table")
                         .striped(true)
@@ -759,16 +804,20 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                 });
                 ui.label(RichText::new(note.as_str()).small().color(pal.weak));
                 ui.add_space(6.0);
+                ui.add_space(10.0);
+                ui.separator();
+                ui.add_space(4.0);
                 ui.horizontal(|ui| {
+                    center_buttons(ui, 2);
                     if ui
-                        .button("复制结果")
+                        .add(plain("复制结果"))
                         .on_hover_text("复制为制表符分隔的文本，可粘贴到 Excel")
                         .clicked()
                     {
                         let text: Vec<String> = rows.iter().map(|r| r.join("\t")).collect();
                         ui.ctx().copy_text(text.join("\n"));
                     }
-                    if ui.button(RichText::new("关闭").strong()).clicked() {
+                    if ui.add(primary(ui, "关闭")).clicked() {
                         action = Action::Close;
                     }
                 });
@@ -780,7 +829,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
             columns,
             error,
         } => {
-            window("设置列值").show(ctx, |ui| {
+            window(ctx, "设置列值").show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label(RichText::new(format!("{target} =")).strong());
                     let edit = ui.add(
@@ -824,7 +873,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
             });
         }
         Dialog::Baseline { als, log_lambda, p } => {
-            window("扣除基线").show(ctx, |ui| {
+            window(ctx, "扣除基线").show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.radio_value(als, false, "两端连线");
                     ui.radio_value(als, true, "自动基线（ALS）");
@@ -862,7 +911,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
             });
         }
         Dialog::Peaks { percent } => {
-            window("寻峰与峰积分").show(ctx, |ui| {
+            window(ctx, "寻峰与峰积分").show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label("最小突出度");
                     ui.add(egui::DragValue::new(percent).range(0.1..=100.0).speed(0.2).suffix(" %"));
@@ -884,7 +933,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
             });
         }
         Dialog::Fft { window: w } => {
-            window("FFT").show(ctx, |ui| {
+            window(ctx, "FFT").show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label("窗函数");
                     for m in FftWindow::ALL {
@@ -913,7 +962,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
             use_constant,
             constant,
         } => {
-            window("列运算").show(ctx, |ui| {
+            window(ctx, "列运算").show(ctx, |ui| {
                 if b.is_none() {
                     *use_constant = true;
                 }
@@ -953,7 +1002,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
             from,
             to,
         } => {
-            window("频数统计").show(ctx, |ui| {
+            window(ctx, "频数统计").show(ctx, |ui| {
                 egui::Grid::new("freq-grid")
                     .num_columns(2)
                     .spacing([12.0, 8.0])
@@ -999,7 +1048,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
             equal_var,
             level,
         } => {
-            window("t 检验").show(ctx, |ui| {
+            window(ctx, "t 检验").show(ctx, |ui| {
                 const KINDS: [&str; 3] = ["单样本", "双样本（独立）", "配对"];
                 ui.label(format!("参与检验的列：{}", columns.join("、")));
                 ui.horizontal(|ui| {
@@ -1057,7 +1106,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
             });
         }
         Dialog::TTestReport { result, names } => {
-            window("t 检验结果").show(ctx, |ui| {
+            window(ctx, "t 检验结果").show(ctx, |ui| {
                 let rows = ttest_rows(result, names);
                 egui::Grid::new("ttest-report")
                     .striped(true)
@@ -1084,23 +1133,27 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                     .color(pal.weak),
                 );
                 ui.add_space(6.0);
+                ui.add_space(10.0);
+                ui.separator();
+                ui.add_space(4.0);
                 ui.horizontal(|ui| {
+                    center_buttons(ui, 2);
                     if ui
-                        .button("复制结果")
+                        .add(plain("复制结果"))
                         .on_hover_text("复制为制表符分隔的文本，可粘贴到 Excel")
                         .clicked()
                     {
                         let text: Vec<String> = rows.iter().map(|(k, v)| format!("{k}\t{v}")).collect();
                         ui.ctx().copy_text(text.join("\n"));
                     }
-                    if ui.button(RichText::new("关闭").strong()).clicked() {
+                    if ui.add(primary(ui, "关闭")).clicked() {
                         action = Action::Close;
                     }
                 });
             });
         }
         Dialog::Png { dpi, page_mm } => {
-            window("导出 PNG").show(ctx, |ui| {
+            window(ctx, "导出 PNG").show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label("分辨率");
                     for preset in [150, 300, 600, 1200] {

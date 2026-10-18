@@ -2722,8 +2722,7 @@ impl SciApp {
                                 if ri < META_ROWS.len() {
                                     row.col(|ui| {
                                         ui.painter().rect_filled(ui.max_rect(), 0.0, pal.meta_bg);
-                                        ui.horizontal_centered(|ui| {
-                                            ui.add_space(6.0);
+                                        ui.centered_and_justified(|ui| {
                                             ui.label(META_ROWS[ri]);
                                         });
                                     });
@@ -2741,6 +2740,7 @@ impl SciApp {
                                             let response = ui.add(
                                                 egui::TextEdit::singleline(field)
                                                     .frame(false)
+                                                    .horizontal_align(egui::Align::Center)
                                                     .margin(egui::vec2(5.0, 3.0))
                                                     .desired_width(f32::INFINITY),
                                             );
@@ -2770,8 +2770,8 @@ impl SciApp {
                                         ui.ctx().set_cursor_icon(egui::CursorIcon::Default);
                                     }
                                     ui.painter().with_clip_rect(rect).text(
-                                        rect.left_center() + egui::vec2(6.0, 0.0),
-                                        egui::Align2::LEFT_CENTER,
+                                        rect.center(),
+                                        egui::Align2::CENTER_CENTER,
                                         (r + 1).to_string(),
                                         egui::FontId::monospace(12.0),
                                         pal.weak,
@@ -3499,6 +3499,8 @@ impl SciApp {
             .collapsible(false)
             .resizable(false)
             .default_width(360.0)
+            // 内容较长：默认高到屏幕高度的 85%，再长时滚动
+            .default_height(ctx.screen_rect().height() * 0.85)
             .vscroll(true)
             .show(ctx, |ui| {
                 let Some(graph) = project.graph_mut(gid) else { return };
@@ -3872,22 +3874,33 @@ impl SciApp {
         let Some(id) = self.confirm_delete else { return };
         let name = self.project.name_of(id).unwrap_or("").to_string();
         let mut decision: Option<bool> = None;
-        egui::Window::new("删除")
-            .id(egui::Id::new("scicanvas-confirm"))
-            .collapsible(false)
-            .resizable(false)
-            .anchor(egui::Align2::CENTER_CENTER, [0.0, 0.0])
-            .show(ctx, |ui| {
-                ui.label(format!("确定删除 {}？可通过撤销恢复。", name));
-                ui.horizontal(|ui| {
-                    if ui.button("删除").clicked() {
-                        decision = Some(true);
-                    }
-                    if ui.button("取消").clicked() {
-                        decision = Some(false);
-                    }
-                });
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            decision = Some(false);
+        }
+        let weak = self.pal.weak;
+        dialogs::window(ctx, "删除").show(ctx, |ui| {
+            ui.vertical_centered(|ui| {
+                ui.add_space(4.0);
+                ui.label(RichText::new(format!("确定删除“{name}”吗？")).size(14.0).strong());
+                ui.add_space(4.0);
+                ui.label(RichText::new("删除后可以用“撤销”（Ctrl+Z）恢复。").color(weak));
             });
+            ui.add_space(10.0);
+            ui.separator();
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                dialogs::center_buttons(ui, 2);
+                let danger = egui::Button::new(RichText::new("删除").color(egui::Color32::WHITE).strong())
+                    .fill(egui::Color32::from_rgb(0xC4, 0x2B, 0x1C))
+                    .min_size(dialogs::BUTTON);
+                if ui.add(danger).clicked() {
+                    decision = Some(true);
+                }
+                if ui.add(dialogs::plain("取消")).clicked() {
+                    decision = Some(false);
+                }
+            });
+        });
         match decision {
             Some(true) => {
                 self.finish_edit();
@@ -4363,7 +4376,9 @@ mod history_tests {
             .shapes
             .iter()
             .find_map(|s| match &s.shape {
-                egui::Shape::Text(t) if t.galley.job.text == "新建文件夹" => Some(t.pos + egui::vec2(3.0, 4.0)),
+                egui::Shape::Text(t) if t.galley.job.text == "新建文件夹" => {
+                    Some(t.pos + t.galley.rect.center().to_vec2())
+                }
                 _ => None,
             })
             .unwrap();
@@ -5389,7 +5404,9 @@ mod history_tests {
             .shapes
             .iter()
             .find_map(|s| match &s.shape {
-                egui::Shape::Text(t) if t.galley.job.text == "数据标签" => Some(t.pos + egui::vec2(3.0, 4.0)),
+                egui::Shape::Text(t) if t.galley.job.text == "数据标签" => {
+                    Some(t.pos + t.galley.rect.center().to_vec2())
+                }
                 _ => None,
             })
             .unwrap();
@@ -5438,7 +5455,7 @@ mod history_tests {
             .iter()
             .find_map(|s| match &s.shape {
                 egui::Shape::Text(t) if t.galley.job.text == "显示 X / Y 误差" => {
-                    Some(t.pos + egui::vec2(3.0, 4.0))
+                    Some(t.pos + t.galley.rect.center().to_vec2())
                 }
                 _ => None,
             })
@@ -5491,7 +5508,7 @@ mod history_tests {
                 .shapes
                 .iter()
                 .find_map(|s| match &s.shape {
-                    egui::Shape::Text(t) if t.galley.job.text == text => Some(t.pos + egui::vec2(3.0, 4.0)),
+                    egui::Shape::Text(t) if t.galley.job.text == text => Some(t.pos + t.galley.rect.center().to_vec2()),
                     _ => None,
                 })
                 .unwrap_or_else(|| {
