@@ -105,16 +105,43 @@ fn adjust(r: (f64, f64), log: bool, shift: f64, zoom: f64, center: f64) -> (f64,
     }
 }
 
+/// 画布与页面之间留出的灰边。
+const CANVAS_MARGIN: f32 = 14.0;
+
+/// 页面在画布里的位置：按页面宽高比整体缩放到能放下的最大尺寸并居中，
+/// 窗口变宽或变高只改变灰边，不改变页面比例。
+pub fn page_rect(canvas: Rect, size: [f64; 2]) -> Rect {
+    let inner = canvas.shrink(CANVAS_MARGIN);
+    let logical = vec2(size[0] as f32, size[1] as f32);
+    let scale = (inner.width() / logical.x).min(inner.height() / logical.y).max(0.0);
+    Rect::from_center_size(inner.center(), logical * scale)
+}
+
+/// Origin 式画布：灰色工作区里放一张带阴影和细边框的白色页面。
+fn paint_canvas(ui: &egui::Ui, canvas: Rect, page: Rect) {
+    let painter = ui.painter_at(canvas);
+    let dark = ui.visuals().dark_mode;
+    painter.rect_filled(canvas, 0.0, Color32::from_gray(if dark { 58 } else { 171 }));
+    painter.rect_filled(
+        page.translate(vec2(3.0, 3.0)),
+        0.0,
+        Color32::from_black_alpha(if dark { 140 } else { 70 }),
+    );
+    painter.rect_filled(page, 0.0, Color32::WHITE);
+    painter.rect_stroke(
+        page,
+        0.0,
+        Stroke::new(1.0_f32, Color32::from_gray(if dark { 20 } else { 110 })),
+    );
+}
+
 pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize) -> PlotOutput {
     let id = view_id(g.id);
     let available = ui.available_size().max(vec2(120.0, 90.0));
-    let aspect = (g.page.width_mm / g.page.height_mm) as f32;
-    let size = if available.x / available.y > aspect {
-        vec2(available.y * aspect, available.y)
-    } else {
-        vec2(available.x, available.x / aspect)
-    };
-    let (rect, response) = ui.allocate_exact_size(size, Sense::click_and_drag());
+    let (canvas, _) = ui.allocate_exact_size(available, Sense::hover());
+    let rect = page_rect(canvas, g.page.logical_size());
+    paint_canvas(ui, canvas, rect);
+    let response = ui.interact(rect, id.with("page"), Sense::click_and_drag());
     let transform = page_transform(rect, g.page.logical_size());
     let local = |p: Pos2| {
         let p = transform.inverse() * p;
@@ -497,6 +524,47 @@ mod tests {
             }
             assert_eq!(mesh.indices.len(), pts.len());
             assert!(rect.contains_rect(clip));
+        }
+    }
+
+    #[test]
+    fn page_keeps_its_aspect_and_stays_centered_as_the_window_resizes() {
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        let mut p = Project::sample();
+        for (width_mm, height_mm) in [(85.0, 63.75), (60.0, 120.0)] {
+            p.graphs[0].page.width_mm = width_mm;
+            p.graphs[0].page.height_mm = height_mm;
+            let aspect = (width_mm / height_mm) as f32;
+            for screen in [
+                vec2(1400.0, 500.0),
+                vec2(500.0, 1200.0),
+                vec2(800.0, 800.0),
+                vec2(150.0, 120.0),
+            ] {
+                let mut output = None;
+                let mut canvas = Rect::NOTHING;
+                let input = egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, screen)),
+                    ..Default::default()
+                };
+                let _ = ctx.run(input, |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        canvas = ui.available_rect_before_wrap();
+                        output = Some(show(ui, &p.graphs[0], &p, 0));
+                    });
+                });
+                let page = output.unwrap().response.rect;
+                assert!((page.aspect_ratio() - aspect).abs() < 1e-3, "{screen:?}: {page:?}");
+                assert!((page.center() - canvas.center()).length() < 0.5, "{screen:?}");
+                let inner = canvas.shrink(CANVAS_MARGIN);
+                assert!(inner.expand(0.5).contains_rect(page), "{screen:?}");
+                // 页面撑满较紧的一边，另一边留灰边。
+                let fit = (page.width() - inner.width())
+                    .abs()
+                    .min((page.height() - inner.height()).abs());
+                assert!(fit < 0.5, "{screen:?}");
+            }
         }
     }
 
