@@ -561,7 +561,7 @@ pub struct Report { pub title: String, pub sections: Vec<ReportSection> }  // Ta
 | 卡 | 内容 | 依赖 | 周 | 2026-10-18 状态 |
 | --- | --- | --- | --- | --- |
 | T1.1 | A1-a：`ColumnData` 类型化列 + `ColumnView` + v9 迁移 | T0.1 | 2 | 已实现待验收：四种存储、ColumnView、v9 迁移/旧 SVG 回归已接入，人工与峰值内存待验收 |
-| T1.2 | A1-b：独立工作表的列属性对话框 + 数字格式（F032）；F049 多 Sheet 按用户要求不做 | T1.1 | 1 | 部分实现：列类型转换已有，完整属性与显示格式待做；各表独立 Book |
+| T1.2 | A1-b：独立工作表的列属性对话框 + 数字格式（F032）；F049 多 Sheet 按用户要求不做 | T1.1 | 1 | 已实现待验收：列属性对话框（长名称、单位、注释、列角色、数据类型、显示格式，一步撤销）与数值/日期显示格式（F032）已接入；各表独立 Book |
 | T1.3 | A3：scene 拆分为 Mark/Stat/Position/Coord，14 种图迁移到预设，golden 不变 | T0.1 | 2 | 未开始：保留 PlotType 场景分支 |
 | T1.4 | A2：Layer → Vec\<Plot\> + AxisSet + v10 迁移；图层内容对话框（F083）；双 Y（F305） | T1.3 | 2 | 未开始：单 PlotSpec，无 AxisSet |
 | T1.5 | A6-a：fontdb + rustybuzz 真实测宽，替换 `text_width`；内置回退字体 | T1.3 | 1 | 未开始：PNG 栅格字体不等同共享场景测宽 |

@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 97 项，P1 146 项，P2 259 项，不做 12 项。
-状态：已完成 26 项，已实现待验收 51 项，部分实现 44 项，未开始 381 项，不做 12 项。
+状态：已完成 26 项，已实现待验收 52 项，部分实现 44 项，未开始 380 项，不做 12 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -60,7 +60,7 @@
 | F029 | 从 Excel 复制粘贴（多单元格） | Copying and Pasting Worksheet Data | P0 | 已完成 | 制表符解析 | 单元测试 | — |
 | F030 | 鼠标拖动框选单元格、Shift 扩展、复制选区 | Scrolling and Simple Data Selection in the Worksheet | P0 | 已实现待验收 | Rust app.rs/sheet.rs 已接入拖动框选、Shift 扩展、复制/剪切/粘贴与清空选区 | 选区边界、键盘、剪贴板及撤销回归已通过；真实鼠标与长表人工验收待做 | — |
 | F031 | 查找与替换 | Finding and Replacing Worksheet Data | P1 | 未开始 | — | 手动操作 | — |
-| F032 | 数值显示格式（小数位、科学计数、工程单位） | Controlling How Numeric Data Display in the Worksheet Column | P0 | 未开始 | 列格式属性 | 单元测试 | — |
+| F032 | 数值显示格式（小数位、科学计数、工程单位） | Controlling How Numeric Data Display in the Worksheet Column | P0 | 已实现待验收 | 工作表 → 列属性（双击列标题或右键“列属性…”）：数值列可选原样、固定小数位、科学计数、工程单位（SI 词头）、百分比及小数位，日期列可选 4 种显示格式；只改变显示，存储值与原始写法不变，格式随项目保存 | 格式化单元测试（舍入进位、负零、非有限值、SI 词头越界）、项目往返与未设格式时文件不变、列属性对话框一步撤销及转换失败不改动的界面测试 | — |
 | F033 | 日期时间列与计算 | Dates and Times in the Worksheet | P1 | 部分实现 | UTC 毫秒日期类型、ISO8601/常见年月日写法/四位年份输入、缺失位图、排序、类型转换、v9 保存已接入；本地时区/完整日期格式和日历运算待做 | 日期时区等价、行操作、排序/往返、失败转换原子性回归通过；完整日期计算与人工验收待补 | — |
 | F034 | 文本列与分类数据 | Setting Column Designation | P1 | 已实现待验收 | Text 与 Category 字典列，列头右键/命令转换；编辑、缺失、复制、排序、保存和撤销已接入；图形的分类轴/分组绘图另按相关条目推进 | 类型、字典、空码、行重排、默认标签排序/有序字典排序、JSON/SCV 与界面转换回归通过；Windows 人工操作待验收 | — |
 | F035 | 设置列值（公式列） | Using Formulae to Set or Transform Worksheet Column Values | P0 | 部分实现 | Ctrl+Q 设置列值：表达式、列引用/col(A)、行号 i、pi/e、24 个函数调用名；按当前数据一次性覆盖结果并支持撤销。列公式持久化、依赖图和自动重算待做 | 公式解析/优先级/错误、写回与撤销回归已通过；源列变化自动重算与循环依赖验收待实现 | — |

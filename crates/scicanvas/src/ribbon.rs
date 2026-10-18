@@ -192,6 +192,7 @@ pub static TABS: &[Tab] = &[
             Group {
                 label: "列",
                 items: &[
+                    Big("col.props"),
                     Big("col.setvalues"),
                     Big("col.fill"),
                     Smalls(&["col.insert", "col.delete", "col.clear"]),

@@ -45,6 +45,12 @@ pub struct Column {
     /// 误差列关联的 X/Y 列；空字符串表示来源已删除，None 按列顺序自动关联。
     #[cfg_attr(feature = "serde", serde(default))]
     pub error_for: Option<String>,
+    /// 显示格式：只影响工作表里的显示。全部为“原样”时不写入文件。
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "crate::format::DisplayFormat::is_auto")
+    )]
+    pub format: crate::format::DisplayFormat,
 }
 
 impl Column {
@@ -58,7 +64,19 @@ impl Column {
             data: crate::ColumnData::default(),
             derived_from: None,
             error_for: None,
+            format: Default::default(),
         }
+    }
+
+    /// 工作表里显示的文字：按显示格式写数值和日期；缺失、文本、分类和“原样”格式显示原始写法。
+    pub fn display_at(&self, row: usize) -> std::borrow::Cow<'_, str> {
+        use crate::ColumnData;
+        let formatted = match &self.data {
+            ColumnData::Num { .. } => self.data.f64_at(row).and_then(|v| self.format.number.apply(v)),
+            ColumnData::DateTime { .. } => self.data.f64_at(row).and_then(|v| self.format.date.apply(v as i64)),
+            _ => None,
+        };
+        formatted.map_or_else(|| self.data.text_at(row), std::borrow::Cow::Owned)
     }
 
     /// 解析为数值；空单元格或非数值为 NaN。

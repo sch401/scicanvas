@@ -726,6 +726,16 @@ fn build() -> Vec<Command> {
         c("col.type.datetime", "转换为日期时间列", "props", "", "列", "datetime UTC type", need_cols, |a| a.set_data_kind(scicanvas_core::DataKind::DateTime)).modifies(),
         c("col.type.category", "转换为分类列", "props", "", "列", "category type", need_cols, |a| a.set_data_kind(scicanvas_core::DataKind::Category)).modifies(),
         c(
+            "col.props",
+            "列属性",
+            "props",
+            "",
+            "列",
+            "column properties format decimal places scientific engineering percent date 列属性 显示格式 小数位 科学计数 工程单位 百分比 日期格式 长名称 单位",
+            need_cols,
+            |a| a.open_column_props(),
+        ),
+        c(
             "col.setX",
             "设为 X",
             "setx",

@@ -6,6 +6,38 @@ const V0: &str = include_str!("fixtures/legacy-v0.scproj");
 const V1: &str = include_str!("fixtures/legacy-v1.scproj");
 
 #[test]
+fn display_formats_round_trip_and_leave_stored_values_alone() {
+    use scicanvas_core::format::{DateFormat, DisplayFormat, NumberFormat};
+    let mut p = Project::sample();
+    // 没设格式时不写入文件，旧项目保存后不变
+    assert!(!project_file::to_json(&p).unwrap().contains("\"format\""));
+    let raw = p.books[0].columns[1].data.text_at(0).into_owned();
+    let col = &mut p.books[0].columns[1];
+    col.format = DisplayFormat {
+        number: NumberFormat::Scientific { places: 2 },
+        date: DateFormat::Original,
+    };
+    let v = col.data.f64_at(0).unwrap();
+    assert_eq!(
+        col.display_at(0),
+        NumberFormat::Scientific { places: 2 }.apply(v).unwrap()
+    );
+    assert_eq!(col.data.text_at(0), raw, "存储的原始写法不变");
+    let restored = project_file::from_json(&project_file::to_json(&p).unwrap()).unwrap();
+    assert_eq!(restored, p);
+    // 日期列
+    let mut dates: scicanvas_core::ColumnData = vec!["2026/10/18 14:30".to_string()].into();
+    dates = dates.converted(scicanvas_core::DataKind::DateTime).unwrap();
+    let col = &mut p.books[0].columns[2];
+    col.data = dates;
+    assert_eq!(col.display_at(0), "2026/10/18 14:30");
+    col.format.date = DateFormat::Chinese;
+    assert_eq!(col.display_at(0), "2026年10月18日");
+    let restored = project_file::from_json(&project_file::to_json(&p).unwrap()).unwrap();
+    assert_eq!(restored.books[0].columns[2].format.date, DateFormat::Chinese);
+}
+
+#[test]
 fn pages_without_a_saved_size_keep_the_old_default_while_new_graphs_use_a4() {
     // v0/v1 旧文件没有页面尺寸：读取后保持当时的 89 × 66.75 mm
     for p in [
