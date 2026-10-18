@@ -86,6 +86,67 @@ fn conversions_are_atomic_and_dates_use_utc_milliseconds() {
 }
 
 #[test]
+fn common_date_spellings_and_years_parse_but_bare_integers_do_not() {
+    let ms = |text: &str| {
+        cells(&[text])
+            .converted(DataKind::DateTime)
+            .map(|d| d.f64_at(0).unwrap())
+    };
+    // 2026-10-18T00:00:00Z
+    for text in [
+        "2026-10-18",
+        "2026/10/18",
+        "2026.10.18",
+        "2026年10月18日",
+        "2026/10/18 00:00",
+    ] {
+        assert_eq!(ms(text), Ok(1_792_281_600_000.0), "{text}");
+    }
+    // 2026-10-18T14:30:00Z，无时区的写法按 UTC
+    for text in [
+        "2026-10-18 14:30",
+        "2026-10-18T14:30:00",
+        "2026/10/18 14:30:00",
+        "2026年10月18日 14:30",
+    ] {
+        assert_eq!(ms(text), Ok(1_792_333_800_000.0), "{text}");
+    }
+    assert_eq!(ms("2026-10-18 14:30:15.5"), Ok(1_792_333_815_500.0));
+    // 四位年份取 1 月 1 日：2020-01-01T00:00:00Z
+    assert_eq!(ms("2020"), Ok(1_577_836_800_000.0));
+    let years = cells(&["2020", "2021"]).converted(DataKind::DateTime).unwrap();
+    assert_eq!(years.f64_at(1), Some(1_609_459_200_000.0));
+    assert_eq!(years.text_at(0), "2020");
+    // 纯整数、小数和日月顺序不确定的写法拒绝转换，原列保持不变
+    for text in [
+        "20261018",
+        "1700000000000",
+        "0",
+        "0.5",
+        "999",
+        "18/10/2026",
+        "10/18/2026",
+        "2026-13-01",
+        "2026-02-30",
+    ] {
+        assert!(ms(text).is_err(), "{text}");
+    }
+}
+
+#[test]
+fn dates_saved_as_millisecond_integers_by_the_first_v9_build_still_load() {
+    let legacy = ColumnData::DateTime {
+        values: vec![1_700_000_000_000],
+        missing: vec![0],
+        lexemes: [(0, "1700000000000".to_string())].into_iter().collect(),
+    };
+    legacy.validate().unwrap();
+    assert_eq!(legacy.f64_at(0), Some(1_700_000_000_000.0));
+    // 新输入的整数不再当作毫秒
+    assert!(!legacy.accepts("1700000000000"));
+}
+
+#[test]
 fn typed_sorting_is_stable_and_keeps_missing_values_last_in_both_directions() {
     let mut p = Project::sample();
     p.books[0].columns.truncate(2);

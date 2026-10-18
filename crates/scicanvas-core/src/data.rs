@@ -61,15 +61,52 @@ fn number(text: &str) -> Option<f64> {
     }
 }
 
+/// 日期时间解析，结果为 UTC 毫秒。
+///
+/// 接受带时区的 ISO 8601 / RFC 3339（如 `2026-10-18T14:30:00+08:00`）；年在前、用 `-` `/` `.`
+/// 分隔或写成 `2026年10月18日` 的日期，可再跟空格或 `T` 和 `时:分[:秒[.小数]]`，按 UTC；
+/// 以及单独的四位年份（1000–9999），取该年 1 月 1 日。
+///
+/// 不接受其他纯整数（避免把数值或 20261018 误当作毫秒时间戳），
+/// 也不接受 `18/10/2026` 这类年份不在前、日月顺序不确定的写法。
 fn timestamp(text: &str) -> Option<i64> {
     let text = text.trim();
     if let Ok(date) = chrono::DateTime::parse_from_rfc3339(text) {
         return Some(date.timestamp_millis());
     }
-    if let Ok(date) = chrono::NaiveDate::parse_from_str(text, "%Y-%m-%d") {
-        return Some(date.and_hms_opt(0, 0, 0)?.and_utc().timestamp_millis());
+    let midnight = |date: chrono::NaiveDate| date.and_hms_opt(0, 0, 0).map(|d| d.and_utc().timestamp_millis());
+    if text.len() == 4 && text.bytes().all(|b| b.is_ascii_digit()) {
+        let year: i32 = text.parse().ok()?;
+        return if year >= 1000 {
+            midnight(chrono::NaiveDate::from_ymd_opt(year, 1, 1)?)
+        } else {
+            None
+        };
     }
-    text.parse::<i64>()
+    // 年份必须在最前：四位数字后紧跟分隔符
+    let bytes = text.as_bytes();
+    if bytes.len() < 8 || !bytes[..4].iter().all(u8::is_ascii_digit) || bytes[4].is_ascii_digit() {
+        return None;
+    }
+    let (date, time) = match text.find([' ', 'T']) {
+        Some(i) => (&text[..i], text[i + 1..].trim()),
+        None => (text, ""),
+    };
+    let date = date.replace(['年', '月', '/', '.'], "-").replace('日', "");
+    let date = chrono::NaiveDate::parse_from_str(&date, "%Y-%m-%d").ok()?;
+    if time.is_empty() {
+        return midnight(date);
+    }
+    let time = chrono::NaiveTime::parse_from_str(time, "%H:%M:%S%.f")
+        .or_else(|_| chrono::NaiveTime::parse_from_str(time, "%H:%M"))
+        .ok()?;
+    Some(date.and_time(time).and_utc().timestamp_millis())
+}
+
+/// 首个 v9 版本（51a5557）的日期列接受 UTC 毫秒整数；读取那时保存的文件时，这类原文仍按毫秒校验。
+fn legacy_millis(text: &str) -> Option<i64> {
+    text.trim()
+        .parse::<i64>()
         .ok()
         .filter(|v| chrono::DateTime::from_timestamp_millis(*v).is_some())
 }
@@ -547,8 +584,8 @@ impl ColumnData {
                     return Err("日期时间超出支持范围".into());
                 }
                 for (&row, text) in lexemes {
-                    if (!missing_at(missing, row) && timestamp(text) != Some(values[row]))
-                        || (missing_at(missing, row) && !text.trim().is_empty())
+                    let matches = timestamp(text) == Some(values[row]) || legacy_millis(text) == Some(values[row]);
+                    if (!missing_at(missing, row) && !matches) || (missing_at(missing, row) && !text.trim().is_empty())
                     {
                         return Err("日期时间与原始文本不一致".into());
                     }

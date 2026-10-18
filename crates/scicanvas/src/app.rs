@@ -5649,15 +5649,17 @@ mod history_tests {
             let mut app = app();
             app.active = Some(1);
             app.selection.insert(1, vec!["A".into()]);
-            app.project.books[0].columns[0].data = if kind == DataKind::Num {
-                ColumnData::Text(vec!["01".into(), "2".into()])
-            } else {
-                vec!["01".into(), "2".into()].into()
+            // 日期列用常见日期写法；其余用带前导零的数字，检查原始写法保留
+            let first = if kind == DataKind::DateTime { "2026/10/18" } else { "01" };
+            app.project.books[0].columns[0].data = match kind {
+                DataKind::Num => ColumnData::Text(vec![first.into(), "2".into()]),
+                DataKind::DateTime => ColumnData::Text(vec![first.into(), "2026".into()]),
+                _ => vec![first.into(), "2".into()].into(),
             };
             let before = app.project.clone();
             app.run_command(command);
             assert_eq!(app.project.books[0].columns[0].data.kind(), kind);
-            assert_eq!(app.project.books[0].columns[0].data.text_at(0), "01");
+            assert_eq!(app.project.books[0].columns[0].data.text_at(0), first);
             roundtrip(&mut app, &before);
         }
         let mut app = app();

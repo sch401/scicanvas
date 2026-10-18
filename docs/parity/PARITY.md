@@ -61,7 +61,7 @@
 | F030 | 鼠标拖动框选单元格、Shift 扩展、复制选区 | Scrolling and Simple Data Selection in the Worksheet | P0 | 已实现待验收 | Rust app.rs/sheet.rs 已接入拖动框选、Shift 扩展、复制/剪切/粘贴与清空选区 | 选区边界、键盘、剪贴板及撤销回归已通过；真实鼠标与长表人工验收待做 | — |
 | F031 | 查找与替换 | Finding and Replacing Worksheet Data | P1 | 未开始 | — | 手动操作 | — |
 | F032 | 数值显示格式（小数位、科学计数、工程单位） | Controlling How Numeric Data Display in the Worksheet Column | P0 | 未开始 | 列格式属性 | 单元测试 | — |
-| F033 | 日期时间列与计算 | Dates and Times in the Worksheet | P1 | 部分实现 | UTC 毫秒日期类型、ISO8601/日期/毫秒输入、缺失位图、排序、类型转换、v9 保存已接入；本地时区/完整日期格式和日历运算待做 | 日期时区等价、行操作、排序/往返、失败转换原子性回归通过；完整日期计算与人工验收待补 | — |
+| F033 | 日期时间列与计算 | Dates and Times in the Worksheet | P1 | 部分实现 | UTC 毫秒日期类型、ISO8601/常见年月日写法/四位年份输入、缺失位图、排序、类型转换、v9 保存已接入；本地时区/完整日期格式和日历运算待做 | 日期时区等价、行操作、排序/往返、失败转换原子性回归通过；完整日期计算与人工验收待补 | — |
 | F034 | 文本列与分类数据 | Setting Column Designation | P1 | 已实现待验收 | Text 与 Category 字典列，列头右键/命令转换；编辑、缺失、复制、排序、保存和撤销已接入；图形的分类轴/分组绘图另按相关条目推进 | 类型、字典、空码、行重排、默认标签排序/有序字典排序、JSON/SCV 与界面转换回归通过；Windows 人工操作待验收 | — |
 | F035 | 设置列值（公式列） | Using Formulae to Set or Transform Worksheet Column Values | P0 | 部分实现 | Ctrl+Q 设置列值：表达式、列引用/col(A)、行号 i、pi/e、24 个函数调用名；按当前数据一次性覆盖结果并支持撤销。列公式持久化、依赖图和自动重算待做 | 公式解析/优先级/错误、写回与撤销回归已通过；源列变化自动重算与循环依赖验收待实现 | — |
 | F036 | 单元格公式（=A1+B1） | Using a Formula to Set Cell Values | P2 | 未开始 | 依赖图 + 增量重算 | 单元测试 | — |
@@ -82,7 +82,7 @@
 | F051 | 选中数据的状态栏统计 | Scrolling and Simple Data Selection in the Worksheet | P0 | 已完成 | — | 与手算比较 | — |
 | F052 | 单元格内嵌图片 / 迷你图 | Inserting Graphs Images and Other Objects into Worksheet Cells | P2 | 未开始 | — | 目视检查 | — |
 | F053 | 大数据量（百万行流畅滚动） | Origin Limitations | P0 | 部分实现 | 类型化数值列、缺失位图和可见行表格已接入；本机百万行十列导入 1.462 秒、排版 185 ms、整表排序 54 ms；完整首帧/进程峰值内存和绘图抽点待验收 | 百万数值单列容量估算 <12 MiB；同机基准见 docs/perf.md，不等同完整界面首帧/峰值内存验收 | — |
-| F510 | 日期时间列 | Worksheet / Column Properties / Date and Time | P0 | 部分实现 | DateTime 基础列已接入：UTC 毫秒存储、ISO8601/日期/毫秒解析、位图/原文保留、转换/排序/v9 保存；本地时区配置、显示格式与日期轴待做 | typed_columns 与界面命令/错误输入回归通过；完整格式及日期轴人工/参考验收继续推进 | — |
+| F510 | 日期时间列 | Worksheet / Column Properties / Date and Time | P0 | 部分实现 | DateTime 基础列已接入：UTC 毫秒存储、ISO8601/常见年月日写法/四位年份解析、位图/原文保留、转换/排序/v9 保存；本地时区配置、显示格式与日期轴待做 | typed_columns 与界面命令/错误输入回归通过；完整格式及日期轴人工/参考验收继续推进 | — |
 | F511 | 分类列及类别排序 | Worksheet / Column Properties / Categorical | P0 | 部分实现 | Category 采用 u32 编码和类别字典，支持缺失、编辑、转换、保存与标签排序；ordered 字典顺序已有核心支持，类别顺序编辑界面和分类轴待做 | 字典合法性、行增删/排序、保持编码/顺序及往返回归通过；类别编辑与分类轴后续验收 | — |
 
 ## 矩阵
