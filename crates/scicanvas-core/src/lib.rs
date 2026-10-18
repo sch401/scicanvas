@@ -14,6 +14,7 @@ pub mod model;
 pub mod nlfit;
 pub mod ops;
 pub mod page;
+pub mod peaks;
 pub mod plotspec;
 pub mod presets;
 #[cfg(feature = "serde")]

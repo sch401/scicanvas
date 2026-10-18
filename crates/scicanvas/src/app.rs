@@ -1321,6 +1321,29 @@ impl SciApp {
         });
     }
 
+    pub(crate) fn open_peaks_dialog(&mut self) {
+        self.dialog = Some(Dialog::Peaks { percent: 5.0 });
+    }
+
+    fn find_peaks(&mut self, min_prominence: f64) {
+        let Some(src) = self.analysis_source() else { return };
+        match self.project.find_peaks(&src, min_prominence) {
+            Ok(made) => {
+                let mut parts = vec![];
+                for id in &made {
+                    if let Some(book) = self.project.book(*id) {
+                        parts.push(format!("{}（{} 个峰）", book.name, book.columns[0].data.len()));
+                    }
+                }
+                if let Some(id) = made.last() {
+                    self.show_item(*id);
+                }
+                self.status = format!("峰表在 {}", parts.join("、"));
+            }
+            Err(e) => self.status = e,
+        }
+    }
+
     pub(crate) fn open_fft_dialog(&mut self) {
         self.dialog = Some(Dialog::Fft {
             window: scicanvas_core::fft::Window::Hann,
@@ -1645,6 +1668,14 @@ impl SciApp {
                 self.begin_edit("非线性拟合");
                 self.dialog = None;
                 self.nlfit(model, &fixed);
+                self.history.changed();
+                self.finish_edit();
+            }
+            dialogs::Action::Peaks(min_prominence) => {
+                self.finish_edit();
+                self.begin_edit("寻峰");
+                self.dialog = None;
+                self.find_peaks(min_prominence);
                 self.history.changed();
                 self.finish_edit();
             }
@@ -4150,6 +4181,33 @@ mod history_tests {
             app.project.books.last().map(|b| b.id),
             "the new table is shown"
         );
+    }
+
+    #[test]
+    fn peaks_open_a_table_per_curve_in_one_undo_step() {
+        let mut app = app();
+        app.active = Some(1);
+        let book = app.project.book_mut(1).unwrap();
+        book.columns[0].data = (0..61).map(|i| scicanvas_core::model::fmt_num(i as f64)).collect();
+        book.columns[1].data = (0..61)
+            .map(|i| {
+                scicanvas_core::model::fmt_num(
+                    3.0 * (-((i as f64 - 20.0) / 3.0).powi(2)).exp() + (-((i as f64 - 45.0) / 4.0).powi(2)).exp(),
+                )
+            })
+            .collect();
+        app.selection.insert(1, vec!["B".into()]);
+        let books = app.project.books.len();
+        app.begin_edit("寻峰");
+        app.find_peaks(0.05);
+        app.history.changed();
+        app.finish_edit();
+        assert_eq!(app.project.books.len(), books + 1);
+        let table = app.project.books.last().unwrap();
+        assert_eq!(table.columns[0].values(), [20.0, 45.0]);
+        assert!(app.status.contains("2 个峰"), "{}", app.status);
+        app.undo();
+        assert_eq!(app.project.books.len(), books);
     }
 
     #[test]

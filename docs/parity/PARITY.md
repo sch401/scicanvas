@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 98 项，P1 146 项，P2 259 项，不做 11 项。
-状态：已完成 27 项，已实现待验收 40 项，部分实现 28 项，未开始 408 项，不做 11 项。
+状态：已完成 27 项，已实现待验收 41 项，部分实现 29 项，未开始 406 项，不做 11 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -302,8 +302,8 @@
 |---|---|---|---|---|---|---|---|
 | F216 | 基线：锚点法、自动基线（ALS、多项式等） | Peak Analyzer | P1 | 未开始 | 复用拟合引擎 | 与 Origin Peak Analyzer 结果比较 | — |
 | F217 | 扣除基线 | Peak Analyzer | P1 | 未开始 | 复用拟合引擎 | 与 Origin Peak Analyzer 结果比较 | — |
-| F218 | 寻峰（局部极值、导数法、阈值） | Peak Analyzer | P1 | 未开始 | 复用拟合引擎 | 与 Origin Peak Analyzer 结果比较 | — |
-| F219 | 峰积分（面积、半峰宽、质心） | Peak Analyzer | P1 | 未开始 | 复用拟合引擎 | 与 Origin Peak Analyzer 结果比较 | — |
+| F218 | 寻峰（局部极值、导数法、阈值） | Peak Analyzer | P1 | 部分实现 | 分析 → 信号处理 → 寻峰：局部极大值（平顶取中点）+ 最小突出度阈值（占 Y 范围百分比），算法同 scipy.signal.find_peaks；导数法待做 | 单元测试与 SciPy 1.17.1 find_peaks / peak_prominences 逐值一致（含平顶峰） | — |
+| F219 | 峰积分（面积、半峰宽、质心） | Peak Analyzer | P1 | 已实现待验收 | 峰表给出峰高、突出度、半峰宽（半突出度处，同 peak_widths）、线性基线以上的面积与质心；积分区间到相邻峰之间的最低点 | 单元测试与 SciPy peak_widths、numpy.trapezoid 一致；高斯峰面积与 A·s·√π 吻合 | — |
 | F220 | 多峰拟合（重叠峰分峰） | Peak Analyzer | P1 | 未开始 | 复用拟合引擎 | 与 Origin Peak Analyzer 结果比较 | — |
 
 ## 图像处理

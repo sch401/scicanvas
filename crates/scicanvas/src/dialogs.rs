@@ -46,6 +46,10 @@ pub enum Dialog {
     },
     /// 非线性拟合结果。
     NlFitReport(Vec<NlFitReport>),
+    /// 寻峰：最小突出度（占 Y 范围的百分比）。
+    Peaks {
+        percent: f64,
+    },
     /// FFT：窗函数。
     Fft {
         window: FftWindow,
@@ -98,6 +102,8 @@ pub enum Action {
     TTest(TTestKind, f64),
     Frequency(Option<usize>, Option<(f64, f64)>),
     Fft(FftWindow),
+    /// 最小突出度（占 Y 范围的比例）。
+    Peaks(f64),
     NlFit(Model, Vec<Option<f64>>),
     /// 运算符，以及常数（为空时用列 B）。
     ColumnMath(ColumnOp, Option<f64>),
@@ -583,6 +589,28 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                         action = Action::Close;
                     }
                 });
+            });
+        }
+        Dialog::Peaks { percent } => {
+            window("寻峰与峰积分").show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("最小突出度");
+                    ui.add(egui::DragValue::new(percent).range(0.1..=100.0).speed(0.2).suffix(" %"));
+                    ui.label(RichText::new("（占 Y 范围）").color(pal.weak));
+                });
+                ui.label(
+                    RichText::new(
+                        "对当前图形的数据曲线，或工作簿里选中的 Y 列寻峰（算法同 SciPy find_peaks）。\n突出度是峰顶比两侧较高的那个谷底高出多少，调大可以滤掉噪声小峰。\n每条曲线生成一个峰表：峰位、峰高、突出度、半峰宽（半突出度处）、面积和质心；\n面积在两侧到相邻峰之间的最低点内、扣除两端连线（线性基线）后积分。",
+                    )
+                    .small()
+                    .color(pal.weak),
+                );
+                let (ok, cancel) = buttons(ui, "寻峰");
+                if ok {
+                    action = Action::Peaks(*percent / 100.0);
+                } else if cancel {
+                    action = Action::Close;
+                }
             });
         }
         Dialog::Fft { window: w } => {

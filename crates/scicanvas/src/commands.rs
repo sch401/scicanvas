@@ -896,6 +896,16 @@ fn build() -> Vec<Command> {
             |a| a.open_smooth_dialog(),
         ),
         c(
+            "signal.peaks",
+            "寻峰",
+            "integ",
+            "",
+            "分析",
+            "peak find peaks prominence fwhm width area integrate centroid 寻峰 峰 突出度 半峰宽 峰面积 积分 质心",
+            need_data,
+            |a| a.open_peaks_dialog(),
+        ),
+        c(
             "signal.fft",
             "FFT",
             "diff",

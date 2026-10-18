@@ -133,7 +133,7 @@ pub static TABS: &[Tab] = &[
             },
             Group {
                 label: "信号处理",
-                items: &[Big("signal.fft")],
+                items: &[Big("signal.peaks"), Big("signal.fft")],
             },
         ],
     },

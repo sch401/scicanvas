@@ -802,6 +802,86 @@ impl Project {
         Ok(made)
     }
 
+    /// 寻峰与峰积分：每条曲线生成一个峰表工作簿（峰位、峰高、突出度、半峰宽、面积、质心、积分起止 X），
+    /// 放在源工作簿所在的文件夹。`min_prominence` 是相对 Y 范围的比例（0.05 即 5%）。
+    /// X 需要单调；递减的 X（如红外光谱的波数）会先反转。返回新工作簿编号。
+    pub fn find_peaks(&mut self, src: &Source, min_prominence: f64) -> Result<Vec<u64>, String> {
+        let r = self.resolve(src)?;
+        let folder = self.folder_of(r.book_id);
+        let mut made = vec![];
+        let mut problems = vec![];
+        for item in &r.items {
+            let book = self.book(r.book_id).unwrap();
+            let name = name_of(book, &item.y);
+            let (mut xs, mut ys, _) = get_xy(book, item);
+            let unit = |k: Option<&str>| {
+                k.and_then(|k| book.column(k))
+                    .map(|c| c.units.clone())
+                    .unwrap_or_default()
+            };
+            let (x_units, y_units) = (unit(item.x.as_deref()), unit(Some(&item.y)));
+            if xs.len() < 3 {
+                problems.push(format!("{name}：数据点太少"));
+                continue;
+            }
+            if xs.windows(2).all(|w| w[1] < w[0]) {
+                xs.reverse();
+                ys.reverse();
+            } else if !xs.windows(2).all(|w| w[1] > w[0]) {
+                problems.push(format!("{name}：X 需要单调递增或递减"));
+                continue;
+            }
+            let (lo, hi) = ys
+                .iter()
+                .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), y| (a.min(*y), b.max(*y)));
+            let threshold = min_prominence * (hi - lo);
+            let peaks = crate::peaks::find_peaks(&xs, &ys, threshold);
+            if peaks.is_empty() {
+                problems.push(format!("{name}：没有突出度达到 {} 的峰", fmt_num(threshold)));
+                continue;
+            }
+            let area_units = match (x_units.as_str(), y_units.as_str()) {
+                ("", "") => String::new(),
+                ("", u) | (u, "") => u.to_string(),
+                (a, b) => format!("{b}·{a}"),
+            };
+            let id = self.alloc_id();
+            let mut nb = Book::new(id, self.unique_name(&format!("{name} 峰")));
+            let note = format!(
+                "{} 的峰，最小突出度 {}（Y 范围的 {}%）",
+                name,
+                fmt_num(threshold),
+                round_sig(min_prominence * 100.0, 4)
+            );
+            type Getter = fn(&crate::peaks::Peak, &[f64]) -> f64;
+            let columns: [(Role, &str, &str, Getter); 8] = [
+                (Role::X, "峰位", &x_units, |p, _| p.x),
+                (Role::Y, "峰高", &y_units, |p, _| p.height),
+                (Role::Y, "突出度", &y_units, |p, _| p.prominence),
+                (Role::Y, "半峰宽", &x_units, |p, _| p.fwhm),
+                (Role::Y, "面积", &area_units, |p, _| p.area),
+                (Role::Y, "质心", &x_units, |p, _| p.centroid),
+                (Role::Y, "积分起点", &x_units, |p, xs| xs[p.start]),
+                (Role::Y, "积分终点", &x_units, |p, xs| xs[p.end]),
+            ];
+            for (role, long_name, units, get) in columns {
+                let k = nb.push_column(role);
+                let c = nb.columns.iter_mut().find(|c| c.key == k).unwrap();
+                c.long_name = long_name.into();
+                c.units = units.into();
+                c.comment = note.clone();
+                c.data = peaks.iter().map(|p| fmt_num(get(p, &xs))).collect();
+            }
+            self.books.push(nb);
+            self.move_project_item(id, folder)?;
+            made.push(id);
+        }
+        if made.is_empty() {
+            return Err(problems.join("；"));
+        }
+        Ok(made)
+    }
+
     /// 列运算：A op B，结果写成新列放在 A 右边。B 与 A 对应同一 X 列时逐行计算；
     /// 对应不同 X 列时（如原始曲线减拟合曲线）先把 B 线性插值到 A 的 X 上，超出 B 的 X 范围处留空。
     /// 结果不是有限数（除以 0、缺失值）的单元格留空。
@@ -1155,6 +1235,47 @@ mod tests {
             .fft(&book_src(&["B"]), crate::fft::Window::Hann)
             .unwrap_err()
             .contains("不等间距"));
+    }
+
+    #[test]
+    fn find_peaks_builds_a_peak_table_per_curve() {
+        let mut p = Project::sample();
+        // 两个高斯峰（X 递减，如波数），在 X = 30 和 X = 70
+        let book = p.book_mut(1).unwrap();
+        book.columns[0].units = "cm⁻¹".into();
+        book.columns[0].data = (0..101).map(|i| fmt_num(100.0 - i as f64)).collect();
+        let g = |x: f64| 2.0 * (-((x - 30.0) / 4.0).powi(2)).exp() + (-((x - 70.0) / 6.0).powi(2)).exp();
+        book.columns[1].data = (0..101).map(|i| fmt_num(g(100.0 - i as f64))).collect();
+        let made = p.find_peaks(&book_src(&["B"]), 0.05).unwrap();
+        let out = p.book(made[0]).unwrap();
+        let names: Vec<_> = out.columns.iter().map(|c| c.long_name.as_str()).collect();
+        assert_eq!(
+            names,
+            [
+                "峰位",
+                "峰高",
+                "突出度",
+                "半峰宽",
+                "面积",
+                "质心",
+                "积分起点",
+                "积分终点"
+            ]
+        );
+        assert_eq!(out.columns[0].values(), [30.0, 70.0]);
+        assert_eq!(out.columns[4].units, "mV·cm⁻¹");
+        // 高斯峰 A·exp(−((x−c)/s)²) 的半峰宽为 2s·√ln2、面积为 A·s·√π
+        let fwhm = out.columns[3].values();
+        assert!((fwhm[0] - 8.0 * 2f64.ln().sqrt()).abs() < 0.05, "{fwhm:?}");
+        let area = out.columns[4].values();
+        assert!((area[0] - 8.0 * std::f64::consts::PI.sqrt()).abs() < 0.05, "{area:?}");
+        assert!((area[1] - 6.0 * std::f64::consts::PI.sqrt()).abs() < 0.05, "{area:?}");
+        // 阈值过高时只留主峰；没有峰时给出提示
+        let made = p.find_peaks(&book_src(&["B"]), 0.6).unwrap();
+        assert_eq!(p.book(made[0]).unwrap().columns[0].values(), [30.0]);
+        assert!(p.find_peaks(&book_src(&["B"]), 1.5).unwrap_err().contains("没有"));
+        p.book_mut(1).unwrap().columns[0].data[5] = "200".into();
+        assert!(p.find_peaks(&book_src(&["B"]), 0.05).unwrap_err().contains("单调"));
     }
 
     #[test]
