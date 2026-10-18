@@ -2743,13 +2743,16 @@ mod history_tests {
 
     #[test]
     fn explorer_new_table_and_graph_buttons_use_folder_and_history() {
-        for (label, command) in [("新建表", "book.new"), ("新建图", "graph.new")] {
+        for (label, command) in [("数据表", "book.new"), ("图形", "graph.new")] {
             let mut app = app();
             let folder = app.project.add_folder(None).unwrap();
             app.explorer_target = Some(folder);
             let before = app.project.clone();
             let mut ui = ExplorerUi::new();
             let pos = ui.at(&mut app, label);
+            // 新建命令合并在“＋ 新建”菜单里：先打开菜单再点菜单项
+            let pos = ui.at(&mut app, "＋ 新建");
+            ui.click(&mut app, pos);
             ui.click(&mut app, pos);
             let id = app.active.unwrap();
             assert_eq!(app.project.folder_of(id), Some(folder));
@@ -3086,32 +3089,35 @@ mod history_tests {
                 },
             )
         };
-        frame(&mut app, vec![]);
-        let output = frame(&mut app, vec![]);
-        let at = output
-            .shapes
-            .iter()
-            .find_map(|s| match &s.shape {
-                egui::Shape::Text(t) if t.galley.job.text == "新建文件夹" => {
-                    Some(t.pos + t.galley.rect.center().to_vec2())
-                }
-                _ => None,
-            })
-            .unwrap();
         let before = app.project.clone();
-        for pressed in [true, false] {
-            frame(
-                &mut app,
-                vec![
-                    egui::Event::PointerMoved(at),
-                    egui::Event::PointerButton {
-                        pos: at,
-                        button: egui::PointerButton::Primary,
-                        pressed,
-                        modifiers: egui::Modifiers::NONE,
-                    },
-                ],
-            );
+        // “＋ 新建”菜单 → “文件夹”
+        for label in ["＋ 新建", "文件夹"] {
+            frame(&mut app, vec![]);
+            let output = frame(&mut app, vec![]);
+            let at = output
+                .shapes
+                .iter()
+                .find_map(|s| match &s.shape {
+                    egui::Shape::Text(t) if t.galley.job.text == label => {
+                        Some(t.pos + t.galley.rect.center().to_vec2())
+                    }
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("missing {label}"));
+            for pressed in [true, false] {
+                frame(
+                    &mut app,
+                    vec![
+                        egui::Event::PointerMoved(at),
+                        egui::Event::PointerButton {
+                            pos: at,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                );
+            }
         }
         assert_eq!(app.project.folders.len(), 1);
         roundtrip(&mut app, &before);

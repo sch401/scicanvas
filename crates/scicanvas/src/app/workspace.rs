@@ -577,7 +577,10 @@ impl SciApp {
                 egui::Id::new(("project-folder", id)),
                 true,
             )
-            .show_header(ui, |ui| self.explorer_label(ui, id, RichText::new(name)))
+            .show_header(ui, |ui| {
+                ui.add(crate::icons::icon("open", self.pal.dark).fit_to_exact_size(egui::vec2(16.0, 16.0)));
+                self.explorer_label(ui, id, RichText::new(name))
+            })
             .body(|ui| self.explorer_folder(ui, Some(id), visible));
             if arrow.clicked() {
                 self.explorer_click = None;
@@ -630,54 +633,51 @@ impl SciApp {
             self.explorer_focus = ui.max_rect().contains(pos) && ui.ctx().layer_id_at(pos) == Some(ui.layer_id());
         }
         ui.add_space(4.0);
+        // 标题一行；“新建”和“排序”两个小菜单放在下一行，窄侧栏里也不会挤压标题
+        let dark = self.pal.dark;
+        let mut command = None;
         ui.horizontal(|ui| {
             ui.label(RichText::new("项目管理器").strong());
             if self.explorer_selection.len() > 1 {
-                ui.weak(format!("{} 项", self.explorer_selection.len()));
+                ui.weak(format!("已选 {} 项", self.explorer_selection.len()));
             }
         });
         ui.horizontal(|ui| {
-            let root = ui.button("项目根目录");
-            if root.clicked() {
-                self.finish_explorer_rename(false);
-                self.explorer_target = None;
-                self.explorer_selection.clear();
-                self.explorer_anchor = None;
-                self.project_name.clear();
-                self.explorer_click = None;
-            }
-            self.explorer_drop(ui, &root, None);
-            if ui.button("新建文件夹").clicked() {
-                self.run_command("project.folder.new");
-            }
+            ui.menu_button(RichText::new("＋ 新建").strong(), |ui| {
+                ui.set_min_width(150.0);
+                for (id, icon, label) in [
+                    ("book.new", "book", "数据表"),
+                    ("graph.new", "graph", "图形"),
+                    ("note.new", "note", "Note 笔记"),
+                    ("project.folder.new", "open", "文件夹"),
+                ] {
+                    if id == "project.folder.new" {
+                        ui.separator();
+                    }
+                    let keys = crate::commands::find(id).map_or("", |c| c.keys);
+                    let item = egui::Button::image_and_text(
+                        crate::icons::icon(icon, dark).fit_to_exact_size(egui::vec2(16.0, 16.0)),
+                        label,
+                    )
+                    .shortcut_text(keys);
+                    if ui.add(item).clicked() {
+                        command = Some(id);
+                        ui.close_menu();
+                    }
+                }
+            });
+            ui.menu_button("排序", |ui| {
+                for (sort, label) in [(ExplorerSort::Type, "按类型"), (ExplorerSort::Name, "按名称")] {
+                    if ui.radio(self.explorer_sort == sort, label).clicked() {
+                        self.explorer_sort = sort;
+                        ui.close_menu();
+                    }
+                }
+            });
         });
-        ui.horizontal_wrapped(|ui| {
-            if ui.button("新建表").clicked() {
-                self.run_command("book.new");
-            }
-            if ui
-                .button("新建图")
-                .on_hover_text("新建空白图形，随后在绘图属性中选择数据")
-                .clicked()
-            {
-                self.run_command("graph.new");
-            }
-            if ui.button("新建 Note").clicked() {
-                self.run_command("note.new");
-            }
-        });
-        ui.horizontal(|ui| {
-            egui::ComboBox::from_id_salt("explorer-sort")
-                .selected_text(if self.explorer_sort == ExplorerSort::Type {
-                    "按类型排序"
-                } else {
-                    "按名称排序"
-                })
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut self.explorer_sort, ExplorerSort::Type, "按类型排序");
-                    ui.selectable_value(&mut self.explorer_sort, ExplorerSort::Name, "按名称排序");
-                });
-        });
+        if let Some(id) = command {
+            self.run_command(id);
+        }
         // 面板先于子窗口绘制：只在项目管理器有焦点时处理 F2，并消费按键，避免工作表同时开始编辑单元格。
         if self.explorer_rename.is_none() && self.explorer_focus && !ui.ctx().wants_keyboard_input() {
             if let Some(id) = self.project_target() {
@@ -688,9 +688,29 @@ impl SciApp {
         }
         ui.separator();
         let mut visible = Vec::new();
-        egui::ScrollArea::vertical()
-            .auto_shrink([false, false])
-            .show(ui, |ui| self.explorer_folder(ui, None, &mut visible));
+        egui::ScrollArea::vertical().auto_shrink([false, false]).show(ui, |ui| {
+            let root = ui
+                .horizontal(|ui| {
+                    ui.add(crate::icons::icon("explorer", dark).fit_to_exact_size(egui::vec2(16.0, 16.0)));
+                    ui.add(
+                        egui::Button::new(RichText::new("项目根目录").strong())
+                            .frame(false)
+                            .selected(self.explorer_target.is_none()),
+                    )
+                })
+                .inner
+                .on_hover_text("单击回到项目根目录；把对象拖到这里可移出文件夹");
+            if root.clicked() {
+                self.finish_explorer_rename(false);
+                self.explorer_target = None;
+                self.explorer_selection.clear();
+                self.explorer_anchor = None;
+                self.project_name.clear();
+                self.explorer_click = None;
+            }
+            self.explorer_drop(ui, &root, None);
+            ui.indent("project-root", |ui| self.explorer_folder(ui, None, &mut visible));
+        });
         self.explorer_visible = visible;
     }
 
