@@ -2318,9 +2318,9 @@
   "feature": "相关（自相关、互相关）",
   "ref": "Correlation",
   "pri": "P1",
-  "status": "未开始",
-  "how": "rustfft",
-  "verify": "与 Origin 及 SciPy.signal 结果比较",
+  "status": "已实现待验收",
+  "how": "分析 → 信号处理 → 相关函数：选一列求自相关、两列求互相关（归一化，滞后以点计），结果表与线图",
+  "verify": "与 numpy.correlate 归一化结果一致（1e-12）",
   "id": "F207",
   "milestone": "M2 论文全流程"
  },

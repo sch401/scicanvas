@@ -728,6 +728,46 @@ impl Project {
         Ok(made)
     }
 
+    /// 自相关 / 互相关：选一列时求自相关，两列时求第二列相对第一列的互相关（滞后以数据点计）。
+    /// 结果放进新工作簿（滞后、相关系数）并画成线图。返回 (工作簿, 图形) 编号。
+    pub fn correlation_function(&mut self, book_id: u64, keys: &[String]) -> Result<(u64, u64), String> {
+        let book = self.book(book_id).ok_or("找不到工作簿")?;
+        let (a, b) = match keys {
+            [a] => (a, a),
+            [a, b] => (a, b),
+            _ => return Err("请选中一列（自相关）或两列（互相关）".into()),
+        };
+        let col = |k: &str| book.column(k).ok_or_else(|| format!("找不到列 {k}"));
+        let (ca, cb) = (col(a)?, col(b)?);
+        let (va, vb) = (ca.values(), cb.values());
+        let (lags, r) = crate::stats::cross_correlation(&va, &vb)?;
+        let auto = a == b;
+        let title = if auto {
+            format!("{} 自相关", ca.display_name())
+        } else {
+            format!("{} 与 {} 互相关", ca.display_name(), cb.display_name())
+        };
+        let folder = self.folder_of(book_id);
+        let id = self.alloc_id();
+        let mut nb = Book::new(id, self.unique_name(&title));
+        let mut ykey = String::new();
+        for (role, name, values) in [
+            (Role::X, "滞后", lags.iter().map(|&k| k as f64).collect::<Vec<_>>()),
+            (Role::Y, "相关系数", r),
+        ] {
+            let k = nb.push_column(role);
+            let c = nb.columns.iter_mut().find(|c| c.key == k).unwrap();
+            c.long_name = name.into();
+            c.comment = format!("{title}，{} 点，归一化", va.len());
+            c.data = values.iter().map(|v| fmt_num(*v)).collect();
+            ykey = k;
+        }
+        self.books.push(nb);
+        self.move_project_item(id, folder)?;
+        let (gid, _) = self.plot_from_selection(id, &[ykey], PlotType::Line)?;
+        Ok((id, gid))
+    }
+
     /// 数值微分，结果写成新列 d(Y)/dX。
     pub fn differentiate(&mut self, src: &Source) -> Result<Vec<String>, String> {
         let (_, made) = self.per_item_column(src, |book, item, xs, ys| {
@@ -1657,6 +1697,23 @@ mod tests {
         assert_eq!(col(2).data[1], fmt_num(0.5));
         assert_eq!(col(3).data, ["3", "2", "0"]);
         assert!(p.row_stats(1, &keys[..1]).is_err());
+    }
+
+    #[test]
+    fn correlation_function_builds_a_lag_table_and_graph() {
+        let mut p = Project::sample();
+        let keys: Vec<String> = vec!["B".into(), "C".into()];
+        let (bid, gid) = p.correlation_function(1, &keys).unwrap();
+        let out = p.book(bid).unwrap();
+        let n = p.book(1).unwrap().column("B").unwrap().values().len() as f64;
+        let lags = out.columns[0].values();
+        assert_eq!((lags[0], *lags.last().unwrap()), (1.0 - n, n - 1.0));
+        assert!(out.name.contains("互相关"));
+        assert_eq!(p.graph(gid).unwrap().first_layer().y_keys, [out.columns[1].key.clone()]);
+        let (bid, _) = p.correlation_function(1, &keys[..1]).unwrap();
+        let r = p.book(bid).unwrap().columns[1].values();
+        assert_eq!(r[r.len() / 2], 1.0, "autocorrelation peaks at lag 0");
+        assert!(p.correlation_function(1, &[]).is_err());
     }
 
     #[test]

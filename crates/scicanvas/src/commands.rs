@@ -926,6 +926,17 @@ fn build() -> Vec<Command> {
             |a| a.open_peaks_dialog(),
         ),
         c(
+            "signal.correlate",
+            "相关函数",
+            "diff",
+            "",
+            "分析",
+            "autocorrelation cross correlation lag 自相关 互相关 相关函数 滞后",
+            need_book,
+            |a| a.correlation_function(),
+        )
+        .modifies(),
+        c(
             "signal.filter",
             "FFT 滤波",
             "smooth",

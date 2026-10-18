@@ -872,6 +872,44 @@ pub fn grubbs(values: &[f64], alpha: f64) -> Result<Grubbs, String> {
     })
 }
 
+/// 归一化互相关 r(k) = Σ (x_i − x̄)(y_{i+k} − ȳ) / √(Σ(x − x̄)² Σ(y − ȳ)²)，
+/// 滞后 k 从 −(n−1) 到 n−1（与 `numpy.correlate(y − ȳ, x − x̄, "full")` 归一化后相同）。
+/// x 与 y 相同时即自相关。返回 (滞后, 相关系数)。
+pub fn cross_correlation(x: &[f64], y: &[f64]) -> Result<(Vec<i64>, Vec<f64>), String> {
+    if x.len() != y.len() {
+        return Err("两列的数据点数不同".into());
+    }
+    if x.iter().chain(y).any(|v| !v.is_finite()) {
+        return Err("数据中有缺失值或非数值，请先补齐".into());
+    }
+    let n = x.len();
+    if n < 2 {
+        return Err("至少需要 2 个数据点".into());
+    }
+    let center = |v: &[f64]| {
+        let m = v.iter().sum::<f64>() / n as f64;
+        v.iter().map(|a| a - m).collect::<Vec<f64>>()
+    };
+    let (a, b) = (center(x), center(y));
+    let norm = (a.iter().map(|v| v * v).sum::<f64>() * b.iter().map(|v| v * v).sum::<f64>()).sqrt();
+    if norm == 0.0 {
+        return Err("数值全部相同，相关函数没有定义".into());
+    }
+    let n = n as i64;
+    let lags: Vec<i64> = (-(n - 1)..n).collect();
+    let r = lags
+        .iter()
+        .map(|&k| {
+            (0..n)
+                .filter(|i| (0..n).contains(&(i + k)))
+                .map(|i| a[i as usize] * b[(i + k) as usize])
+                .sum::<f64>()
+                / norm
+        })
+        .collect();
+    Ok((lags, r))
+}
+
 /// 多元线性回归 y = b0 + b1·x1 + … + bk·xk 的结果。系数顺序为截距在前。
 #[derive(Clone, Debug, PartialEq)]
 pub struct Regression {
@@ -1280,6 +1318,33 @@ mod tests {
         near(r.critical, 2.708245645805754);
         near(r.p, 0.9544522095301384);
         assert!(grubbs(&[1.0, 1.0, 1.0], 0.05).is_err());
+    }
+
+    #[test]
+    fn cross_and_auto_correlation_match_numpy() {
+        let near = |got: f64, want: f64| assert!((got - want).abs() <= 1e-12, "{got} vs {want}");
+        let x = [1.0, 3.0, 2.0, 5.0, 4.0, 6.0, 5.5, 7.0];
+        let y = [0.5, 1.0, 2.5, 2.0, 4.5, 4.0, 6.0, 5.0];
+        let (lags, r) = cross_correlation(&x, &y).unwrap();
+        assert_eq!((lags[0], *lags.last().unwrap(), r.len()), (-7, 7, 15));
+        // numpy.correlate(y − ȳ, x − x̄, "full") / √(Σx'² Σy'²)
+        for (k, want) in [
+            (-7, -0.2634433505602296),
+            (-2, 0.2121161447921642),
+            (0, 0.7569741752531662),
+            (1, 0.6544559101514335),
+            (7, -0.20136057647471814),
+        ] {
+            near(r[(k + 7) as usize], want);
+        }
+        let (_, a) = cross_correlation(&x, &x).unwrap();
+        near(a[7], 1.0);
+        near(a[8], 0.3398070907194995);
+        near(a[10], -0.19330031282586027);
+        near(a[6], a[8]);
+        assert!(cross_correlation(&x, &y[..7]).is_err());
+        assert!(cross_correlation(&[1.0, f64::NAN], &[1.0, 2.0]).is_err());
+        assert!(cross_correlation(&[1.0, 1.0], &[1.0, 2.0]).is_err());
     }
 
     #[test]

@@ -144,6 +144,7 @@ pub static TABS: &[Tab] = &[
                     Big("signal.peaks"),
                     Big("signal.fft"),
                     Big("signal.filter"),
+                    Big("signal.correlate"),
                 ],
             },
         ],

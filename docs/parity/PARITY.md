@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 98 项，P1 146 项，P2 259 项，不做 11 项。
-状态：已完成 27 项，已实现待验收 47 项，部分实现 33 项，未开始 396 项，不做 11 项。
+状态：已完成 27 项，已实现待验收 48 项，部分实现 33 项，未开始 395 项，不做 11 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -286,7 +286,7 @@
 | F204 | 傅里叶变换 FFT / IFFT（幅值、相位、功率谱、窗函数） | Fast Fourier Transform (FFT) | P0 | 部分实现 | 分析 → FFT：自写基 2 与 Bluestein（任意点数），矩形 / Hann / Hamming 窗，单边幅值（正弦振幅归一、相干增益补偿）、相位、功率谱表与幅值谱图；IFFT 待做 | 与 numpy.fft.rfft 的实部 / 虚部（基 2 与 Bluestein 两种长度）及 numpy 窗函数结果一致（1e-9）；IFFT 与 Origin 对照待做 | — |
 | F205 | 短时傅里叶变换 STFT | Short-Time Fourier Transform (Pro Only) | P2 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 | — |
 | F206 | 卷积 / 反卷积 | Convolution | P1 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 | — |
-| F207 | 相关（自相关、互相关） | Correlation | P1 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 | — |
+| F207 | 相关（自相关、互相关） | Correlation | P1 | 已实现待验收 | 分析 → 信号处理 → 相关函数：选一列求自相关、两列求互相关（归一化，滞后以点计），结果表与线图 | 与 numpy.correlate 归一化结果一致（1e-12） | — |
 | F208 | 相干性 | Coherence (Pro Only) | P2 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 | — |
 | F209 | 希尔伯特变换、包络 | Hilbert Transform (Pro Only) | P2 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 | — |
 | F210 | 二维 FFT 与二维 FFT 滤波 | 2D Fourier Transform (Pro Only) | P2 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 | — |

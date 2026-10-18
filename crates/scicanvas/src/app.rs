@@ -1541,6 +1541,19 @@ impl SciApp {
         }
     }
 
+    /// 自相关（选一列）或互相关（选两列）。
+    pub(crate) fn correlation_function(&mut self) {
+        let Some((id, keys)) = self.ttest_columns() else { return };
+        match self.project.correlation_function(id, &keys) {
+            Ok((bid, gid)) => {
+                let name = self.project.name_of(bid).unwrap_or_default().to_owned();
+                self.show_item(gid);
+                self.status = format!("相关函数结果在 {name}，已画成图");
+            }
+            Err(e) => self.status = e,
+        }
+    }
+
     /// 对点选的各列逐行统计（平行样的均值、标准差等）。
     pub(crate) fn row_stats(&mut self) {
         let Some((id, keys)) = self.ttest_columns() else { return };
