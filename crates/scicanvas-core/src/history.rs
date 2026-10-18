@@ -135,6 +135,11 @@ impl Snapshot {
 /// 估算快照拥有的堆内存；BTreeMap 按每项 128 字节保守计入节点开销。
 fn estimated_bytes(p: &Project) -> usize {
     let mut bytes = p.books.capacity() * size_of::<Book>() + p.graphs.capacity() * size_of::<Graph>();
+    bytes += p.notes.capacity() * size_of::<crate::Note>()
+        + p.notes
+            .iter()
+            .map(|n| n.name.capacity() + n.text.capacity())
+            .sum::<usize>();
     bytes += p.folders.capacity() * size_of::<crate::project_tree::Folder>()
         + p.folders
             .iter()

@@ -16,7 +16,7 @@
   "ref": "Project Explorer",
   "pri": "P0",
   "status": "已完成",
-  "how": "真实多级目录；拖放/菜单移动、慢速双击/F2 就地重命名、删除保留内容、显示/隐藏窗口；快捷键按焦点分流",
+  "how": "真实多级目录；拖放/菜单移动、慢速双击/F2 就地重命名、删除保留内容、显示/隐藏窗口；快捷键按焦点分流；Ctrl 多选、Shift 连续选择、Ctrl+Shift 追加范围；按名称/类型排序，跳过折叠内容",
   "verify": "项目树、移动/重命名历史、F2 与工作表键盘隔离回归已通过",
   "id": "F002",
   "milestone": "M1 日常够用"
@@ -27,7 +27,7 @@
   "ref": "Using Project Explorer to Manage Child Windows",
   "pri": "P1",
   "status": "已实现待验收",
-  "how": "真实多级目录；工作簿、图形与文件夹拖入目录/拖回根目录，目标高亮；名称慢速双击或 F2 就地编辑；菜单移动保留，均复用撤销事务",
+  "how": "真实多级目录；工作簿、图形与文件夹拖入目录/拖回根目录，目标高亮；名称慢速双击或 F2 就地编辑；菜单移动保留，均复用撤销事务；多选批量移动保留内部层级，整批失败回滚；Note 同样支持目录和移动",
   "verify": "真实 egui 鼠标拖放、根目录移动、自身/下级拒绝、同目录无操作、慢/快速点击、Enter/Esc/失焦与撤销重做回归通过；Windows 手工交互验收待做",
   "id": "F003",
   "milestone": "M2 论文全流程"
@@ -49,7 +49,7 @@
   "ref": "Opening, Closing and Backing Up the Origin Project File",
   "pri": "P0",
   "status": "已完成",
-  "how": "v9 类型化列；.scv ZIP / .scproj JSON 共用迁移入口，兼容 v0–v8；保存前校验、原子替换；原始数值写法保留",
+  "how": "v10 项目：类型化数据列与 Note 文本；兼容 v0–v9，JSON/SCV 共用校验和原子保存，保留原始数值写法及 notes/*.txt 预览",
   "verify": "旧版迁移与损坏输入、JSON/SCV 往返、14 份旧示例 CSV/SVG 字节一致及原有原子保存回归通过",
   "id": "F005",
   "milestone": "M1 日常够用"
@@ -114,9 +114,9 @@
   "feature": "Notes 文本窗口 / Markdown 报告",
   "ref": "Notes Window",
   "pri": "P2",
-  "status": "未开始",
-  "how": "egui_commonmark",
-  "verify": "手动操作",
+  "status": "部分实现",
+  "how": "Note 独立文本窗口，编辑、重命名、移动、删除、撤销重做、UTF-8 导出与 v10 项目保存已接入；拟合/非线性拟合/t 检验/方差分析/相关系数/通用结果表可保存报告快照；Markdown 渲染和富文本待做",
+  "verify": "文本编辑及撤销、拟合报告真实按钮、目录与 ID、JSON/SCV 往返、旧版迁移与文本预览回归；Windows 人工验收待做",
   "id": "F011",
   "milestone": "M3 高级功能"
  },

@@ -1,6 +1,7 @@
 //! 应用状态与界面调度、图形属性和分析操作。
 //! 项目管理与子窗口位于 workspace，工作表显示与编辑位于 worksheet。
 
+mod notes;
 mod worksheet;
 mod workspace;
 
@@ -52,6 +53,9 @@ pub struct SciApp {
     pub(crate) active: Option<u64>,
     pub(crate) explorer_target: Option<u64>,
     explorer_selection: Vec<u64>,
+    explorer_anchor: Option<u64>,
+    explorer_visible: Vec<u64>,
+    explorer_sort: workspace::ExplorerSort,
     pub(crate) folder_destination: Option<u64>,
     pub(crate) project_name: String,
     explorer_click: Option<(u64, f64)>,
@@ -142,6 +146,9 @@ impl SciApp {
             active: None,
             explorer_target: None,
             explorer_selection: Vec::new(),
+            explorer_anchor: None,
+            explorer_visible: Vec::new(),
+            explorer_sort: workspace::ExplorerSort::default(),
             folder_destination: None,
             project_name: String::new(),
             explorer_click: None,
@@ -189,14 +196,20 @@ impl SciApp {
         for g in &project.graphs {
             self.open.insert(g.id, true);
         }
+        for note in &project.notes {
+            self.open.insert(note.id, true);
+        }
         self.active = project
             .graphs
             .last()
             .map(|g| g.id)
-            .or(project.books.last().map(|b| b.id));
+            .or(project.books.last().map(|b| b.id))
+            .or(project.notes.last().map(|n| n.id));
         self.project = project;
         self.explorer_target = self.active;
         self.explorer_selection = self.active.into_iter().collect();
+        self.explorer_anchor = self.active;
+        self.explorer_visible.clear();
         self.folder_destination = None;
         self.project_name.clear();
         self.explorer_click = None;
@@ -767,6 +780,7 @@ impl SciApp {
     pub(crate) fn doc_title(&self) -> String {
         match self.active.and_then(|id| self.project.name_of(id).map(|n| (id, n))) {
             Some((id, n)) if self.project.book(id).is_some() => format!("{} · 工作簿", n),
+            Some((id, n)) if self.project.note(id).is_some() => format!("{} · Note", n),
             Some((_, n)) => format!("{} · 图形", n),
             None => "未选中窗口".to_string(),
         }
@@ -1500,6 +1514,14 @@ impl SciApp {
     fn dialogs(&mut self, ctx: &egui::Context) {
         let Some(d) = self.dialog.as_mut() else { return };
         match dialogs::show(ctx, d, &self.pal) {
+            dialogs::Action::SaveNote(title, text) => {
+                self.finish_edit();
+                self.begin_edit("保存结果为 Note");
+                self.save_note(&title, text);
+                self.history.changed();
+                self.finish_edit();
+                self.dialog = None;
+            }
             dialogs::Action::None => {}
             dialogs::Action::Close => self.dialog = None,
             dialogs::Action::ColumnProps(edit) => {
@@ -2686,6 +2708,116 @@ mod history_tests {
         assert_ne!(app.project, before);
         app.run_command("edit.undo");
         assert_eq!(app.project, before);
+    }
+
+    #[test]
+    fn explorer_shift_ranges_follow_sort_order_and_skip_collapsed_contents() {
+        let mut app = app();
+        let note = app.project.add_note("M-Note", "结果".into());
+        app.project.rename_project_item(1, "Z-Table").unwrap();
+        app.project.rename_project_item(2, "A-Graph").unwrap();
+        let mut ui = ExplorerUi::new();
+        let table_pos = ui.at(&mut app, "Z-Table");
+        ui.click(&mut app, table_pos);
+        assert_eq!(app.explorer_visible, vec![1, 2, note]);
+        ui.modifiers.shift = true;
+        let note_pos = ui.at(&mut app, "M-Note1");
+        ui.click(&mut app, note_pos);
+        assert_eq!(app.explorer_selection, vec![1, 2, note]);
+        let graph_pos = ui.at(&mut app, "A-Graph");
+        ui.click(&mut app, graph_pos);
+        assert_eq!(app.explorer_selection, vec![1, 2]);
+        ui.modifiers.ctrl = true;
+        ui.click(&mut app, note_pos);
+        assert_eq!(app.explorer_selection, vec![1, 2, note]);
+        assert!(app.explorer_rename.is_none());
+        ui.modifiers = egui::Modifiers::NONE;
+        app.explorer_sort = workspace::ExplorerSort::Name;
+        ui.frame(&mut app, vec![]);
+        assert_eq!(app.explorer_visible, vec![2, note, 1]);
+        let folder = app.project.add_folder(None).unwrap();
+        app.project.move_project_item(1, Some(folder)).unwrap();
+        let mut collapsed = egui::collapsing_header::CollapsingState::load_with_default_open(
+            &ui.ctx,
+            egui::Id::new(("project-folder", folder)),
+            false,
+        );
+        collapsed.set_open(false);
+        collapsed.store(&ui.ctx);
+        ui.frame(&mut app, vec![]);
+        assert_eq!(app.explorer_visible, vec![folder, 2, note]);
+        let name = app.project.name_of(folder).unwrap().to_owned();
+        let folder_pos = ui.at(&mut app, &name);
+        ui.click(&mut app, folder_pos);
+        ui.modifiers.shift = true;
+        let note_pos = ui.at(&mut app, "M-Note1");
+        ui.click(&mut app, note_pos);
+        assert_eq!(app.explorer_selection, vec![folder, 2, note]);
+        assert!(app.history.undo_label().is_none());
+    }
+
+    #[test]
+    fn fit_report_save_note_button_persists_report_and_undoes() {
+        for nonlinear in [false, true] {
+            let mut app = app();
+            app.active = Some(1);
+            if nonlinear {
+                app.nlfit(scicanvas_core::nlfit::Model::ALL[0], &[]);
+            } else {
+                app.fit(1);
+            }
+            assert!(app.dialog.is_some(), "nonlinear={nonlinear}: {}", app.status);
+            let before = app.project.clone();
+            let ctx = egui::Context::default();
+            crate::fonts::setup(&ctx);
+            ctx.style_mut(|style| style.animation_time = 0.0);
+            let mut time = 0.0;
+            let mut frame = |app: &mut SciApp, events| {
+                time += 0.02;
+                ctx.run(
+                    egui::RawInput {
+                        time: Some(time),
+                        screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1400.0, 1000.0))),
+                        events,
+                        ..Default::default()
+                    },
+                    |ctx| app.dialogs(ctx),
+                )
+            };
+            frame(&mut app, vec![]);
+            frame(&mut app, vec![]);
+            let output = frame(&mut app, vec![]);
+            let pos = output
+                .shapes
+                .iter()
+                .find_map(|s| match &s.shape {
+                    egui::Shape::Text(t) if t.galley.job.text == "保存为 Note" => Some(t.pos + egui::vec2(5.0, 5.0)),
+                    _ => None,
+                })
+                .expect("save report button");
+            frame(&mut app, vec![egui::Event::PointerMoved(pos)]);
+            for pressed in [true, false] {
+                frame(
+                    &mut app,
+                    vec![egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    }],
+                );
+            }
+            let note = app.project.notes.last().expect("saved Note");
+            assert!(note.text.contains("R"));
+            assert!(note.text.contains('\t'));
+            assert_eq!(app.active, Some(note.id));
+            assert!(app.dialog.is_none());
+            let saved =
+                scicanvas_core::project_file::from_scv(&scicanvas_core::project_file::to_scv(&app.project).unwrap())
+                    .unwrap();
+            assert_eq!(saved.notes, app.project.notes);
+            roundtrip(&mut app, &before);
+        }
     }
 
     #[test]

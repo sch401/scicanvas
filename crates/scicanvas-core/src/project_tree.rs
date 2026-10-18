@@ -64,7 +64,7 @@ impl Project {
                 return Err(e);
             }
         } else {
-            if self.book(id).is_none() && self.graph(id).is_none() {
+            if self.book(id).is_none() && self.graph(id).is_none() && self.note(id).is_none() {
                 return Err("找不到项目对象".into());
             }
             for f in &mut self.folders {
@@ -122,7 +122,9 @@ impl Project {
                 current = self.folder(id).ok_or("文件夹引用了不存在的上级")?.parent;
             }
             for id in &folder.items {
-                if (self.book(*id).is_none() && self.graph(*id).is_none()) || !items.insert(*id) {
+                if (self.book(*id).is_none() && self.graph(*id).is_none() && self.note(*id).is_none())
+                    || !items.insert(*id)
+                {
                     return Err("文件夹中的对象不存在或重复归属".into());
                 }
             }

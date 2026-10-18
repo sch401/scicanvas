@@ -154,6 +154,7 @@ pub enum Dialog {
 
 /// 对话框里用户做出的选择，由 app.rs 执行。
 pub enum Action {
+    SaveNote(String, String),
     ColumnProps(ColumnEdit),
     None,
     Close,
@@ -539,13 +540,16 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                 ui.separator();
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
-                    center_buttons(ui, 2);
+                    center_buttons(ui, 3);
                     if ui
                         .add(plain("复制结果"))
                         .on_hover_text("复制为制表符分隔的文本，可粘贴到 Excel")
                         .clicked()
                     {
                         ui.ctx().copy_text(fit_text(reports));
+                    }
+                    if ui.add(plain("保存为 Note")).clicked() {
+                        action = Action::SaveNote("拟合结果".into(), fit_text(reports));
                     }
                     if ui.add(primary(ui, "关闭")).clicked() {
                         action = Action::Close;
@@ -677,7 +681,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                     ui.separator();
                     ui.add_space(4.0);
                     ui.horizontal(|ui| {
-                    center_buttons(ui, 2);
+                    center_buttons(ui, 3);
                     if ui
                         .add(plain("复制结果"))
                         .on_hover_text("复制为制表符分隔的文本，可粘贴到 Excel")
@@ -694,6 +698,12 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                             .map(|r| r.join("\t"))
                             .collect();
                         ui.ctx().copy_text(text.join("\n"));
+                    }
+                    if ui.add(plain("保存为 Note")).clicked() {
+                        let (table, groups) = anova_rows(result, names);
+                        let pairs = tukey_rows(tukey, names);
+                        let text = table.iter().chain(groups.iter()).chain(pairs.iter()).map(|r| r.join("\t")).collect::<Vec<_>>().join("\n");
+                        action = Action::SaveNote("方差分析结果".into(), text);
                     }
                     if ui.add(primary(ui, "关闭")).clicked() {
                         action = Action::Close;
@@ -737,7 +747,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                     ui.separator();
                     ui.add_space(4.0);
                     ui.horizontal(|ui| {
-                    center_buttons(ui, 2);
+                    center_buttons(ui, 3);
                     if ui
                         .add(plain("复制结果"))
                         .on_hover_text("复制为制表符分隔的文本，可粘贴到 Excel")
@@ -746,6 +756,11 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                         let mut lines = vec![correlation_header().join("\t")];
                         lines.extend(correlation_rows(pairs).into_iter().map(|r| r.join("\t")));
                         ui.ctx().copy_text(lines.join("\n"));
+                    }
+                    if ui.add(plain("保存为 Note")).clicked() {
+                        let mut lines = vec![correlation_header().join("\t")];
+                        lines.extend(correlation_rows(pairs).into_iter().map(|r| r.join("\t")));
+                        action = Action::SaveNote("相关系数结果".into(), lines.join("\n"));
                     }
                     if ui.add(primary(ui, "关闭")).clicked() {
                         action = Action::Close;
@@ -842,13 +857,16 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                 ui.separator();
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
-                    center_buttons(ui, 2);
+                    center_buttons(ui, 3);
                     if ui
                         .add(plain("复制结果"))
                         .on_hover_text("复制为制表符分隔的文本，可粘贴到 Excel")
                         .clicked()
                     {
                         ui.ctx().copy_text(nlfit_text(reports));
+                    }
+                    if ui.add(plain("保存为 Note")).clicked() {
+                        action = Action::SaveNote("非线性拟合结果".into(), nlfit_text(reports));
                     }
                     if ui.add(primary(ui, "关闭")).clicked() {
                         action = Action::Close;
@@ -979,7 +997,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                 ui.separator();
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
-                    center_buttons(ui, 2);
+                    center_buttons(ui, 3);
                     if ui
                         .add(plain("复制结果"))
                         .on_hover_text("复制为制表符分隔的文本，可粘贴到 Excel")
@@ -987,6 +1005,10 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                     {
                         let text: Vec<String> = rows.iter().map(|r| r.join("\t")).collect();
                         ui.ctx().copy_text(text.join("\n"));
+                    }
+                    if ui.add(plain("保存为 Note")).clicked() {
+                        let text = rows.iter().map(|r| r.join("\t")).collect::<Vec<_>>().join("\n");
+                        action = Action::SaveNote(title.clone(), format!("{title}\n\n{text}\n\n{note}"));
                     }
                     if ui.add(primary(ui, "关闭")).clicked() {
                         action = Action::Close;
@@ -1308,7 +1330,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                 ui.separator();
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
-                    center_buttons(ui, 2);
+                    center_buttons(ui, 3);
                     if ui
                         .add(plain("复制结果"))
                         .on_hover_text("复制为制表符分隔的文本，可粘贴到 Excel")
@@ -1316,6 +1338,14 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                     {
                         let text: Vec<String> = rows.iter().map(|(k, v)| format!("{k}\t{v}")).collect();
                         ui.ctx().copy_text(text.join("\n"));
+                    }
+                    if ui.add(plain("保存为 Note")).clicked() {
+                        let text = rows
+                            .iter()
+                            .map(|(k, v)| format!("{k}\t{v}"))
+                            .collect::<Vec<_>>()
+                            .join("\n");
+                        action = Action::SaveNote("t 检验结果".into(), text);
                     }
                     if ui.add(primary(ui, "关闭")).clicked() {
                         action = Action::Close;

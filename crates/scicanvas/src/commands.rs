@@ -54,7 +54,7 @@ fn need_folder(a: &SciApp) -> Result<(), &'static str> {
 }
 fn need_window(a: &SciApp) -> Result<(), &'static str> {
     a.project_target()
-        .filter(|id| a.project.book(*id).is_some() || a.project.graph(*id).is_some())
+        .filter(|id| a.project.book(*id).is_some() || a.project.graph(*id).is_some() || a.project.note(*id).is_some())
         .map(|_| ())
         .ok_or("请先选择工作簿或图形")
 }
@@ -1252,6 +1252,34 @@ fn build() -> Vec<Command> {
             |a| a.ui.toggle_collapsed(),
         ),
     ];
+    commands.push(
+        c(
+            "note.new",
+            "新建 Note",
+            "book",
+            "",
+            "工作区",
+            "note 笔记 计算结果",
+            always,
+            |a| a.new_note(),
+        )
+        .modifies(),
+    );
+    commands.push(c(
+        "note.export",
+        "导出 Note 文本",
+        "book",
+        "",
+        "导出",
+        "note txt 文本",
+        |a| {
+            a.active
+                .and_then(|id| a.project.note(id))
+                .map(|_| ())
+                .ok_or("请先激活 Note 窗口")
+        },
+        |a| a.export_note(),
+    ));
     commands.extend(crate::examples::ALL.iter().map(|example| {
         c(
             example.command,

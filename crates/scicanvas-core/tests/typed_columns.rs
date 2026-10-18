@@ -226,7 +226,7 @@ mod files {
         let old = v8_json(&p);
         let restored = project_file::from_json(&old.to_string()).unwrap();
         assert_eq!(restored, p);
-        assert_eq!(restored.version, 9);
+        assert_eq!(restored.version, project_file::CURRENT_VERSION);
         assert_eq!(
             svg::render_page(&restored.graphs[0], &restored),
             svg::render_page(&p.graphs[0], &p)

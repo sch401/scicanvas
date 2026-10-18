@@ -3,7 +3,7 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-pub const PROJECT_VERSION: u32 = 9;
+pub const PROJECT_VERSION: u32 = 10;
 
 /// 列的绘图角色，对应 Origin 里的 X / Y / 忽略。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -649,6 +649,15 @@ impl Graph {
     }
 }
 
+/// 随项目保存的文本笔记或计算报告。
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct Note {
+    pub id: u64,
+    pub name: String,
+    pub text: String,
+}
+
 /// 整个项目。
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -658,6 +667,8 @@ pub struct Project {
     pub version: u32,
     pub books: Vec<Book>,
     pub graphs: Vec<Graph>,
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Vec::is_empty"))]
+    pub notes: Vec<Note>,
     #[cfg_attr(feature = "serde", serde(default))]
     pub folders: Vec<crate::project_tree::Folder>,
     pub next_id: u64,
@@ -669,6 +680,7 @@ impl Default for Project {
             version: PROJECT_VERSION,
             books: Vec::new(),
             graphs: Vec::new(),
+            notes: Vec::new(),
             folders: Vec::new(),
             next_id: 1,
         }
@@ -676,6 +688,17 @@ impl Default for Project {
 }
 
 impl Project {
+    pub fn note(&self, id: u64) -> Option<&Note> {
+        self.notes.iter().find(|n| n.id == id)
+    }
+
+    pub fn add_note(&mut self, name: &str, text: String) -> u64 {
+        let id = self.alloc_id();
+        let name = self.unique_name(name);
+        self.notes.push(Note { id, name, text });
+        id
+    }
+
     /// 界面、预设和未来脚本共用的声明式作图入口；校验成功后才修改项目。
     pub fn plot_spec(&mut self, spec: crate::plotspec::PlotSpec) -> Result<u64, String> {
         let book = self.book(spec.book_id.ok_or("请选择工作簿")?).ok_or("找不到工作簿")?;
@@ -714,6 +737,7 @@ impl Project {
         self.book(id)
             .map(|b| b.name.as_str())
             .or_else(|| self.graph(id).map(|g| g.name.as_str()))
+            .or_else(|| self.note(id).map(|n| n.name.as_str()))
             .or_else(|| self.folder(id).map(|f| f.name.as_str()))
     }
 
@@ -724,6 +748,9 @@ impl Project {
         if let Some(g) = self.graphs.iter_mut().find(|g| g.id == id) {
             return Some(&mut g.name);
         }
+        if let Some(n) = self.notes.iter_mut().find(|n| n.id == id) {
+            return Some(&mut n.name);
+        }
         self.folders.iter_mut().find(|f| f.id == id).map(|f| &mut f.name)
     }
 
@@ -731,7 +758,11 @@ impl Project {
     pub fn unique_name(&self, base: &str) -> String {
         (1..)
             .map(|i| format!("{}{}", base, i))
-            .find(|n| !self.books.iter().any(|b| &b.name == n) && !self.graphs.iter().any(|g| &g.name == n))
+            .find(|n| {
+                !self.books.iter().any(|b| &b.name == n)
+                    && !self.graphs.iter().any(|g| &g.name == n)
+                    && !self.notes.iter().any(|note| &note.name == n)
+            })
             .unwrap()
     }
 
@@ -742,6 +773,7 @@ impl Project {
         }
         self.books.retain(|b| b.id != id);
         self.graphs.retain(|g| g.id != id);
+        self.notes.retain(|n| n.id != id);
         for g in &mut self.graphs {
             for layer in g.page.layers_mut() {
                 if layer.book_id == Some(id) {

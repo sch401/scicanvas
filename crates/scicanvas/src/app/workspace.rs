@@ -2,8 +2,37 @@
 
 use super::*;
 
+#[derive(Clone, Copy, Default, PartialEq, Eq)]
+pub(super) enum ExplorerSort {
+    Name,
+    #[default]
+    Type,
+}
+
 impl SciApp {
+    fn range_select_project_item(&mut self, id: u64, append: bool) {
+        let anchor = self.explorer_anchor.or(self.explorer_target).unwrap_or(id);
+        let a = self.explorer_visible.iter().position(|item| *item == anchor);
+        let b = self.explorer_visible.iter().position(|item| *item == id);
+        if let (Some(a), Some(b)) = (a, b) {
+            if !append {
+                self.explorer_selection.clear();
+            }
+            for item in &self.explorer_visible[a.min(b)..=a.max(b)] {
+                if !self.explorer_selection.contains(item) {
+                    self.explorer_selection.push(*item);
+                }
+            }
+            self.explorer_target = Some(id);
+            self.project_name = self.project.name_of(id).unwrap_or("").into();
+            self.explorer_click = None;
+        } else {
+            self.select_project_item(id, false);
+        }
+    }
+
     fn select_project_item(&mut self, id: u64, extend: bool) {
+        self.explorer_anchor = Some(id);
         if extend {
             if self.explorer_selection.contains(&id) {
                 self.explorer_selection.retain(|selected| *selected != id);
@@ -81,6 +110,7 @@ impl SciApp {
     }
 
     pub(super) fn show_item(&mut self, id: u64) {
+        self.explorer_anchor = Some(id);
         self.explorer_selection = vec![id];
         self.explorer_target = Some(id);
         self.project_name = self.project.name_of(id).unwrap_or("").to_string();
@@ -100,6 +130,7 @@ impl SciApp {
             .iter()
             .map(|b| b.id)
             .chain(self.project.graphs.iter().map(|g| g.id))
+            .chain(self.project.notes.iter().map(|n| n.id))
             .collect()
     }
 
@@ -427,7 +458,12 @@ impl SciApp {
         }
         if response.clicked() {
             self.finish_explorer_rename(false);
-            let extend = ui.input(|i| i.modifiers.ctrl);
+            let modifiers = ui.input(|i| i.modifiers);
+            if modifiers.shift {
+                self.range_select_project_item(id, modifiers.ctrl);
+                return response;
+            }
+            let extend = modifiers.ctrl;
             let now = ui.input(|i| i.time);
             let slow_second_click = !extend
                 && self.explorer_selection.len() <= 1
@@ -511,43 +547,57 @@ impl SciApp {
         }
     }
 
-    pub(super) fn explorer_folder(&mut self, ui: &mut egui::Ui, parent: Option<u64>) {
-        let folders: Vec<_> = self
+    pub(super) fn explorer_folder(&mut self, ui: &mut egui::Ui, parent: Option<u64>, visible: &mut Vec<u64>) {
+        let mut folders: Vec<_> = self
             .project
             .folders
             .iter()
             .filter(|f| f.parent == parent)
             .map(|f| (f.id, f.name.clone()))
             .collect();
+        folders.sort_by_key(|(_, name)| name.to_lowercase());
         for (id, name) in folders {
+            visible.push(id);
             let (arrow, header, _) = egui::collapsing_header::CollapsingState::load_with_default_open(
                 ui.ctx(),
                 egui::Id::new(("project-folder", id)),
                 true,
             )
             .show_header(ui, |ui| self.explorer_label(ui, id, RichText::new(name)))
-            .body(|ui| self.explorer_folder(ui, Some(id)));
+            .body(|ui| self.explorer_folder(ui, Some(id), visible));
             if arrow.clicked() {
                 self.explorer_click = None;
             }
             self.explorer_drop(ui, &header.inner.union(arrow), Some(id));
         }
-        let items: Vec<_> = self
+        let mut items: Vec<_> = self
             .project
             .books
             .iter()
-            .map(|b| (b.id, true, b.name.clone()))
-            .chain(self.project.graphs.iter().map(|g| (g.id, false, g.name.clone())))
+            .map(|b| (b.id, 0, b.name.clone()))
+            .chain(self.project.graphs.iter().map(|g| (g.id, 1, g.name.clone())))
+            .chain(self.project.notes.iter().map(|n| (n.id, 2, n.name.clone())))
             .filter(|(id, _, _)| self.project.folder_of(*id) == parent)
             .collect();
-        for (id, is_book, name) in items {
+        items.sort_by_key(|(_, kind, name)| {
+            (
+                if self.explorer_sort == ExplorerSort::Type {
+                    *kind
+                } else {
+                    0
+                },
+                name.to_lowercase(),
+            )
+        });
+        for (id, kind, name) in items {
+            visible.push(id);
             let shown = self.open.get(&id).copied().unwrap_or(false);
             ui.horizontal(|ui| {
                 ui.label(
-                    RichText::new(if is_book { "表" } else { "图" })
+                    RichText::new(["表", "图", "N"][kind])
                         .small()
                         .strong()
-                        .color(if is_book { self.pal.book } else { self.pal.graph }),
+                        .color(if kind == 0 { self.pal.book } else { self.pal.graph }),
                 );
                 self.explorer_label(
                     ui,
@@ -574,6 +624,7 @@ impl SciApp {
                 self.finish_explorer_rename(false);
                 self.explorer_target = None;
                 self.explorer_selection.clear();
+                self.explorer_anchor = None;
                 self.project_name.clear();
                 self.explorer_click = None;
             }
@@ -581,6 +632,21 @@ impl SciApp {
             if ui.button("新建文件夹").clicked() {
                 self.run_command("project.folder.new");
             }
+        });
+        ui.horizontal(|ui| {
+            if ui.button("新建 Note").clicked() {
+                self.run_command("note.new");
+            }
+            egui::ComboBox::from_id_salt("explorer-sort")
+                .selected_text(if self.explorer_sort == ExplorerSort::Type {
+                    "按类型排序"
+                } else {
+                    "按名称排序"
+                })
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut self.explorer_sort, ExplorerSort::Type, "按类型排序");
+                    ui.selectable_value(&mut self.explorer_sort, ExplorerSort::Name, "按名称排序");
+                });
         });
         // 面板先于子窗口绘制：只在项目管理器有焦点时处理 F2，并消费按键，避免工作表同时开始编辑单元格。
         if self.explorer_rename.is_none() && self.explorer_focus && !ui.ctx().wants_keyboard_input() {
@@ -594,11 +660,13 @@ impl SciApp {
         ui.label(if self.explorer_selection.len() > 1 {
             format!("已选 {} 项", self.explorer_selection.len())
         } else {
-            "Ctrl+单击可多选".into()
+            "Ctrl 多选 · Shift 连续选择".into()
         });
+        let mut visible = Vec::new();
         egui::ScrollArea::vertical()
             .auto_shrink([false, false])
-            .show(ui, |ui| self.explorer_folder(ui, None));
+            .show(ui, |ui| self.explorer_folder(ui, None, &mut visible));
+        self.explorer_visible = visible;
     }
 
     pub(super) fn child_windows(&mut self, ctx: &egui::Context) {
@@ -664,12 +732,20 @@ impl SciApp {
                 &mut geom,
                 this_slot,
                 &name,
-                if is_book { "book" } else { "graph" },
+                if is_book {
+                    "book"
+                } else if self.project.note(id).is_some() {
+                    "note"
+                } else {
+                    "graph"
+                },
                 active,
                 &pal,
                 |ui| {
                     if is_book {
                         self.book_ui(ui, id);
+                    } else if self.project.note(id).is_some() {
+                        self.note_ui(ui, id);
                     } else {
                         self.graph_ui(ui, id);
                     }
@@ -680,6 +756,7 @@ impl SciApp {
                 snapped = Some((id, snap));
             }
             if resp.pressed {
+                self.explorer_anchor = Some(id);
                 self.explorer_selection = vec![id];
                 self.active = Some(id);
                 if self.explorer_target != Some(id) {

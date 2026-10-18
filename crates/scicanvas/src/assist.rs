@@ -141,7 +141,17 @@ impl SciApp {
         painter.rect_filled(bar, 4.0, if hovered { pal.title } else { pal.title_in });
         let is_book = self.project.book(id).is_some();
         let icon = Rect::from_center_size(pos2(bar.left() + 12.0, bar.center().y), vec2(13.0, 13.0));
-        crate::icons::icon(if is_book { "book" } else { "graph" }, true).paint_at(ui, icon);
+        crate::icons::icon(
+            if is_book {
+                "book"
+            } else if self.project.note(id).is_some() {
+                "note"
+            } else {
+                "graph"
+            },
+            true,
+        )
+        .paint_at(ui, icon);
         painter.with_clip_rect(bar.shrink(2.0)).text(
             pos2(icon.right() + 6.0, bar.center().y),
             egui::Align2::LEFT_CENTER,
@@ -154,6 +164,16 @@ impl SciApp {
         if let Some(graph) = self.project.graph(id) {
             let sc = scene::layout_page(graph, &self.project, &[]);
             crate::plot::paint(ui, thumb, &sc);
+        } else if let Some(note) = self.project.note(id) {
+            for (row, text) in note.text.lines().take(8).enumerate() {
+                painter.with_clip_rect(thumb).text(
+                    thumb.left_top() + vec2(3.0, row as f32 * 14.0),
+                    egui::Align2::LEFT_TOP,
+                    text,
+                    egui::FontId::monospace(10.5),
+                    Color32::BLACK,
+                );
+            }
         } else if let Some(book) = self.project.book(id) {
             // 工作簿：表头加前几行数据。
             let p = painter.with_clip_rect(thumb);

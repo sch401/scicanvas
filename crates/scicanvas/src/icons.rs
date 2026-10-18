@@ -21,6 +21,7 @@ fn wrap(body: &str) -> String {
 /// (名称, SVG 主体)
 fn sources() -> Vec<(&'static str, String)> {
     vec![
+        ("note", wrap(r#"<path d="M6 3h9l4 4v14H6zM15 3v5h4M9 12h7M9 16h7"/>"#)),
         (
             "steph",
             wrap(&format!(

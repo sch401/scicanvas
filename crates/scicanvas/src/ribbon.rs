@@ -48,7 +48,10 @@ pub static TABS: &[Tab] = &[
         groups: &[
             Group {
                 label: "新建",
-                items: &[Big("book.new"), Smalls(&["file.import", "file.open", "file.save"])],
+                items: &[
+                    Big("book.new"),
+                    Smalls(&["note.new", "file.import", "file.open", "file.save"]),
+                ],
             },
             Group {
                 label: "选区",
@@ -780,9 +783,14 @@ pub fn backstage(
                 let nb = app.project.books.len();
                 let ng = app.project.graphs.len();
                 ui.label(
-                    RichText::new(format!("项目内容 · {} 个工作簿，{} 个图形", nb, ng))
-                        .strong()
-                        .color(pal.weak),
+                    RichText::new(format!(
+                        "项目内容 · {} 个工作簿，{} 个图形，{} 个 Note",
+                        nb,
+                        ng,
+                        app.project.notes.len()
+                    ))
+                    .strong()
+                    .color(pal.weak),
                 );
                 ui.add_space(6.0);
                 ui.horizontal_wrapped(|ui| {
@@ -801,6 +809,11 @@ pub fn backstage(
                         };
                         if project_card(ui, "graph", &g.name, &sub, dark, pal).clicked() {
                             open = Some(g.id);
+                        }
+                    }
+                    for note in &app.project.notes {
+                        if project_card(ui, "note", &note.name, "Note · 文本与计算结果", dark, pal).clicked() {
+                            open = Some(note.id);
                         }
                     }
                 });

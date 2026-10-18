@@ -101,6 +101,7 @@ pub fn from_json(text: &str) -> Result<Project, String> {
         .iter()
         .map(|b| b.id)
         .chain(project.graphs.iter().map(|g| g.id))
+        .chain(project.notes.iter().map(|n| n.id))
         .chain(project.folders.iter().map(|f| f.id))
         .max()
         .unwrap_or(0);
@@ -129,6 +130,7 @@ fn validate(project: &Project) -> Result<(), String> {
         .iter()
         .map(|b| b.id)
         .chain(project.graphs.iter().map(|g| g.id))
+        .chain(project.notes.iter().map(|n| n.id))
         .chain(project.folders.iter().map(|f| f.id))
     {
         if id == 0 || id == u64::MAX || !ids.insert(id) {
@@ -136,6 +138,9 @@ fn validate(project: &Project) -> Result<(), String> {
         }
     }
     project.validate_folders()?;
+    if project.notes.iter().any(|n| n.name.trim().is_empty()) {
+        return Err("Note 名称不能为空".into());
+    }
     for book in &project.books {
         let mut keys = BTreeSet::new();
         for col in &book.columns {
@@ -273,6 +278,10 @@ pub fn to_scv(project: &Project) -> Result<Vec<u8>, String> {
         "graphs": graphs.iter().map(|(path, g)| serde_json::json!({
             "id": g.id, "name": g.name, "folder": folder(g.id), "path": path,
         })).collect::<Vec<_>>(),
+        "notes": project.notes.iter().map(|n| serde_json::json!({
+            "id": n.id, "name": n.name, "folder": folder(n.id),
+            "path": entry_name("notes", n.id, &n.name, "txt"),
+        })).collect::<Vec<_>>(),
     });
     let manifest = serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())?;
 
@@ -292,6 +301,13 @@ pub fn to_scv(project: &Project) -> Result<Vec<u8>, String> {
         add(PROJECT_ENTRY, CompressionMethod::Deflated, json.as_bytes())?;
         for (path, book) in &tables {
             add(path, CompressionMethod::Deflated, book_csv(book).as_bytes())?;
+        }
+        for note in &project.notes {
+            add(
+                &entry_name("notes", note.id, &note.name, "txt"),
+                CompressionMethod::Deflated,
+                note.text.as_bytes(),
+            )?;
         }
         for (path, graph) in &graphs {
             add(
