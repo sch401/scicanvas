@@ -125,10 +125,16 @@ pub fn book_from_table(id: u64, name: &str, mut rows: Vec<Vec<String>>) -> Book 
             col.long_name = n;
             col.units = u;
         }
-        col.data = rows.iter().map(|r| r.get(j).cloned().unwrap_or_default()).collect();
-        while col.data.last().is_some_and(|s| s.trim().is_empty()) {
-            col.data.pop();
+    }
+    // Consume cells into typed columns; avoid cloning the complete row-major table.
+    for row in rows {
+        let mut cells = row.into_iter();
+        for col in &mut book.columns {
+            col.data.push(cells.next().unwrap_or_default());
         }
+    }
+    for col in &mut book.columns {
+        col.data.trim_empty();
     }
     book
 }
@@ -136,6 +142,25 @@ pub fn book_from_table(id: u64, name: &str, mut rows: Vec<Vec<String>>) -> Book 
 /// 文本里有制表符或换行时视为多单元格粘贴（从 Excel 复制的一块区域）。
 pub fn is_block_paste(text: &str) -> bool {
     text.contains('\t') || text.trim_end().contains('\n')
+}
+
+/// 从 (col, row) 开始粘贴一块数据，列不够时自动补列。
+pub fn paste_conflicts(book: &Book, col: usize, row: usize, text: &str) -> Vec<String> {
+    let mut rows = parse_table(text);
+    if row == 0 && has_header(&rows) {
+        rows.remove(0);
+    }
+    let mut conflicts = std::collections::BTreeSet::new();
+    for row in rows {
+        for (j, value) in row.iter().enumerate() {
+            if let Some(column) = book.columns.get(col + j) {
+                if !column.data.accepts(value) {
+                    conflicts.insert(column.key.clone());
+                }
+            }
+        }
+    }
+    conflicts.into_iter().collect()
 }
 
 /// 从 (col, row) 开始粘贴一块数据，列不够时自动补列。
@@ -214,8 +239,8 @@ mod tests {
         assert_eq!(b.columns[1].data, vec!["2", "5"]);
         // 从中间粘贴不吃表头
         paste_into(&mut b, 1, 5, "7\t8");
-        assert_eq!(b.columns[1].data[5], "7");
-        assert_eq!(b.columns[2].data[5], "8");
+        assert_eq!(b.columns[1].data.text_at(5), "7");
+        assert_eq!(b.columns[2].data.text_at(5), "8");
     }
 
     #[test]

@@ -8,8 +8,8 @@ use scicanvas_core::{
 fn project(kind: PlotType) -> (Project, u64) {
     let mut p = Project::sample();
     let book = p.book_mut(1).unwrap();
-    book.columns[0].data = vec!["0".into(), "1".into(), "2".into()];
-    book.columns[1].data = vec!["10".into(), "20".into(), "15".into()];
+    book.columns[0].data = vec!["0".into(), "1".into(), "2".into()].into();
+    book.columns[1].data = vec!["10".into(), "20".into(), "15".into()].into();
     let spec = PlotSpec::from_selection(book, &["B".into()], kind).unwrap();
     let id = p.plot_spec(spec).unwrap();
     (p, id)

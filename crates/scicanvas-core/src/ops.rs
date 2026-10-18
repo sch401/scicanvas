@@ -3,7 +3,7 @@
 
 use crate::analysis::{self, Describe, NormalizeMethod, PolyFit, SmoothMethod};
 use crate::interpolate::{self, InterpMethod};
-use crate::model::{fmt_num, parse_num, round_sig, Book, Column, Graph, PlotType, Project, Role};
+use crate::model::{fmt_num, round_sig, Book, Column, Graph, PlotType, Project, Role};
 
 /// 统计类操作选中的数据：工作簿编号、列标识和可选的行范围。
 type Picked = (u64, Vec<String>, Option<(usize, usize)>);
@@ -536,7 +536,7 @@ impl Project {
             c.long_name = long_name;
             c.units = units;
             c.comment = comment;
-            c.data = data;
+            c.data = data.into();
             let key = self.insert_result_column(r.book_id, &item.y, c).unwrap();
             made.push((item.clone(), key));
         }
@@ -598,11 +598,11 @@ impl Project {
             c.long_name = format!("{} 扣除基线", y.display_name());
             c.units = y.units.clone();
             c.comment = method.label();
-            c.data = vec![String::new(); book.nrows()];
+            c.data = vec![String::new(); book.nrows()].into();
             for (k, &row) in idx.iter().enumerate() {
                 let v = ys[k] - bv.get(row).copied().unwrap_or(f64::NAN);
                 if v.is_finite() {
-                    c.data[row] = fmt_num(v);
+                    c.data.set_text(row, fmt_num(v));
                 }
             }
             while c.data.last().is_some_and(|s| s.is_empty()) {
@@ -722,7 +722,7 @@ impl Project {
             c.long_name = format!("行{label}");
             c.units = units;
             c.comment = format!("{names} 共 {} 列逐行统计", keys.len());
-            c.data = data;
+            c.data = data.into();
             made.push(self.insert_result_column(book_id, keys.last().unwrap(), c).unwrap());
         }
         Ok(made)
@@ -782,11 +782,12 @@ impl Project {
         }
         let book = self.book_mut(book_id).ok_or("找不到工作簿")?;
         book.column(target).ok_or("找不到目标列")?;
-        book.freeze_error_sources();
-        let data = crate::stats::sequence(kind, n, seed)
+        let data: Vec<String> = crate::stats::sequence(kind, n, seed)
             .iter()
             .map(|v| fmt_num(*v))
             .collect();
+        let data = book.column(target).unwrap().data.replaced_texts(data)?;
+        book.freeze_error_sources();
         book.columns.iter_mut().find(|c| c.key == target).unwrap().data = data;
         Ok(())
     }
@@ -1213,6 +1214,7 @@ impl Project {
             data.pop();
         }
         let n = data.len();
+        let data = book.column(target).unwrap().data.replaced_texts(data)?;
         let book = self.book_mut(book_id).unwrap();
         book.freeze_error_sources();
         book.columns.iter_mut().find(|c| c.key == target).unwrap().data = data;
@@ -1349,7 +1351,7 @@ impl Project {
         col.units = op.units(&ca.units, &b_units);
         col.comment = format!("列运算 {name}{note}");
         col.long_name = name;
-        col.data = data;
+        col.data = data.into();
         let a = a.to_string();
         self.insert_result_column(book_id, &a, col)
             .ok_or_else(|| "无法写入结果列".into())
@@ -1461,33 +1463,11 @@ impl Project {
             return Err("没有这一列".into());
         }
         let n = book.nrows();
-        let key: Vec<String> = (0..n)
-            .map(|i| book.columns[col].data.get(i).cloned().unwrap_or_default())
-            .collect();
+        let data = &book.columns[col].data;
         let mut idx: Vec<usize> = (0..n).collect();
-        idx.sort_by(|&i, &j| {
-            use std::cmp::Ordering::*;
-            let (a, b) = (key[i].trim(), key[j].trim());
-            let ord = match (a.is_empty(), b.is_empty()) {
-                (true, true) => Equal,
-                (true, false) => return Greater,
-                (false, true) => return Less,
-                _ => {
-                    let (na, nb) = (parse_num(a), parse_num(b));
-                    match (na.is_finite(), nb.is_finite()) {
-                        (true, true) => na.partial_cmp(&nb).unwrap_or(Equal),
-                        (true, false) => return Less,
-                        (false, true) => return Greater,
-                        _ => a.cmp(b),
-                    }
-                }
-            };
-            let ord = if ascending { ord } else { ord.reverse() };
-            ord.then(i.cmp(&j))
-        });
+        idx.sort_by(|&i, &j| data.compare_rows(i, j, ascending).then(i.cmp(&j)));
         for c in &mut book.columns {
-            let old = std::mem::take(&mut c.data);
-            c.data = idx.iter().map(|&i| old.get(i).cloned().unwrap_or_default()).collect();
+            c.data = c.data.reordered(&idx);
             while c.data.last().is_some_and(|s| s.trim().is_empty()) {
                 c.data.pop();
             }
@@ -1549,7 +1529,7 @@ mod tests {
         let mut p = Project::sample();
         assert!(p.fit_poly(&book_src(&["A"]), 1).is_err());
         let id = p.new_book();
-        p.book_mut(id).unwrap().columns[1].data = vec!["1".into()];
+        p.book_mut(id).unwrap().columns[1].data = vec!["1".into()].into();
         let src = Source::Book {
             id,
             selected: vec![],
@@ -1580,7 +1560,7 @@ mod tests {
         assert!(layer.line_only.contains(&y.key) && layer.x_by_y.contains_key(&y.key));
         assert!(p.nlfit(&book_src(&["C"]), Model::Gauss, &[]).is_ok());
         let id = p.new_book();
-        p.book_mut(id).unwrap().columns[1].data = vec!["1".into(), "2".into()];
+        p.book_mut(id).unwrap().columns[1].data = vec!["1".into(), "2".into()].into();
         let src = Source::Book {
             id,
             selected: vec![],
@@ -1620,7 +1600,7 @@ mod tests {
         assert_eq!(layer.x_key.as_deref(), Some(out.columns[0].key.as_str()));
 
         // 不等间距的 X 给出提示
-        p.book_mut(1).unwrap().columns[0].data[3] = "0.35".into();
+        p.book_mut(1).unwrap().columns[0].data.set_text(3, "0.35".into());
         assert!(p
             .fft(&book_src(&["B"]), crate::fft::Window::Hann)
             .unwrap_err()
@@ -1664,7 +1644,7 @@ mod tests {
         let made = p.find_peaks(&book_src(&["B"]), 0.6).unwrap();
         assert_eq!(p.book(made[0]).unwrap().columns[0].values(), [30.0]);
         assert!(p.find_peaks(&book_src(&["B"]), 1.5).unwrap_err().contains("没有"));
-        p.book_mut(1).unwrap().columns[0].data[5] = "200".into();
+        p.book_mut(1).unwrap().columns[0].data.set_text(5, "200".into());
         assert!(p.find_peaks(&book_src(&["B"]), 0.05).unwrap_err().contains("单调"));
     }
 
@@ -1706,14 +1686,14 @@ mod tests {
         assert_eq!(p.set_column_values(1, "B", "B + sqrt(B) * A - i").unwrap(), 3);
         let b = &p.book(1).unwrap().columns[1].data;
         let want = 10.0 + 10f64.sqrt() - 1.0;
-        assert_eq!(b[0], fmt_num(want));
-        assert_eq!(b[1], "");
-        assert_eq!(b[2], fmt_num(30.0 + 30f64.sqrt() * 3.0 - 3.0));
+        assert_eq!(b.text_at(0), fmt_num(want));
+        assert_eq!(b.text_at(1), "");
+        assert_eq!(b.text_at(2), fmt_num(30.0 + 30f64.sqrt() * 3.0 - 3.0));
         assert_eq!(b.len(), 3, "trailing blanks trimmed");
         // 不引用列时按已有行数
         let rows = p.book(1).unwrap().nrows();
         assert_eq!(p.set_column_values(1, "C", "i^2").unwrap(), rows);
-        assert_eq!(p.book(1).unwrap().columns[2].data[3], "16");
+        assert_eq!(p.book(1).unwrap().columns[2].data.text_at(3), "16");
         assert!(p.set_column_values(1, "C", "Z * 2").unwrap_err().contains("没有列 Z"));
         assert!(p.set_column_values(1, "C", "2 +").is_err());
         assert!(p.set_column_values(1, "Q", "1").unwrap_err().contains("目标列"));
@@ -1724,17 +1704,17 @@ mod tests {
         let mut p = Project::sample();
         let book = p.book_mut(1).unwrap();
         let set = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-        book.columns[0].data = set(&["0", "1", "2", "4", "6", "8", "10"]);
+        book.columns[0].data = set(&["0", "1", "2", "4", "6", "8", "10"]).into();
         book.columns[0].units = "mg/L".into();
-        book.columns[1].data = set(&["0.02", "0.215", "0.41", "0.79", "1.22", "1.58", "2.01"]);
-        book.columns[2].data = set(&["0.9", "", "1.5"]);
+        book.columns[1].data = set(&["0.02", "0.215", "0.41", "0.79", "1.22", "1.58", "2.01"]).into();
+        book.columns[2].data = set(&["0.9", "", "1.5"]).into();
         let (cal, k0, k1) = p.calibrate(1, "A", "B", "C").unwrap();
         let book = p.book(1).unwrap();
         assert_eq!(book.column_index(&k0), Some(3));
         assert_eq!(book.column_index(&k1), Some(4));
         let (x0, ci) = (book.column(&k0).unwrap(), book.column(&k1).unwrap());
         assert_eq!(x0.units, "mg/L");
-        assert_eq!(x0.data[1], "");
+        assert_eq!(x0.data.text_at(1), "");
         // 与 numpy.polyfit 和 scipy.stats.t 计算一致
         let v = x0.values();
         assert!((v[0] - 4.468198640158359).abs() < 1e-6 && (v[2] - (1.5 - cal.intercept) / cal.slope).abs() < 1e-6);
@@ -1770,7 +1750,7 @@ mod tests {
         assert!(keys
             .iter()
             .all(|k| p.graph(2).unwrap().first_layer().line_only.contains(k)));
-        p.book_mut(1).unwrap().columns[0].data[2] = "9".into();
+        p.book_mut(1).unwrap().columns[0].data.set_text(2, "9".into());
         assert!(p
             .fft_filter(&book_src(&["B"]), FilterKind::LowPass(1.0))
             .unwrap_err()
@@ -1782,9 +1762,9 @@ mod tests {
         let mut p = Project::sample();
         let book = p.book_mut(1).unwrap();
         let set = |v: &[&str]| v.iter().map(|s| s.to_string()).collect::<Vec<_>>();
-        book.columns[0].data = set(&["1", "4", ""]);
-        book.columns[1].data = set(&["2", "", ""]);
-        book.columns[2].data = set(&["6", "5", ""]);
+        book.columns[0].data = set(&["1", "4", ""]).into();
+        book.columns[1].data = set(&["2", "", ""]).into();
+        book.columns[2].data = set(&["6", "5", ""]).into();
         let keys: Vec<String> = ["A", "B", "C"].iter().map(|s| s.to_string()).collect();
         let made = p.row_stats(1, &keys).unwrap();
         let book = p.book(1).unwrap();
@@ -1793,8 +1773,8 @@ mod tests {
         assert_eq!((col(0).role, col(1).role), (Role::Y, Role::YError));
         assert_eq!(col(0).data, ["3", "4.5"]);
         // 行 1：1、2、6 的样本标准差 √7，标准误 √(7/3)
-        assert_eq!(col(1).data[0], fmt_num(7f64.sqrt()));
-        assert_eq!(col(2).data[1], fmt_num(0.5));
+        assert_eq!(col(1).data.text_at(0), fmt_num(7f64.sqrt()));
+        assert_eq!(col(2).data.text_at(1), fmt_num(0.5));
         assert_eq!(col(3).data, ["3", "2", "0"]);
         assert!(p.row_stats(1, &keys[..1]).is_err());
     }
@@ -1837,12 +1817,12 @@ mod tests {
         let book = p.book_mut(1).unwrap();
         let set = |v: &[f64]| v.iter().map(|x| fmt_num(*x)).collect::<Vec<_>>();
         // A、B 为第一条曲线；在 B 后插入第二条曲线的 X 与 Y
-        book.columns[0].data = set(&[0.0, 1.0, 2.0, 3.0, 4.0]);
-        book.columns[1].data = set(&[0.0, 2.0, 4.0, 6.0, 8.0]);
+        book.columns[0].data = set(&[0.0, 1.0, 2.0, 3.0, 4.0]).into();
+        book.columns[1].data = set(&[0.0, 2.0, 4.0, 6.0, 8.0]).into();
         book.columns[2].role = Role::X;
-        book.columns[2].data = set(&[0.5, 1.5, 2.5, 3.5, 4.5]);
+        book.columns[2].data = set(&[0.5, 1.5, 2.5, 3.5, 4.5]).into();
         let k = book.push_column(Role::Y);
-        book.columns.iter_mut().find(|c| c.key == k).unwrap().data = set(&[1.0; 5]);
+        book.columns.iter_mut().find(|c| c.key == k).unwrap().data = set(&[1.0; 5]).into();
         let (bid, gid) = p.average_curves(&book_src(&["B", &k])).unwrap();
         let out = p.book(bid).unwrap();
         // numpy.interp 在 linspace(0.5, 4.0, 5) 上平均：((2x) + 1) / 2
@@ -1895,7 +1875,7 @@ mod tests {
         assert_eq!(book.column(&sq).unwrap().units, "mV·mV");
         assert_eq!(book.column(&ratio).unwrap().units, "mV/s");
         // 第 0 行 A = 0，B ÷ A 不是有限数，留空
-        assert_eq!(book.column(&ratio).unwrap().data[0], "");
+        assert_eq!(book.column(&ratio).unwrap().data.text_at(0), "");
         assert!(p
             .column_math(1, "B", ColumnOp::Div, &Operand::Constant(0.0))
             .unwrap_err()
@@ -1932,12 +1912,12 @@ mod tests {
         // B 的 X 范围之外留空
         let id = p.new_book();
         let short = p.book_mut(id).unwrap();
-        short.columns[0].data = ["0", "1", "2", "3"].map(String::from).to_vec();
-        short.columns[1].data = ["1", "1", "1", "1"].map(String::from).to_vec();
+        short.columns[0].data = ["0", "1", "2", "3"].map(String::from).to_vec().into();
+        short.columns[1].data = ["1", "1", "1", "1"].map(String::from).to_vec().into();
         let x2 = short.push_column(Role::X);
         let y2 = short.push_column(Role::Y);
-        short.columns.iter_mut().find(|c| c.key == x2).unwrap().data = ["1.5", "2.5"].map(String::from).to_vec();
-        short.columns.iter_mut().find(|c| c.key == y2).unwrap().data = ["10", "20"].map(String::from).to_vec();
+        short.columns.iter_mut().find(|c| c.key == x2).unwrap().data = ["1.5", "2.5"].map(String::from).to_vec().into();
+        short.columns.iter_mut().find(|c| c.key == y2).unwrap().data = ["10", "20"].map(String::from).to_vec().into();
         let key = p.column_math(id, "B", ColumnOp::Add, &Operand::Column(y2)).unwrap();
         assert_eq!(p.book(id).unwrap().column(&key).unwrap().data, ["", "", "16"]);
     }
@@ -2003,12 +1983,15 @@ mod tests {
             let x = book.column(&layer.x_by_y[key]).unwrap();
             let y = book.column(key).unwrap();
             assert_eq!((x.data.len(), y.data.len()), (41, 41));
-            assert_eq!((x.data[0].as_str(), x.data[40].as_str()), ("0", "20"));
+            assert_eq!((x.data.text_at(0).as_ref(), x.data.text_at(40).as_ref()), ("0", "20"));
             assert!(y.long_name.ends_with("三次样条插值") && y.units == "mV");
         }
         // 网格落在原始 X 上（步长 0.5）时，插值结果就是原始数据
         let y = book.column(&keys[0]).unwrap();
-        assert_eq!(y.data[..5], book.column("B").unwrap().data[..5]);
+        assert_eq!(
+            y.data.iter().take(5).collect::<Vec<_>>(),
+            book.column("B").unwrap().data.iter().take(5).collect::<Vec<_>>()
+        );
 
         let (_, wide) = p
             .interpolate(&Source::Graph(2), InterpMethod::Linear, 3, Some((-10.0, 30.0)))
@@ -2021,8 +2004,8 @@ mod tests {
         assert_eq!(x.data, ["-10", "10", "30"], "custom ranges extrapolate");
 
         let id = p.new_book();
-        p.book_mut(id).unwrap().columns[0].data = vec!["1".into(), "1".into()];
-        p.book_mut(id).unwrap().columns[1].data = vec!["2".into(), "3".into()];
+        p.book_mut(id).unwrap().columns[0].data = vec!["1".into(), "1".into()].into();
+        p.book_mut(id).unwrap().columns[1].data = vec!["2".into(), "3".into()].into();
         let src = Source::Book {
             id,
             selected: vec![],
@@ -2037,11 +2020,11 @@ mod tests {
     #[test]
     fn math_columns_align_with_rows() {
         let mut p = Project::sample();
-        p.book_mut(1).unwrap().columns[1].data[5] = "".into(); // 中间空一格
+        p.book_mut(1).unwrap().columns[1].data.set_text(5, "".into()); // 中间空一格
         let keys = p.differentiate(&book_src(&["B"])).unwrap();
         let col = p.book(1).unwrap().column(&keys[0]).unwrap().clone();
-        assert_eq!(col.data[5], "");
-        assert!(!col.data[4].is_empty());
+        assert_eq!(col.data.text_at(5), "");
+        assert!(!col.data.text_at(4).is_empty());
         assert_eq!(col.long_name, "d(电压 A)/dX");
         assert_eq!(col.units, "mV/s");
         let (_, areas) = p.integrate(&book_src(&["C"])).unwrap();
@@ -2069,7 +2052,7 @@ mod tests {
         assert_eq!(b.columns.len(), 11);
         assert_eq!(b.nrows(), 2);
         assert_eq!(b.columns[1].data, vec!["41", "41"]);
-        assert_eq!(b.columns[0].data[0], "B · 电压 A");
+        assert_eq!(b.columns[0].data.text_at(0), "B · 电压 A");
     }
 
     #[test]
@@ -2078,8 +2061,8 @@ mod tests {
         let before: Vec<(String, String)> = (0..41)
             .map(|i| {
                 (
-                    p.book(1).unwrap().columns[0].data[i].clone(),
-                    p.book(1).unwrap().columns[1].data[i].clone(),
+                    p.book(1).unwrap().columns[0].data.text_at(i).into_owned(),
+                    p.book(1).unwrap().columns[1].data.text_at(i).into_owned(),
                 )
             })
             .collect();
@@ -2088,13 +2071,16 @@ mod tests {
         let v = b.columns[1].values();
         assert!(v.windows(2).all(|w| w[0] >= w[1]));
         for i in 0..41 {
-            let pair = (b.columns[0].data[i].clone(), b.columns[1].data[i].clone());
+            let pair = (
+                b.columns[0].data.text_at(i).into_owned(),
+                b.columns[1].data.text_at(i).into_owned(),
+            );
             assert!(before.contains(&pair));
         }
         // 文本和空单元格排在数值后面
         let id = p.new_book();
-        p.book_mut(id).unwrap().columns[0].data = vec!["b".into(), "3".into(), "".into(), "1".into()];
-        p.book_mut(id).unwrap().columns[1].data = vec!["x".into(), "y".into(), "z".into(), "w".into()];
+        p.book_mut(id).unwrap().columns[0].data = vec!["b".into(), "3".into(), "".into(), "1".into()].into();
+        p.book_mut(id).unwrap().columns[1].data = vec!["x".into(), "y".into(), "z".into(), "w".into()].into();
         p.sort_book(id, 0, true).unwrap();
         assert_eq!(p.book(id).unwrap().columns[0].data, vec!["1", "3", "b"]);
         assert_eq!(p.book(id).unwrap().columns[1].data, vec!["w", "y", "x", "z"]);

@@ -1,7 +1,7 @@
 {
   "target": "x86_64-pc-windows-msvc",
   "scope": "normal,build; all workspace features",
-  "cargo_lock_sha256": "990c4306be1b70c662b7d3b442adfcbe6fa2ea3f03d34241e98fa8d7bfa9bd0b",
+  "cargo_lock_sha256": "e852bc2ad2ab6b027b08c13641b9f231cab101a1a4952620af8e990a7edb4849",
   "packages": [
     {
       "name": "ab_glyph",
@@ -396,6 +396,24 @@
         {
           "path": "licenses/third-party/cfg_aliases-0.2.2/NOTICES.md",
           "sha256": "1e2b7ade3fb228130408b9990cae6a7618eb314c75aa0b164bfe485d9d9756ee"
+        }
+      ]
+    },
+    {
+      "name": "chrono",
+      "version": "0.4.45",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/chronotope/chrono",
+      "crate_sha256": "1aa79e62e7697b8e29b513a68abacf485adcd1fe8284a4316c5ae868e6633327",
+      "revision": "170338250e836976a211e64728ec956e45e78a39",
+      "files": [
+        {
+          "path": "licenses/third-party/chrono-0.4.45/LICENSE.txt",
+          "sha256": "946c9835d8034d24404f8cfec5f4654cee5dad17e944afc3d06d742cf2882831"
+        },
+        {
+          "path": "licenses/third-party/chrono-0.4.45/SOURCE_COPYRIGHT_HEADERS.txt",
+          "sha256": "0fe9b55d7d07b5d7e4cabbb17373be0ad472445dab94008ef81866797d1e5386"
         }
       ]
     },

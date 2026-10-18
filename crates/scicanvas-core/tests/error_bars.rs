@@ -69,10 +69,10 @@ fn association_supports_both_column_orders_and_shared_x_errors() {
 fn errors_keep_original_rows_and_invalid_errors_keep_the_point() {
     let (mut p, gid) = project();
     let b = p.book_mut(1).unwrap();
-    b.columns[0].data = ["1", "", "3", "4", "5", "6"].map(str::to_string).to_vec();
-    b.columns[1].data = ["10", "20", "30", "40", "50", "60"].map(str::to_string).to_vec();
-    b.columns[2].data = ["2", "99", "-1", "NaN", "inf", "0"].map(str::to_string).to_vec();
-    b.columns[3].data = ["0.1", "99", "0.3"].map(str::to_string).to_vec();
+    b.columns[0].data = ["1", "", "3", "4", "5", "6"].map(str::to_string).to_vec().into();
+    b.columns[1].data = ["10", "20", "30", "40", "50", "60"].map(str::to_string).to_vec().into();
+    b.columns[2].data = ["2", "99", "-1", "NaN", "inf", "0"].map(str::to_string).to_vec().into();
+    b.columns[3].data = ["0.1", "99", "0.3"].map(str::to_string).to_vec().into();
     let layer = p.graph_mut(gid).unwrap().first_layer_mut();
     layer.rows = Some((1, 5));
     let (_, s) = p.graph(gid).unwrap().first_layer().series(p.book(1).unwrap());
@@ -134,8 +134,8 @@ fn autoscale_svg_and_all_basic_chart_types_share_error_segments() {
 #[test]
 fn logarithmic_filtering_preserves_errors_and_clips_nonpositive_endpoints() {
     let (mut p, gid) = project();
-    p.book_mut(1).unwrap().columns[1].data = ["-1", "20", "30"].map(str::to_string).to_vec();
-    p.book_mut(1).unwrap().columns[2].data = ["999", "25", "4"].map(str::to_string).to_vec();
+    p.book_mut(1).unwrap().columns[1].data = ["-1", "20", "30"].map(str::to_string).to_vec().into();
+    p.book_mut(1).unwrap().columns[2].data = ["999", "25", "4"].map(str::to_string).to_vec().into();
     let l = p.graph_mut(gid).unwrap().first_layer_mut();
     l.y_log = true;
     l.y_auto = false;

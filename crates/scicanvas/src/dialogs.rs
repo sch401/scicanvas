@@ -14,6 +14,12 @@ use scicanvas_core::stats::{Anova, Correlation, TTest, TTestKind, TukeyPair};
 use crate::theme::Palette;
 
 pub enum Dialog {
+    ConvertText {
+        book: u64,
+        key: String,
+        row: usize,
+        value: String,
+    },
     Poly {
         order: usize,
     },
@@ -132,6 +138,7 @@ pub enum Dialog {
 pub enum Action {
     None,
     Close,
+    ConvertText(u64, String, usize, String),
     Fit(usize),
     Smooth(SmoothMethod, usize),
     Normalize(NormalizeMethod),
@@ -235,6 +242,20 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
     let mut action = Action::None;
     let esc = ctx.input(|i| i.key_pressed(egui::Key::Escape));
     match dialog {
+        Dialog::ConvertText { book, key, row, value } => {
+            window(ctx, "转换为文本列？").show(ctx, |ui| {
+                ui.label(format!("列 {key} 第 {} 行的输入与当前列类型不符。", *row + 1));
+                ui.label("转换会保留整列已有内容，确认后再写入本次输入；可撤销。");
+                ui.horizontal(|ui| {
+                    if ui.button("转换为文本并写入").clicked() {
+                        action = Action::ConvertText(*book, key.clone(), *row, value.clone());
+                    }
+                    if ui.button("取消").clicked() || esc {
+                        action = Action::Close;
+                    }
+                });
+            });
+        }
         Dialog::Poly { order } => {
             window(ctx, "多项式拟合").show(ctx, |ui| {
                 ui.horizontal(|ui| {

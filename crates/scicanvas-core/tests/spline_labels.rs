@@ -11,8 +11,8 @@ fn project(kind: PlotType) -> (Project, u64) {
     let mut p = Project::default();
     p.new_book();
     let b = p.book_mut(1).unwrap();
-    b.columns[0].data = ["0", "1", "2", "3"].map(str::to_string).to_vec();
-    b.columns[1].data = ["0", "1", "1", "0"].map(str::to_string).to_vec();
+    b.columns[0].data = ["0", "1", "2", "3"].map(str::to_string).to_vec().into();
+    b.columns[1].data = ["0", "1", "1", "0"].map(str::to_string).to_vec().into();
     let (id, _) = p.plot_from_selection(1, &[], kind).unwrap();
     (p, id)
 }
@@ -85,7 +85,7 @@ fn spline_autoscale_symbols_gaps_duplicates_and_fit_are_independent() {
         .iter()
         .any(|it| matches!(&it.prim, Prim::Symbols { pts, .. } if pts.len() == 4)));
     let b = p.book_mut(1).unwrap();
-    b.columns[0].data = ["2", "1", "1", "3"].map(str::to_string).to_vec();
+    b.columns[0].data = ["2", "1", "1", "3"].map(str::to_string).to_vec().into();
     let sc = scene::layout_page(p.graph(id).unwrap(), &p, &[]);
     assert!(sc
         .items
@@ -93,7 +93,7 @@ fn spline_autoscale_symbols_gaps_duplicates_and_fit_are_independent() {
         .any(|it| matches!(&it.prim, Prim::Polyline { pts, .. } if pts.len() == 33)));
     p.graph_mut(id).unwrap().first_layer_mut().line_only.clear();
     p.graph_mut(id).unwrap().first_layer_mut().y_keys = vec!["B".into()];
-    p.book_mut(1).unwrap().columns[1].data[2] = String::new();
+    p.book_mut(1).unwrap().columns[1].data.set_text(2, String::new());
     let sc = scene::layout_page(p.graph(id).unwrap(), &p, &[]);
     assert_eq!(
         sc.items
@@ -107,7 +107,7 @@ fn spline_autoscale_symbols_gaps_duplicates_and_fit_are_independent() {
 #[test]
 fn drop_lines_use_zero_or_log_boundary_and_svg_shares_segments() {
     let (mut p, id) = project(PlotType::VerticalDrop);
-    p.book_mut(1).unwrap().columns[1].data = ["-2", "3", "4", "-1"].map(str::to_string).to_vec();
+    p.book_mut(1).unwrap().columns[1].data = ["-2", "3", "4", "-1"].map(str::to_string).to_vec().into();
     for log in [false, true] {
         p.graph_mut(id).unwrap().first_layer_mut().y_log = log;
         let sc = scene::layout_page(p.graph(id).unwrap(), &p, &[]);
@@ -136,9 +136,9 @@ fn label_sources_keep_rows_escape_text_and_exclude_fit_samples() {
     p.fit_poly(&Source::Graph(id), 1).unwrap();
     let b = p.book_mut(1).unwrap();
     let mut text = Column::new("Z", Role::Ignore);
-    text.data = ["A<&", "B", "C", "D"].map(str::to_string).to_vec();
+    text.data = ["A<&", "B", "C", "D"].map(str::to_string).to_vec().into();
     b.columns.push(text);
-    b.columns[1].data[1] = String::new();
+    b.columns[1].data.set_text(1, String::new());
     let l = p.graph_mut(id).unwrap().first_layer_mut();
     l.labels.visible = true;
     l.labels.source = LabelSource::Row;
@@ -169,7 +169,7 @@ fn bar_labels_use_segment_values_positions_and_independent_layers() {
     let (mut p, id) = project(PlotType::StackedBar);
     let b = p.book_mut(1).unwrap();
     let mut c = Column::new("C", Role::Y);
-    c.data = vec!["3".into(); 4];
+    c.data = vec!["3".into(); 4].into();
     b.columns.push(c);
     let l = p.graph_mut(id).unwrap().first_layer_mut();
     l.y_keys.push("C".into());

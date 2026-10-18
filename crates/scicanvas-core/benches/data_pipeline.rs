@@ -44,8 +44,8 @@ fn main() {
         project.sort_book(1, 0, true).unwrap();
         let sort = start.elapsed();
         let book = black_box(&project.books[0]);
-        assert_eq!(book.columns[0].data[0], "0");
-        assert_eq!(book.columns[0].data[rows - 1], (rows - 1).to_string());
+        assert_eq!(book.columns[0].data.text_at(0), "0");
+        assert_eq!(book.columns[0].data.text_at(rows - 1), (rows - 1).to_string());
         println!(
             "{rows},10,{},{:.3},{:.3},{:.3},{items}",
             input.len(),

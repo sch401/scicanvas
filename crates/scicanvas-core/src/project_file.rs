@@ -14,7 +14,7 @@ use zip::CompressionMethod;
 
 use crate::{Book, Project};
 
-pub const CURRENT_VERSION: u32 = 8;
+pub const CURRENT_VERSION: u32 = crate::model::PROJECT_VERSION;
 
 /// `.scv` 容器版本，与 `project.json` 的项目版本分开演进。
 pub const SCV_VERSION: u32 = 1;
@@ -59,6 +59,23 @@ pub fn migrate(mut value: Value) -> Result<Value, String> {
                 let name = old.remove("name").ok_or("图形缺少名称")?;
                 let layer = Value::Object(std::mem::take(old));
                 *graph = serde_json::json!({"id": id, "name": name, "page": {"layers": [layer]}});
+            }
+        }
+    }
+    // v8 → v9: infer numeric/text storage while preserving every legacy cell spelling.
+    if version < 9 {
+        if let Some(books) = object.get_mut("books").and_then(Value::as_array_mut) {
+            for book in books {
+                if let Some(columns) = book.get_mut("columns").and_then(Value::as_array_mut) {
+                    for column in columns {
+                        if column.get("data").is_some_and(Value::is_array) {
+                            let cells: Vec<String> = serde_json::from_value(column["data"].clone())
+                                .map_err(|_| "旧版列数据必须为字符串数组")?;
+                            column["data"] =
+                                serde_json::to_value(crate::ColumnData::from(cells)).map_err(|e| e.to_string())?;
+                        }
+                    }
+                }
             }
         }
     }
@@ -112,6 +129,7 @@ fn validate(project: &Project) -> Result<(), String> {
     for book in &project.books {
         let mut keys = BTreeSet::new();
         for col in &book.columns {
+            col.data.validate()?;
             if col.key.is_empty() || !keys.insert(&col.key) {
                 return Err(format!("工作簿 {} 的列标识为空或重复", book.name));
             }
@@ -190,7 +208,7 @@ pub fn book_csv(book: &Book) -> String {
             if i > 0 {
                 out.push(',');
             }
-            field(&mut out, col.data.get(row).map_or("", String::as_str));
+            field(&mut out, &col.data.text_at(row));
         }
         out.push_str("\r\n");
     }

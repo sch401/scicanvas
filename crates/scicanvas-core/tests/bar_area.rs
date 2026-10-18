@@ -91,7 +91,7 @@ fn horizontal_error_directions_and_derived_lines_follow_the_same_rotation() {
     let b = p.book_mut(1).unwrap();
     for (role, value) in [(Role::XError, "0.1"), (Role::YError, "0.5")] {
         b.push_column(role);
-        b.columns.last_mut().unwrap().data = vec![value.into(); 3];
+        b.columns.last_mut().unwrap().data = vec![value.into(); 3].into();
         b.columns.last_mut().unwrap().error_for = Some("B".into());
     }
     p.fit_poly(&Source::Graph(id), 1).unwrap();
@@ -158,7 +158,7 @@ fn area_gaps_and_log_filtered_rows_split_both_fill_and_outline() {
     for log in [false, true] {
         p.graph_mut(id).unwrap().first_layer_mut().y_log = log;
         if log {
-            p.book_mut(1).unwrap().columns[1].data[2] = "-3".into();
+            p.book_mut(1).unwrap().columns[1].data.set_text(2, "-3".into());
         }
         let sc = scene::layout_page(p.graph(id).unwrap(), &p, &[]);
         assert_eq!(triangles(&sc).len(), 2);

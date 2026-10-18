@@ -32,6 +32,7 @@ Windows 系统字体通过用户电脑读取，本发行包不附加微软雅黑
 | byteorder-lite 0.1.0 | Unlicense OR MIT | [LICENSE-MIT](licenses/third-party/byteorder-lite-0.1.0/LICENSE-MIT), [UNLICENSE](licenses/third-party/byteorder-lite-0.1.0/UNLICENSE) |
 | cfg-if 1.0.5 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/cfg-if-1.0.5/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/cfg-if-1.0.5/LICENSE-MIT) |
 | cfg_aliases 0.2.2 | MIT | [LICENSE](licenses/third-party/cfg_aliases-0.2.2/LICENSE), [NOTICES.md](licenses/third-party/cfg_aliases-0.2.2/NOTICES.md) |
+| chrono 0.4.45 | MIT OR Apache-2.0 | [LICENSE.txt](licenses/third-party/chrono-0.4.45/LICENSE.txt), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/chrono-0.4.45/SOURCE_COPYRIGHT_HEADERS.txt) |
 | clipboard-win 5.4.1 | BSL-1.0 | [LICENSE](licenses/third-party/clipboard-win-5.4.1/upstream/LICENSE) |
 | core_detect 1.0.0 | MIT/Apache-2.0 | [LICENSE-APACHE](licenses/third-party/core_detect-1.0.0/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/core_detect-1.0.0/LICENSE-MIT) |
 | crc32fast 1.5.2 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/crc32fast-1.5.2/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/crc32fast-1.5.2/LICENSE-MIT) |

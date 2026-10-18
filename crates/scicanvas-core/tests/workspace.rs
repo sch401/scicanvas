@@ -83,7 +83,7 @@ fn v8_saves_folders_and_v7_projects_migrate_to_root() {
     v["version"] = 7.into();
     v.as_object_mut().unwrap().remove("folders");
     let old = project_file::from_json(&v.to_string()).unwrap();
-    assert_eq!(old.version, 8);
+    assert_eq!(old.version, project_file::CURRENT_VERSION);
     assert!(old.folders.is_empty());
     assert_eq!(old.books, p.books);
     assert_eq!(old.graphs, p.graphs);

@@ -3,8 +3,8 @@
 条目按 Origin 帮助文档的目录整理，只引用章节标题；实现按公开说明和观察到的行为编写。
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
-共 514 项：P0 98 项，P1 146 项，P2 259 项，不做 11 项。
-状态：已完成 26 项，已实现待验收 50 项，部分实现 41 项，未开始 386 项，不做 11 项。
+共 514 项：P0 97 项，P1 146 项，P2 259 项，不做 12 项。
+状态：已完成 26 项，已实现待验收 51 项，部分实现 44 项，未开始 381 项，不做 12 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -26,7 +26,7 @@
 | F002 | 项目管理器（文件夹树、显示 / 隐藏窗口） | Project Explorer | P0 | 已完成 | 真实多级目录；拖放/菜单移动、慢速双击/F2 就地重命名、删除保留内容、显示/隐藏窗口；快捷键按焦点分流 | 项目树、移动/重命名历史、F2 与工作表键盘隔离回归已通过 | — |
 | F003 | 项目管理器多级文件夹、拖动整理 | Using Project Explorer to Manage Child Windows | P1 | 已实现待验收 | 真实多级目录；工作簿、图形与文件夹拖入目录/拖回根目录，目标高亮；名称慢速双击或 F2 就地编辑；菜单移动保留，均复用撤销事务 | 真实 egui 鼠标拖放、根目录移动、自身/下级拒绝、同目录无操作、慢/快速点击、Enter/Esc/失焦与撤销重做回归通过；Windows 手工交互验收待做 | — |
 | F004 | 窗口排列：层叠 / 平铺 | Arrange Windows | P1 | 已实现待验收 | 层叠/平铺、边缘及四角吸附、顶部吸附布局与 Snap Assist 候选补位已接入 | 窗口几何、吸附和候选补位回归通过；Windows 不同缩放、窄窗口手工验收待做 | — |
-| F005 | 项目文件保存 / 打开 | Opening, Closing and Backing Up the Origin Project File | P0 | 已完成 | .scv ZIP 包保存 project.json、清单、CSV 表格和 SVG 预览，兼容旧 .scproj；内部数据 v8、迁移 v0–v7、完整性校验与原子替换 | scv_files/project_files：包内容、往返、损坏输入、旧版迁移及保存回归已通过 | — |
+| F005 | 项目文件保存 / 打开 | Opening, Closing and Backing Up the Origin Project File | P0 | 已完成 | v9 类型化列；.scv ZIP / .scproj JSON 共用迁移入口，兼容 v0–v8；保存前校验、原子替换；原始数值写法保留 | 旧版迁移与损坏输入、JSON/SCV 往返、14 份旧示例 CSV/SVG 字节一致及原有原子保存回归通过 | — |
 | F006 | 自动备份与崩溃恢复 | Opening, Closing and Backing Up the Origin Project File | P1 | 未开始 | 定时写临时文件 | 强制退出后恢复 | — |
 | F007 | 最近打开的文件 | Recent Origin Files | P1 | 未开始 | 配置文件记录 | 手动操作 | — |
 | F008 | 撤销 / 重做 | — | P0 | 已完成 | 编辑事务；100 步 / 300 MiB；文件夹新建/重命名/移动/删除均可撤销 | 项目快照、真实编辑控件与文件夹事务回归 | — |
@@ -61,8 +61,8 @@
 | F030 | 鼠标拖动框选单元格、Shift 扩展、复制选区 | Scrolling and Simple Data Selection in the Worksheet | P0 | 已实现待验收 | Rust app.rs/sheet.rs 已接入拖动框选、Shift 扩展、复制/剪切/粘贴与清空选区 | 选区边界、键盘、剪贴板及撤销回归已通过；真实鼠标与长表人工验收待做 | — |
 | F031 | 查找与替换 | Finding and Replacing Worksheet Data | P1 | 未开始 | — | 手动操作 | — |
 | F032 | 数值显示格式（小数位、科学计数、工程单位） | Controlling How Numeric Data Display in the Worksheet Column | P0 | 未开始 | 列格式属性 | 单元测试 | — |
-| F033 | 日期时间列与计算 | Dates and Times in the Worksheet | P1 | 未开始 | chrono / jiff | 单元测试 | — |
-| F034 | 文本列与分类数据 | Setting Column Designation | P1 | 未开始 | 列数据类型 | 分类轴绘图 | — |
+| F033 | 日期时间列与计算 | Dates and Times in the Worksheet | P1 | 部分实现 | UTC 毫秒日期类型、ISO8601/日期/毫秒输入、缺失位图、排序、类型转换、v9 保存已接入；本地时区/完整日期格式和日历运算待做 | 日期时区等价、行操作、排序/往返、失败转换原子性回归通过；完整日期计算与人工验收待补 | — |
+| F034 | 文本列与分类数据 | Setting Column Designation | P1 | 已实现待验收 | Text 与 Category 字典列，列头右键/命令转换；编辑、缺失、复制、排序、保存和撤销已接入；图形的分类轴/分组绘图另按相关条目推进 | 类型、字典、空码、行重排、默认标签排序/有序字典排序、JSON/SCV 与界面转换回归通过；Windows 人工操作待验收 | — |
 | F035 | 设置列值（公式列） | Using Formulae to Set or Transform Worksheet Column Values | P0 | 部分实现 | Ctrl+Q 设置列值：表达式、列引用/col(A)、行号 i、pi/e、24 个函数调用名；按当前数据一次性覆盖结果并支持撤销。列公式持久化、依赖图和自动重算待做 | 公式解析/优先级/错误、写回与撤销回归已通过；源列变化自动重算与循环依赖验收待实现 | — |
 | F036 | 单元格公式（=A1+B1） | Using a Formula to Set Cell Values | P2 | 未开始 | 依赖图 + 增量重算 | 单元测试 | — |
 | F037 | 生成数据序列（等差、随机数、正态分布） | Generating Simple Worksheet Datasets | P1 | 已实现待验收 | 工作表 → 填充序列：等差序列、均匀分布、正态分布随机数（SplitMix64 + Box–Muller），覆盖目标列，可撤销 | 单元测试：等差值精确；20000 个随机数的均值、标准差落在理论值附近；同种子可复现 | — |
@@ -77,13 +77,13 @@
 | F046 | 数据透视表 | Pivot Table | P2 | 未开始 | polars pivot | 与 Origin 结果比较 | — |
 | F047 | 工作表查询（条件提取） | Worksheet Query - Quick Start | P2 | 未开始 | — | 与 Origin 结果比较 | — |
 | F048 | 冻结行列 | Freeze Rows Columns | P1 | 未开始 | — | 手动操作 | — |
-| F049 | 多工作表（一个工作簿多张表） | Workbooks | P0 | 未开始 | Book → Sheet → Column 三层模型 | 手动操作 | — |
+| F049 | 多工作表（一个工作簿多张表） | Workbooks | 不做 | 不做 | 用户 2026-10-18 决定：每个 Book 只有一张表，多表使用独立窗口；Excel 多工作表导入继续拆成独立 Book，不采用多 Sheet 容器或底部标签页 | 后续保持一表一窗口、独立命名/目录/保存/绘图引用；Excel 拆表导入沿用现有回归 | — |
 | F050 | 工作簿模板 | What is Saved with the Workbook Template (*.OTW or *.OTWU) File? | P1 | 未开始 | 保存列定义与格式 | 套模板后结构一致 | — |
 | F051 | 选中数据的状态栏统计 | Scrolling and Simple Data Selection in the Worksheet | P0 | 已完成 | — | 与手算比较 | — |
 | F052 | 单元格内嵌图片 / 迷你图 | Inserting Graphs Images and Other Objects into Worksheet Cells | P2 | 未开始 | — | 目视检查 | — |
-| F053 | 大数据量（百万行流畅滚动） | Origin Limitations | P0 | 部分实现 | 虚拟化表格与十万行编辑事务回归已有；百万行性能目标、数值列式存储和绘图抽点待落实 | 十万行事务复用/空闲帧测试已通过；百万行滚动帧率及内存验收待做 | — |
-| F510 | 日期时间列 | Worksheet / Column Properties / Date and Time | P0 | 未开始 | A1 UTC 毫秒存储与日期时间解析、显示和排序 | 格式、时区、缺失值、v9 迁移和往返 | — |
-| F511 | 分类列及类别排序 | Worksheet / Column Properties / Categorical | P0 | 未开始 | A1 类别编码、显式类别顺序和稳定排序 | 缺失类别、重排、保存与图形轴顺序 | — |
+| F053 | 大数据量（百万行流畅滚动） | Origin Limitations | P0 | 部分实现 | 类型化数值列、缺失位图和可见行表格已接入；本机百万行十列导入 1.462 秒、排版 185 ms、整表排序 54 ms；完整首帧/进程峰值内存和绘图抽点待验收 | 百万数值单列容量估算 <12 MiB；同机基准见 docs/perf.md，不等同完整界面首帧/峰值内存验收 | — |
+| F510 | 日期时间列 | Worksheet / Column Properties / Date and Time | P0 | 部分实现 | DateTime 基础列已接入：UTC 毫秒存储、ISO8601/日期/毫秒解析、位图/原文保留、转换/排序/v9 保存；本地时区配置、显示格式与日期轴待做 | typed_columns 与界面命令/错误输入回归通过；完整格式及日期轴人工/参考验收继续推进 | — |
+| F511 | 分类列及类别排序 | Worksheet / Column Properties / Categorical | P0 | 部分实现 | Category 采用 u32 编码和类别字典，支持缺失、编辑、转换、保存与标签排序；ordered 字典顺序已有核心支持，类别顺序编辑界面和分类轴待做 | 字典合法性、行增删/排序、保持编码/顺序及往返回归通过；类别编辑与分类轴后续验收 | — |
 
 ## 矩阵
 

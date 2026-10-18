@@ -988,7 +988,7 @@ fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View
                         .as_deref()
                         .and_then(|k| book.and_then(|b| b.column(k)))
                         .and_then(|c| c.data.get(s.rows[i]))
-                        .cloned()
+                        .map(std::borrow::Cow::into_owned)
                         .unwrap_or_default(),
                     _ => String::new(),
                 };

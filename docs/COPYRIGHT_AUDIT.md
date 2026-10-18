@@ -8,7 +8,7 @@
 | 项目 | 检查结果及处理 |
 | --- | --- |
 | 应用自有部分 | Cargo.toml 原有 MIT OR Apache-2.0；补 LICENSE-MIT / LICENSE-APACHE，第三方部分保留原许可，不以应用许可重新覆盖 |
-| Rust 包 | 从实际 Windows 构建树列出 186 个第三方包（含构建期工具）；从 Cargo.lock 校验原始 .crate，保留原始许可、NOTICE 和源码版权头。完整索引与每文件校验和见 licenses/THIRD_PARTY_INDEX.json |
+| Rust 包 | 从实际 Windows 构建树列出 187 个第三方包（含构建期工具）；从 Cargo.lock 校验原始 .crate，保留原始许可、NOTICE 和源码版权头。完整索引与每文件校验和见 licenses/THIRD_PARTY_INDEX.json |
 | 未随 crate 提供的许可文本 | 按 .cargo_vcs_info.json 指向的同一提交取得 egui、AccessKit、clipboard-win、enum-map、gl-rs 的原文；URL/SHA-256 见 licenses/supplemental/sources.json，保留 REUSE 文件级版权 |
 | MPL 2.0 | resvg、usvg、usvg-parser、usvg-text-layout、usvg-tree 各为 0.37.0；原始完整源码随包提供，校验和与 Cargo.lock 一致；检查本地 MPL 文件与原包相同，见 MPL_SOURCE.md |
 | egui 内嵌字体 | Ubuntu Light、Noto Emoji、Hack、emoji-icon-font；保留 UFL、OFL、MIT 原文，以及 Hack 附带的 Bitstream Vera/DejaVu 声明。额外提取字体 name 表原始版权、商标与许可，见 licenses/FONT_NOTICES.md |
