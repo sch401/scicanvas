@@ -2334,6 +2334,7 @@ impl eframe::App for SciApp {
 
 impl SciApp {
     fn ui_frame(&mut self, ctx: &egui::Context) {
+        crate::chrome::edges(ctx, &self.pal);
         self.dropped_files(ctx);
         if self.last_history_group.is_some()
             && ctx.input(|i| {
@@ -2749,10 +2750,10 @@ mod history_tests {
             app.explorer_target = Some(folder);
             let before = app.project.clone();
             let mut ui = ExplorerUi::new();
-            let pos = ui.at(&mut app, label);
             // 新建命令合并在“＋ 新建”菜单里：先打开菜单再点菜单项
             let pos = ui.at(&mut app, "＋ 新建");
             ui.click(&mut app, pos);
+            let pos = ui.at(&mut app, label);
             ui.click(&mut app, pos);
             let id = app.active.unwrap();
             assert_eq!(app.project.folder_of(id), Some(folder));

@@ -362,9 +362,10 @@ pub fn show(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palette, 
         .show_separator_line(false)
         .show(ctx, |ui| {
             ui.spacing_mut().item_spacing = vec2(4.0, 0.0);
-            // 标题栏：快速访问 + 名称 + 搜索
-            ui.add_space(3.0);
-            ui.horizontal(|ui| {
+            // 标题栏：快速访问 + 名称 + 搜索 + 窗口按钮；空白处拖动移窗、双击最大化
+            let title_rect = Rect::from_min_size(ui.cursor().min, vec2(ui.available_width(), 30.0));
+            crate::chrome::drag_area(ui, title_rect);
+            ui.allocate_ui_with_layout(title_rect.size(), Layout::left_to_right(Align::Center), |ui| {
                 ui.add_space(6.0);
                 for id in QAT {
                     if let Some(c) = commands::find(id) {
@@ -378,7 +379,8 @@ pub fn show(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palette, 
                 ui.add_space(6.0);
                 ui.label(RichText::new(app.doc_title()).color(pal.weak));
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    ui.add_space(8.0);
+                    crate::chrome::buttons(ui, pal);
+                    ui.add_space(12.0);
                     let text = RichText::new("搜索命令            Ctrl K").color(pal.weak);
                     let b = egui::Button::image_and_text(
                         icons::icon("search", dark).fit_to_exact_size(vec2(14.0, 14.0)),
