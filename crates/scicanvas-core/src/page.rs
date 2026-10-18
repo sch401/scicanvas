@@ -11,12 +11,21 @@ pub struct Page {
     pub columns: usize,
     layers: Vec<Layer>,
 }
+/// 字号、刻度、点和线宽按这一栏宽设计（Nature 单栏 89 mm）；更宽的栏按比例整体放大。
+pub const REFERENCE_COLUMN_MM: f64 = 89.0;
+
+/// 新图形的默认页宽：A4 纸宽。
+pub const A4_WIDTH_MM: f64 = 210.0;
+
+/// 早期项目文件没有记录页面尺寸时使用的旧默认值（Nature 单栏 89 mm，4:3），读取时补上以保持原样。
+pub const LEGACY_PAGE_MM: (f64, f64) = (89.0, 66.75);
+
 impl Default for Page {
     fn default() -> Self {
         Self {
-            // Nature 单栏宽 89 mm，4:3
-            width_mm: 89.0,
-            height_mm: 66.75,
+            // A4 纸宽 210 mm，4:3
+            width_mm: A4_WIDTH_MM,
+            height_mm: A4_WIDTH_MM * 0.75,
             columns: 1,
             layers: vec![Layer::default()],
         }
@@ -26,6 +35,18 @@ impl Page {
     /// 页面固定逻辑画布，96 个逻辑单位对应一英寸。
     pub fn logical_size(&self) -> [f64; 2] {
         [self.width_mm * 96.0 / 25.4, self.height_mm * 96.0 / 25.4]
+    }
+    /// 版面放大倍数：每栏宽度 / 89 mm，至少为 1（单栏及更窄的页面保持原尺寸）。
+    pub fn scale(&self) -> f64 {
+        let cols = self
+            .columns
+            .clamp(1, self.layers.iter().filter(|l| l.placement.is_none()).count().max(1));
+        let k = self.width_mm / cols as f64 / REFERENCE_COLUMN_MM;
+        if k.is_finite() {
+            k.max(1.0)
+        } else {
+            1.0
+        }
     }
     pub fn layers(&self) -> &[Layer] {
         &self.layers
@@ -252,6 +273,15 @@ impl Layer {
         }
         if self.plot_type == crate::PlotType::PercentStackedBar {
             return "百分比 (%)".into();
+        }
+        if self.plot_type == crate::PlotType::FloatingBar {
+            let range = book.and_then(|b| {
+                let top = self.y_keys.first()?;
+                Some(b.column(self.base_by_y.get(top)?)?.range_label(b.column(top)?))
+            });
+            if let Some(range) = range {
+                return range;
+            }
         }
         book.and_then(|b| self.y_keys.first().and_then(|k| b.column(k)))
             .map(|c| c.axis_label())

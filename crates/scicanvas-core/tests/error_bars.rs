@@ -131,6 +131,12 @@ fn autoscale_svg_and_all_basic_chart_types_share_error_segments() {
     }
 }
 
+/// 版面按页宽整体放大后坐标会有末位舍入差异，按 1e-9 比较线段。
+fn has(segs: &[[f64; 4]], want: [f64; 4]) -> bool {
+    segs.iter()
+        .any(|s| s.iter().zip(want).all(|(a, b)| (a - b).abs() < 1e-9))
+}
+
 #[test]
 fn logarithmic_filtering_preserves_errors_and_clips_nonpositive_endpoints() {
     let (mut p, gid) = project();
@@ -145,7 +151,7 @@ fn logarithmic_filtering_preserves_errors_and_clips_nonpositive_endpoints() {
     let groups = errors(&sc);
     assert_eq!(groups[0].len(), 11); // two XY errors; clipped lower Y endpoint has no cap
     assert!(groups[0].iter().flatten().all(|v| v.is_finite()));
-    assert!(groups[0].contains(&[sc.px(2.0), sc.py(1.0), sc.px(2.0), sc.py(45.0)]));
+    assert!(has(groups[0], [sc.px(2.0), sc.py(1.0), sc.px(2.0), sc.py(45.0)]));
     let svg = svg::render_page(p.graph(gid).unwrap(), &p);
     assert!(!svg.contains("NaN") && !svg.contains("inf"));
 }
@@ -163,9 +169,9 @@ fn grouped_bars_place_errors_at_each_bar_center() {
     let groups = errors(&sc);
     assert_eq!(groups.len(), 2);
     let x = sc.px(1.0 - 0.175);
-    assert!(groups[0].contains(&[x, sc.py(8.0), x, sc.py(12.0)]));
+    assert!(has(groups[0], [x, sc.py(8.0), x, sc.py(12.0)]));
     let x = sc.px(1.0 + 0.175);
-    assert_eq!(groups[1][0], [x, sc.py(14.0), x, sc.py(16.0)]);
+    assert!(has(&groups[1][..1], [x, sc.py(14.0), x, sc.py(16.0)]));
 }
 
 #[test]

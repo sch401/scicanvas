@@ -78,6 +78,21 @@ impl Column {
     }
 
     /// 坐标轴标题：长名称 (单位)。
+    /// 两列构成的范围（如浮动柱的下端到上端）：单位相同时只写一次。
+    pub fn range_label(&self, top: &Column) -> String {
+        let (a, b) = (self.units.trim(), top.units.trim());
+        if a == b {
+            let names = format!("{} – {}", self.display_name(), top.display_name());
+            if a.is_empty() {
+                names
+            } else {
+                format!("{names} ({a})")
+            }
+        } else {
+            format!("{} – {}", self.axis_label(), top.axis_label())
+        }
+    }
+
     pub fn axis_label(&self) -> String {
         let n = self.display_name();
         if self.units.trim().is_empty() {
@@ -341,9 +356,10 @@ impl Panels {
     }
     pub fn page_mm(self) -> (f64, f64) {
         match self {
-            Panels::Stacked => (89.0, 120.0),
-            Panels::SideBySide => (183.0, 70.0),
-            Panels::Grid4 => (183.0, 140.0),
+            // 页宽统一为 A4 纸宽；上下两面板每块 3:2，整页仍可放进 A4 竖版
+            Panels::Stacked => (210.0, 280.0),
+            Panels::SideBySide => (210.0, 105.0),
+            Panels::Grid4 => (210.0, 157.5),
         }
     }
 }
@@ -1041,8 +1057,8 @@ mod tests {
     fn panels_split_y_columns_in_order_and_lay_out_on_a_grid() {
         let mut p = Project::sample();
         for (panels, columns, size) in [
-            (Panels::Stacked, 1, (89.0, 120.0)),
-            (Panels::SideBySide, 2, (183.0, 70.0)),
+            (Panels::Stacked, 1, (210.0, 280.0)),
+            (Panels::SideBySide, 2, (210.0, 105.0)),
         ] {
             let (id, _) = p.plot_panels(1, &[], PlotType::Line, panels).unwrap();
             let page = &p.graph(id).unwrap().page;

@@ -22,7 +22,8 @@ fn presets_have_example_data_and_use_the_shared_scene() {
         let sc = scene::build_page(&graph, &project, 800.0, 600.0, None);
         assert!(!sc.items.is_empty());
         assert_eq!(sc.layer_plots.len(), 1);
-        assert!(svg::render_page(&graph, &project).contains("89mm"));
+        // 新图形默认 A4 纸宽、4:3
+        assert!(svg::render_page(&graph, &project).contains(r#"width="210mm" height="157.5mm""#));
         let layout = scene::layout_page(&graph, &project, &[]);
         assert_eq!([layout.w, layout.h], graph.page.logical_size());
         assert!(svg::render_page(&graph, &project).contains(&format!("viewBox=\"0 0 {} {}\"", layout.w, layout.h)));

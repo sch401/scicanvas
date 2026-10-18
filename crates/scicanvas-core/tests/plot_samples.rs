@@ -387,10 +387,16 @@ fn samples() -> Vec<(String, Project)> {
             ],
         ),
     ];
+    // 提交的示例是 v8 兼容样本，当时默认页面为 89 × 66.75 mm；已保存的项目保留自己的页面尺寸
     cases
         .into_iter()
         .enumerate()
-        .map(|(i, p)| (format!("{:02}-{}.scv", i + 1, p.graphs[0].name), p))
+        .map(|(i, mut p)| {
+            for g in &mut p.graphs {
+                (g.page.width_mm, g.page.height_mm) = scicanvas_core::page::LEGACY_PAGE_MM;
+            }
+            (format!("{:02}-{}.scv", i + 1, p.graphs[0].name), p)
+        })
         .collect()
 }
 
@@ -442,20 +448,24 @@ fn committed_samples_match_generated_projects() {
         let committed = fs::read(directory().join(&name)).unwrap();
         assert_eq!(project_file::from_bytes(&committed).unwrap(), project, "{name}");
         let rendered = project_file::to_scv(&project).unwrap();
-        // Keep the committed v8 examples as compatibility fixtures. Only the authoritative
-        // schema/manifest changes in v9; every CSV and SVG preview must retain its bytes.
+        // Keep the committed v8 examples as compatibility fixtures: the migrated project must equal
+        // the generated one and every CSV keeps its bytes. SVG previews are derived from the
+        // renderer, whose output is pinned by tests/golden; here they only need to regenerate.
         use std::io::{Cursor, Read};
         let mut old = zip::ZipArchive::new(Cursor::new(&committed)).unwrap();
         let mut current = zip::ZipArchive::new(Cursor::new(&rendered)).unwrap();
         for i in 0..old.len() {
             let mut file = old.by_index(i).unwrap();
             let path = file.name().unwrap().into_owned();
-            if path.ends_with(".csv") || path.ends_with(".svg") {
-                let mut before = Vec::new();
-                let mut after = Vec::new();
+            let mut before = Vec::new();
+            let mut after = Vec::new();
+            if path.ends_with(".csv") {
                 file.read_to_end(&mut before).unwrap();
                 current.by_name(&path).unwrap().read_to_end(&mut after).unwrap();
                 assert_eq!(before, after, "{name}/{path}");
+            } else if path.ends_with(".svg") {
+                current.by_name(&path).unwrap().read_to_end(&mut after).unwrap();
+                assert!(String::from_utf8(after).unwrap().starts_with("<svg"), "{name}/{path}");
             }
         }
     }

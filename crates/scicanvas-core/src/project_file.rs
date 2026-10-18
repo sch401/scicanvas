@@ -62,6 +62,16 @@ pub fn migrate(mut value: Value) -> Result<Value, String> {
             }
         }
     }
+    // 默认页宽从 89 mm 改为 A4 宽之前，早期文件可能没有记录页面尺寸：补上当时的默认值，打开后版面不变。
+    if let Some(graphs) = object.get_mut("graphs").and_then(Value::as_array_mut) {
+        for graph in graphs {
+            if let Some(page) = graph.get_mut("page").and_then(Value::as_object_mut) {
+                let (w, h) = crate::page::LEGACY_PAGE_MM;
+                page.entry("width_mm").or_insert(w.into());
+                page.entry("height_mm").or_insert(h.into());
+            }
+        }
+    }
     // v8 → v9: infer numeric/text storage while preserving every legacy cell spelling.
     if version < 9 {
         if let Some(books) = object.get_mut("books").and_then(Value::as_array_mut) {

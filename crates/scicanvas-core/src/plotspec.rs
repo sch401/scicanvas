@@ -232,9 +232,14 @@ impl PlotSpec {
                     }));
                 }
             }
+            // 浮动柱表示下端到上端的范围，图例写出两列
+            let name = match base_values {
+                Some(base) => format!("{} – {}", base.display_name(), c.display_name()),
+                None => c.display_name().to_string(),
+            };
             out.push(Series {
                 key: c.key.clone(),
-                name: c.display_name().to_string(),
+                name,
                 points: pts,
                 errors,
                 rows,

@@ -39,7 +39,15 @@ fn horizontal_and_vertical_steps_preserve_the_sample_values() {
             })
             .unwrap();
         let expected: Vec<_> = expected.into_iter().map(|p| [sc.px(p[0]), sc.py(p[1])]).collect();
-        assert_eq!(actual, &expected);
+        // 版面按页宽整体放大后坐标有末位舍入差异
+        assert_eq!(actual.len(), expected.len());
+        assert!(
+            actual
+                .iter()
+                .zip(&expected)
+                .all(|(a, b)| (a[0] - b[0]).abs() < 1e-9 && (a[1] - b[1]).abs() < 1e-9),
+            "{actual:?} vs {expected:?}"
+        );
     }
 }
 

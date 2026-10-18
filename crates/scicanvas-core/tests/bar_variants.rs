@@ -55,8 +55,9 @@ fn signed_stacks_keep_missing_rows_aligned_and_expand_the_axis() {
     assert_eq!(rects.len(), 11);
     assert_eq!(rects[0][0], rects[3][0]);
     assert_eq!(rects[0][2], rects[3][2]);
-    assert_eq!(rects[3][1], sc.py(7.0));
-    assert_eq!(rects[3][3], sc.py(2.0) - sc.py(7.0));
+    // 版面按页宽整体放大后坐标会有末位舍入差异
+    assert!((rects[3][1] - sc.py(7.0)).abs() < 1e-9);
+    assert!((rects[3][3] - (sc.py(2.0) - sc.py(7.0))).abs() < 1e-9);
 }
 
 #[test]

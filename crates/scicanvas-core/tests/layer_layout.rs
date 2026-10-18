@@ -28,16 +28,12 @@ fn inset_preserves_parent_layout_and_top_layer_captures_its_background() {
     assert_eq!(sc.layer_at(560.0, 70.0), Some(1));
     assert!(!sc.layers[1].contains(560.0, 70.0));
     assert_eq!(sc.layer_at(300.0, 300.0), Some(0));
+    // 版面按页宽整体放大后坐标有末位舍入差异
+    let near = |a: f64, b: f64| (a - b).abs() < 1e-9;
     assert!(sc.items.iter().any(|item| matches!(
         item.prim,
-        Prim::Rect {
-            x: 550.0,
-            y: 60.0,
-            w: 400.0,
-            h: 240.0,
-            fill: None,
-            stroke: None
-        }
+        Prim::Rect { x, y, w, h, fill: None, stroke: None }
+            if near(x, 550.0) && near(y, 60.0) && near(w, 400.0) && near(h, 240.0)
     )));
     let view = scene::View {
         x: (2.0, 4.0),

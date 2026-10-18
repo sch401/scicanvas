@@ -6,6 +6,27 @@ const V0: &str = include_str!("fixtures/legacy-v0.scproj");
 const V1: &str = include_str!("fixtures/legacy-v1.scproj");
 
 #[test]
+fn pages_without_a_saved_size_keep_the_old_default_while_new_graphs_use_a4() {
+    // v0/v1 旧文件没有页面尺寸：读取后保持当时的 89 × 66.75 mm
+    for p in [
+        project_file::from_json(V0).unwrap(),
+        project_file::from_json(V1).unwrap(),
+    ] {
+        assert!(p
+            .graphs
+            .iter()
+            .all(|g| (g.page.width_mm, g.page.height_mm) == scicanvas_core::page::LEGACY_PAGE_MM));
+    }
+    // 记录了尺寸的页面按记录读取；新图形默认 A4 纸宽、4:3
+    let mut p = Project::sample();
+    p.graphs[0].page.width_mm = 120.0;
+    let restored = project_file::from_json(&project_file::to_json(&p).unwrap()).unwrap();
+    assert_eq!(restored.graphs[0].page.width_mm, 120.0);
+    let page = scicanvas_core::page::Page::default();
+    assert_eq!((page.width_mm, page.height_mm), (210.0, 157.5));
+}
+
+#[test]
 fn old_versions_preserve_data_and_all_four_plot_layouts() {
     let mut p = project_file::from_json(V0).unwrap();
     assert_eq!(p, project_file::from_json(V1).unwrap());
