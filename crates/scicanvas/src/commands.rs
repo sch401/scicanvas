@@ -1019,6 +1019,16 @@ fn build() -> Vec<Command> {
         )
         .modifies(),
         c(
+            "fit.mlr",
+            "多元线性回归",
+            "fitlin",
+            "",
+            "分析",
+            "multiple linear regression mlr least squares 多元 线性回归 多变量",
+            need_book,
+            |a| a.regression(),
+        ),
+        c(
             "stats.normality",
             "正态性检验",
             "stats",

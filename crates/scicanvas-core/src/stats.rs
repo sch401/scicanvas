@@ -872,6 +872,107 @@ pub fn grubbs(values: &[f64], alpha: f64) -> Result<Grubbs, String> {
     })
 }
 
+/// 多元线性回归 y = b0 + b1·x1 + … + bk·xk 的结果。系数顺序为截距在前。
+#[derive(Clone, Debug, PartialEq)]
+pub struct Regression {
+    pub n: usize,
+    pub coef: Vec<f64>,
+    pub se: Vec<f64>,
+    pub t: Vec<f64>,
+    pub p: Vec<f64>,
+    pub r2: f64,
+    pub adj_r2: f64,
+    pub f: f64,
+    pub f_p: f64,
+    /// 残差标准差。
+    pub s: f64,
+}
+
+/// 对称矩阵求逆（Gauss–Jordan，部分主元）；奇异时返回 None。
+fn invert(mut a: Vec<Vec<f64>>) -> Option<Vec<Vec<f64>>> {
+    let n = a.len();
+    let mut inv: Vec<Vec<f64>> = (0..n).map(|i| (0..n).map(|j| f64::from(i == j)).collect()).collect();
+    let scale = a.iter().flatten().fold(0.0_f64, |m, v| m.max(v.abs()));
+    for c in 0..n {
+        let piv = (c..n).max_by(|i, j| a[*i][c].abs().total_cmp(&a[*j][c].abs()))?;
+        if a[piv][c].abs() <= 1e-12 * scale {
+            return None;
+        }
+        a.swap(c, piv);
+        inv.swap(c, piv);
+        let d = a[c][c];
+        for j in 0..n {
+            a[c][j] /= d;
+            inv[c][j] /= d;
+        }
+        for r in 0..n {
+            if r != c {
+                let f = a[r][c];
+                if f != 0.0 {
+                    for j in 0..n {
+                        a[r][j] -= f * a[c][j];
+                        inv[r][j] -= f * inv[c][j];
+                    }
+                }
+            }
+        }
+    }
+    Some(inv)
+}
+
+/// 多元线性回归（最小二乘）。`xs` 是各自变量的列；任一变量缺失的行整行跳过。
+pub fn multiple_regression(xs: &[Vec<f64>], y: &[f64]) -> Result<Regression, String> {
+    if xs.is_empty() {
+        return Err("至少需要一个自变量".into());
+    }
+    let rows: Vec<usize> = (0..y.len())
+        .filter(|&i| y[i].is_finite() && xs.iter().all(|x| x.get(i).is_some_and(|v| v.is_finite())))
+        .collect();
+    let (n, k) = (rows.len(), xs.len() + 1);
+    if n <= k {
+        return Err(format!("有效行数（{n}）必须多于参数个数（{k}）"));
+    }
+    let design = |i: usize, j: usize| if j == 0 { 1.0 } else { xs[j - 1][i] };
+    let mut xtx = vec![vec![0.0; k]; k];
+    let mut xty = vec![0.0; k];
+    for &i in &rows {
+        for (a, row) in xtx.iter_mut().enumerate() {
+            xty[a] += design(i, a) * y[i];
+            for (b, cell) in row.iter_mut().enumerate() {
+                *cell += design(i, a) * design(i, b);
+            }
+        }
+    }
+    let inv = invert(xtx).ok_or("自变量之间线性相关（或某一列为常数），无法回归")?;
+    let coef: Vec<f64> = (0..k).map(|a| (0..k).map(|b| inv[a][b] * xty[b]).sum()).collect();
+    let my = rows.iter().map(|&i| y[i]).sum::<f64>() / n as f64;
+    let (mut sse, mut sst) = (0.0, 0.0);
+    for &i in &rows {
+        let fit: f64 = (0..k).map(|a| coef[a] * design(i, a)).sum();
+        sse += (y[i] - fit).powi(2);
+        sst += (y[i] - my).powi(2);
+    }
+    let df = (n - k) as f64;
+    let s2 = sse / df;
+    let se: Vec<f64> = (0..k).map(|a| (s2 * inv[a][a]).sqrt()).collect();
+    let t: Vec<f64> = coef.iter().zip(&se).map(|(c, s)| c / s).collect();
+    let p = t.iter().map(|t| (2.0 * t_cdf(-t.abs(), df)).min(1.0)).collect();
+    let r2 = if sst > 0.0 { 1.0 - sse / sst } else { f64::NAN };
+    let f = (sst - sse) / (k - 1) as f64 / s2;
+    Ok(Regression {
+        n,
+        coef,
+        se,
+        t,
+        p,
+        r2,
+        adj_r2: 1.0 - (1.0 - r2) * (n - 1) as f64 / df,
+        f,
+        f_p: f_sf(f, (k - 1) as f64, df),
+        s: s2.sqrt(),
+    })
+}
+
 /// 线性标准曲线 y = a + b·x，用于由响应值反查浓度。
 #[derive(Clone, Debug, PartialEq)]
 pub struct Calibration {
@@ -1179,6 +1280,57 @@ mod tests {
         near(r.critical, 2.708245645805754);
         near(r.p, 0.9544522095301384);
         assert!(grubbs(&[1.0, 1.0, 1.0], 0.05).is_err());
+    }
+
+    #[test]
+    fn multiple_regression_matches_numpy_and_scipy() {
+        let near = |got: f64, want: f64| assert!((got - want).abs() <= 1e-9 * want.abs(), "{got} vs {want}");
+        let x1: Vec<f64> = (1..=10).map(f64::from).collect();
+        let mut x2 = vec![2.0, 1.5, 3.2, 2.8, 4.1, 3.9, 5.5, 5.0, 6.2, 6.8];
+        let mut y = vec![5.1, 6.0, 8.9, 9.7, 12.6, 13.1, 16.4, 16.2, 19.5, 21.0];
+        // numpy.linalg.lstsq，标准误 / t / p 与 scipy.stats.t、f 计算
+        let check = |r: &Regression| {
+            for (got, want) in r
+                .coef
+                .iter()
+                .zip([1.7134747847478458, 1.0458979089790894, 1.313191881918821])
+            {
+                near(*got, want);
+            }
+            for (got, want) in
+                r.se.iter()
+                    .zip([0.2716168984837354, 0.11457163503596314, 0.19603498815694728])
+            {
+                near(*got, want);
+            }
+            for (got, want) in
+                r.p.iter()
+                    .zip([0.00040090279266631336, 3.888855306495218e-05, 0.0002777537567371148])
+            {
+                near(*got, want);
+            }
+            near(r.t[1], 9.128768291128866);
+            near(r.r2, 0.9980150489717398);
+            near(r.adj_r2, 0.9974479201065225);
+            near(r.f, 1759.7676827638034);
+            near(r.f_p, 3.4843701764736113e-10);
+            near(r.s, 0.2752116962847333);
+        };
+        check(&multiple_regression(&[x1.clone(), x2.clone()], &y).unwrap());
+        // 缺失行整行跳过
+        let mut x1m = x1.clone();
+        x1m.push(11.0);
+        x2.push(f64::NAN);
+        y.push(30.0);
+        let r = multiple_regression(&[x1m, x2], &y).unwrap();
+        assert_eq!(r.n, 10);
+        check(&r);
+        // 共线
+        let x3: Vec<f64> = x1.iter().map(|v| 2.0 * v).collect();
+        assert!(multiple_regression(&[x1.clone(), x3], &y[..10])
+            .unwrap_err()
+            .contains("线性相关"));
+        assert!(multiple_regression(&[x1[..2].to_vec()], &y[..2]).is_err());
     }
 
     #[test]

@@ -1550,6 +1550,52 @@ impl SciApp {
         }
     }
 
+    /// 多元线性回归：最后点选的列为因变量，其余为自变量。
+    pub(crate) fn regression(&mut self) {
+        let Some((id, keys)) = self.ttest_columns() else { return };
+        if keys.len() < 2 {
+            self.status = "请先点选自变量列，最后点选因变量（Y）列".into();
+            return;
+        }
+        let book = self.project.book(id).unwrap();
+        let (ykey, xkeys) = keys.split_last().unwrap();
+        let xs: Vec<Vec<f64>> = xkeys.iter().map(|k| book.column(k).unwrap().values()).collect();
+        let y = book.column(ykey).unwrap();
+        match scicanvas_core::stats::multiple_regression(&xs, &y.values()) {
+            Ok(r) => {
+                let mut rows = vec![["参数", "值", "标准误", "t", "p"].map(String::from).to_vec()];
+                let names = std::iter::once("截距".to_owned())
+                    .chain(xkeys.iter().map(|k| book.column(k).unwrap().display_name().to_owned()));
+                for (i, name) in names.enumerate() {
+                    rows.push(vec![
+                        name,
+                        fmt_num(round_sig(r.coef[i], 8)),
+                        fmt_num(round_sig(r.se[i], 6)),
+                        fmt_num(round_sig(r.t[i], 6)),
+                        fmt_num(round_sig(r.p[i], 6)),
+                    ]);
+                }
+                let note = format!(
+                    "因变量 {}，N = {}。R² = {}，调整 R² = {}，残差标准差 = {}；\nF = {}，p = {}（检验所有斜率是否同时为 0）。参数的 p 为双侧 t 检验；任一变量缺失的行已跳过。",
+                    y.display_name(),
+                    r.n,
+                    fmt_num(round_sig(r.r2, 6)),
+                    fmt_num(round_sig(r.adj_r2, 6)),
+                    fmt_num(round_sig(r.s, 6)),
+                    fmt_num(round_sig(r.f, 6)),
+                    fmt_num(round_sig(r.f_p, 6))
+                );
+                self.status = format!("多元线性回归：R² = {}", fmt_num(round_sig(r.r2, 6)));
+                self.dialog = Some(Dialog::Table {
+                    title: "多元线性回归".into(),
+                    rows,
+                    note,
+                });
+            }
+            Err(e) => self.status = e,
+        }
+    }
+
     /// 点选的各列分别做 Shapiro–Wilk 正态性检验。
     pub(crate) fn normality(&mut self) {
         let Some((id, keys)) = self.ttest_columns() else { return };
@@ -4492,6 +4538,28 @@ mod history_tests {
         assert!(app.status.contains("2 个峰"), "{}", app.status);
         app.undo();
         assert_eq!(app.project.books.len(), books);
+    }
+
+    #[test]
+    fn regression_uses_the_last_picked_column_as_y() {
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["A".into(), "C".into(), "B".into()]);
+        app.regression();
+        let book = app.project.book(1).unwrap();
+        let want = scicanvas_core::stats::multiple_regression(
+            &[book.column("A").unwrap().values(), book.column("C").unwrap().values()],
+            &book.column("B").unwrap().values(),
+        );
+        match (&app.dialog, want) {
+            (Some(Dialog::Table { rows, note, .. }), Ok(r)) => {
+                assert_eq!(rows.len(), 4);
+                assert_eq!(rows[2][0], book.column("A").unwrap().display_name());
+                assert_eq!(rows[1][1], fmt_num(round_sig(r.coef[0], 8)));
+                assert!(note.contains(book.column("B").unwrap().display_name()));
+            }
+            (d, w) => panic!("unexpected {:?} / {:?}", d.is_some(), w),
+        }
     }
 
     #[test]

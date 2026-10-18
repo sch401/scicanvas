@@ -127,6 +127,7 @@ pub static TABS: &[Tab] = &[
                     Big("fit.poly"),
                     Big("fit.nonlinear"),
                     Big("fit.calibration"),
+                    Big("fit.mlr"),
                 ],
             },
             Group {

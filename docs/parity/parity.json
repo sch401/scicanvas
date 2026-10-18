@@ -1461,9 +1461,9 @@
   "feature": "多元线性回归",
   "ref": "The Multiple Linear Regression Dialog Box",
   "pri": "P1",
-  "status": "未开始",
-  "how": "",
-  "verify": "NIST StRD（Longley）",
+  "status": "已实现待验收",
+  "how": "分析 → 多元线性回归：先点选自变量、最后点选因变量；参数表（值、标准误、t、p）与 R²、调整 R²、F 检验、残差标准差",
+  "verify": "与 numpy.linalg.lstsq 及 scipy.stats.t / f 计算的参数、标准误、p 值一致（1e-9），含缺失行与共线提示",
   "id": "F132",
   "milestone": "M2 论文全流程"
  },
