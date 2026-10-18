@@ -49,6 +49,12 @@ pub enum Dialog {
     },
     /// 非线性拟合结果。
     NlFitReport(Vec<NlFitReport>),
+    /// 通用结果表：标题、表头、各行和说明，可复制到 Excel。
+    Table {
+        title: String,
+        rows: Vec<Vec<String>>,
+        note: String,
+    },
     /// 设置列值：目标列名、公式和可引用的列（短名、显示名）。
     SetValues {
         target: String,
@@ -609,6 +615,45 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                         .clicked()
                     {
                         ui.ctx().copy_text(nlfit_text(reports));
+                    }
+                    if ui.button(RichText::new("关闭").strong()).clicked() {
+                        action = Action::Close;
+                    }
+                });
+            });
+        }
+        Dialog::Table { title, rows, note } => {
+            window(title).show(ctx, |ui| {
+                egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
+                    egui::Grid::new("result-table")
+                        .striped(true)
+                        .num_columns(rows.first().map_or(1, Vec::len))
+                        .spacing([16.0, 4.0])
+                        .show(ui, |ui| {
+                            for (ri, row) in rows.iter().enumerate() {
+                                for (ci, cell) in row.iter().enumerate() {
+                                    if ri == 0 {
+                                        ui.label(RichText::new(cell).color(pal.weak));
+                                    } else if ci == 0 {
+                                        ui.label(cell);
+                                    } else {
+                                        ui.label(RichText::new(cell).monospace());
+                                    }
+                                }
+                                ui.end_row();
+                            }
+                        });
+                });
+                ui.label(RichText::new(note.as_str()).small().color(pal.weak));
+                ui.add_space(6.0);
+                ui.horizontal(|ui| {
+                    if ui
+                        .button("复制结果")
+                        .on_hover_text("复制为制表符分隔的文本，可粘贴到 Excel")
+                        .clicked()
+                    {
+                        let text: Vec<String> = rows.iter().map(|r| r.join("\t")).collect();
+                        ui.ctx().copy_text(text.join("\n"));
                     }
                     if ui.button(RichText::new("关闭").strong()).clicked() {
                         action = Action::Close;

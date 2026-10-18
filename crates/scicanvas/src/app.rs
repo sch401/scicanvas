@@ -8,7 +8,7 @@ use egui_extras::{Column as TCol, TableBuilder};
 use scicanvas_core::analysis::{NormalizeMethod, SmoothMethod};
 use scicanvas_core::history::History;
 use scicanvas_core::ops::Source;
-use scicanvas_core::{csv, round_sig, svg, PlotType, Project, Role};
+use scicanvas_core::{csv, fmt_num, round_sig, svg, PlotType, Project, Role};
 
 use crate::commands;
 use crate::dialogs::{self, Dialog};
@@ -1507,6 +1507,99 @@ impl SciApp {
             .filter(|k| book.column(k).is_some())
             .collect();
         Some((id, keys))
+    }
+
+    /// 点选的各列分别做 Shapiro–Wilk 正态性检验。
+    pub(crate) fn normality(&mut self) {
+        let Some((id, keys)) = self.ttest_columns() else { return };
+        if keys.is_empty() {
+            self.status = "请先在工作表里单击选中要检验的列".into();
+            return;
+        }
+        let book = self.project.book(id).unwrap();
+        let mut rows = vec![["列", "N", "W", "p", "α = 0.05"].map(String::from).to_vec()];
+        let mut problems = vec![];
+        for k in &keys {
+            let c = book.column(k).unwrap();
+            match scicanvas_core::stats::shapiro_wilk(&c.values()) {
+                Ok(r) => rows.push(vec![
+                    c.display_name().to_owned(),
+                    r.n.to_string(),
+                    fmt_num(round_sig(r.w, 6)),
+                    fmt_num(round_sig(r.p, 6)),
+                    if r.p < 0.05 {
+                        "偏离正态"
+                    } else {
+                        "不能拒绝正态"
+                    }
+                    .into(),
+                ]),
+                Err(e) => problems.push(format!("{}：{e}", c.display_name())),
+            }
+        }
+        if rows.len() == 1 {
+            self.status = problems.join("；");
+            return;
+        }
+        self.status = if problems.is_empty() {
+            format!("已对 {} 列做正态性检验", rows.len() - 1)
+        } else {
+            problems.join("；")
+        };
+        self.dialog = Some(Dialog::Table {
+            title: "正态性检验（Shapiro–Wilk）".into(),
+            rows,
+            note: "原假设：数据来自正态分布。p < 0.05 时认为偏离正态；缺失值已跳过，3 ≤ N ≤ 5000。".into(),
+        });
+    }
+
+    /// 点选的各列分别做 Grubbs 异常值检验（双侧，α = 0.05）。
+    pub(crate) fn grubbs(&mut self) {
+        let Some((id, keys)) = self.ttest_columns() else { return };
+        if keys.is_empty() {
+            self.status = "请先在工作表里单击选中要检验的列".into();
+            return;
+        }
+        let book = self.project.book(id).unwrap();
+        let mut rows = vec![["列", "N", "可疑值", "所在行", "G", "临界值 G(0.05)", "p", "结论"]
+            .map(String::from)
+            .to_vec()];
+        let mut problems = vec![];
+        for k in &keys {
+            let c = book.column(k).unwrap();
+            match scicanvas_core::stats::grubbs(&c.values(), 0.05) {
+                Ok(r) => rows.push(vec![
+                    c.display_name().to_owned(),
+                    r.n.to_string(),
+                    fmt_num(r.value),
+                    (r.index + 1).to_string(),
+                    fmt_num(round_sig(r.g, 6)),
+                    fmt_num(round_sig(r.critical, 6)),
+                    fmt_num(round_sig(r.p, 6)),
+                    if r.g > r.critical {
+                        "是异常值"
+                    } else {
+                        "不是异常值"
+                    }
+                    .into(),
+                ]),
+                Err(e) => problems.push(format!("{}：{e}", c.display_name())),
+            }
+        }
+        if rows.len() == 1 {
+            self.status = problems.join("；");
+            return;
+        }
+        self.status = if problems.is_empty() {
+            format!("已对 {} 列做 Grubbs 检验", rows.len() - 1)
+        } else {
+            problems.join("；")
+        };
+        self.dialog = Some(Dialog::Table {
+            title: "Grubbs 异常值检验".into(),
+            rows,
+            note: "检验离均值最远的一个点（双侧，α = 0.05），假设其余数据近似正态。\n剔除异常值后如需继续检验，请再运行一次。".into(),
+        });
     }
 
     /// 每个点选的列作为一组做单因素方差分析。
@@ -4330,6 +4423,31 @@ mod history_tests {
         assert!(app.status.contains("2 个峰"), "{}", app.status);
         app.undo();
         assert_eq!(app.project.books.len(), books);
+    }
+
+    #[test]
+    fn normality_and_grubbs_report_one_row_per_picked_column() {
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["B".into(), "C".into()]);
+        app.normality();
+        match &app.dialog {
+            Some(Dialog::Table { rows, .. }) => {
+                assert_eq!(rows.len(), 3);
+                let w =
+                    scicanvas_core::stats::shapiro_wilk(&app.project.book(1).unwrap().column("B").unwrap().values())
+                        .unwrap();
+                assert_eq!(rows[1][2], fmt_num(round_sig(w.w, 6)));
+            }
+            _ => panic!("normality report should open"),
+        }
+        app.dialog = None;
+        app.grubbs();
+        assert!(matches!(&app.dialog, Some(Dialog::Table { rows, .. }) if rows.len() == 3 && rows[0].len() == 8));
+        app.dialog = None;
+        app.selection.insert(1, vec![]);
+        app.normality();
+        assert!(app.dialog.is_none() && app.status.contains("选中"));
     }
 
     #[test]

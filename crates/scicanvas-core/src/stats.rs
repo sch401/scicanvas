@@ -689,6 +689,189 @@ pub fn tukey_hsd(a: &Anova, level: f64) -> Vec<TukeyPair> {
     out
 }
 
+/// 标准正态分布的分位数（Newton 法反解 Φ）。
+pub fn norm_ppf(p: f64) -> f64 {
+    if !(0.0..=1.0).contains(&p) || p.is_nan() {
+        return f64::NAN;
+    }
+    if p == 0.0 {
+        return f64::NEG_INFINITY;
+    }
+    if p == 1.0 {
+        return f64::INFINITY;
+    }
+    if p > 0.5 {
+        return -norm_ppf(1.0 - p);
+    }
+    // 左半边 Φ 是凸函数，从 0 出发的 Newton 迭代单调收敛
+    let mut x = 0.0_f64;
+    for _ in 0..200 {
+        let pdf = (-0.5 * x * x).exp() / (2.0 * std::f64::consts::PI).sqrt();
+        let step = (norm_cdf(x) - p) / pdf;
+        x -= step;
+        if step.abs() < 1e-15 * x.abs().max(1.0) {
+            break;
+        }
+    }
+    x
+}
+
+/// 正态性检验结果。
+#[derive(Clone, Debug, PartialEq)]
+pub struct Normality {
+    pub n: usize,
+    pub w: f64,
+    pub p: f64,
+}
+
+/// Shapiro–Wilk 正态性检验（Royston 1995 的 AS R94 算法，与 SciPy `shapiro` 相同），3 ≤ n ≤ 5000。
+pub fn shapiro_wilk(values: &[f64]) -> Result<Normality, String> {
+    let poly = |c: &[f64], x: f64| c.iter().rev().fold(0.0, |acc, k| acc * x + k);
+    let mut x = finite(values);
+    let n = x.len();
+    if n < 3 {
+        return Err("Shapiro–Wilk 检验至少需要 3 个数值".into());
+    }
+    if n > 5000 {
+        return Err("Shapiro–Wilk 检验最多 5000 个数值".into());
+    }
+    x.sort_by(f64::total_cmp);
+    let range = x[n - 1] - x[0];
+    if range < 1e-19 {
+        return Err("数值全部相同，无法检验".into());
+    }
+    let an = n as f64;
+    let half = n / 2;
+    // 系数 a（只算前一半，按反对称展开）
+    let mut a = vec![0.0; half];
+    if n == 3 {
+        a[0] = std::f64::consts::FRAC_1_SQRT_2;
+    } else {
+        let m: Vec<f64> = (1..=half).map(|i| norm_ppf((i as f64 - 0.375) / (an + 0.25))).collect();
+        let summ2 = 2.0 * m.iter().map(|v| v * v).sum::<f64>();
+        let ssumm2 = summ2.sqrt();
+        let rsn = 1.0 / an.sqrt();
+        let a1 = poly(&[0.0, 0.221157, -0.147981, -2.07119, 4.434685, -2.706056], rsn) - m[0] / ssumm2;
+        let (first, fac) = if n > 5 {
+            let a2 = -m[1] / ssumm2 + poly(&[0.0, 0.042981, -0.293762, -1.752461, 5.682633, -3.582633], rsn);
+            a[1] = a2;
+            let fac = ((summ2 - 2.0 * m[0] * m[0] - 2.0 * m[1] * m[1]) / (1.0 - 2.0 * a1 * a1 - 2.0 * a2 * a2)).sqrt();
+            (2, fac)
+        } else {
+            (1, ((summ2 - 2.0 * m[0] * m[0]) / (1.0 - 2.0 * a1 * a1)).sqrt())
+        };
+        a[0] = a1;
+        for i in first..half {
+            a[i] = -m[i] / fac;
+        }
+    }
+    // W：系数与排序后数据的相关系数平方
+    let coef: Vec<f64> = (0..n)
+        .map(|i| {
+            if i < half {
+                -a[i]
+            } else if n - 1 - i < half {
+                a[n - 1 - i]
+            } else {
+                0.0
+            }
+        })
+        .collect();
+    let xs: Vec<f64> = x.iter().map(|v| v / range).collect();
+    let (ca, cx) = (coef.iter().sum::<f64>() / an, xs.iter().sum::<f64>() / an);
+    let (mut ssa, mut ssx, mut sax) = (0.0, 0.0, 0.0);
+    for (c, v) in coef.iter().zip(&xs) {
+        let (da, dx) = (c - ca, v - cx);
+        ssa += da * da;
+        ssx += dx * dx;
+        sax += da * dx;
+    }
+    let root = (ssa * ssx).sqrt();
+    let w1 = (root - sax) * (root + sax) / (ssa * ssx);
+    let w = 1.0 - w1;
+    let p = if n == 3 {
+        let pi6 = 6.0 / std::f64::consts::PI;
+        (pi6 * (w.sqrt().asin() - std::f64::consts::FRAC_PI_3)).max(0.0)
+    } else {
+        let mut y = w1.ln();
+        let (m, sd) = if n <= 11 {
+            let gamma = poly(&[-2.273, 0.459], an);
+            if y >= gamma {
+                return Ok(Normality { n, w, p: 1e-99 });
+            }
+            y = -(gamma - y).ln();
+            (
+                poly(&[0.544, -0.39978, 0.025054, -6.714e-4], an),
+                poly(&[1.3822, -0.77857, 0.062767, -0.0020322], an).exp(),
+            )
+        } else {
+            let lx = an.ln();
+            (
+                poly(&[-1.5861, -0.31082, -0.083751, 0.0038915], lx),
+                poly(&[-0.4803, -0.082676, 0.0030302], lx).exp(),
+            )
+        };
+        1.0 - norm_cdf((y - m) / sd)
+    };
+    Ok(Normality { n, w, p })
+}
+
+/// Grubbs 异常值检验（双侧）：离均值最远的点是否为异常值。
+#[derive(Clone, Debug, PartialEq)]
+pub struct Grubbs {
+    pub n: usize,
+    /// 可疑值在输入中的位置（跳过缺失值之前的序号）与数值。
+    pub index: usize,
+    pub value: f64,
+    pub g: f64,
+    /// 显著性水平 `alpha` 下的临界值。
+    pub critical: f64,
+    /// 双侧 p 值（Bonferroni 上界，最大为 1）。
+    pub p: f64,
+}
+
+pub fn grubbs(values: &[f64], alpha: f64) -> Result<Grubbs, String> {
+    let pts: Vec<(usize, f64)> = values
+        .iter()
+        .copied()
+        .enumerate()
+        .filter(|(_, v)| v.is_finite())
+        .collect();
+    let n = pts.len();
+    if n < 3 {
+        return Err("Grubbs 检验至少需要 3 个数值".into());
+    }
+    let nf = n as f64;
+    let mean = pts.iter().map(|p| p.1).sum::<f64>() / nf;
+    let sd = (pts.iter().map(|p| (p.1 - mean).powi(2)).sum::<f64>() / (nf - 1.0)).sqrt();
+    if sd <= 0.0 {
+        return Err("数值全部相同，无法检验".into());
+    }
+    let &(index, value) = pts
+        .iter()
+        .max_by(|a, b| (a.1 - mean).abs().total_cmp(&(b.1 - mean).abs()))
+        .unwrap();
+    let g = (value - mean).abs() / sd;
+    let df = nf - 2.0;
+    let t = t_ppf(alpha / (2.0 * nf), df);
+    let critical = (nf - 1.0) / nf.sqrt() * (t * t / (df + t * t)).sqrt();
+    let denom = (nf - 1.0).powi(2) - nf * g * g;
+    let p = if denom <= 0.0 {
+        0.0
+    } else {
+        let tt = (nf * df * g * g / denom).sqrt();
+        (2.0 * nf * t_cdf(-tt, df)).min(1.0)
+    };
+    Ok(Grubbs {
+        n,
+        index,
+        value,
+        g,
+        critical,
+        p,
+    })
+}
+
 /// 频数统计的一个区间 `[lo, hi)`；最后一个区间包含右端点。
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Bin {
@@ -883,6 +1066,58 @@ mod tests {
             near(got.low, low, 1e-7);
             near(got.high, high, 1e-7);
         }
+    }
+
+    fn s20() -> Vec<f64> {
+        (0..20)
+            .map(|i| ((i * 37) % 23) as f64 / 7.0 + (i as f64).sin())
+            .collect()
+    }
+
+    #[test]
+    fn shapiro_wilk_matches_scipy() {
+        let near = |got: f64, want: f64, tol: f64| assert!((got - want).abs() <= tol * want.abs(), "{got} vs {want}");
+        near(norm_ppf(1.25e-4), -3.6622599308877013, 1e-12);
+        near(norm_ppf(0.3), -0.5244005127080409, 1e-12);
+        near(norm_ppf(0.7), 0.5244005127080409, 1e-12);
+        let s60: Vec<f64> = (0..60)
+            .map(|i| (-1.0 + 3.0 * i as f64 / 59.0).exp() + 0.1 * (i as f64 * 2.3).cos())
+            .collect();
+        // SciPy 1.17.1 shapiro（其内部用单精度，W 只有 6–7 位有效数字）
+        for (data, w, p) in [
+            (vec![2.1, 3.7, 3.0], 0.9948186528497406, 0.8624063231829059),
+            (
+                vec![4.2, 4.8, 5.1, 5.0, 4.4, 6.9, 4.9, 5.3],
+                0.8285523114638335,
+                0.057342968785825094,
+            ),
+            (s20(), 0.9826675147410115, 0.963716670343387),
+            (s60, 0.8642262952339322, 8.22293515304458e-06),
+        ] {
+            let r = shapiro_wilk(&data).unwrap();
+            near(r.w, w, 1e-6);
+            near(r.p, p, 1e-4);
+        }
+        assert!(shapiro_wilk(&[1.0, 2.0]).is_err());
+        assert!(shapiro_wilk(&[1.0, 1.0, 1.0]).is_err());
+    }
+
+    #[test]
+    fn grubbs_matches_t_distribution_formula() {
+        let near = |got: f64, want: f64| assert!((got - want).abs() <= 1e-9 * want.abs(), "{got} vs {want}");
+        // scipy.stats.t.ppf / t.sf 按 Grubbs 公式计算
+        let x = [4.2, 4.8, 5.1, 5.0, f64::NAN, 4.4, 6.9, 4.9, 5.3];
+        let r = grubbs(&x, 0.05).unwrap();
+        assert_eq!((r.n, r.index, r.value), (8, 6, 6.9));
+        near(r.g, 2.223673601093327);
+        near(r.critical, 2.1266450871954685);
+        near(r.p, 0.01935394175439725);
+        let r = grubbs(&s20(), 0.05).unwrap();
+        assert_eq!(r.index, 5);
+        near(r.g, 1.902394763555888);
+        near(r.critical, 2.708245645805754);
+        near(r.p, 0.9544522095301384);
+        assert!(grubbs(&[1.0, 1.0, 1.0], 0.05).is_err());
     }
 
     #[test]
