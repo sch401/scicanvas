@@ -903,16 +903,24 @@ fn build_layer_full(
     let (xa, x_label) = if let Some(names) = x_cat {
         (xa, TickLabel::Category(names))
     } else if x_date {
-        let (axis, unit) = match view {
-            Some(v) => crate::ticks::date_axis(v.x.0, v.x.1, false),
+        // 在当地时间上取整刻度，再换回 UTC 坐标
+        let off = x_col.map_or(0.0, |c| f64::from(c.format.utc_offset) * 60_000.0);
+        let (mut axis, unit) = match view {
+            Some(v) => crate::ticks::date_axis(v.x.0 + off, v.x.1 + off, false),
             None if g.x_auto && !all_x.is_empty() => {
                 let lo = all_x.iter().copied().fold(f64::INFINITY, f64::min);
                 let hi = all_x.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-                crate::ticks::date_axis(lo, hi, true)
+                crate::ticks::date_axis(lo + off, hi + off, true)
             }
-            None => crate::ticks::date_axis(xa.lo, xa.hi, false),
+            None => crate::ticks::date_axis(xa.lo + off, xa.hi + off, false),
         };
-        (axis, TickLabel::Date(unit))
+        axis.lo -= off;
+        axis.hi -= off;
+        axis.ticks
+            .iter_mut()
+            .chain(axis.minor.iter_mut())
+            .for_each(|t| *t -= off);
+        (axis, TickLabel::Date(unit, off))
     } else {
         (xa, TickLabel::Number(g.x_format))
     };

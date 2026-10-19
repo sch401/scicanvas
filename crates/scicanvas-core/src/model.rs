@@ -88,7 +88,10 @@ impl Column {
         use crate::ColumnData;
         let formatted = match &self.data {
             ColumnData::Num { .. } => self.data.f64_at(row).and_then(|v| self.format.number.apply(v)),
-            ColumnData::DateTime { .. } => self.data.f64_at(row).and_then(|v| self.format.date.apply(v as i64)),
+            ColumnData::DateTime { .. } => self
+                .data
+                .f64_at(row)
+                .and_then(|v| self.format.date.apply_in(v as i64, self.format.utc_offset)),
             _ => None,
         };
         formatted.map_or_else(|| self.data.text_at(row), std::borrow::Cow::Owned)
@@ -141,8 +144,19 @@ impl Column {
             return;
         }
         self.data.set_text(row, value);
+        if self.format.utc_offset != 0 {
+            self.data.reinterpret_local(row, self.format.utc_offset);
+        }
         while self.data.last().is_some_and(|s| s.trim().is_empty()) {
             self.data.pop();
+        }
+    }
+
+    /// 设置日期列的时区：不带时区写的日期保持“墙上时间”（按新时区重新换算成 UTC），带时区的保持原时刻。
+    pub fn set_utc_offset(&mut self, minutes: i32) {
+        self.format.utc_offset = minutes;
+        for row in 0..self.data.len() {
+            self.data.reinterpret_local(row, minutes);
         }
     }
 }

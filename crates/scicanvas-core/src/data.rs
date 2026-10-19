@@ -135,6 +135,22 @@ impl Default for ColumnData {
 }
 
 impl ColumnData {
+    /// 日期列第 `row` 行按“墙上时间”重新解释：原文不带时区时，按 UTC 偏移 `offset_minutes` 换算成 UTC；
+    /// 带时区（ISO 8601 的 Z 或 ±hh:mm）的原文保持原时刻。原文不变。
+    pub fn reinterpret_local(&mut self, row: usize, offset_minutes: i32) {
+        let Self::DateTime { .. } = self else { return };
+        if self.f64_at(row).is_none() {
+            return;
+        }
+        let text = self.text_at(row).into_owned();
+        if chrono::DateTime::parse_from_rfc3339(text.trim()).is_ok() {
+            return;
+        }
+        if let (Some(naive), Self::DateTime { values, .. }) = (timestamp(&text), self) {
+            values[row] = naive - i64::from(offset_minutes) * 60_000;
+        }
+    }
+
     /// 分类列按显示顺序排列的类别：有序字典按字典顺序，否则按文字排序。其他类型返回 None。
     pub fn category_levels(&self) -> Option<Vec<String>> {
         let Self::Category { levels, ordered, .. } = self else {

@@ -283,7 +283,8 @@ pub fn format_date_tick(ms: f64, unit: DateUnit) -> String {
 #[derive(Clone, Debug, PartialEq)]
 pub enum TickLabel {
     Number(crate::format::NumberFormat),
-    Date(DateUnit),
+    /// 日期：时间单位与时区偏移（毫秒）。
+    Date(DateUnit, f64),
     Category(Vec<String>),
 }
 
@@ -291,7 +292,7 @@ impl TickLabel {
     pub fn text(&self, v: f64) -> String {
         match self {
             TickLabel::Number(f) => f.apply(v).unwrap_or_else(|| format_tick(v)),
-            TickLabel::Date(unit) => format_date_tick(v, *unit),
+            TickLabel::Date(unit, offset) => format_date_tick(v + offset, *unit),
             TickLabel::Category(names) => {
                 let k = v.round();
                 if (v - k).abs() < 1e-9 && k >= 1.0 {

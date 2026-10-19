@@ -377,13 +377,27 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                                 });
                             }
                             DataKind::DateTime => {
-                                egui::ComboBox::from_id_salt("column-date-format")
-                                    .selected_text(edit.format.date.label())
-                                    .show_ui(ui, |ui| {
-                                        for f in DateFormat::ALL {
-                                            ui.selectable_value(&mut edit.format.date, f, f.label());
-                                        }
-                                    });
+                                ui.horizontal(|ui| {
+                                    egui::ComboBox::from_id_salt("column-date-format")
+                                        .selected_text(edit.format.date.label())
+                                        .show_ui(ui, |ui| {
+                                            for f in DateFormat::ALL {
+                                                ui.selectable_value(&mut edit.format.date, f, f.label());
+                                            }
+                                        });
+                                    use scicanvas_core::format::{utc_offset_label, utc_offsets};
+                                    egui::ComboBox::from_id_salt("column-utc-offset")
+                                        .selected_text(utc_offset_label(edit.format.utc_offset))
+                                        .show_ui(ui, |ui| {
+                                            for m in utc_offsets() {
+                                                ui.selectable_value(
+                                                    &mut edit.format.utc_offset,
+                                                    m,
+                                                    utc_offset_label(m),
+                                                );
+                                            }
+                                        });
+                                });
                             }
                             _ => {
                                 ui.label(RichText::new("文本和分类列按原样显示").color(pal.weak));
@@ -394,7 +408,9 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                             (DataKind::Num, Some(v)) => {
                                 Some(edit.format.number.apply(*v).unwrap_or_else(|| fmt_num(*v)))
                             }
-                            (DataKind::DateTime, Some(ms)) => edit.format.date.apply(*ms as i64),
+                            (DataKind::DateTime, Some(ms)) => {
+                                edit.format.date.apply_in(*ms as i64, edit.format.utc_offset)
+                            }
                             _ => None,
                         };
                         if let Some(text) = preview {

@@ -16,6 +16,7 @@ fn display_formats_round_trip_and_leave_stored_values_alone() {
     col.format = DisplayFormat {
         number: NumberFormat::Scientific { places: 2 },
         date: DateFormat::Original,
+        utc_offset: 0,
     };
     let v = col.data.f64_at(0).unwrap();
     assert_eq!(

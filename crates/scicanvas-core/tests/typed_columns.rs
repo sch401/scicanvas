@@ -293,3 +293,66 @@ mod files {
         assert!(project_file::from_json(&old.to_string()).is_err());
     }
 }
+
+#[test]
+fn column_time_zones_keep_wall_time_for_naive_entries_and_instants_for_zoned_ones() {
+    use scicanvas_core::{format::DateFormat, Column, Role};
+    let ms = |t: &str| chrono::DateTime::parse_from_rfc3339(t).unwrap().timestamp_millis() as f64;
+    let mut c = Column::new("A", Role::X);
+    c.data = cells(&["2026-10-18 08:00", "2026-10-18T00:00:00Z"]);
+    c.data = c.data.converted(DataKind::DateTime).unwrap();
+    c.format.date = DateFormat::DateMinute;
+    // UTC+8：不带时区的 08:00 是当地时间（UTC 00:00）；带 Z 的保持原时刻，两者显示相同
+    c.set_utc_offset(480);
+    assert_eq!(c.data.f64_at(0), Some(ms("2026-10-18T00:00:00Z")));
+    assert_eq!(c.data.f64_at(1), Some(ms("2026-10-18T00:00:00Z")));
+    assert_eq!(
+        (c.display_at(0), c.display_at(1)),
+        ("2026-10-18 08:00".into(), "2026-10-18 08:00".into())
+    );
+    // 新输入按列时区理解；原文保留
+    c.set(2, "2026-10-19 12:00".into());
+    assert_eq!(c.data.f64_at(2), Some(ms("2026-10-19T04:00:00Z")));
+    assert_eq!(c.data.text_at(2), "2026-10-19 12:00");
+    // 改回 UTC：墙上时间不变
+    c.set_utc_offset(0);
+    assert_eq!(c.data.f64_at(0), Some(ms("2026-10-18T08:00:00Z")));
+    assert_eq!(c.data.f64_at(1), Some(ms("2026-10-18T00:00:00Z")));
+    assert_eq!(scicanvas_core::format::utc_offset_label(330), "UTC+5:30");
+    assert_eq!(scicanvas_core::format::utc_offset_label(-180), "UTC−3");
+}
+
+#[test]
+fn date_axes_align_to_local_midnight_and_save_the_zone() {
+    use scicanvas_core::{scene, PlotType};
+    let mut p = Project::default();
+    p.new_book();
+    let b = p.book_mut(1).unwrap();
+    b.columns[0].data = cells(&["2026-10-18", "2026-10-19", "2026-10-20"]);
+    b.columns[1].data = cells(&["1", "3", "2"]);
+    b.convert_columns(&["A".into()], DataKind::DateTime).unwrap();
+    b.columns[0].set_utc_offset(480);
+    let (id, _) = p.plot_from_selection(1, &[], PlotType::LineSymbol).unwrap();
+    let sc = scene::layout_page(p.graph(id).unwrap(), &p, &[]);
+    // 刻度在北京时间零点（UTC 前一天 16:00），标签仍是当地日期
+    let first = chrono::DateTime::parse_from_rfc3339("2026-10-17T16:00:00Z")
+        .unwrap()
+        .timestamp_millis() as f64;
+    assert_eq!(sc.xa.ticks.first(), Some(&first));
+    let texts: Vec<String> = sc
+        .items
+        .iter()
+        .filter_map(|it| match &it.prim {
+            scene::Prim::Text { text, .. } if it.clip.is_none() => Some(text.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(texts.iter().any(|t| t == "10-18 00:00"), "{texts:?}");
+    #[cfg(feature = "serde")]
+    {
+        let json = scicanvas_core::project_file::to_json(&p).unwrap();
+        assert!(json.contains("\"utc_offset\":480"));
+        let back = scicanvas_core::project_file::from_json(&json).unwrap();
+        assert_eq!(back.book(1).unwrap().columns[0].format.utc_offset, 480);
+    }
+}

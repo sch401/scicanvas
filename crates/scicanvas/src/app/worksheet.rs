@@ -161,7 +161,12 @@ impl SciApp {
         col.long_name = edit.long_name;
         col.units = edit.units;
         col.comment = edit.comment;
+        // 时区改变：不带时区写的日期按新时区重新换算，显示的墙上时间不变
+        let offset_changed = col.format.utc_offset != edit.format.utc_offset;
         col.format = edit.format;
+        if offset_changed && col.data.kind() == scicanvas_core::DataKind::DateTime {
+            col.set_utc_offset(edit.format.utc_offset);
+        }
         self.status = format!("已更新列 {} 的属性", edit.key);
         Ok(())
     }
