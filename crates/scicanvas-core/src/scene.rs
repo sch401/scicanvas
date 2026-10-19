@@ -728,8 +728,9 @@ fn build_layer_full(
         Some(b) => g.series(b),
         None => (None, Vec::new()),
     };
-    // 日期时间列做 X：用日期刻度（值为 UTC 毫秒）
+    // 日期时间列做 X：用日期刻度（值为 UTC 毫秒）；分类列做 X：分类轴（水平条形图在 Y 轴）
     let x_date = !horizontal && !g.x_log && x_col.is_some_and(|c| c.data.kind() == crate::DataKind::DateTime);
+    let categories = x_col.and_then(|c| c.data.category_levels());
     if horizontal {
         for s in &mut series {
             for p in &mut s.points {
@@ -878,7 +879,30 @@ fn build_layer_full(
             (xa, ya)
         }
     };
-    let (xa, x_label) = if x_date {
+    let zoomed = view.is_some();
+    let (xa, ya, x_cat, y_cat) = match &categories {
+        // 缩放后保留视图范围，刻度仍在各类别上
+        Some(names) if !horizontal => {
+            let mut axis = crate::ticks::category_axis(names.len());
+            if zoomed {
+                axis.lo = xa.lo;
+                axis.hi = xa.hi;
+            }
+            (axis, ya, Some(names.clone()), None)
+        }
+        Some(names) => {
+            let mut axis = crate::ticks::category_axis(names.len());
+            if zoomed {
+                axis.lo = ya.lo;
+                axis.hi = ya.hi;
+            }
+            (xa, axis, None, Some(names.clone()))
+        }
+        None => (xa, ya, None, None),
+    };
+    let (xa, x_label) = if let Some(names) = x_cat {
+        (xa, TickLabel::Category(names))
+    } else if x_date {
         let (axis, unit) = match view {
             Some(v) => crate::ticks::date_axis(v.x.0, v.x.1, false),
             None if g.x_auto && !all_x.is_empty() => {
@@ -892,7 +916,10 @@ fn build_layer_full(
     } else {
         (xa, TickLabel::Number(g.x_format))
     };
-    let y_label = TickLabel::Number(g.y_format);
+    let y_label = match y_cat {
+        Some(names) => TickLabel::Category(names),
+        None => TickLabel::Number(g.y_format),
+    };
 
     // 版面：刻度朝外，刻度标签和轴标题依次排在左轴、下轴外侧
     let ylab_w = ya

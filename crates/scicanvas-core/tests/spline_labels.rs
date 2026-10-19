@@ -379,3 +379,48 @@ fn datetime_x_columns_get_date_tick_labels() {
         "{texts:?}"
     );
 }
+
+#[test]
+fn category_x_columns_get_a_category_axis_in_custom_order() {
+    let (mut p, id) = project(PlotType::Bar);
+    let b = p.book_mut(1).unwrap();
+    b.columns[0].data = ["中", "低", "高", "中"].map(str::to_string).to_vec().into();
+    b.convert_columns(&["A".into()], scicanvas_core::DataKind::Category)
+        .unwrap();
+    // 无序字典按文字排序；设定顺序后按 低、中、高
+    let data = &mut p.book_mut(1).unwrap().columns[0].data;
+    assert!(data.set_category_order(&["低".into(), "中".into()]).is_err());
+    data.set_category_order(&["低".into(), "中".into(), "高".into()])
+        .unwrap();
+    assert_eq!(data.category_positions().unwrap(), [2.0, 1.0, 3.0, 2.0]);
+    assert_eq!(data.text_at(2), "高");
+    let sc = scene::layout_page(p.graph(id).unwrap(), &p, &[]);
+    assert_eq!(
+        (sc.xa.lo, sc.xa.hi, sc.xa.ticks.clone()),
+        (0.5, 3.5, vec![1.0, 2.0, 3.0])
+    );
+    let texts: Vec<String> = sc
+        .items
+        .iter()
+        .filter_map(|it| match &it.prim {
+            Prim::Text { text, .. } if it.clip.is_none() => Some(text.clone()),
+            _ => None,
+        })
+        .collect();
+    let at = |t: &str| {
+        texts
+            .iter()
+            .position(|x| x == t)
+            .unwrap_or_else(|| panic!("{t}: {texts:?}"))
+    };
+    assert!(at("低") < at("中") && at("中") < at("高"));
+    #[cfg(feature = "serde")]
+    {
+        let json = scicanvas_core::project_file::to_json(&p).unwrap();
+        let back = scicanvas_core::project_file::from_json(&json).unwrap();
+        assert_eq!(
+            back.book(1).unwrap().columns[0].data.category_levels().unwrap(),
+            ["低", "中", "高"]
+        );
+    }
+}

@@ -234,10 +234,13 @@ impl PlotSpec {
             let mut errors = Vec::with_capacity(pts.capacity());
             let mut rows = Vec::with_capacity(pts.capacity());
             let mut bases = Vec::with_capacity(pts.capacity());
+            // 分类列做 X：按类别显示顺序放在 1、2、3…
+            let categories = xv.and_then(|v| v.data.category_positions());
             for i in i0..i1 {
-                let x = match xv {
-                    Some(v) => v.f64_at(i).unwrap_or(f64::NAN),
-                    None => (i + 1) as f64,
+                let x = match (&categories, xv) {
+                    (Some(c), _) => c.get(i).copied().unwrap_or(f64::NAN),
+                    (None, Some(v)) => v.f64_at(i).unwrap_or(f64::NAN),
+                    (None, None) => (i + 1) as f64,
                 };
                 let y = yv.f64_at(i).unwrap_or(f64::NAN);
                 let base = base_values.as_ref().map_or(0.0, |v| v.f64_at(i).unwrap_or(f64::NAN));

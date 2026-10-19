@@ -135,6 +135,62 @@ impl Default for ColumnData {
 }
 
 impl ColumnData {
+    /// 分类列按显示顺序排列的类别：有序字典按字典顺序，否则按文字排序。其他类型返回 None。
+    pub fn category_levels(&self) -> Option<Vec<String>> {
+        let Self::Category { levels, ordered, .. } = self else {
+            return None;
+        };
+        let mut out = levels.clone();
+        if !ordered {
+            out.sort();
+        }
+        Some(out)
+    }
+
+    /// 分类列各行在显示顺序中的位置（从 1 开始），缺失为 NaN；用作分类轴的坐标。
+    pub fn category_positions(&self) -> Option<Vec<f64>> {
+        let Self::Category { codes, levels, .. } = self else {
+            return None;
+        };
+        let order = self.category_levels()?;
+        let rank: Vec<f64> = levels
+            .iter()
+            .map(|l| order.iter().position(|o| o == l).map_or(f64::NAN, |p| p as f64 + 1.0))
+            .collect();
+        Some(
+            codes
+                .iter()
+                .map(|&c| rank.get(c as usize).copied().unwrap_or(f64::NAN))
+                .collect(),
+        )
+    }
+
+    /// 设置类别顺序：`order` 必须正好是现有类别的一种排列。之后按此顺序显示、排序和作图。
+    pub fn set_category_order(&mut self, order: &[String]) -> Result<(), String> {
+        let Self::Category { codes, levels, ordered } = self else {
+            return Err("只有分类列可以设置类别顺序".into());
+        };
+        let mut a = levels.clone();
+        let mut b = order.to_vec();
+        a.sort();
+        b.sort();
+        if a != b {
+            return Err("类别顺序必须包含全部类别且不重复".into());
+        }
+        let remap: Vec<u32> = levels
+            .iter()
+            .map(|l| order.iter().position(|o| o == l).unwrap() as u32)
+            .collect();
+        for c in codes.iter_mut() {
+            if let Some(&n) = remap.get(*c as usize) {
+                *c = n;
+            }
+        }
+        *levels = order.to_vec();
+        *ordered = true;
+        Ok(())
+    }
+
     pub fn kind(&self) -> DataKind {
         match self {
             Self::Num { .. } => DataKind::Num,

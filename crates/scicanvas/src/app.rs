@@ -35,6 +35,7 @@ enum ColAction {
     SetRole(Role),
     SetDataKind(scicanvas_core::DataKind),
     InsertRight,
+    CategoryOrder,
     Move(scicanvas_core::ColumnMove),
     Clear,
     Delete,
@@ -1691,6 +1692,25 @@ impl SciApp {
                 }
                 self.finish_edit();
             }
+            dialogs::Action::CategoryOrder(book, key, levels) => {
+                self.finish_edit();
+                self.begin_edit("类别顺序");
+                let result = self
+                    .project
+                    .book_mut(book)
+                    .and_then(|b| b.columns.iter_mut().find(|c| c.key == key))
+                    .ok_or_else(|| "找不到这一列".to_string())
+                    .and_then(|c| c.data.set_category_order(&levels));
+                match result {
+                    Ok(()) => {
+                        self.status = format!("已设置 {key} 列的类别顺序");
+                        self.dialog = None;
+                        self.history.changed();
+                    }
+                    Err(e) => self.status = e,
+                }
+                self.finish_edit();
+            }
             dialogs::Action::SgDiff(w, order, deriv) => {
                 self.finish_edit();
                 self.begin_edit("SG 平滑求导");
@@ -3164,6 +3184,33 @@ mod history_tests {
         let f = &reports[0].fit;
         assert_eq!(f.params[2], 3.0);
         assert_eq!(f.at_bound, vec![false, false, true]);
+    }
+
+    #[test]
+    fn category_order_dialog_reorders_levels_in_one_step() {
+        let mut app = app();
+        let b = app.project.book_mut(1).unwrap();
+        b.columns[2].data = ["中", "低", "高"].iter().map(|s| s.to_string()).collect();
+        b.convert_columns(&["C".into()], scicanvas_core::DataKind::Category)
+            .unwrap();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["C".into()]);
+        app.run_command("col.categories");
+        let Some(Dialog::CategoryOrder { levels, .. }) = app.dialog.as_mut() else {
+            panic!("dialog not open: {}", app.status);
+        };
+        *levels = vec!["低".into(), "中".into(), "高".into()];
+        let before = app.project.clone();
+        press_dialog_button(&mut app, "确定");
+        assert!(app.dialog.is_none(), "{}", app.status);
+        let data = &app.project.book(1).unwrap().columns[2].data;
+        assert_eq!(data.category_levels().unwrap(), ["低", "中", "高"]);
+        assert_eq!(data.text_at(0), "中");
+        roundtrip(&mut app, &before);
+        // 非分类列给出提示
+        app.selection.insert(1, vec!["B".into()]);
+        app.run_command("col.categories");
+        assert!(app.status.contains("不是分类列"), "{}", app.status);
     }
 
     #[test]

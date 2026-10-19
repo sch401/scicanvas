@@ -887,6 +887,16 @@ fn build() -> Vec<Command> {
         })
         .modifies(),
         c(
+            "col.categories",
+            "类别顺序…",
+            "sortasc",
+            "",
+            "列",
+            "category order levels 分类 类别顺序 分类轴",
+            need_cols,
+            |a| a.open_category_order_dialog(),
+        ),
+        c(
             "col.clear",
             "清空列",
             "colclear",

@@ -279,19 +279,40 @@ pub fn format_date_tick(ms: f64, unit: DateUnit) -> String {
     t.format(pattern).to_string()
 }
 
-/// 一个坐标轴的刻度标签写法：数字格式（Auto 为默认写法）或日期。
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// 一个坐标轴的刻度标签写法：数字格式（Auto 为默认写法）、日期或分类（第 k 个类别在 k 处）。
+#[derive(Clone, Debug, PartialEq)]
 pub enum TickLabel {
     Number(crate::format::NumberFormat),
     Date(DateUnit),
+    Category(Vec<String>),
 }
 
 impl TickLabel {
-    pub fn text(self, v: f64) -> String {
+    pub fn text(&self, v: f64) -> String {
         match self {
             TickLabel::Number(f) => f.apply(v).unwrap_or_else(|| format_tick(v)),
-            TickLabel::Date(unit) => format_date_tick(v, unit),
+            TickLabel::Date(unit) => format_date_tick(v, *unit),
+            TickLabel::Category(names) => {
+                let k = v.round();
+                if (v - k).abs() < 1e-9 && k >= 1.0 {
+                    names.get(k as usize - 1).cloned().unwrap_or_default()
+                } else {
+                    String::new()
+                }
+            }
         }
+    }
+}
+
+/// 分类轴：k 个类别放在 1…k，范围 0.5…k + 0.5，每个类别一个刻度、没有次刻度。
+pub fn category_axis(count: usize) -> Axis {
+    let k = count.max(1);
+    Axis {
+        lo: 0.5,
+        hi: k as f64 + 0.5,
+        ticks: (1..=k).map(|i| i as f64).collect(),
+        minor: vec![],
+        log: false,
     }
 }
 

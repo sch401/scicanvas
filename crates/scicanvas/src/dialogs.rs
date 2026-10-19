@@ -45,6 +45,12 @@ pub enum Dialog {
         method: SmoothMethod,
         window: usize,
     },
+    /// 类别顺序：工作簿、列和当前顺序的类别。
+    CategoryOrder {
+        book: u64,
+        key: String,
+        levels: Vec<String>,
+    },
     /// IFFT：工作簿、实部列、虚部列（可无）及显示名、频点数、是否双边谱、单边谱原信号点数是否为奇数。
     Ifft {
         book: u64,
@@ -192,6 +198,7 @@ pub enum Action {
     Fit(usize),
     Smooth(SmoothMethod, usize),
     SgDiff(usize, usize, usize),
+    CategoryOrder(u64, String, Vec<String>),
     Sort(u64, Vec<(String, bool)>, Option<Vec<String>>),
     Ifft(u64, String, Option<String>, scicanvas_core::fft::InverseInput),
     Normalize(NormalizeMethod),
@@ -500,6 +507,44 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                 let (ok, cancel) = buttons(ui, "平滑");
                 if ok {
                     action = Action::Smooth(*method, (*w).max(3) | 1);
+                } else if cancel {
+                    action = Action::Close;
+                }
+            });
+        }
+        Dialog::CategoryOrder { book, key, levels } => {
+            window(ctx, "类别顺序").show(ctx, |ui| {
+                let mut swap = None;
+                egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
+                    egui::Grid::new("category-order")
+                        .num_columns(3)
+                        .spacing([8.0, 4.0])
+                        .show(ui, |ui| {
+                            let n = levels.len();
+                            for (i, name) in levels.iter().enumerate() {
+                                ui.label(RichText::new(format!("{}", i + 1)).color(pal.weak));
+                                ui.label(name);
+                                ui.horizontal(|ui| {
+                                    if ui.add_enabled(i > 0, egui::Button::new("↑").small()).clicked() {
+                                        swap = Some((i, i - 1));
+                                    }
+                                    if ui.add_enabled(i + 1 < n, egui::Button::new("↓").small()).clicked() {
+                                        swap = Some((i, i + 1));
+                                    }
+                                });
+                                ui.end_row();
+                            }
+                        });
+                });
+                if let Some((a, b)) = swap {
+                    levels.swap(a, b);
+                }
+                if ui.button("按名称排序").clicked() {
+                    levels.sort();
+                }
+                let (ok, cancel) = buttons(ui, "确定");
+                if ok {
+                    action = Action::CategoryOrder(*book, key.clone(), levels.clone());
                 } else if cancel {
                     action = Action::Close;
                 }

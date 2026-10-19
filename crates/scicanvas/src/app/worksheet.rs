@@ -192,6 +192,24 @@ impl SciApp {
         self.status = format!("已清空 {} 列", sel.join(", "));
     }
 
+    /// 类别顺序对话框：选中的第一列须是分类列。
+    pub(crate) fn open_category_order_dialog(&mut self) {
+        let Some(bid) = self.active_book() else { return };
+        let Some(key) = self.selected_keys(bid).first().cloned() else {
+            self.status = "请先单击分类列的列标题".into();
+            return;
+        };
+        let levels = self
+            .project
+            .book(bid)
+            .and_then(|b| b.column(&key))
+            .and_then(|c| c.data.category_levels());
+        match levels {
+            Some(levels) => self.dialog = Some(Dialog::CategoryOrder { book: bid, key, levels }),
+            None => self.status = format!("{key} 列不是分类列，可先“转换为分类列”"),
+        }
+    }
+
     pub(crate) fn move_columns(&mut self, to: scicanvas_core::ColumnMove) {
         let Some(bid) = self.active_book() else { return };
         let sel = self.selected_keys(bid);
@@ -529,6 +547,9 @@ impl SciApp {
                                         pick(ui, "设为忽略", ColAction::SetRole(Role::Ignore));
                                         ui.separator();
                                         ui.label(format!("数据类型：{}", col.data.kind().label()));
+                                        if col.data.kind() == scicanvas_core::DataKind::Category {
+                                            pick(ui, "类别顺序…", ColAction::CategoryOrder);
+                                        }
                                         for kind in scicanvas_core::DataKind::ALL {
                                             pick(
                                                 ui,
@@ -1022,6 +1043,7 @@ impl SciApp {
                 ColAction::SetRole(Role::Z) => "col.setZ",
                 ColAction::SetRole(Role::Label) => "col.setLabel",
                 ColAction::InsertRight => "col.insert",
+                ColAction::CategoryOrder => "col.categories",
                 ColAction::Move(scicanvas_core::ColumnMove::Left) => "col.left",
                 ColAction::Move(scicanvas_core::ColumnMove::Right) => "col.right",
                 ColAction::Move(scicanvas_core::ColumnMove::First) => "col.first",
