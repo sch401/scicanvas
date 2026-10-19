@@ -1177,6 +1177,97 @@ impl Project {
         Ok(made)
     }
 
+    /// 逆傅里叶变换：`re_key`/`im_key` 为同一工作簿里逐行对齐的实部、虚部（没有虚部按 0）。
+    /// 实部列对应的 X（频率）给出频率间隔 df，时间间隔 dt = 1/(N·df)；没有 X 时 dt = 1。
+    /// 生成新工作簿（时间、实部，双边谱另有虚部）和实部曲线图，放在源工作簿所在文件夹。返回 (工作簿, 图形)。
+    pub fn ifft(
+        &mut self,
+        book_id: u64,
+        re_key: &str,
+        im_key: Option<&str>,
+        input: crate::fft::InverseInput,
+    ) -> Result<(u64, u64), String> {
+        let book = self.book(book_id).ok_or("找不到工作簿")?;
+        let re_col = book.column(re_key).ok_or("找不到实部列")?;
+        // 去掉末尾空行；中间有缺失值时报错
+        let finite = |v: Vec<f64>| -> Result<Vec<f64>, String> {
+            let end = v.iter().rposition(|x| x.is_finite()).map_or(0, |i| i + 1);
+            let v = v[..end].to_vec();
+            if v.iter().any(|x| !x.is_finite()) {
+                return Err("频谱里有缺失值或非数值".into());
+            }
+            Ok(v)
+        };
+        let re = finite(re_col.values())?;
+        let im = match im_key {
+            Some(k) => finite(book.column(k).ok_or("找不到虚部列")?.values())?,
+            None => vec![],
+        };
+        let m = re.len().max(im.len());
+        if m < 2 {
+            return Err("IFFT 至少需要 2 个频点".into());
+        }
+        let (mut re, mut im) = (re, im);
+        re.resize(m, 0.0);
+        im.resize(m, 0.0);
+        let n = input.points(m);
+        let x_key = x_for(book, re_col, &[]);
+        let x_col = x_key.as_deref().and_then(|k| book.column(k));
+        let dt = match x_col {
+            Some(c) => {
+                let f = c.values();
+                let df = f.get(1).zip(f.first()).map_or(f64::NAN, |(b, a)| b - a);
+                if !(df.is_finite() && df > 0.0) {
+                    return Err("频率列前两行必须递增，用来确定频率间隔".into());
+                }
+                1.0 / (n as f64 * df)
+            }
+            None => 1.0,
+        };
+        let t_units = match x_col.map(|c| c.units.as_str()).unwrap_or("") {
+            "Hz" => "s".to_string(),
+            u => u.strip_prefix("1/").unwrap_or("").to_string(),
+        };
+        let (out_re, out_im) = match input {
+            crate::fft::InverseInput::OneSided { .. } => (crate::fft::inverse_real(&re, &im, n), None),
+            crate::fft::InverseInput::TwoSided => {
+                let (r, i) = crate::fft::inverse(&re, &im);
+                (r, Some(i))
+            }
+        };
+        let source = re_col.display_name().to_string();
+        let note = match input {
+            crate::fft::InverseInput::OneSided { .. } => format!("{source} 的 IFFT（单边谱），{n} 点"),
+            crate::fft::InverseInput::TwoSided => format!("{source} 的 IFFT（双边谱），{n} 点"),
+        };
+        let name = self.unique_name(&format!("{} IFFT", book.name));
+        let folder = self.folder_of(book_id);
+        let id = self.alloc_id();
+        let mut nb = Book::new(id, name);
+        let times: Vec<f64> = (0..n).map(|i| i as f64 * dt).collect();
+        let mut columns: Vec<(Role, &str, &str, &[f64])> =
+            vec![(Role::X, "时间", &t_units, &times), (Role::Y, "实部", "", &out_re)];
+        if let Some(i) = &out_im {
+            columns.push((Role::Y, "虚部", "", i));
+        }
+        let mut re_out_key = String::new();
+        for (role, long_name, units, values) in columns {
+            let k = nb.push_column(role);
+            let c = nb.columns.iter_mut().find(|c| c.key == k).unwrap();
+            c.long_name = long_name.into();
+            c.units = units.into();
+            c.comment = note.clone();
+            c.data = values.iter().map(|v| fmt_num(*v)).collect();
+            if long_name == "实部" {
+                re_out_key = k;
+            }
+        }
+        self.books.push(nb);
+        self.move_project_item(id, folder)?;
+        let (gid, _) = self.plot_from_selection(id, &[re_out_key], PlotType::Line)?;
+        Ok((id, gid))
+    }
+
     /// 寻峰与峰积分：每条曲线生成一个峰表工作簿（峰位、峰高、突出度、半峰宽、面积、质心、积分起止 X），
     /// 放在源工作簿所在的文件夹。`min_prominence` 是相对 Y 范围的比例（0.05 即 5%）。
     /// X 需要单调；递减的 X（如红外光谱的波数）会先反转。返回新工作簿编号。
@@ -1817,6 +1908,66 @@ mod tests {
         assert!((ci.values()[0] - 0.21355306685211103).abs() < 1e-6);
         assert!(x0.comment.contains("R²"));
         assert!(p.calibrate(1, "A", "B", "Z").is_err());
+    }
+
+    #[test]
+    fn ifft_of_the_fft_table_recovers_the_signal() {
+        // 32 点、dt = 0.01 s 的信号做矩形窗 FFT，再对频谱表的实部/虚部做 IFFT
+        let mut p = Project::default();
+        let id = p.new_book();
+        let b = p.book_mut(id).unwrap();
+        b.ensure_columns(2);
+        b.columns[0].units = "s".into();
+        let ys: Vec<f64> = (0..32)
+            .map(|i| (2.0 * std::f64::consts::PI * 5.0 * i as f64 * 0.01).sin() + 0.3 + 0.01 * i as f64)
+            .collect();
+        b.columns[0].data = (0..32).map(|i| fmt_num(i as f64 * 0.01)).collect();
+        b.columns[1].data = ys.iter().map(|y| format!("{y}")).collect();
+        let src = Source::Book {
+            id,
+            selected: vec!["B".into()],
+            rows: None,
+        };
+        let (spec_book, _) = p.fft(&src, crate::fft::Window::Rect).unwrap()[0];
+        let sb = p.book(spec_book).unwrap();
+        let key = |name: &str| sb.columns.iter().find(|c| c.long_name == name).unwrap().key.clone();
+        let (re, im) = (key("实部"), key("虚部"));
+        let (out, gid) = p
+            .ifft(
+                spec_book,
+                &re,
+                Some(&im),
+                crate::fft::InverseInput::OneSided { odd: false },
+            )
+            .unwrap();
+        let ob = p.book(out).unwrap();
+        assert_eq!(ob.columns[0].units, "s");
+        let t = ob.columns[0].values();
+        let back = ob.columns[1].values();
+        assert_eq!(back.len(), 32);
+        assert!((t[1] - 0.01).abs() < 1e-12 && (t[31] - 0.31).abs() < 1e-12);
+        for (b, y) in back.iter().zip(&ys) {
+            // 频谱表按 fmt_num 存 8 位有效数字
+            assert!((b - y).abs() < 1e-6, "{b} vs {y}");
+        }
+        assert_eq!(p.graph(gid).unwrap().first_layer().book_id, Some(out));
+        // 奇数点数与双边谱
+        let (odd, _) = p
+            .ifft(
+                spec_book,
+                &re,
+                Some(&im),
+                crate::fft::InverseInput::OneSided { odd: true },
+            )
+            .unwrap();
+        assert_eq!(p.book(odd).unwrap().columns[1].values().len(), 33);
+        let (two, _) = p
+            .ifft(spec_book, &re, None, crate::fft::InverseInput::TwoSided)
+            .unwrap();
+        assert_eq!(p.book(two).unwrap().columns.len(), 3);
+        assert!(p
+            .ifft(spec_book, "Z", None, crate::fft::InverseInput::TwoSided)
+            .is_err());
     }
 
     #[test]

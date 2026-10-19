@@ -950,6 +950,45 @@ impl SciApp {
         self.dialog = Some(Dialog::Poly { order: 2 });
     }
 
+    /// IFFT：选中的前两列作实部、虚部；没选列时找 FFT 结果表里的“实部”“虚部”。
+    pub(crate) fn open_ifft_dialog(&mut self) {
+        let Some(id) = self.active_book() else { return };
+        let Some(book) = self.project.book(id) else { return };
+        let named = |name: &str| book.columns.iter().find(|c| c.long_name == name).map(|c| c.key.clone());
+        let sel = self.selected_keys(id);
+        let (re, im) = if sel.is_empty() {
+            (named("实部"), named("虚部"))
+        } else {
+            (sel.first().cloned(), sel.get(1).cloned())
+        };
+        let Some(re) = re else {
+            self.status = "请选中实部列（和虚部列），或在 FFT 结果表里运行".into();
+            return;
+        };
+        let label = |k: &String| {
+            (
+                k.clone(),
+                book.column(k)
+                    .map_or(k.clone(), |c| format!("{}（{}）", c.key, c.display_name())),
+            )
+        };
+        let rows = [Some(&re), im.as_ref()]
+            .into_iter()
+            .flatten()
+            .filter_map(|k| book.column(k))
+            .map(|c| c.values().iter().rposition(|v| v.is_finite()).map_or(0, |i| i + 1))
+            .max()
+            .unwrap_or(0);
+        self.dialog = Some(Dialog::Ifft {
+            book: id,
+            re: label(&re),
+            im: im.as_ref().map(label),
+            rows,
+            two_sided: false,
+            odd: false,
+        });
+    }
+
     pub(crate) fn open_sg_diff_dialog(&mut self) {
         self.dialog = Some(Dialog::SgDiff {
             window: 7,
@@ -1586,6 +1625,21 @@ impl SciApp {
                 self.begin_edit("多项式拟合");
                 self.dialog = None;
                 self.fit(order);
+                self.history.changed();
+                self.finish_edit();
+            }
+            dialogs::Action::Ifft(book, re, im, input) => {
+                self.finish_edit();
+                self.begin_edit("IFFT");
+                self.dialog = None;
+                match self.project.ifft(book, &re, im.as_deref(), input) {
+                    Ok((b, g)) => {
+                        self.show_item(g);
+                        let name = self.project.name_of(b).unwrap_or("").to_string();
+                        self.status = format!("IFFT 结果在 {name}，实部已画成图");
+                    }
+                    Err(e) => self.status = e,
+                }
                 self.history.changed();
                 self.finish_edit();
             }
@@ -2856,6 +2910,67 @@ mod history_tests {
         ui.click(&mut app, note_pos);
         assert_eq!(app.explorer_selection, vec![folder, 2, note]);
         assert!(app.history.undo_label().is_none());
+    }
+
+    #[test]
+    fn ifft_dialog_finds_fft_columns_and_creates_a_signal_table() {
+        let mut app = app();
+        let src = scicanvas_core::ops::Source::Book {
+            id: 1,
+            selected: vec!["B".into()],
+            rows: None,
+        };
+        let (spec, _) = app.project.fft(&src, scicanvas_core::fft::Window::Rect).unwrap()[0];
+        app.active = Some(spec);
+        app.run_command("signal.ifft");
+        let Some(Dialog::Ifft { re, im, rows, .. }) = &app.dialog else {
+            panic!("IFFT dialog not open: {}", app.status);
+        };
+        assert!(re.1.contains("实部") && im.as_ref().unwrap().1.contains("虚部"));
+        let m = *rows;
+        let before = app.project.clone();
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        ctx.style_mut(|style| style.animation_time = 0.0);
+        let mut time = 0.0;
+        let mut frame = |app: &mut SciApp, events| {
+            time += 0.02;
+            ctx.run(
+                egui::RawInput {
+                    time: Some(time),
+                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1400.0, 1000.0))),
+                    events,
+                    ..Default::default()
+                },
+                |ctx| app.dialogs(ctx),
+            )
+        };
+        frame(&mut app, vec![]);
+        let output = frame(&mut app, vec![]);
+        let pos = output
+            .shapes
+            .iter()
+            .find_map(|s| match &s.shape {
+                egui::Shape::Text(t) if t.galley.job.text == "变换" => Some(t.pos + egui::vec2(5.0, 5.0)),
+                _ => None,
+            })
+            .expect("OK button");
+        frame(&mut app, vec![egui::Event::PointerMoved(pos)]);
+        for pressed in [true, false] {
+            frame(
+                &mut app,
+                vec![egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+            );
+        }
+        let out = app.project.books.last().unwrap();
+        assert!(out.name.contains("IFFT"), "{}", app.status);
+        assert_eq!(out.columns[1].values().len(), 2 * (m - 1));
+        roundtrip(&mut app, &before);
     }
 
     #[test]

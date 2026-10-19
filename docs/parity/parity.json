@@ -2333,9 +2333,9 @@
   "feature": "傅里叶变换 FFT / IFFT（幅值、相位、功率谱、窗函数）",
   "ref": "Fast Fourier Transform (FFT)",
   "pri": "P0",
-  "status": "部分实现",
-  "how": "任意点数 FFT（基 2/Bluestein）、矩形/Hann/Hamming 窗、单边幅值/相位/功率谱及幅值图已接入；滤波内部已有逆变换，独立 IFFT 命令与复数输入输出待做",
-  "verify": "与 numpy.fft.rfft 的实部 / 虚部（基 2 与 Bluestein 两种长度）及 numpy 窗函数结果一致（1e-9）；IFFT 与 Origin 对照待做",
+  "status": "已实现待验收",
+  "how": "任意点数 FFT（基 2/Bluestein）、矩形/Hann/Hamming 窗、单边幅值/相位/功率谱及幅值图；独立 IFFT 命令：选中实部/虚部列或在 FFT 结果表直接运行，单边谱按实数信号逆变换（可选偶/奇输出点数，同 numpy.fft.irfft），双边谱做复数逆变换（同 numpy.fft.ifft，输出实部和虚部），时间间隔按 1/(N·df) 换算，生成信号表与曲线图",
+  "verify": "FFT 与 numpy.fft 一致；irfft（8/9/7 点）与 ifft 与 NumPy 2.4.4 参考值误差 < 1e-12；任意长度往返还原；FFT→IFFT 项目往返、对话框真实点击与撤销/重做回归",
   "id": "F204",
   "milestone": "M1 日常够用"
  },

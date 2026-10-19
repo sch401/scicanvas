@@ -1019,6 +1019,16 @@ fn build() -> Vec<Command> {
             |a| a.open_fft_dialog(),
         ),
         c(
+            "signal.ifft",
+            "IFFT",
+            "diff",
+            "",
+            "分析",
+            "ifft inverse fourier transform 逆傅里叶 逆变换",
+            need_book,
+            |a| a.open_ifft_dialog(),
+        ),
+        c(
             "math.colmath",
             "列运算",
             "colins",

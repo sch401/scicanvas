@@ -45,6 +45,15 @@ pub enum Dialog {
         method: SmoothMethod,
         window: usize,
     },
+    /// IFFT：工作簿、实部列、虚部列（可无）及显示名、频点数、是否双边谱、单边谱原信号点数是否为奇数。
+    Ifft {
+        book: u64,
+        re: (String, String),
+        im: Option<(String, String)>,
+        rows: usize,
+        two_sided: bool,
+        odd: bool,
+    },
     /// Savitzky–Golay 平滑求导：窗口点数、多项式阶数、导数阶数。
     SgDiff {
         window: usize,
@@ -169,6 +178,7 @@ pub enum Action {
     Fit(usize),
     Smooth(SmoothMethod, usize),
     SgDiff(usize, usize, usize),
+    Ifft(u64, String, Option<String>, scicanvas_core::fft::InverseInput),
     Normalize(NormalizeMethod),
     ExportPng(u32),
     Interpolate(InterpMethod, usize, Option<(f64, f64)>),
@@ -469,6 +479,56 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                 let (ok, cancel) = buttons(ui, "平滑");
                 if ok {
                     action = Action::Smooth(*method, (*w).max(3) | 1);
+                } else if cancel {
+                    action = Action::Close;
+                }
+            });
+        }
+        Dialog::Ifft {
+            book,
+            re,
+            im,
+            rows,
+            two_sided,
+            odd,
+        } => {
+            window(ctx, "IFFT").show(ctx, |ui| {
+                egui::Grid::new("ifft-grid")
+                    .num_columns(2)
+                    .spacing([12.0, 8.0])
+                    .show(ui, |ui| {
+                        ui.label("实部");
+                        ui.label(&re.1);
+                        ui.end_row();
+                        ui.label("虚部");
+                        ui.label(im.as_ref().map_or("无（按 0）", |c| c.1.as_str()));
+                        ui.end_row();
+                        ui.label("输入");
+                        ui.horizontal(|ui| {
+                            ui.radio_value(two_sided, false, "单边谱");
+                            ui.radio_value(two_sided, true, "双边谱");
+                        });
+                        ui.end_row();
+                        if !*two_sided {
+                            use scicanvas_core::fft::InverseInput;
+                            ui.label("输出点数");
+                            ui.horizontal(|ui| {
+                                let even = InverseInput::OneSided { odd: false }.points(*rows);
+                                let oddn = InverseInput::OneSided { odd: true }.points(*rows);
+                                ui.radio_value(odd, false, even.to_string());
+                                ui.radio_value(odd, true, oddn.to_string());
+                            });
+                            ui.end_row();
+                        }
+                    });
+                let (ok, cancel) = buttons(ui, "变换");
+                if ok {
+                    let input = if *two_sided {
+                        scicanvas_core::fft::InverseInput::TwoSided
+                    } else {
+                        scicanvas_core::fft::InverseInput::OneSided { odd: *odd }
+                    };
+                    action = Action::Ifft(*book, re.0.clone(), im.as_ref().map(|c| c.0.clone()), input);
                 } else if cancel {
                     action = Action::Close;
                 }
