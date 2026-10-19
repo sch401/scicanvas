@@ -23,6 +23,8 @@ pub struct ColumnEdit {
     pub role: scicanvas_core::Role,
     pub kind: scicanvas_core::DataKind,
     pub format: scicanvas_core::format::DisplayFormat,
+    /// 分析结果列的重算方式（普通列为 None）。
+    pub recalc: Option<scicanvas_core::ops::RecalcMode>,
 }
 
 pub enum Dialog {
@@ -354,6 +356,15 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                                 }
                             });
                         ui.end_row();
+                        if let Some(mode) = &mut edit.recalc {
+                            ui.label("重算方式");
+                            ui.horizontal(|ui| {
+                                for m in scicanvas_core::ops::RecalcMode::ALL {
+                                    ui.radio_value(mode, m, m.label());
+                                }
+                            });
+                            ui.end_row();
+                        }
                         ui.label("显示格式");
                         match edit.kind {
                             DataKind::Num => {

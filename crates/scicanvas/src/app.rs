@@ -631,10 +631,20 @@ impl SciApp {
         self.last_history_group = None;
     }
 
+    /// “重算”命令：公式列和全部分析结果列（含手动的）按依赖顺序重算，一步撤销。
+    pub(crate) fn recalc_all(&mut self) {
+        let problems = self.project.recalc_computed(true);
+        self.status = if problems.is_empty() {
+            "已重算公式列和分析结果".into()
+        } else {
+            format!("重算出错：{}", problems.join("；"))
+        };
+    }
+
     /// 有改动时按保存的列公式重算（并入同一步撤销）；出错时在状态栏说明。
     fn recalc_formulas(&mut self) {
         if self.history.has_changes() {
-            let problems = self.project.recalc_formulas();
+            let problems = self.project.recalc_computed(false);
             if !problems.is_empty() {
                 self.status = format!("公式重算出错：{}", problems.join("；"));
             }
@@ -4036,6 +4046,52 @@ mod history_tests {
             app.project.books.last().map(|b| b.id),
             "the new table is shown"
         );
+    }
+
+    #[test]
+    fn manual_analysis_results_update_only_on_recalc_command() {
+        use scicanvas_core::ops::RecalcMode;
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["B".into()]);
+        app.begin_edit("平滑");
+        app.smooth(scicanvas_core::analysis::SmoothMethod::MovingAverage, 3);
+        app.history.changed();
+        app.finish_edit();
+        let key = app
+            .project
+            .book(1)
+            .unwrap()
+            .columns
+            .iter()
+            .find(|c| c.op.is_some())
+            .unwrap()
+            .key
+            .clone();
+        // 列属性改为手动
+        app.selection.insert(1, vec![key.clone()]);
+        app.run_command("col.props");
+        let Some(Dialog::ColumnProps { edit, .. }) = app.dialog.take() else {
+            panic!()
+        };
+        assert_eq!(edit.recalc, Some(RecalcMode::Auto));
+        let mut edit = edit;
+        edit.recalc = Some(RecalcMode::Manual);
+        app.begin_edit("列属性");
+        app.apply_column_props(edit).unwrap();
+        app.history.changed();
+        app.finish_edit();
+        let smoothed = |app: &SciApp| app.project.book(1).unwrap().column(&key).unwrap().values();
+        let old = smoothed(&app);
+        app.begin_edit("编辑单元格");
+        app.project.book_mut(1).unwrap().columns[1].set(1, "99".into());
+        app.history.changed();
+        app.finish_edit();
+        assert_eq!(smoothed(&app), old);
+        let before = app.project.clone();
+        app.run_command("data.recalc");
+        assert_ne!(smoothed(&app), old);
+        roundtrip(&mut app, &before);
     }
 
     #[test]

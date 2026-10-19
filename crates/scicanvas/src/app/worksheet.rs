@@ -140,6 +140,7 @@ impl SciApp {
                 role: col.role,
                 kind: col.data.kind(),
                 format: col.format,
+                recalc: col.op.as_ref().map(|op| op.mode),
             },
             sample,
             error: None,
@@ -161,6 +162,9 @@ impl SciApp {
         col.long_name = edit.long_name;
         col.units = edit.units;
         col.comment = edit.comment;
+        if let (Some(op), Some(mode)) = (col.op.as_mut(), edit.recalc) {
+            op.mode = mode;
+        }
         // 时区改变：不带时区写的日期按新时区重新换算，显示的墙上时间不变
         let offset_changed = col.format.utc_offset != edit.format.utc_offset;
         col.format = edit.format;
@@ -511,7 +515,12 @@ impl SciApp {
                                 header.col(|ui| {
                                     let rect = ui.max_rect();
                                     // 带保存公式的列标 ƒ
-                                    let mark = if col.formula.is_some() { " ƒ" } else { "" };
+                                    let computed = col.formula.is_some()
+                                        || col
+                                            .op
+                                            .as_ref()
+                                            .is_some_and(|op| op.mode != scicanvas_core::ops::RecalcMode::None);
+                                    let mark = if computed { " ƒ" } else { "" };
                                     let text =
                                         RichText::new(format!("{}({}){mark}", col.key, col.role.label())).strong();
                                     let resp = ui

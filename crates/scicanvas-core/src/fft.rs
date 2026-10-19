@@ -179,6 +179,7 @@ pub fn spectrum(ys: &[f64], dt: f64, window: Window) -> Result<Spectrum, String>
 /// 由 X 列求采样间隔；不等间距（相对偏差超过 1e-6）时报错。
 /// FFT 滤波类型；频率单位与 1/X 相同（X 以 s 为单位时为 Hz）。
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum FilterKind {
     LowPass(f64),
     HighPass(f64),

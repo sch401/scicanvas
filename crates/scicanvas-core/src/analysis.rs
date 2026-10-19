@@ -300,6 +300,7 @@ pub fn polyfit(xs: &[f64], ys: &[f64], order: usize) -> Option<PolyFit> {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum SmoothMethod {
     /// 移动平均。
     MovingAverage,
@@ -504,6 +505,7 @@ pub fn cumulative_trapezoid(xs: &[f64], ys: &[f64]) -> (Vec<f64>, f64) {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum NormalizeMethod {
     /// 缩放到 [0, 1]。
     MinMax,

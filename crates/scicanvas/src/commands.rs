@@ -1095,6 +1095,17 @@ fn build() -> Vec<Command> {
             |a| a.open_sg_diff_dialog(),
         ),
         c(
+            "data.recalc",
+            "重算",
+            "diff",
+            "",
+            "分析",
+            "recalculate recompute 重算 更新结果 公式",
+            need_book,
+            |a| a.recalc_all(),
+        )
+        .modifies(),
+        c(
             "math.integ",
             "积分",
             "integ",

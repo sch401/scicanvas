@@ -8,6 +8,164 @@ use crate::model::{fmt_num, round_sig, Book, Column, Graph, PlotType, Project, R
 /// 统计类操作选中的数据：工作簿编号、列标识和可选的行范围。
 type Picked = (u64, Vec<String>, Option<(usize, usize)>);
 
+/// 结果列的重算方式：来源变化时自动重算、只在“重算”命令时重算、或保持不变。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum RecalcMode {
+    #[default]
+    Auto,
+    Manual,
+    None,
+}
+
+impl RecalcMode {
+    pub const ALL: [RecalcMode; 3] = [RecalcMode::Auto, RecalcMode::Manual, RecalcMode::None];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            RecalcMode::Auto => "自动",
+            RecalcMode::Manual => "手动",
+            RecalcMode::None => "不重算",
+        }
+    }
+}
+
+/// 可重算的逐列分析。
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum OpKind {
+    Smooth {
+        method: SmoothMethod,
+        window: usize,
+    },
+    Normalize {
+        method: NormalizeMethod,
+    },
+    Derivative,
+    SgDerivative {
+        window: usize,
+        order: usize,
+        deriv: usize,
+    },
+    Integral,
+    Baseline {
+        method: crate::baseline::BaselineMethod,
+    },
+    BaselineSubtracted {
+        method: crate::baseline::BaselineMethod,
+    },
+    FftFilter {
+        kind: crate::fft::FilterKind,
+    },
+    /// 多项式拟合：逐点残差（与原数据同行）、拟合曲线的 X 网格与拟合值（各 200 点）。
+    PolyResidual {
+        order: usize,
+    },
+    PolyFitX {
+        order: usize,
+    },
+    PolyFitY {
+        order: usize,
+    },
+}
+
+/// 拟合曲线的网格点数。
+const FIT_POINTS: usize = 200;
+
+impl OpKind {
+    /// 对一组有效点计算结果（与首次分析用同一实现）。
+    pub fn compute(&self, xs: &[f64], ys: &[f64]) -> Vec<f64> {
+        match *self {
+            OpKind::Smooth { method, window } => analysis::smooth(xs, ys, method, window),
+            OpKind::Normalize { method } => analysis::normalize(ys, method),
+            OpKind::Derivative => analysis::derivative(xs, ys),
+            OpKind::SgDerivative { window, order, deriv } => analysis::sg_derivative(xs, ys, window, order, deriv),
+            OpKind::Integral => analysis::cumulative_trapezoid(xs, ys).0,
+            OpKind::Baseline { method } => crate::baseline::baseline(xs, ys, method),
+            OpKind::BaselineSubtracted { method } => {
+                let b = crate::baseline::baseline(xs, ys, method);
+                ys.iter().zip(&b).map(|(y, b)| y - b).collect()
+            }
+            OpKind::FftFilter { kind } => {
+                let dt = crate::fft::sample_interval(xs).unwrap_or(1.0);
+                crate::fft::filter(ys, dt, kind).unwrap_or_else(|_| vec![f64::NAN; ys.len()])
+            }
+            OpKind::PolyResidual { order } => match analysis::polyfit(xs, ys, order) {
+                Some(fit) => xs.iter().zip(ys).map(|(x, y)| y - fit.eval(*x)).collect(),
+                None => vec![f64::NAN; ys.len()],
+            },
+            OpKind::PolyFitX { order } | OpKind::PolyFitY { order } => match analysis::polyfit(xs, ys, order) {
+                Some(fit) => (0..FIT_POINTS)
+                    .map(|i| {
+                        let x = fit.x_min + (fit.x_max - fit.x_min) * i as f64 / (FIT_POINTS - 1) as f64;
+                        if matches!(self, OpKind::PolyFitX { .. }) {
+                            x
+                        } else {
+                            fit.eval(x)
+                        }
+                    })
+                    .collect(),
+                None => vec![],
+            },
+        }
+    }
+
+    /// 结果是独立的网格（拟合曲线），不与原数据逐行对齐。
+    fn is_grid(&self) -> bool {
+        matches!(self, OpKind::PolyFitX { .. } | OpKind::PolyFitY { .. })
+    }
+}
+
+/// 结果列上记录的分析操作：操作、来源 Y/X 列、行范围与重算方式。
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub struct Operation {
+    pub kind: OpKind,
+    pub y: String,
+    pub x: Option<String>,
+    pub rows: Option<(usize, usize)>,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub mode: RecalcMode,
+}
+
+impl Operation {
+    /// 在工作簿当前数据上重算，结果与原数据逐行对齐（无效点留空）。来源列已删除时返回 None。
+    fn data(&self, book: &Book) -> Option<crate::ColumnData> {
+        book.column(&self.y)?;
+        if let Some(x) = &self.x {
+            book.column(x)?;
+        }
+        let item = Item {
+            y: self.y.clone(),
+            x: self.x.clone(),
+            rows: self.rows,
+        };
+        let (xs, ys, idx) = get_xy(book, &item);
+        let vals = if xs.len() < 3 {
+            vec![]
+        } else {
+            self.kind.compute(&xs, &ys)
+        };
+        if self.kind.is_grid() {
+            return Some(
+                vals.iter()
+                    .map(|v| if v.is_finite() { fmt_num(*v) } else { String::new() })
+                    .collect(),
+            );
+        }
+        let mut data = vec![String::new(); book.nrows()];
+        for (k, &row) in idx.iter().enumerate() {
+            if vals.get(k).is_some_and(|v| v.is_finite()) {
+                data[row] = fmt_num(vals[k]);
+            }
+        }
+        while data.last().is_some_and(|s| s.is_empty()) {
+            data.pop();
+        }
+        Some(data.into())
+    }
+}
+
 /// 一条曲线的非线性拟合结果。
 #[derive(Clone, Debug, PartialEq)]
 pub struct NlFitReport {
@@ -200,17 +358,26 @@ fn formula_data(book: &Book, target: &str, formula: &str) -> Result<crate::Colum
     book.column(target).ok_or("找不到目标列")?.data.replaced_texts(data)
 }
 
-/// 带公式的列按依赖排序（被引用的先算）；有循环依赖时报错。
-fn formula_order(book: &Book) -> Result<Vec<String>, String> {
+/// 需要重算的列（公式列、自动或 `manual` 时手动的分析结果列）按依赖排序（来源先算）；有循环依赖时报错。
+fn computed_order(book: &Book, manual: bool) -> Result<Vec<String>, String> {
     let deps: std::collections::HashMap<String, Vec<String>> = book
         .columns
         .iter()
         .filter_map(|c| {
-            let f = c.formula.as_deref()?;
-            Some((
-                c.key.clone(),
-                crate::formula::parse(f).map(|e| e.columns()).unwrap_or_default(),
-            ))
+            if let Some(f) = c.formula.as_deref() {
+                return Some((
+                    c.key.clone(),
+                    crate::formula::parse(f).map(|e| e.columns()).unwrap_or_default(),
+                ));
+            }
+            let op = c.op.as_ref()?;
+            let due = op.mode == RecalcMode::Auto || (manual && op.mode == RecalcMode::Manual);
+            due.then(|| {
+                (
+                    c.key.clone(),
+                    std::iter::once(op.y.clone()).chain(op.x.clone()).collect(),
+                )
+            })
         })
         .collect();
     // 0 未访问，1 访问中，2 完成
@@ -224,7 +391,7 @@ fn formula_order(book: &Book) -> Result<Vec<String>, String> {
     ) -> Result<(), String> {
         match state.get(key) {
             Some(2) => return Ok(()),
-            Some(1) => return Err(format!("列公式循环引用（涉及 {key} 列）")),
+            Some(1) => return Err(format!("列公式或分析结果循环引用（涉及 {key} 列）")),
             _ => {}
         }
         state.insert(key, 1);
@@ -407,7 +574,20 @@ impl Project {
             cr.long_name = format!("{} 残差", name);
             cr.units = y_units.clone();
             cr.comment = format!("{kind}：Y − 拟合值");
+            while residual.last().is_some_and(String::is_empty) {
+                residual.pop();
+            }
             cr.data = residual.into_iter().collect();
+            let op = |kind: OpKind| {
+                Some(Operation {
+                    kind,
+                    y: item.y.clone(),
+                    x: item.x.clone(),
+                    rows: item.rows,
+                    mode: RecalcMode::Auto,
+                })
+            };
+            cr.op = op(OpKind::PolyResidual { order });
             let kr = self.insert_result_column(r.book_id, &item.y, cr).unwrap();
             const N: usize = 200;
             let fx: Vec<f64> = (0..N)
@@ -418,11 +598,13 @@ impl Project {
             cx.units = x_units;
             cx.comment = kind.clone();
             cx.data = fx.iter().map(|x| fmt_num(*x)).collect();
+            cx.op = op(OpKind::PolyFitX { order });
             let mut cy = Column::new("", Role::Y);
             cy.long_name = format!("{} {}", name, kind);
             cy.units = y_units;
             cy.comment = fit.equation();
             cy.data = fx.iter().map(|x| fmt_num(fit.eval(*x))).collect();
+            cy.op = op(OpKind::PolyFitY { order });
             let kx = self.insert_result_column(r.book_id, &item.y, cx).unwrap();
             let ky = self.insert_result_column(r.book_id, &item.y, cy).unwrap();
             let (gid, index) = self.graph_for_result(&r, item);
@@ -730,6 +912,7 @@ impl Project {
     fn per_item_column(
         &mut self,
         src: &Source,
+        op: OpKind,
         mut f: impl FnMut(&Book, &Item, &[f64], &[f64]) -> (Vec<f64>, String, String, String),
     ) -> Result<(Resolved, Vec<(Item, String)>), String> {
         let r = self.resolve(src)?;
@@ -756,6 +939,13 @@ impl Project {
             c.units = units;
             c.comment = comment;
             c.data = data.into();
+            c.op = Some(Operation {
+                kind: op,
+                y: item.y.clone(),
+                x: item.x.clone(),
+                rows: item.rows,
+                mode: RecalcMode::Auto,
+            });
             let key = self.insert_result_column(r.book_id, &item.y, c).unwrap();
             made.push((item.clone(), key));
         }
@@ -777,7 +967,7 @@ impl Project {
                 }
             }
         }
-        let (r, made) = self.per_item_column(src, |book, item, xs, ys| {
+        let (r, made) = self.per_item_column(src, OpKind::Smooth { method, window }, |book, item, xs, ys| {
             let y = book.column(&item.y).unwrap();
             (
                 analysis::smooth(xs, ys, method, window),
@@ -808,7 +998,7 @@ impl Project {
         src: &Source,
         method: crate::baseline::BaselineMethod,
     ) -> Result<Vec<(String, String)>, String> {
-        let (r, base) = self.per_item_column(src, |book, item, xs, ys| {
+        let (r, base) = self.per_item_column(src, OpKind::Baseline { method }, |book, item, xs, ys| {
             let y = book.column(&item.y).unwrap();
             (
                 crate::baseline::baseline(xs, ys, method),
@@ -827,6 +1017,13 @@ impl Project {
             c.long_name = format!("{} 扣除基线", y.display_name());
             c.units = y.units.clone();
             c.comment = method.label();
+            c.op = Some(Operation {
+                kind: OpKind::BaselineSubtracted { method },
+                y: item.y.clone(),
+                x: item.x.clone(),
+                rows: item.rows,
+                mode: RecalcMode::Auto,
+            });
             c.data = vec![String::new(); book.nrows()].into();
             for (k, &row) in idx.iter().enumerate() {
                 let v = ys[k] - bv.get(row).copied().unwrap_or(f64::NAN);
@@ -865,7 +1062,7 @@ impl Project {
                 crate::fft::sample_interval(&xs).map_err(|e| format!("{}：{e}", name_of(book, &item.y)))?;
             }
         }
-        let (r, made) = self.per_item_column(src, |book, item, xs, ys| {
+        let (r, made) = self.per_item_column(src, OpKind::FftFilter { kind }, |book, item, xs, ys| {
             let y = book.column(&item.y).unwrap();
             let dt = if item.x.is_some() {
                 crate::fft::sample_interval(xs).unwrap_or(1.0)
@@ -1100,7 +1297,7 @@ impl Project {
 
     /// 数值微分，结果写成新列 d(Y)/dX。
     pub fn differentiate(&mut self, src: &Source) -> Result<Vec<String>, String> {
-        let (_, made) = self.per_item_column(src, |book, item, xs, ys| {
+        let (_, made) = self.per_item_column(src, OpKind::Derivative, |book, item, xs, ys| {
             let y = book.column(&item.y).unwrap();
             let xu = item
                 .x
@@ -1132,38 +1329,42 @@ impl Project {
         deriv: usize,
     ) -> Result<Vec<String>, String> {
         let deriv = deriv.clamp(1, 2);
-        let (_, made) = self.per_item_column(src, |book, item, xs, ys| {
-            let y = book.column(&item.y).unwrap();
-            let xu = item
-                .x
-                .as_deref()
-                .and_then(|k| book.column(k))
-                .map(|c| c.units.clone())
-                .unwrap_or_default();
-            let (name, units) = if deriv == 1 {
-                (format!("d({})/dX", y.display_name()), format!("{}/{}", y.units, xu))
-            } else {
-                (format!("d²({})/dX²", y.display_name()), format!("{}/{}²", y.units, xu))
-            };
-            let units = if y.units.is_empty() || xu.is_empty() {
-                String::new()
-            } else {
-                units
-            };
-            (
-                analysis::sg_derivative(xs, ys, window, order, deriv),
-                name,
-                units,
-                format!("Savitzky–Golay，{} 点 {} 阶多项式", window.max(3) | 1, order),
-            )
-        })?;
+        let (_, made) = self.per_item_column(
+            src,
+            OpKind::SgDerivative { window, order, deriv },
+            |book, item, xs, ys| {
+                let y = book.column(&item.y).unwrap();
+                let xu = item
+                    .x
+                    .as_deref()
+                    .and_then(|k| book.column(k))
+                    .map(|c| c.units.clone())
+                    .unwrap_or_default();
+                let (name, units) = if deriv == 1 {
+                    (format!("d({})/dX", y.display_name()), format!("{}/{}", y.units, xu))
+                } else {
+                    (format!("d²({})/dX²", y.display_name()), format!("{}/{}²", y.units, xu))
+                };
+                let units = if y.units.is_empty() || xu.is_empty() {
+                    String::new()
+                } else {
+                    units
+                };
+                (
+                    analysis::sg_derivative(xs, ys, window, order, deriv),
+                    name,
+                    units,
+                    format!("Savitzky–Golay，{} 点 {} 阶多项式", window.max(3) | 1, order),
+                )
+            },
+        )?;
         Ok(made.into_iter().map(|(_, k)| k).collect())
     }
 
     /// 梯形法累积积分，结果写成新列，并返回每组数据的总面积。
     pub fn integrate(&mut self, src: &Source) -> Result<(Vec<String>, Vec<AreaReport>), String> {
         let mut areas = vec![];
-        let (_, made) = self.per_item_column(src, |book, item, xs, ys| {
+        let (_, made) = self.per_item_column(src, OpKind::Integral, |book, item, xs, ys| {
             let y = book.column(&item.y).unwrap();
             let (cum, abs) = analysis::cumulative_trapezoid(xs, ys);
             let total = *cum.last().unwrap_or(&0.0);
@@ -1196,7 +1397,7 @@ impl Project {
 
     /// 归一化，结果写成新列。
     pub fn normalize(&mut self, src: &Source, method: NormalizeMethod) -> Result<Vec<String>, String> {
-        let (_, made) = self.per_item_column(src, |book, item, _xs, ys| {
+        let (_, made) = self.per_item_column(src, OpKind::Normalize { method }, |book, item, _xs, ys| {
             let y = book.column(&item.y).unwrap();
             (
                 analysis::normalize(ys, method),
@@ -1569,7 +1770,7 @@ impl Project {
                 .find(|c| c.key == target)
                 .ok_or("找不到目标列")?
                 .formula = Some(formula.into());
-            formula_order(&trial)?;
+            computed_order(&trial, true)?;
         }
         let n = self.set_column_values(book_id, target, formula)?;
         let book = self.book_mut(book_id).unwrap();
@@ -1577,14 +1778,24 @@ impl Project {
         Ok(n)
     }
 
-    /// 按保存的列公式重算全部工作簿（按依赖顺序）；结果不变的列不改动。返回出错的说明。
+    /// 按保存的列公式重算（只算公式列）。
     pub fn recalc_formulas(&mut self) -> Vec<String> {
+        self.recalc_computed(false)
+    }
+
+    /// 重算公式列和带分析操作的结果列（按依赖顺序）：自动的总是重算，`manual` 时也算手动的；
+    /// “不重算”的保持原样，结果不变的列不改动。返回出错的说明。
+    pub fn recalc_computed(&mut self, manual: bool) -> Vec<String> {
         let mut problems = vec![];
         for b in 0..self.books.len() {
-            if !self.books[b].columns.iter().any(|c| c.formula.is_some()) {
+            if !self.books[b]
+                .columns
+                .iter()
+                .any(|c| c.formula.is_some() || c.op.is_some())
+            {
                 continue;
             }
-            let order = match formula_order(&self.books[b]) {
+            let order = match computed_order(&self.books[b], manual) {
                 Ok(order) => order,
                 Err(e) => {
                     problems.push(format!("{}：{e}", self.books[b].name));
@@ -1593,7 +1804,17 @@ impl Project {
             };
             for key in order {
                 let book = &self.books[b];
-                let formula = book.column(&key).and_then(|c| c.formula.clone()).unwrap_or_default();
+                let col = book.column(&key).unwrap();
+                if let Some(op) = col.op.as_ref().filter(|_| col.formula.is_none()) {
+                    if let Some(data) = op.data(book) {
+                        let col = self.books[b].columns.iter_mut().find(|c| c.key == key).unwrap();
+                        if col.data != data {
+                            col.data = data;
+                        }
+                    }
+                    continue;
+                }
+                let formula = col.formula.clone().unwrap_or_default();
                 match formula_data(book, &key, &formula) {
                     Ok(data) => {
                         let col = self.books[b].columns.iter_mut().find(|c| c.key == key).unwrap();
@@ -2158,6 +2379,69 @@ mod tests {
             .unwrap();
         let c = p.book(1).unwrap().columns[2].values();
         assert_eq!(&c[..4], &[-1.5, -0.5, 6.5, 11.5]);
+    }
+
+    #[test]
+    fn analysis_result_columns_recalculate_by_mode() {
+        let mut p = Project::sample();
+        let keys = p.smooth(&book_src(&["B"]), SmoothMethod::SavitzkyGolay, 7).unwrap();
+        let derived = p.differentiate(&book_src(&["B"])).unwrap();
+        let (smooth, diff) = (keys[0].clone(), derived[0].clone());
+        let col = |p: &Project, k: &str| p.book(1).unwrap().column(k).unwrap().values();
+        assert_eq!(
+            p.book(1).unwrap().column(&smooth).unwrap().op.as_ref().unwrap().mode,
+            RecalcMode::Auto
+        );
+        // 改源数据：自动的平滑列与重新平滑一致
+        p.book_mut(1).unwrap().columns[1].set(4, "50".into());
+        assert!(p.recalc_computed(false).is_empty());
+        let mut fresh = p.clone();
+        let again = fresh.smooth(&book_src(&["B"]), SmoothMethod::SavitzkyGolay, 7).unwrap();
+        assert_eq!(col(&p, &smooth), col(&fresh, &again[0]));
+        // 手动：只在 manual 重算时更新；不重算：保持
+        let set_mode = |p: &mut Project, k: &str, m: RecalcMode| {
+            p.book_mut(1)
+                .unwrap()
+                .columns
+                .iter_mut()
+                .find(|c| c.key == k)
+                .unwrap()
+                .op
+                .as_mut()
+                .unwrap()
+                .mode = m;
+        };
+        set_mode(&mut p, &diff, RecalcMode::Manual);
+        set_mode(&mut p, &smooth, RecalcMode::None);
+        let (old_diff, old_smooth) = (col(&p, &diff), col(&p, &smooth));
+        p.book_mut(1).unwrap().columns[1].set(4, "-20".into());
+        p.recalc_computed(false);
+        assert_eq!(
+            (col(&p, &diff), col(&p, &smooth)),
+            (old_diff.clone(), old_smooth.clone())
+        );
+        p.recalc_computed(true);
+        assert_ne!(col(&p, &diff), old_diff);
+        assert_eq!(col(&p, &smooth), old_smooth);
+        #[cfg(feature = "serde")]
+        {
+            let json = crate::project_file::to_json(&p).unwrap();
+            let back = crate::project_file::from_json(&json).unwrap();
+            assert_eq!(
+                back.book(1).unwrap().column(&diff).unwrap().op,
+                p.book(1).unwrap().column(&diff).unwrap().op
+            );
+        }
+        // 多项式拟合：残差、拟合 X、拟合值随数据重算，与重新拟合一致
+        let (_, reps) = p.fit_poly(&book_src(&["C"]), 2).unwrap();
+        let (res, (fx, fy)) = (reps[0].residual_key.clone(), reps[0].curve.clone());
+        p.book_mut(1).unwrap().columns[2].set(3, "9".into());
+        assert!(p.recalc_computed(false).is_empty());
+        let mut fresh = p.clone();
+        let (_, again) = fresh.fit_poly(&book_src(&["C"]), 2).unwrap();
+        assert_eq!(col(&p, &res), col(&fresh, &again[0].residual_key));
+        assert_eq!(col(&p, &fx), col(&fresh, &again[0].curve.0));
+        assert_eq!(col(&p, &fy), col(&fresh, &again[0].curve.1));
     }
 
     #[test]
