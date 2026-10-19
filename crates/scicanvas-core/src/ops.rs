@@ -487,7 +487,7 @@ impl Project {
         &mut self,
         src: &Source,
         model: crate::nlfit::Model,
-        fixed: &[Option<f64>],
+        limits: &[crate::nlfit::ParamLimits],
     ) -> Result<(u64, Vec<NlFitReport>), String> {
         let r = self.resolve(src)?;
         let mut reports = vec![];
@@ -497,7 +497,7 @@ impl Project {
             let book = self.book(r.book_id).unwrap();
             let (xs, ys, _) = get_xy(book, item);
             let name = name_of(book, &item.y);
-            let fit = match crate::nlfit::fit(model, &xs, &ys, None, fixed) {
+            let fit = match crate::nlfit::fit_with(model, &xs, &ys, None, limits) {
                 Ok(f) => f,
                 Err(e) => {
                     problems.push(format!("{name}：{e}"));

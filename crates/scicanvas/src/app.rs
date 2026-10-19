@@ -925,13 +925,13 @@ impl SciApp {
     pub(crate) fn open_nlfit_dialog(&mut self) {
         self.dialog = Some(Dialog::NlFit {
             model: scicanvas_core::nlfit::Model::Gauss,
-            fixed: [(false, 0.0); scicanvas_core::nlfit::MAX_PARAMS],
+            limits: [(false, 0.0, false, 0.0, false, 1.0); scicanvas_core::nlfit::MAX_PARAMS],
         });
     }
 
-    fn nlfit(&mut self, model: scicanvas_core::nlfit::Model, fixed: &[Option<f64>]) {
+    fn nlfit(&mut self, model: scicanvas_core::nlfit::Model, limits: &[scicanvas_core::nlfit::ParamLimits]) {
         let Some(src) = self.analysis_source() else { return };
-        match self.project.nlfit(&src, model, fixed) {
+        match self.project.nlfit(&src, model, limits) {
             Ok((gid, reports)) => {
                 self.after_analysis(Some(gid));
                 let unconverged = reports.iter().filter(|r| !r.fit.converged).count();
@@ -1693,11 +1693,11 @@ impl SciApp {
                 self.finish_edit();
             }
             dialogs::Action::TTest(kind, level) => self.run_ttest(kind, level),
-            dialogs::Action::NlFit(model, fixed) => {
+            dialogs::Action::NlFit(model, limits) => {
                 self.finish_edit();
                 self.begin_edit("非线性拟合");
                 self.dialog = None;
-                self.nlfit(model, &fixed);
+                self.nlfit(model, &limits);
                 self.history.changed();
                 self.finish_edit();
             }
@@ -3006,6 +3006,29 @@ mod history_tests {
                 }],
             );
         }
+    }
+
+    #[test]
+    fn nlfit_dialog_upper_bound_stops_the_parameter_and_marks_it() {
+        use scicanvas_core::nlfit::Model;
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["C".into()]);
+        app.run_command("fit.nonlinear");
+        let Some(Dialog::NlFit { model, limits }) = app.dialog.as_mut() else {
+            panic!("nlfit dialog not open");
+        };
+        // C 列是 8(1 − e^{−t/4}) 加噪声；ExpDec1 的 t1 约为 4，限制 t1 ≤ 3
+        *model = Model::ExpDec1;
+        limits[2].4 = true;
+        limits[2].5 = 3.0;
+        press_dialog_button(&mut app, "拟合");
+        let Some(Dialog::NlFitReport(reports)) = &app.dialog else {
+            panic!("no report: {}", app.status);
+        };
+        let f = &reports[0].fit;
+        assert_eq!(f.params[2], 3.0);
+        assert_eq!(f.at_bound, vec![false, false, true]);
     }
 
     #[test]

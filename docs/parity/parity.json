@@ -1484,7 +1484,7 @@
   "ref": "Theory of Nonlinear Curve Fitting",
   "pri": "P0",
   "status": "部分实现",
-  "how": "Levenberg–Marquardt（中心差分雅可比、自适应阻尼），标准误 (JᵀJ)⁻¹·RSS/(n−p)；目前只用内置函数，参数约束与自定义函数待做",
+  "how": "Levenberg–Marquardt（中心差分雅可比、自适应阻尼、上下界活动集投影），标准误 (JᵀJ)⁻¹·RSS/(n−p)；24 种内置函数；参数间线性约束与自定义函数（F142）待做",
   "verify": "与 SciPy 1.17.1 curve_fit 的参数（1e-6）、标准误（1e-4）一致，从自动初值收敛；Origin 对照待做",
   "id": "F134",
   "milestone": "M1 日常够用"
@@ -1514,8 +1514,8 @@
   "ref": "Parameters,Bounds,Constraints and Weighting",
   "pri": "P0",
   "status": "部分实现",
-  "how": "非线性拟合对话框可把任意参数固定为指定值，固定参数不计入自由度、标准误标为“固定”；上下界与线性约束待做",
-  "verify": "与 SciPy curve_fit 固定参数后的拟合一致（参数 1e-6、标准误 1e-4）；上下界待做",
+  "how": "非线性拟合对话框每个参数可设固定值、下限、上限：固定参数不计入自由度、标准误标为“固定”；上下界用活动集投影的 Levenberg–Marquardt（贴界且下降方向朝外的参数本步不动），初值先截到界内，停在边界上的参数在报告中标“（边界）”；参数间线性约束待做",
+  "verify": "固定参数与 SciPy curve_fit 一致；三组上下界（含生效与不生效）与 SciPy 1.17.1 curve_fit(bounds, method=trf) 参数（1e-6）、标准误（1e-4）、RSS 一致；对话框真实点击上界生效回归；线性约束待做",
   "id": "F136",
   "milestone": "M1 日常够用"
  },

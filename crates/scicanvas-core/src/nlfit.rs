@@ -563,6 +563,8 @@ pub struct NlFit {
     pub converged: bool,
     /// 被固定的参数（标准误记为 0，不计入自由度）。
     pub fixed: Vec<bool>,
+    /// 结果停在下限或上限上的参数。
+    pub at_bound: Vec<bool>,
     pub x_min: f64,
     pub x_max: f64,
 }
@@ -597,6 +599,28 @@ fn jacobian(model: Model, xs: &[f64], p: &[f64], free: &[usize]) -> Vec<Vec<f64>
     j
 }
 
+/// 单个参数的限制：固定值（优先）、下限、上限。
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct ParamLimits {
+    pub fixed: Option<f64>,
+    pub lower: Option<f64>,
+    pub upper: Option<f64>,
+}
+
+impl ParamLimits {
+    pub fn fixed(v: f64) -> Self {
+        Self {
+            fixed: Some(v),
+            ..Default::default()
+        }
+    }
+
+    fn clamp(&self, v: f64) -> f64 {
+        let v = self.lower.map_or(v, |lo| v.max(lo));
+        self.upper.map_or(v, |hi| v.min(hi))
+    }
+}
+
 /// 拟合 `model`；`initial` 为空时自动估计初值。`fixed` 为空或逐个参数给出固定值（`Some`）。
 /// 非有限的点会被跳过。
 pub fn fit(
@@ -606,6 +630,41 @@ pub fn fit(
     initial: Option<&[f64]>,
     fixed: &[Option<f64>],
 ) -> Result<NlFit, String> {
+    let limits: Vec<ParamLimits> = fixed
+        .iter()
+        .map(|f| ParamLimits {
+            fixed: *f,
+            ..Default::default()
+        })
+        .collect();
+    fit_with(model, xs, ys, initial, &limits)
+}
+
+/// 带参数限制的拟合：固定参数不参与迭代；上下界用投影法——每步把试探参数截到界内，
+/// 初值也先截到界内。标准误按停止点的雅可比计算（与 SciPy `curve_fit` 带 bounds 时相同口径）。
+pub fn fit_with(
+    model: Model,
+    xs: &[f64],
+    ys: &[f64],
+    initial: Option<&[f64]>,
+    limits: &[ParamLimits],
+) -> Result<NlFit, String> {
+    let fixed: Vec<Option<f64>> = limits.iter().map(|l| l.fixed).collect();
+    let fixed = fixed.as_slice();
+    let limit = |k: usize| limits.get(k).copied().unwrap_or_default();
+    for (k, l) in limits.iter().enumerate() {
+        if let (Some(lo), Some(hi)) = (l.lower, l.upper) {
+            if lo >= hi || lo.is_nan() || hi.is_nan() {
+                return Err(format!(
+                    "参数 {} 的下限必须小于上限",
+                    model.params().get(k).unwrap_or(&"?")
+                ));
+            }
+        }
+        if l.lower.is_some_and(|v| !v.is_finite()) || l.upper.is_some_and(|v| !v.is_finite()) {
+            return Err("上下限必须是有限数".into());
+        }
+    }
     let mut pts: Vec<(f64, f64)> = xs
         .iter()
         .zip(ys)
@@ -642,6 +701,9 @@ pub fn fit(
             p[k] = *v;
         }
     }
+    for &k in &free {
+        p[k] = limit(k).clamp(p[k]);
+    }
     let mut cost = rss(model, &xs, &ys, &p);
     if !cost.is_finite() {
         return Err("初值处函数值无效，请检查数据是否适合该函数".into());
@@ -663,27 +725,36 @@ pub fn fit(
                 }
             }
         }
+        // 活动集：贴着边界、且下降方向还往界外推的参数，本步不动，只解其余参数
+        let open: Vec<usize> = (0..m)
+            .filter(|&u| {
+                let (k, l) = (free[u], limit(free[u]));
+                !(l.lower == Some(p[k]) && g[u] < 0.0 || l.upper == Some(p[k]) && g[u] > 0.0)
+            })
+            .collect();
         let mut stepped = false;
-        while lambda < 1e16 {
-            let mut damped = a.clone();
-            for (u, row) in damped.iter_mut().enumerate() {
-                row[u] += lambda * a[u][u].max(1e-12);
+        while lambda < 1e16 && !open.is_empty() {
+            let mut damped: Vec<Vec<f64>> = open.iter().map(|&u| open.iter().map(|&v| a[u][v]).collect()).collect();
+            for (i, row) in damped.iter_mut().enumerate() {
+                row[i] += lambda * a[open[i]][open[i]].max(1e-12);
             }
             let Some(inv) = mat_inv(&damped) else {
                 lambda *= 10.0;
                 continue;
             };
-            let delta: Vec<f64> = (0..m).map(|u| (0..m).map(|v| inv[u][v] * g[v]).sum()).collect();
+            let mut delta = vec![0.0; m];
+            for (i, &u) in open.iter().enumerate() {
+                delta[u] = open.iter().enumerate().map(|(j, &v)| inv[i][j] * g[v]).sum();
+            }
             let mut trial = p.clone();
             for (d, &k) in delta.iter().zip(&free) {
-                trial[k] += d;
+                trial[k] = limit(k).clamp(trial[k] + d);
             }
             let new_cost = rss(model, &xs, &ys, &trial);
             if new_cost < cost {
-                let small_step = delta
+                let small_step = free
                     .iter()
-                    .zip(&free)
-                    .all(|(d, &k)| d.abs() <= 1e-10 * p[k].abs().max(1e-10));
+                    .all(|&k| (trial[k] - p[k]).abs() <= 1e-10 * p[k].abs().max(1e-10));
                 let small_gain = cost - new_cost <= 1e-14 * cost.max(1e-300);
                 p = trial;
                 cost = new_cost;
@@ -726,6 +797,12 @@ pub fn fit(
             }
         }
     }
+    let at_bound: Vec<bool> = (0..all)
+        .map(|k| {
+            let l = limit(k);
+            !is_fixed(k) && (l.lower == Some(p[k]) || l.upper == Some(p[k]))
+        })
+        .collect();
     let mean = ys.iter().sum::<f64>() / n as f64;
     let tss: f64 = ys.iter().map(|y| (y - mean).powi(2)).sum();
     let r2 = if tss > 0.0 { 1.0 - cost / tss } else { f64::NAN };
@@ -741,6 +818,7 @@ pub fn fit(
         iterations,
         converged,
         fixed: (0..all).map(is_fixed).collect(),
+        at_bound,
         x_min: xs[0],
         x_max: xs[n - 1],
     })
@@ -1227,6 +1305,93 @@ mod tests {
             "the dialog holds up to MAX_PARAMS parameters"
         );
         assert!(Model::ALL.iter().all(|m| Model::CATEGORIES.contains(&m.category())));
+    }
+
+    #[test]
+    fn bounded_parameters_match_scipy_trf() {
+        // 参考值：scipy curve_fit(bounds=…, method="trf")（SciPy 1.17.1）
+        let lim = |lower: Option<f64>, upper: Option<f64>| ParamLimits {
+            fixed: None,
+            lower,
+            upper,
+        };
+        let free = ParamLimits::default();
+        type Bounded<'a> = (
+            Model,
+            f64,
+            f64,
+            &'a [f64],
+            &'a [ParamLimits],
+            &'a [f64],
+            &'a [f64],
+            f64,
+            &'a [bool],
+        );
+        let cases: [Bounded; 3] = [
+            (
+                Model::Gauss,
+                0.0,
+                10.0,
+                &[1.0, 4.2, 1.5, 6.0],
+                &[lim(Some(1.02), None), free, lim(None, Some(1.3)), free],
+                &[
+                    1.0591747191658383,
+                    4.200262070736825,
+                    1.2999999999999998,
+                    5.43529480038129,
+                ],
+                &[
+                    0.021308377368655526,
+                    0.014258322592542791,
+                    0.0308399632343038,
+                    0.12682856689340216,
+                ],
+                0.4565305024320042,
+                &[false, false, true, false],
+            ),
+            (
+                Model::ExpDec1,
+                0.0,
+                8.0,
+                &[0.3, 5.0, 1.7],
+                &[free, free, lim(None, Some(1.5))],
+                &[0.40247361429382816, 5.096088116350162, 1.4999999999999998],
+                &[0.021649870222356992, 0.049727736755135005, 0.031631938817463304],
+                0.22313286158621473,
+                &[false, false, true],
+            ),
+            (
+                // 界不生效时与无约束结果相同
+                Model::ExpDec1,
+                0.0,
+                8.0,
+                &[0.3, 5.0, 1.7],
+                &[
+                    lim(Some(0.0), Some(1.0)),
+                    lim(Some(0.0), Some(10.0)),
+                    lim(Some(0.5), Some(5.0)),
+                ],
+                &[0.3028905161777613, 5.011675158968168, 1.6976676595997724],
+                &[0.008905602142936982, 0.017482735121955775, 0.013692056871435564],
+                0.029978254433445914,
+                &[false, false, false],
+            ),
+        ];
+        for (model, from, to, truth, limits, params, se, rss, at_bound) in cases {
+            let amp = 0.05;
+            let (xs, ys) = data(model, from, to, truth, amp);
+            let f = fit_with(model, &xs, &ys, None, limits).unwrap();
+            assert!(f.converged);
+            for (g, w) in f.params.iter().zip(params) {
+                close(*g, *w, 1e-6);
+            }
+            for (g, w) in f.se.iter().zip(se) {
+                close(*g, *w, 1e-4);
+            }
+            close(f.rss, rss, 1e-8);
+            assert_eq!(f.at_bound, at_bound);
+        }
+        assert!(fit_with(Model::Gauss, &[0.0; 10], &[0.0; 10], None, &[lim(Some(2.0), Some(1.0))]).is_err());
     }
 
     #[test]

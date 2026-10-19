@@ -192,9 +192,9 @@
 | F131 | 多项式回归 | The Polynomial Regression Dialog Box | P0 | 已实现待验收 | X 标准化后的正规方程与高斯–约当求逆；2–6 阶拟合、参数标准误、R²、曲线及撤销已接入 | 解析/仿真回归已通过；NIST Wampler、Origin 及高阶数值稳定性验收待做 | 多项式阶次：已完成 0/5，待验收 5，部分实现 0；2–6 阶；认证数据与稳定性验收待完成 |
 | F132 | 多元线性回归 | The Multiple Linear Regression Dialog Box | P1 | 已实现待验收 | 分析 → 多元线性回归：先点选自变量、最后点选因变量；参数表（值、标准误、t、p）与 R²、调整 R²、F 检验、残差标准差 | 与 numpy.linalg.lstsq 及 scipy.stats.t / f 计算的参数、标准误、p 值一致（1e-9），含缺失行与共线提示 | — |
 | F133 | 含 X 误差的线性拟合（York 法） | The Linear Fit with X Error Dialog (Pro Only) | P2 | 未开始 | — | 与 Origin 比较 | — |
-| F134 | 非线性拟合引擎（Levenberg–Marquardt） | Theory of Nonlinear Curve Fitting | P0 | 部分实现 | Levenberg–Marquardt（中心差分雅可比、自适应阻尼），标准误 (JᵀJ)⁻¹·RSS/(n−p)；目前只用内置函数，参数约束与自定义函数待做 | 与 SciPy 1.17.1 curve_fit 的参数（1e-6）、标准误（1e-4）一致，从自动初值收敛；Origin 对照待做 | — |
+| F134 | 非线性拟合引擎（Levenberg–Marquardt） | Theory of Nonlinear Curve Fitting | P0 | 部分实现 | Levenberg–Marquardt（中心差分雅可比、自适应阻尼、上下界活动集投影），标准误 (JᵀJ)⁻¹·RSS/(n−p)；24 种内置函数；参数间线性约束与自定义函数（F142）待做 | 与 SciPy 1.17.1 curve_fit 的参数（1e-6）、标准误（1e-4）一致，从自动初值收敛；Origin 对照待做 | — |
 | F135 | 参数初值自动估计 | Fitting Functions | P0 | 已实现待验收 | 当前 24 种内置非线性模型均有数据驱动初值估计；支持固定参数并报告未收敛状态 | nlfit.rs 模型估计和拟合回归已通过；退化数据、复杂初值与 Origin 实例验收待做 | 当前模型自动初值：已完成 0/24，待验收 24，部分实现 0；24 为当前内置模型数；完整函数库仍见 F514，退化数据与 Origin 实例待验收 |
-| F136 | 参数固定、上下界、线性约束 | Parameters,Bounds,Constraints and Weighting | P0 | 部分实现 | 非线性拟合对话框可把任意参数固定为指定值，固定参数不计入自由度、标准误标为“固定”；上下界与线性约束待做 | 与 SciPy curve_fit 固定参数后的拟合一致（参数 1e-6、标准误 1e-4）；上下界待做 | — |
+| F136 | 参数固定、上下界、线性约束 | Parameters,Bounds,Constraints and Weighting | P0 | 部分实现 | 非线性拟合对话框每个参数可设固定值、下限、上限：固定参数不计入自由度、标准误标为“固定”；上下界用活动集投影的 Levenberg–Marquardt（贴界且下降方向朝外的参数本步不动），初值先截到界内，停在边界上的参数在报告中标“（边界）”；参数间线性约束待做 | 固定参数与 SciPy curve_fit 一致；三组上下界（含生效与不生效）与 SciPy 1.17.1 curve_fit(bounds, method=trf) 参数（1e-6）、标准误（1e-4）、RSS 一致；对话框真实点击上界生效回归；线性约束待做 | — |
 | F137 | 加权拟合（误差列权重等） | Parameters,Bounds,Constraints and Weighting | P1 | 未开始 | — | 与 Origin 比较 | — |
 | F138 | 拟合报告（参数表、ANOVA、置信带、预测带） | Interpreting Regression Results | P0 | 部分实现 | 线性/多项式、非线性和多元回归已有临时报告，含参数/标准误、R²/RSS 等；多元回归还有 t/p 与整体 F 检验。完整拟合 ANOVA、置信/预测带、持久化报告待做 | 现有报告格式、数值及复制回归通过；完整拟合报告与带状输出待验收 | — |
 | F139 | 残差图（残差-自变量、正态概率图） | Residual Plot Analysis | P1 | 未开始 | — | 与 Origin 比较 | — |

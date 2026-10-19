@@ -94,7 +94,8 @@ pub enum Dialog {
     /// 非线性拟合：选择内置函数；每个参数可固定为指定值（最多 4 个参数）。
     NlFit {
         model: Model,
-        fixed: [(bool, f64); scicanvas_core::nlfit::MAX_PARAMS],
+        /// 每个参数：(固定?, 固定值, 有下限?, 下限, 有上限?, 上限)。
+        limits: [(bool, f64, bool, f64, bool, f64); scicanvas_core::nlfit::MAX_PARAMS],
     },
     /// 非线性拟合结果。
     NlFitReport(Vec<NlFitReport>),
@@ -201,7 +202,7 @@ pub enum Action {
     FftFilter(FilterKind),
     Fill(Sequence, usize),
     SetValues(String),
-    NlFit(Model, Vec<Option<f64>>),
+    NlFit(Model, Vec<scicanvas_core::nlfit::ParamLimits>),
     /// 运算符，以及常数（为空时用列 B）。
     ColumnMath(ColumnOp, Option<f64>),
 }
@@ -947,7 +948,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                 });
             });
         }
-        Dialog::NlFit { model, fixed } => {
+        Dialog::NlFit { model, limits } => {
             window(ctx, "非线性拟合").show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label("类别");
@@ -985,20 +986,40 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                     .color(pal.weak),
                 );
                 ui.add_space(4.0);
-                ui.horizontal_wrapped(|ui| {
-                    for (name, (on, value)) in model.params().iter().zip(fixed.iter_mut()) {
-                        ui.checkbox(on, format!("固定 {name}"));
-                        ui.add_enabled(*on, egui::DragValue::new(value).speed(0.01));
-                        ui.add_space(8.0);
-                    }
-                });
+                egui::Grid::new("nlfit-limits")
+                    .num_columns(4)
+                    .spacing([10.0, 4.0])
+                    .show(ui, |ui| {
+                        ui.label("");
+                        for head in ["固定", "下限", "上限"] {
+                            ui.label(RichText::new(head).color(pal.weak));
+                        }
+                        ui.end_row();
+                        for (name, (fix, fv, has_lo, lo, has_hi, hi)) in model.params().iter().zip(limits.iter_mut()) {
+                            ui.label(*name);
+                            let free = !*fix;
+                            for (on, v, enabled) in [(fix, fv, true), (has_lo, lo, free), (has_hi, hi, free)] {
+                                ui.add_enabled_ui(enabled, |ui| {
+                                    ui.horizontal(|ui| {
+                                        ui.checkbox(on, "");
+                                        ui.add_enabled(*on, egui::DragValue::new(v).speed(0.01));
+                                    });
+                                });
+                            }
+                            ui.end_row();
+                        }
+                    });
                 let (ok, cancel) = buttons(ui, "拟合");
                 if ok {
                     let held = model
                         .params()
                         .iter()
-                        .zip(fixed.iter())
-                        .map(|(_, (on, v))| on.then_some(*v))
+                        .zip(limits.iter())
+                        .map(|(_, &(fix, fv, has_lo, lo, has_hi, hi))| scicanvas_core::nlfit::ParamLimits {
+                            fixed: fix.then_some(fv),
+                            lower: (!fix && has_lo).then_some(lo),
+                            upper: (!fix && has_hi).then_some(hi),
+                        })
                         .collect();
                     action = Action::NlFit(*model, held);
                 } else if cancel {
@@ -1034,7 +1055,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                                     if f.fixed[k] {
                                         ui.label(RichText::new("固定").color(pal.weak));
                                     } else {
-                                        ui.label(RichText::new(fmt_num(f.se[k])).monospace());
+                                        ui.label(RichText::new(nlfit_se(f, k)).monospace());
                                     }
                                     ui.end_row();
                                 }
@@ -1675,6 +1696,17 @@ fn correlation_rows(pairs: &[(String, String, Vec<Correlation>)]) -> Vec<Vec<Str
         .collect()
 }
 
+/// 标准误文字：固定参数写“固定”，停在上下限上的参数后面注明“（边界）”。
+fn nlfit_se(f: &scicanvas_core::nlfit::NlFit, k: usize) -> String {
+    if f.fixed[k] {
+        "固定".into()
+    } else if f.at_bound[k] {
+        format!("{}（边界）", fmt_num(f.se[k]))
+    } else {
+        fmt_num(f.se[k])
+    }
+}
+
 fn nlfit_stats(f: &scicanvas_core::nlfit::NlFit) -> Vec<(&'static str, String)> {
     vec![
         ("R²", fmt_num(f.r2)),
@@ -1722,12 +1754,7 @@ fn nlfit_markdown(reports: &[NlFitReport]) -> String {
             let f = &r.fit;
             let mut params = vec![["参数", "值", "标准误"].map(String::from).to_vec()];
             for (k, name) in f.model.params().iter().enumerate() {
-                let se = if f.fixed[k] {
-                    "固定".to_string()
-                } else {
-                    fmt_num(f.se[k])
-                };
-                params.push(vec![name.to_string(), fmt_num(f.params[k]), se]);
+                params.push(vec![name.to_string(), fmt_num(f.params[k]), nlfit_se(f, k)]);
             }
             let stats: Vec<(String, String)> = nlfit_stats(f).into_iter().map(|(k, v)| (k.to_string(), v)).collect();
             format!(
@@ -1782,12 +1809,7 @@ fn nlfit_text(reports: &[NlFitReport]) -> String {
         lines.push(format!("{}\t{}\t{}", r.name, f.model.name(), f.model.formula()));
         lines.push("参数\t值\t标准误".into());
         for (k, name) in f.model.params().iter().enumerate() {
-            let se = if f.fixed[k] {
-                "固定".to_string()
-            } else {
-                fmt_num(f.se[k])
-            };
-            lines.push(format!("{name}\t{}\t{se}", fmt_num(f.params[k])));
+            lines.push(format!("{name}\t{}\t{}", fmt_num(f.params[k]), nlfit_se(f, k)));
         }
         for (k, v) in nlfit_stats(f) {
             lines.push(format!("{k}\t{v}"));
