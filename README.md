@@ -148,7 +148,7 @@ Windows CI 使用专用 `ci` 配置与依赖 / 构建缓存；桌面开发配置
 
 ## 功能对照清单
 
-`docs/parity/PARITY.md` 按 Origin 帮助文档目录列出 488 个功能点，标了优先级（P0 / P1 / P2 / 不做）、里程碑、状态、实现方案和验证方法。`build_parity.py` 是生成脚本，`parity.html` 是可筛选的离线版本。
+`docs/parity/PARITY.md` 按 Origin 帮助文档目录列出 514 个功能点，标了优先级（P0 / P1 / P2 / 不做）、里程碑、状态、实现方案和验证方法。`build_parity.py` 是生成脚本，`parity.html` 是可筛选的离线版本。
 
 ## 安装包体积
 
