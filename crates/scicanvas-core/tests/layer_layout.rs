@@ -140,13 +140,16 @@ fn page_margins_shift_grid_layers_and_background_colors_the_page() {
         }
     )));
     // 保存后读回不变；没设边距和背景的页面不写这两个字段
-    let saved = scicanvas_core::project_file::to_json(&p).unwrap();
-    assert_eq!(
-        scicanvas_core::project_file::from_json(&saved).unwrap().graphs[0].page,
-        p.graphs[0].page
-    );
-    let plain = scicanvas_core::project_file::to_json(&Project::sample()).unwrap();
-    assert!(!plain.contains("margin_mm") && !plain.contains("background"));
+    #[cfg(feature = "serde")]
+    {
+        let saved = scicanvas_core::project_file::to_json(&p).unwrap();
+        assert_eq!(
+            scicanvas_core::project_file::from_json(&saved).unwrap().graphs[0].page,
+            p.graphs[0].page
+        );
+        let plain = scicanvas_core::project_file::to_json(&Project::sample()).unwrap();
+        assert!(!plain.contains("margin_mm") && !plain.contains("background"));
+    }
     // 边距过大或为负时拒绝
     let page = &mut p.graphs[0].page;
     page.margin_mm = [150.0, 0.0, 60.0, 0.0];
