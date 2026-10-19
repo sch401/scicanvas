@@ -950,6 +950,14 @@ impl SciApp {
         self.dialog = Some(Dialog::Poly { order: 2 });
     }
 
+    pub(crate) fn open_sg_diff_dialog(&mut self) {
+        self.dialog = Some(Dialog::SgDiff {
+            window: 7,
+            order: 2,
+            deriv: 1,
+        });
+    }
+
     pub(crate) fn open_smooth_dialog(&mut self) {
         self.dialog = Some(Dialog::Smooth {
             method: SmoothMethod::SavitzkyGolay,
@@ -1578,6 +1586,19 @@ impl SciApp {
                 self.begin_edit("多项式拟合");
                 self.dialog = None;
                 self.fit(order);
+                self.history.changed();
+                self.finish_edit();
+            }
+            dialogs::Action::SgDiff(w, order, deriv) => {
+                self.finish_edit();
+                self.begin_edit("SG 平滑求导");
+                self.dialog = None;
+                if let Some(src) = self.analysis_source() {
+                    match self.project.differentiate_sg(&src, w, order, deriv) {
+                        Ok(keys) => self.status = format!("已求导数，结果在新列 {}", keys.join(", ")),
+                        Err(e) => self.status = e,
+                    }
+                }
                 self.history.changed();
                 self.finish_edit();
             }
@@ -2835,6 +2856,67 @@ mod history_tests {
         ui.click(&mut app, note_pos);
         assert_eq!(app.explorer_selection, vec![folder, 2, note]);
         assert!(app.history.undo_label().is_none());
+    }
+
+    #[test]
+    fn sg_derivative_dialog_writes_second_derivative_column_and_undoes() {
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["B".into()]);
+        app.run_command("math.diff_sg");
+        if let Some(Dialog::SgDiff { deriv, .. }) = app.dialog.as_mut() {
+            *deriv = 2;
+        } else {
+            panic!("SG dialog not open");
+        }
+        let before = app.project.clone();
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        ctx.style_mut(|style| style.animation_time = 0.0);
+        let mut time = 0.0;
+        let mut frame = |app: &mut SciApp, events| {
+            time += 0.02;
+            ctx.run(
+                egui::RawInput {
+                    time: Some(time),
+                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1400.0, 1000.0))),
+                    events,
+                    ..Default::default()
+                },
+                |ctx| app.dialogs(ctx),
+            )
+        };
+        frame(&mut app, vec![]);
+        let output = frame(&mut app, vec![]);
+        let pos = output
+            .shapes
+            .iter()
+            .find_map(|s| match &s.shape {
+                egui::Shape::Text(t) if t.galley.job.text == "求导" => Some(t.pos + egui::vec2(5.0, 5.0)),
+                _ => None,
+            })
+            .expect("OK button");
+        frame(&mut app, vec![egui::Event::PointerMoved(pos)]);
+        for pressed in [true, false] {
+            frame(
+                &mut app,
+                vec![egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+            );
+        }
+        assert!(app.dialog.is_none());
+        let book = app.project.book(1).unwrap();
+        let col = book
+            .columns
+            .iter()
+            .find(|c| c.long_name.starts_with("d²("))
+            .expect("derivative column");
+        assert!(col.comment.contains("Savitzky–Golay，7 点 2 阶"), "{}", col.comment);
+        roundtrip(&mut app, &before);
     }
 
     #[test]

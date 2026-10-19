@@ -1050,6 +1050,16 @@ fn build() -> Vec<Command> {
         )
         .modifies(),
         c(
+            "math.diff_sg",
+            "SG 平滑求导",
+            "diff",
+            "",
+            "分析",
+            "savitzky golay derivative differentiate smooth 平滑求导 二阶导数",
+            need_data,
+            |a| a.open_sg_diff_dialog(),
+        ),
+        c(
             "math.integ",
             "积分",
             "integ",

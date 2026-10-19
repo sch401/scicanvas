@@ -935,6 +935,43 @@ impl Project {
         Ok(made.into_iter().map(|(_, k)| k).collect())
     }
 
+    /// Savitzky–Golay 平滑求导（1 或 2 阶导数），结果写成新列。
+    pub fn differentiate_sg(
+        &mut self,
+        src: &Source,
+        window: usize,
+        order: usize,
+        deriv: usize,
+    ) -> Result<Vec<String>, String> {
+        let deriv = deriv.clamp(1, 2);
+        let (_, made) = self.per_item_column(src, |book, item, xs, ys| {
+            let y = book.column(&item.y).unwrap();
+            let xu = item
+                .x
+                .as_deref()
+                .and_then(|k| book.column(k))
+                .map(|c| c.units.clone())
+                .unwrap_or_default();
+            let (name, units) = if deriv == 1 {
+                (format!("d({})/dX", y.display_name()), format!("{}/{}", y.units, xu))
+            } else {
+                (format!("d²({})/dX²", y.display_name()), format!("{}/{}²", y.units, xu))
+            };
+            let units = if y.units.is_empty() || xu.is_empty() {
+                String::new()
+            } else {
+                units
+            };
+            (
+                analysis::sg_derivative(xs, ys, window, order, deriv),
+                name,
+                units,
+                format!("Savitzky–Golay，{} 点 {} 阶多项式", window.max(3) | 1, order),
+            )
+        })?;
+        Ok(made.into_iter().map(|(_, k)| k).collect())
+    }
+
     /// 梯形法累积积分，结果写成新列，并返回每组数据的总面积。
     pub fn integrate(&mut self, src: &Source) -> Result<(Vec<String>, Vec<AreaReport>), String> {
         let mut areas = vec![];

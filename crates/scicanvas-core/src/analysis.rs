@@ -42,6 +42,18 @@ impl PolyFit {
         self.coef.len() - 1
     }
 
+    /// 拟合多项式在 x 处的 k 阶导数（k = 0 即拟合值）。
+    pub fn derivative_at(&self, x: f64, k: usize) -> f64 {
+        let t = (x - self.mx) / self.sx;
+        let mut f = 0.0;
+        for (j, b) in self.bt.iter().enumerate().skip(k) {
+            // d^k/dt^k t^j = j!/(j−k)! · t^(j−k)
+            let falling: f64 = ((j - k + 1)..=j).map(|v| v as f64).product();
+            f += b * falling * t.powi((j - k) as i32);
+        }
+        f / self.sx.powi(k as i32)
+    }
+
     /// 线性拟合的 Pearson 相关系数；高阶拟合返回 None。
     pub fn pearson_r(&self) -> Option<f64> {
         (self.coef.len() == 2).then(|| self.coef[1].signum() * self.r2.max(0.0).sqrt())
@@ -235,21 +247,47 @@ pub fn smooth(xs: &[f64], ys: &[f64], method: SmoothMethod, window: usize) -> Ve
                 ys[a..=b].iter().sum::<f64>() / (b - a + 1) as f64
             }
             SmoothMethod::SavitzkyGolay => {
-                let (mut a, mut b) = (i as isize - h as isize, (i + h) as isize);
-                if a < 0 {
-                    b -= a;
-                    a = 0;
-                }
-                if b > n as isize - 1 {
-                    a -= b - (n as isize - 1);
-                    b = n as isize - 1;
-                }
-                let a = a.max(0) as usize;
-                let b = b as usize;
+                let (a, b) = sg_window(i, n, h);
                 polyfit(&xs[a..=b], &ys[a..=b], 2)
                     .map(|f| f.eval(xs[i]))
                     .unwrap_or(ys[i])
             }
+        })
+        .collect()
+}
+
+/// Savitzky–Golay 窗口：以 i 为中心、半宽 h；靠近两端时平移窗口保持点数。
+fn sg_window(i: usize, n: usize, h: usize) -> (usize, usize) {
+    let (mut a, mut b) = (i as isize - h as isize, (i + h) as isize);
+    if a < 0 {
+        b -= a;
+        a = 0;
+    }
+    if b > n as isize - 1 {
+        a -= b - (n as isize - 1);
+        b = n as isize - 1;
+    }
+    (a.max(0) as usize, b as usize)
+}
+
+/// Savitzky–Golay 平滑求导：每点在窗口内按实际 x 做 `order` 阶最小二乘多项式，
+/// 取该多项式在此点的 `deriv` 阶导数。窗口取奇数并不超过数据点数，阶数限制在窗口点数 − 2 以内。
+/// 等间距数据与 SciPy `savgol_filter(..., deriv, delta, mode="interp")` 一致。
+pub fn sg_derivative(xs: &[f64], ys: &[f64], window: usize, order: usize, deriv: usize) -> Vec<f64> {
+    let n = ys.len().min(xs.len());
+    if n < 3 {
+        return vec![f64::NAN; n];
+    }
+    let mut w = window.max(3) | 1;
+    if w > n {
+        w = if n % 2 == 1 { n } else { n - 1 };
+    }
+    let order = order.clamp(deriv.max(1), w - 2);
+    let h = w / 2;
+    (0..n)
+        .map(|i| {
+            let (a, b) = sg_window(i, n, h);
+            polyfit(&xs[a..=b], &ys[a..=b], order).map_or(f64::NAN, |f| f.derivative_at(xs[i], deriv))
         })
         .collect()
 }
@@ -447,6 +485,109 @@ mod tests {
             smooth(&x, &y, SmoothMethod::MovingAverage, 4),
             smooth(&x, &y, SmoothMethod::MovingAverage, 5)
         );
+    }
+
+    #[test]
+    fn savitzky_golay_derivatives_match_scipy() {
+        // 参考值：SciPy 1.17.1 savgol_filter(y, w, order, deriv, delta=0.5, mode="interp")
+        let xs: Vec<f64> = (0..21).map(|i| i as f64 * 0.5).collect();
+        let ys: Vec<f64> = xs
+            .iter()
+            .map(|x| x.sin() + 0.1 * (3.0 * x).cos() + 0.05 * x * x)
+            .collect();
+        let cases: [((usize, usize, usize), [f64; 21]); 3] = [
+            (
+                (7, 2, 1),
+                [
+                    1.2288647913282356,
+                    0.878913110890015,
+                    0.5289614304517944,
+                    0.1790097500135727,
+                    -0.11305126965050136,
+                    -0.3178199022619514,
+                    -0.4193068628723384,
+                    -0.360385292862031,
+                    -0.0940177391507212,
+                    0.3137475274346442,
+                    0.724245698629218,
+                    1.055062901983875,
+                    1.2893441204270788,
+                    1.3834645877258036,
+                    1.2749345673293544,
+                    0.993761574815048,
+                    0.671469969649942,
+                    0.4151520871158408,
+                    0.110712648234077,
+                    -0.19372679064769227,
+                    -0.4981662295294613,
+                ],
+            ),
+            (
+                (9, 3, 2),
+                [
+                    -1.1030624516612693,
+                    -0.9521215782816457,
+                    -0.8011807049020221,
+                    -0.6502398315223986,
+                    -0.4992989581427748,
+                    -0.3053723773511236,
+                    -0.033628165392129816,
+                    0.3271659709805541,
+                    0.6617433097968165,
+                    0.8066127449432817,
+                    0.7416961594678995,
+                    0.5666397310787632,
+                    0.320761216897252,
+                    -0.01999320626558554,
+                    -0.3805725173477872,
+                    -0.5896260748950561,
+                    -0.5758406998981406,
+                    -0.5487916922003695,
+                    -0.5217426845025978,
+                    -0.494693676804826,
+                    -0.4676446691070542,
+                ],
+            ),
+            (
+                (5, 3, 1),
+                [
+                    0.7745739500717682,
+                    0.7257137891496365,
+                    0.6023357879382183,
+                    0.47601755760440767,
+                    -0.1422955154852812,
+                    -0.7946179103007259,
+                    -0.7956748693480048,
+                    -0.3547031538711767,
+                    -0.11211816648978162,
+                    0.029605896452785496,
+                    0.6131718146745665,
+                    1.4432223953654515,
+                    1.754457565412268,
+                    1.4663884094134998,
+                    1.2337640411396378,
+                    1.2232304430875134,
+                    0.8914169928073257,
+                    0.15538546948160104,
+                    -0.2591836769420599,
+                    -0.06169312502709734,
+                    0.7042938573576871,
+                ],
+            ),
+        ];
+        for ((w, order, deriv), want) in cases {
+            let got = sg_derivative(&xs, &ys, w, order, deriv);
+            for (g, e) in got.iter().zip(want) {
+                assert!(
+                    (g - e).abs() < 1e-9 * (1.0 + e.abs()),
+                    "w={w} order={order} deriv={deriv}: {g} vs {e}"
+                );
+            }
+        }
+        // 二次函数的二阶导数处处为常数；窗口大于数据点数时自动缩小
+        let q: Vec<f64> = xs.iter().map(|x| 3.0 * x * x - x + 2.0).collect();
+        assert!(sg_derivative(&xs, &q, 51, 2, 2).iter().all(|d| (d - 6.0).abs() < 1e-9));
+        assert!(sg_derivative(&xs[..2], &q[..2], 5, 2, 1).iter().all(|d| d.is_nan()));
     }
 
     #[test]

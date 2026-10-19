@@ -1875,9 +1875,9 @@
   "feature": "数值微分（含 Savitzky-Golay 平滑求导）",
   "ref": "Differentiate",
   "pri": "P0",
-  "status": "部分实现",
-  "how": "有限差分微分和独立 Savitzky–Golay 平滑已实现；直接 SG 平滑求导入口待做",
-  "verify": "解析函数微分与结果列回归已通过；组合求导功能待补齐",
+  "status": "已实现待验收",
+  "how": "有限差分微分和独立 Savitzky–Golay 平滑；“SG 平滑求导”对话框可选一阶/二阶导数、窗口点数和多项式阶数，按实际 X 在窗口内做最小二乘多项式并对其求导，两端平移窗口，结果写成新列（单位按 Y/X 或 Y/X² 推导），一步撤销",
+  "verify": "与 SciPy 1.17.1 savgol_filter(deriv, delta, mode=interp) 三组参数逐点一致（相对误差 < 1e-9，含两端）；二次函数二阶导为常数；对话框真实点击与撤销/重做回归",
   "id": "F166",
   "milestone": "M1 日常够用"
  },

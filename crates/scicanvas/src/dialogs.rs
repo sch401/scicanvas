@@ -45,6 +45,12 @@ pub enum Dialog {
         method: SmoothMethod,
         window: usize,
     },
+    /// Savitzky–Golay 平滑求导：窗口点数、多项式阶数、导数阶数。
+    SgDiff {
+        window: usize,
+        order: usize,
+        deriv: usize,
+    },
     Normalize {
         method: NormalizeMethod,
     },
@@ -162,6 +168,7 @@ pub enum Action {
     ConvertText(u64, String, usize, String),
     Fit(usize),
     Smooth(SmoothMethod, usize),
+    SgDiff(usize, usize, usize),
     Normalize(NormalizeMethod),
     ExportPng(u32),
     Interpolate(InterpMethod, usize, Option<(f64, f64)>),
@@ -462,6 +469,40 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                 let (ok, cancel) = buttons(ui, "平滑");
                 if ok {
                     action = Action::Smooth(*method, (*w).max(3) | 1);
+                } else if cancel {
+                    action = Action::Close;
+                }
+            });
+        }
+        Dialog::SgDiff {
+            window: w,
+            order,
+            deriv,
+        } => {
+            window(ctx, "SG 平滑求导").show(ctx, |ui| {
+                egui::Grid::new("sgdiff-grid")
+                    .num_columns(2)
+                    .spacing([12.0, 8.0])
+                    .show(ui, |ui| {
+                        ui.label("导数阶数");
+                        ui.horizontal(|ui| {
+                            ui.radio_value(deriv, 1, "一阶");
+                            ui.radio_value(deriv, 2, "二阶");
+                        });
+                        ui.end_row();
+                        ui.label("窗口点数");
+                        ui.add(egui::DragValue::new(w).range(3..=101).speed(1.0));
+                        ui.end_row();
+                        ui.label("多项式阶数");
+                        ui.add(egui::DragValue::new(order).range(1..=6).speed(0.1));
+                        ui.end_row();
+                    });
+                // 窗口取奇数；阶数不低于导数阶数，并小于窗口点数 − 1
+                *w = (*w).max(3) | 1;
+                *order = (*order).clamp((*deriv).max(1), *w - 2);
+                let (ok, cancel) = buttons(ui, "求导");
+                if ok {
+                    action = Action::SgDiff(*w, *order, *deriv);
                 } else if cancel {
                     action = Action::Close;
                 }

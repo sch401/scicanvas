@@ -138,7 +138,7 @@ pub static TABS: &[Tab] = &[
                 items: &[
                     Smalls(&["math.smooth", "math.diff", "math.integ"]),
                     Smalls(&["math.norm", "math.interp", "math.colmath"]),
-                    Smalls(&["math.average"]),
+                    Smalls(&["math.average", "math.diff_sg"]),
                 ],
             },
             Group {
