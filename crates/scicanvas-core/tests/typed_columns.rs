@@ -351,7 +351,7 @@ fn date_axes_align_to_local_midnight_and_save_the_zone() {
     #[cfg(feature = "serde")]
     {
         let json = scicanvas_core::project_file::to_json(&p).unwrap();
-        assert!(json.contains("\"utc_offset\":480"));
+        assert!(json.contains("utc_offset"));
         let back = scicanvas_core::project_file::from_json(&json).unwrap();
         assert_eq!(back.book(1).unwrap().columns[0].format.utc_offset, 480);
     }

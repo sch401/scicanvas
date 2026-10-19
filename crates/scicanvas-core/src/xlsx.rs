@@ -1,11 +1,12 @@
-//! 读取 Excel 工作簿（.xlsx / .xlsm）：ZIP 容器里的 workbook、关系、共享字符串和工作表 XML。
-//! 只取单元格的值（公式取缓存结果），数字整理成工作表的显示格式；不读样式，日期保持序列号。
+//! 读取 Excel 工作簿（.xlsx / .xlsm）：ZIP 容器里的 workbook、关系、共享字符串、样式和工作表 XML。
+//! 只取单元格的值（公式取缓存结果），数字整理成工作表的显示格式；按单元格数字格式把日期序列号
+//! 写成日期，合并单元格用左上角的值填满。旧版 .xls 交给 [`crate::xls`]。
 
 use std::io::{Cursor, Read};
 
 use roxmltree::{Document, Node};
 
-use crate::model::{fmt_num, parse_num};
+use crate::model::parse_num;
 
 /// 一张工作表：表名和按行排列的单元格文本（右侧、下方的空单元格已去掉）。
 #[derive(Clone, Debug, PartialEq)]
@@ -64,10 +65,96 @@ fn cell_ref(r: &str) -> Option<(usize, usize)> {
     Some((col, row))
 }
 
-/// 读取工作簿里的全部工作表，顺序与 Excel 中的标签相同。
+/// 导入的数值写成文字：取 15 位有效数字（去掉 0.1 + 0.2 这类二进制尾差，不丢精度），
+/// 很大或很小时用科学计数。
+pub(crate) fn excel_number(v: f64) -> String {
+    let r = crate::model::round_sig(v, 15);
+    let a = r.abs();
+    if a != 0.0 && !(1e-6..1e15).contains(&a) {
+        format!("{r:e}")
+    } else {
+        format!("{r}")
+    }
+}
+
+/// 数字格式是否为日期或时间：内置编号 14–22、27–36、45–47、50–58（含中文日期格式），
+/// 或自定义格式里（去掉引号文字、转义字符和颜色等方括号后）出现 y、m、d、h、s。
+pub(crate) fn is_date_format(id: u16, code: Option<&str>) -> bool {
+    if matches!(id, 14..=22 | 27..=36 | 45..=47 | 50..=58) {
+        return true;
+    }
+    let Some(code) = code else { return false };
+    let mut plain = String::new();
+    let mut chars = code.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '"' => {
+                for d in chars.by_ref() {
+                    if d == '"' {
+                        break;
+                    }
+                }
+            }
+            '\\' | '_' | '*' => {
+                chars.next();
+            }
+            '[' => {
+                let inner: String = chars.by_ref().take_while(|&d| d != ']').collect();
+                // [h]、[mm]、[ss] 是累计时间
+                if inner.chars().all(|d| matches!(d.to_ascii_lowercase(), 'h' | 'm' | 's')) && !inner.is_empty() {
+                    plain.push('h');
+                }
+            }
+            _ => plain.push(c.to_ascii_lowercase()),
+        }
+    }
+    plain != "general" && plain.chars().any(|c| matches!(c, 'y' | 'm' | 'd' | 'h' | 's'))
+}
+
+/// Excel 日期序列号 → 文字（按秒取整）：整天写 `2026-10-18`，整分钟写 `2026-10-18 14:30`，否则带秒。
+/// 1900 日期制以 1899-12-30 为 0（与 Excel 自 1900-03-01 起一致），1904 日期制以 1904-01-01 为 0。
+pub(crate) fn excel_date_text(serial: f64, date1904: bool) -> Option<String> {
+    if !serial.is_finite() || serial < 0.0 || serial > 2_958_466.0 {
+        return None;
+    }
+    let base = if date1904 {
+        chrono::NaiveDate::from_ymd_opt(1904, 1, 1)?
+    } else {
+        chrono::NaiveDate::from_ymd_opt(1899, 12, 30)?
+    };
+    let secs = (serial * 86_400.0).round() as i64;
+    let t = base.and_hms_opt(0, 0, 0)? + chrono::Duration::seconds(secs);
+    let pattern = if secs % 86_400 == 0 {
+        "%Y-%m-%d"
+    } else if secs % 60 == 0 {
+        "%Y-%m-%d %H:%M"
+    } else {
+        "%Y-%m-%d %H:%M:%S"
+    };
+    Some(t.format(pattern).to_string())
+}
+
+/// 合并单元格：每个区域 [首行, 末行, 首列, 末列] 用左上角的值填满（只在已有的表格范围内）。
+pub(crate) fn fill_merged(rows: &mut [Vec<String>], ranges: &[[usize; 4]]) {
+    for &[r0, r1, c0, c1] in ranges {
+        let Some(value) = rows.get(r0).and_then(|r| r.get(c0)).cloned() else {
+            continue;
+        };
+        if value.is_empty() {
+            continue;
+        }
+        for row in rows.iter_mut().take(r1 + 1).skip(r0) {
+            for cell in row.iter_mut().take(c1 + 1).skip(c0) {
+                *cell = value.clone();
+            }
+        }
+    }
+}
+
+/// 读取工作簿里的全部工作表，顺序与 Excel 中的标签相同。旧版 .xls（OLE2 复合文档）交给 `xls::read`。
 pub fn read(bytes: &[u8]) -> Result<Vec<Sheet>, String> {
     if bytes.starts_with(&[0xD0, 0xCF, 0x11, 0xE0]) {
-        return Err("这是旧版 .xls 格式，请在 Excel 中另存为 .xlsx 后再导入".into());
+        return crate::xls::read(bytes);
     }
     let mut zip = zip::ZipArchive::new(Cursor::new(bytes)).map_err(|e| format!("不是有效的 .xlsx 文件：{e}"))?;
     let workbook = entry(&mut zip, "xl/workbook.xml")?.ok_or("缺少 xl/workbook.xml，不是 Excel 工作簿")?;
@@ -93,7 +180,41 @@ pub fn read(bytes: &[u8]) -> Result<Vec<Sheet>, String> {
             .filter_map(|n| Some((n.attribute("Id")?.to_owned(), n.attribute("Target")?.to_owned())))
             .collect()
     };
+    // 样式：每个单元格格式（xf）对应的数字格式是否为日期
+    let date_xf: Vec<bool> = match entry(&mut zip, "xl/styles.xml")? {
+        Some(text) => {
+            let doc = Document::parse(&text).map_err(|e| format!("样式格式错误：{e}"))?;
+            let custom: std::collections::HashMap<u16, String> = doc
+                .descendants()
+                .filter(|n| is(n, "numFmt"))
+                .filter_map(|n| {
+                    Some((
+                        n.attribute("numFmtId")?.parse().ok()?,
+                        n.attribute("formatCode")?.to_owned(),
+                    ))
+                })
+                .collect();
+            doc.descendants()
+                .find(|n| is(n, "cellXfs"))
+                .map(|xfs| {
+                    xfs.children()
+                        .filter(|n| is(n, "xf"))
+                        .map(|xf| {
+                            let id: u16 = xf.attribute("numFmtId").and_then(|v| v.parse().ok()).unwrap_or(0);
+                            is_date_format(id, custom.get(&id).map(String::as_str))
+                        })
+                        .collect()
+                })
+                .unwrap_or_default()
+        }
+        None => vec![],
+    };
     let doc = Document::parse(&workbook).map_err(|e| format!("工作簿格式错误：{e}"))?;
+    let date1904 = doc
+        .descendants()
+        .find(|n| is(n, "workbookPr"))
+        .and_then(|n| n.attribute("date1904"))
+        .is_some_and(|v| v == "1" || v == "true");
     let mut sheets = vec![];
     for (i, node) in doc.descendants().filter(|n| is(n, "sheet")).enumerate() {
         let name = node.attribute("name").unwrap_or("Sheet").to_owned();
@@ -109,7 +230,7 @@ pub fn read(bytes: &[u8]) -> Result<Vec<Sheet>, String> {
         let xml = entry(&mut zip, &path)?.ok_or_else(|| format!("缺少工作表 {name}（{path}）"))?;
         sheets.push(Sheet {
             name,
-            rows: parse_sheet(&xml, &shared)?,
+            rows: parse_sheet(&xml, &shared, &date_xf, date1904)?,
         });
     }
     if sheets.is_empty() {
@@ -118,7 +239,7 @@ pub fn read(bytes: &[u8]) -> Result<Vec<Sheet>, String> {
     Ok(sheets)
 }
 
-fn parse_sheet(xml: &str, shared: &[String]) -> Result<Vec<Vec<String>>, String> {
+fn parse_sheet(xml: &str, shared: &[String], date_xf: &[bool], date1904: bool) -> Result<Vec<Vec<String>>, String> {
     let doc = Document::parse(xml).map_err(|e| format!("工作表格式错误：{e}"))?;
     let mut cells: Vec<(usize, usize, String)> = vec![];
     let mut next_row = 0;
@@ -147,8 +268,16 @@ fn parse_sheet(xml: &str, shared: &[String]) -> Result<Vec<Vec<String>>, String>
                 _ => {
                     let raw = v().trim();
                     let x = parse_num(raw);
-                    if x.is_finite() {
-                        fmt_num(x)
+                    let is_date = c
+                        .attribute("s")
+                        .and_then(|s| s.parse::<usize>().ok())
+                        .and_then(|s| date_xf.get(s))
+                        .copied()
+                        .unwrap_or(false);
+                    if x.is_finite() && is_date && !raw.is_empty() {
+                        excel_date_text(x, date1904).unwrap_or_else(|| excel_number(x))
+                    } else if x.is_finite() {
+                        excel_number(x)
                     } else {
                         raw.to_owned()
                     }
@@ -165,5 +294,15 @@ fn parse_sheet(xml: &str, shared: &[String]) -> Result<Vec<Vec<String>>, String>
     for (r, c, text) in cells {
         rows[r][c] = text;
     }
+    let merged: Vec<[usize; 4]> = doc
+        .descendants()
+        .filter(|n| is(n, "mergeCell"))
+        .filter_map(|n| {
+            let (a, b) = n.attribute("ref")?.split_once(':')?;
+            let ((c0, r0), (c1, r1)) = (cell_ref(a)?, cell_ref(b)?);
+            Some([r0, r1, c0, c1])
+        })
+        .collect();
+    fill_merged(&mut rows, &merged);
     Ok(rows)
 }

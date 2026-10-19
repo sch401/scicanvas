@@ -135,6 +135,14 @@ pub fn book_from_table(id: u64, name: &str, mut rows: Vec<Vec<String>>) -> Book 
     }
     for col in &mut book.columns {
         col.data.trim_empty();
+        // 全部是日期写法的文本列（如 Excel 日期、ISO 日期）转为日期时间列
+        if col.data.kind() == crate::DataKind::Text
+            && (0..col.data.len()).any(|r| !col.data.text_at(r).trim().is_empty())
+        {
+            if let Ok(dates) = col.data.converted(crate::DataKind::DateTime) {
+                col.data = dates;
+            }
+        }
     }
     book
 }

@@ -655,10 +655,28 @@ impl ColumnData {
                 {
                     return Err("日期时间超出支持范围".into());
                 }
+                // 不带时区的原文按列时区存储：与 UTC 解析结果相差同一个整分钟偏移（±14 小时内）
+                let mut shift: Option<i64> = None;
                 for (&row, text) in lexemes {
-                    let matches = timestamp(text) == Some(values[row]) || legacy_millis(text) == Some(values[row]);
-                    if (!missing_at(missing, row) && !matches) || (missing_at(missing, row) && !text.trim().is_empty())
-                    {
+                    let missing_here = missing_at(missing, row);
+                    if missing_here {
+                        if !text.trim().is_empty() {
+                            return Err("日期时间与原始文本不一致".into());
+                        }
+                        continue;
+                    }
+                    let v = values[row];
+                    let zoned = chrono::DateTime::parse_from_rfc3339(text.trim()).is_ok();
+                    let ok = match timestamp(text) {
+                        Some(t) if !zoned => {
+                            let d = t - v;
+                            let same = *shift.get_or_insert(d) == d;
+                            same && d % 60_000 == 0 && d.abs() <= 14 * 3_600_000
+                        }
+                        Some(t) => t == v,
+                        None => false,
+                    } || legacy_millis(text) == Some(v);
+                    if !ok {
                         return Err("日期时间与原始文本不一致".into());
                     }
                 }

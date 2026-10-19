@@ -719,9 +719,9 @@
   "feature": "导入 Excel（.xlsx / .xls）",
   "ref": "Importing from Excel",
   "pri": "P0",
-  "status": "部分实现",
-  "how": "导入 .xlsx / .xlsm：自写读取（zip + roxmltree），共享 / 内联 / 富文本字符串、公式缓存值、布尔与错误值，每张非空工作表一个工作簿；.xls、日期格式与合并单元格待做",
-  "verify": "openpyxl 生成文件与手工构造的边界文件回归、拖放导入回归；Excel 实际保存文件逐格比较待做",
+  "status": "已实现待验收",
+  "how": "导入 .xlsx/.xlsm（zip + roxmltree）与旧版 .xls（自写 OLE2 复合文档 + BIFF8 读取：FAT/DIFAT/迷你流，共享字符串跨 CONTINUE 记录，NUMBER/RK/MULRK/LABELSST/LABEL/BOOLERR/FORMULA 缓存值）；按单元格数字格式（内置 14–22、27–36、45–47、50–58 含中文日期及自定义格式）把日期序列号写成日期，支持 1904 日期制；合并单元格用左上角的值填满；数值按 15 位有效数字保留；全部为日期写法的列导入为日期时间列；每张非空工作表一个工作簿；加密或 Excel 95 文件给出提示",
+  "verify": "Excel 16 另存的同一内容 .xls 与 .xlsx 读取结果逐格一致（含中文日期、日期时间、合并单元格、公式数值与字符串结果、布尔、1200 个跨记录共享字符串、301 字长文本、大数值精度）；原有 openpyxl/手写 xlsx 回归通过；RK 解码单元测试",
   "id": "F066",
   "milestone": "M1 日常够用"
  },

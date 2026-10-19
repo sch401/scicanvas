@@ -303,8 +303,8 @@ impl SciApp {
     pub(crate) fn import_csv(&mut self) {
         let Some(path) = rfd::FileDialog::new()
             .set_title("导入数据")
-            .add_filter("数据文件", &["csv", "txt", "tsv", "dat", "xlsx", "xlsm"])
-            .add_filter("Excel 工作簿", &["xlsx", "xlsm"])
+            .add_filter("数据文件", &["csv", "txt", "tsv", "dat", "xlsx", "xlsm", "xls"])
+            .add_filter("Excel 工作簿", &["xlsx", "xlsm", "xls"])
             .add_filter("所有文件", &["*"])
             .pick_file()
         else {
