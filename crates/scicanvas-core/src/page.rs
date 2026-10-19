@@ -10,6 +10,17 @@ pub struct Page {
     pub height_mm: f64,
     pub columns: usize,
     layers: Vec<Layer>,
+    /// 页面背景色，None 为白色。图层和图例的底色跟随页面背景。
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub background: Option<[u8; 3]>,
+    /// 页边距 mm（左、上、右、下）：网格排版的图层放在边距以内；自定义位置的图层仍按整页定位。
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "no_margin"))]
+    pub margin_mm: [f64; 4],
+}
+
+#[cfg(feature = "serde")]
+fn no_margin(m: &[f64; 4]) -> bool {
+    *m == [0.0; 4]
 }
 /// 字号、刻度、点和线宽按这一栏宽设计（Nature 单栏 89 mm）；更宽的栏按比例整体放大。
 pub const REFERENCE_COLUMN_MM: f64 = 89.0;
@@ -28,6 +39,8 @@ impl Default for Page {
             height_mm: A4_WIDTH_MM * 0.75,
             columns: 1,
             layers: vec![Layer::default()],
+            background: None,
+            margin_mm: [0.0; 4],
         }
     }
 }
@@ -37,11 +50,20 @@ impl Page {
         [self.width_mm * 96.0 / 25.4, self.height_mm * 96.0 / 25.4]
     }
     /// 版面放大倍数：每栏宽度 / 89 mm，至少为 1（单栏及更窄的页面保持原尺寸）。
+    /// 网格排版区域（逻辑单位）：[左, 上, 宽, 高]，即整页扣除页边距。
+    pub fn content_rect(&self) -> [f64; 4] {
+        let [w, h] = self.logical_size();
+        let px = 96.0 / 25.4;
+        let [l, t, r, b] = self.margin_mm.map(|m| m * px);
+        [l, t, w - l - r, h - t - b]
+    }
+
     pub fn scale(&self) -> f64 {
         let cols = self
             .columns
             .clamp(1, self.layers.iter().filter(|l| l.placement.is_none()).count().max(1));
-        let k = self.width_mm / cols as f64 / REFERENCE_COLUMN_MM;
+        let inner = self.width_mm - self.margin_mm[0] - self.margin_mm[2];
+        let k = inner / cols as f64 / REFERENCE_COLUMN_MM;
         if k.is_finite() {
             k.max(1.0)
         } else {
@@ -79,6 +101,13 @@ impl Page {
             || self.logical_size().iter().any(|v| !v.is_finite())
         {
             return Err("页面毫米尺寸必须为有限正数".into());
+        }
+        let [l, t, r, b] = self.margin_mm;
+        if self.margin_mm.iter().any(|m| !m.is_finite() || *m < 0.0)
+            || self.width_mm - l - r < 1.0
+            || self.height_mm - t - b < 1.0
+        {
+            return Err("页边距必须非负，且留给图层的区域至少 1 mm".into());
         }
         for layer in &self.layers {
             if let Some(rect) = layer.placement {

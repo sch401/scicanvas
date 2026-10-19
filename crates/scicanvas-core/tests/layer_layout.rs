@@ -107,3 +107,50 @@ fn v2_migrates_and_v3_free_layout_roundtrips() {
     bad["graphs"][0]["page"]["layers"][1]["placement"]["width"] = 0.9.into();
     assert!(project_file::from_json(&bad.to_string()).is_err());
 }
+
+#[test]
+fn page_margins_shift_grid_layers_and_background_colors_the_page() {
+    let mut p = Project::sample();
+    let page = &mut p.graphs[0].page;
+    let [w, h] = page.logical_size();
+    let mm = 96.0 / 25.4;
+    page.margin_mm = [10.0, 5.0, 20.0, 15.0];
+    page.background = Some([250, 240, 230]);
+    page.validate().unwrap();
+    let sc = scene::layout_page(&p.graphs[0], &p, &[]);
+    let near = |a: f64, b: f64| (a - b).abs() < 1e-9;
+    let [x, y, bw, bh] = sc.layers[0].bounds;
+    assert!(near(x, 10.0 * mm) && near(y, 5.0 * mm), "{:?}", sc.layers[0].bounds);
+    assert!(near(bw, w - 30.0 * mm) && near(bh, h - 20.0 * mm));
+    // 第一个图元是整页背景；不再有白色填充
+    assert!(matches!(
+        sc.items[0].prim,
+        Prim::Rect {
+            x: 0.0,
+            y: 0.0,
+            fill: Some(((250, 240, 230), _)),
+            ..
+        }
+    ));
+    assert!(!sc.items.iter().any(|i| matches!(
+        i.prim,
+        Prim::Rect {
+            fill: Some(((255, 255, 255), _)),
+            ..
+        }
+    )));
+    // 保存后读回不变；没设边距和背景的页面不写这两个字段
+    let saved = scicanvas_core::project_file::to_json(&p).unwrap();
+    assert_eq!(
+        scicanvas_core::project_file::from_json(&saved).unwrap().graphs[0].page,
+        p.graphs[0].page
+    );
+    let plain = scicanvas_core::project_file::to_json(&Project::sample()).unwrap();
+    assert!(!plain.contains("margin_mm") && !plain.contains("background"));
+    // 边距过大或为负时拒绝
+    let page = &mut p.graphs[0].page;
+    page.margin_mm = [150.0, 0.0, 60.0, 0.0];
+    assert!(page.validate().is_err());
+    page.margin_mm = [-1.0, 0.0, 0.0, 0.0];
+    assert!(page.validate().is_err());
+}

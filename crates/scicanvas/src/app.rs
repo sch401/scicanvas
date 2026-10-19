@@ -2008,6 +2008,32 @@ impl SciApp {
                     );
                 });
                 ui.horizontal(|ui| {
+                    ui.label("页边距 mm");
+                    let page = &mut graph.page;
+                    for (i, side) in ["左", "上", "右", "下"].into_iter().enumerate() {
+                        // 对边之和留出至少 1 mm 给图层
+                        let span = if i % 2 == 0 { page.width_mm } else { page.height_mm };
+                        let max = (span - page.margin_mm[(i + 2) % 4] - 1.0).max(0.0);
+                        ui.label(side);
+                        edit_group(
+                            &ui.add(egui::DragValue::new(&mut page.margin_mm[i]).range(0.0..=max).speed(0.5)),
+                            history_group,
+                        );
+                    }
+                });
+                ui.horizontal(|ui| {
+                    ui.label("页面背景");
+                    let mut rgb = graph.page.background.unwrap_or([255, 255, 255]);
+                    let response = ui.color_edit_button_srgb(&mut rgb);
+                    if response.changed() {
+                        graph.page.background = (rgb != [255, 255, 255]).then_some(rgb);
+                    }
+                    edit_group(&response, history_group);
+                    if graph.page.background.is_some() && ui.small_button("白色").clicked() {
+                        graph.page.background = None;
+                    }
+                });
+                ui.horizontal(|ui| {
                     ui.label("排版列数");
                     let n = graph.page.layers().len();
                     edit_group(

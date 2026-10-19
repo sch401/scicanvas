@@ -257,6 +257,14 @@ pub fn layout_page(g: &Graph, project: &crate::Project, views: &[Option<View>]) 
 }
 
 fn compose<'a>(g: &Graph, book: impl Fn(u64) -> Option<&'a Book>, w: f64, h: f64, views: &[Option<View>]) -> Scene {
+    // 网格区域：整页扣除页边距（按当前画布与逻辑页面的比例换算）
+    let [lw0, lh0] = g.page.logical_size();
+    let [ox, oy, gw, gh] = g.page.content_rect();
+    let (sx, sy) = (w / lw0, h / lh0);
+    // 用整页减去边距，边距为 0 时与整页完全相同
+    let (ox, oy) = (ox * sx, oy * sy);
+    let (gw, gh) = (w - (lw0 - gw) * sx, h - (lh0 - gh) * sy);
+    let paper: Rgb = g.page.background.map_or(PAPER, |[r, gg, b]| (r, gg, b));
     let grid_count = g
         .page
         .layers()
@@ -266,7 +274,7 @@ fn compose<'a>(g: &Graph, book: impl Fn(u64) -> Option<&'a Book>, w: f64, h: f64
         .max(1);
     let cols = g.page.columns.min(grid_count).max(1);
     let rows = grid_count.div_ceil(cols);
-    let (cw, ch) = (w / cols as f64, h / rows as f64);
+    let (cw, ch) = (gw / cols as f64, gh / rows as f64);
     // 各图层先按 89 mm 一栏的参考尺寸排版，再把坐标、字号、线宽和符号同乘 k：
     // A4 等宽页面上的文字、点和线与单栏图成比例，版面相同只是整体放大。
     let k = g.page.scale();
@@ -316,7 +324,7 @@ fn compose<'a>(g: &Graph, book: impl Fn(u64) -> Option<&'a Book>, w: f64, h: f64
             None => {
                 let index = grid_index;
                 grid_index += 1;
-                [(index % cols) as f64 * cw, (index / cols) as f64 * ch, cw, ch]
+                [ox + (index % cols) as f64 * cw, oy + (index / cols) as f64 * ch, cw, ch]
             }
         };
         let mut sc = build_layer_min(
@@ -348,7 +356,11 @@ fn compose<'a>(g: &Graph, book: impl Fn(u64) -> Option<&'a Book>, w: f64, h: f64
         .unwrap_or_else(|| build_layer(&Layer::default(), None, w, h, None));
     page.w = w;
     page.h = h;
-    if g.page.layers().len() > 1 || g.page.layers().iter().any(|l| l.transparent || l.placement.is_some()) {
+    if g.page.layers().len() > 1
+        || g.page.layers().iter().any(|l| l.transparent || l.placement.is_some())
+        || g.page.background.is_some()
+        || g.page.margin_mm != [0.0; 4]
+    {
         page.items.insert(
             0,
             Item {
@@ -369,6 +381,16 @@ fn compose<'a>(g: &Graph, book: impl Fn(u64) -> Option<&'a Book>, w: f64, h: f64
         page.layer_plots.push(sc.plot);
         page.layers.extend(sc.layers);
         page.items.extend(sc.items);
+    }
+    // 页面背景：页面、图层底色和图例底色都用同一颜色
+    if paper != PAPER {
+        for item in &mut page.items {
+            if let Prim::Rect { fill: Some((c, _)), .. } = &mut item.prim {
+                if *c == PAPER {
+                    *c = paper;
+                }
+            }
+        }
     }
     page
 }
