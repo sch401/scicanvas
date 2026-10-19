@@ -1530,7 +1530,7 @@ mod tests {
             &|s| eq(s[0], l) || eq(s[2], l),
             &|s| eq(s[0], l + w) || eq(s[2], l + w),
         ] {
-            assert!(segs.iter().any(|s| edge(s)));
+            assert!(segs.iter().any(edge));
         }
         // 刻度不占框外空间：坐标框比默认（朝外）更大
         assert!(sc.plot[2] > base.plot[2] && sc.plot[3] > base.plot[3]);
