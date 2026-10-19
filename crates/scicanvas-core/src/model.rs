@@ -14,6 +14,10 @@ pub enum Role {
     XError,
     YError,
     Ignore,
+    /// Z 值（三维数据、等高线和热图的第三维）；二维作图和分析不把它当 Y。
+    Z,
+    /// 标签列：数据标签选“指定列文本”而未指定列时使用。
+    Label,
 }
 
 impl Role {
@@ -24,6 +28,8 @@ impl Role {
             Role::XError => "X Error",
             Role::YError => "Y Error",
             Role::Ignore => "—",
+            Role::Z => "Z",
+            Role::Label => "L",
         }
     }
 }

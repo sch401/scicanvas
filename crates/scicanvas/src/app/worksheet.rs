@@ -100,6 +100,8 @@ impl SciApp {
             Role::XError => "X 误差",
             Role::YError => "Y 误差",
             Role::Ignore => "忽略",
+            Role::Z => "Z",
+            Role::Label => "标签",
         };
         self.status = format!("已将 {} 列设为 {}", sel.join(", "), name);
     }
@@ -522,6 +524,8 @@ impl SciApp {
                                         pick(ui, "设为 Y", ColAction::SetRole(Role::Y));
                                         pick(ui, "设为 X 误差", ColAction::SetRole(Role::XError));
                                         pick(ui, "设为 Y 误差", ColAction::SetRole(Role::YError));
+                                        pick(ui, "设为 Z", ColAction::SetRole(Role::Z));
+                                        pick(ui, "设为标签", ColAction::SetRole(Role::Label));
                                         pick(ui, "设为忽略", ColAction::SetRole(Role::Ignore));
                                         ui.separator();
                                         ui.label(format!("数据类型：{}", col.data.kind().label()));
@@ -1015,6 +1019,8 @@ impl SciApp {
                 ColAction::SetRole(Role::XError) => "col.setXError",
                 ColAction::SetRole(Role::YError) => "col.setYError",
                 ColAction::SetRole(Role::Ignore) => "col.setIgnore",
+                ColAction::SetRole(Role::Z) => "col.setZ",
+                ColAction::SetRole(Role::Label) => "col.setLabel",
                 ColAction::InsertRight => "col.insert",
                 ColAction::Move(scicanvas_core::ColumnMove::Left) => "col.left",
                 ColAction::Move(scicanvas_core::ColumnMove::Right) => "col.right",

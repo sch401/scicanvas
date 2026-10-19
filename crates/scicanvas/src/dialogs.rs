@@ -318,6 +318,8 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                             (Role::Y, "Y"),
                             (Role::XError, "X 误差"),
                             (Role::YError, "Y 误差"),
+                            (Role::Z, "Z"),
+                            (Role::Label, "标签"),
                             (Role::Ignore, "忽略"),
                         ];
                         let current = roles.iter().find(|(r, _)| *r == edit.role).map_or("Y", |(_, n)| *n);

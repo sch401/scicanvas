@@ -3553,6 +3553,8 @@ mod history_tests {
             "plot.step_vertical",
             "col.setXError",
             "col.setYError",
+            "col.setZ",
+            "col.setLabel",
             "book.new",
         ] {
             let mut app = app();

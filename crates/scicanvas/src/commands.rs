@@ -779,6 +779,11 @@ fn build() -> Vec<Command> {
             |a| a.set_role(Role::Ignore),
         )
         .modifies(),
+        c("col.setZ", "设为 Z", "sety", "", "列", "z column 三维 等高线", need_cols, |a| a.set_role(Role::Z)).modifies(),
+        c("col.setLabel", "设为标签", "ignore", "", "列", "label column 标签列 数据标签", need_cols, |a| {
+            a.set_role(Role::Label)
+        })
+        .modifies(),
         c(
             "col.setXError",
             "设为 X 误差",

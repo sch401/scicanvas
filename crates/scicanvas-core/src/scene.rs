@@ -1159,6 +1159,8 @@ fn build_layer_full(
                         .column
                         .as_deref()
                         .and_then(|k| book.and_then(|b| b.column(k)))
+                        // 没有指定列时用工作表里的标签列
+                        .or_else(|| book.and_then(|b| b.columns.iter().find(|c| c.role == crate::Role::Label)))
                         .and_then(|c| c.data.get(s.rows[i]))
                         .map(std::borrow::Cow::into_owned)
                         .unwrap_or_default(),

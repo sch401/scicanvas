@@ -249,3 +249,40 @@ fn v7_roundtrip_and_v6_defaults_preserve_old_plots() {
     bad.graph_mut(id).unwrap().first_layer_mut().labels.size = f32::NAN;
     assert!(project_file::to_json(&bad).is_err());
 }
+
+#[test]
+fn label_and_z_columns_are_not_curves_and_label_column_feeds_data_labels() {
+    let (mut p, id) = project(PlotType::Scatter);
+    let b = p.book_mut(1).unwrap();
+    let mut name = Column::new("C", Role::Label);
+    name.data = ["甲", "乙", "丙", "丁"].map(str::to_string).to_vec().into();
+    let mut z = Column::new("D", Role::Z);
+    z.data = ["5", "6", "7", "8"].map(str::to_string).to_vec().into();
+    b.columns.push(name);
+    b.columns.push(z);
+    // 全表作图和分析只取 Y 列
+    let (all, _) = p.plot_from_selection(1, &[], PlotType::Line).unwrap();
+    assert_eq!(p.graph(all).unwrap().first_layer().y_keys, ["B"]);
+    let src = Source::Book {
+        id: 1,
+        selected: vec![],
+        rows: None,
+    };
+    assert_eq!(p.resolve(&src).unwrap().items.len(), 1);
+    // 指定列文本而未指定列：用标签列
+    let l = p.graph_mut(id).unwrap().first_layer_mut();
+    l.labels.visible = true;
+    l.labels.source = LabelSource::Column;
+    l.labels.column = None;
+    assert_eq!(
+        labels(&scene::layout_page(p.graph(id).unwrap(), &p, &[])),
+        ["甲", "乙", "丙", "丁"]
+    );
+    #[cfg(feature = "serde")]
+    {
+        let json = scicanvas_core::project_file::to_json(&p).unwrap();
+        let back = scicanvas_core::project_file::from_json(&json).unwrap();
+        let roles: Vec<Role> = back.book(1).unwrap().columns.iter().map(|c| c.role).collect();
+        assert_eq!(roles[2..], [Role::Label, Role::Z]);
+    }
+}
