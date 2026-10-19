@@ -148,7 +148,53 @@ pub struct Layer {
     pub labels: DataLabels,
     pub grid: bool,
     pub legend: bool,
+    /// 四边框：补上顶边和右边，并在这两边画不带标签的镜像刻度。
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "is_false"))]
+    pub frame: bool,
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "TickDir::is_out"))]
+    pub tick_dir: TickDir,
 }
+
+#[cfg(feature = "serde")]
+fn is_false(v: &bool) -> bool {
+    !*v
+}
+
+/// 刻度方向（相对坐标框）。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum TickDir {
+    #[default]
+    Out,
+    In,
+    Both,
+}
+
+impl TickDir {
+    pub const ALL: [TickDir; 3] = [TickDir::Out, TickDir::In, TickDir::Both];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            TickDir::Out => "朝外",
+            TickDir::In => "朝内",
+            TickDir::Both => "内外",
+        }
+    }
+
+    pub fn is_out(&self) -> bool {
+        *self == TickDir::Out
+    }
+
+    /// (框外长度系数, 框内长度系数)。
+    pub fn factors(self) -> (f64, f64) {
+        match self {
+            TickDir::Out => (1.0, 0.0),
+            TickDir::In => (0.0, 1.0),
+            TickDir::Both => (1.0, 1.0),
+        }
+    }
+}
+
 impl Default for Layer {
     fn default() -> Self {
         Self {
@@ -173,6 +219,8 @@ impl Default for Layer {
             labels: Default::default(),
             grid: false,
             legend: true,
+            frame: false,
+            tick_dir: TickDir::Out,
         }
     }
 }

@@ -826,12 +826,13 @@ fn build_layer_full(
         .map(|t| text_width(&format_tick(*t), TICK_FONT))
         .fold(8.0, f64::max);
     let has_title = !g.title.trim().is_empty();
-    let left = (MAJOR_TICK + TICK_GAP + ylab_w + 5.0 + LABEL_FONT + 4.0)
-        .round()
-        .max(min[0]);
+    // 刻度在框外的长度：朝内时刻度标签直接贴近坐标轴
+    let (fout, fin) = g.tick_dir.factors();
+    let out = MAJOR_TICK * fout;
+    let left = (out + TICK_GAP + ylab_w + 5.0 + LABEL_FONT + 4.0).round().max(min[0]);
     let right = 14.0f64.max(min[2]);
     let top = (if has_title { 12.0 + TITLE_FONT + 6.0 } else { 10.0f64 }).max(min[1]);
-    let bottom = (MAJOR_TICK + TICK_GAP + TICK_FONT + 5.0 + LABEL_FONT + 5.0)
+    let bottom = (out + TICK_GAP + TICK_FONT + 5.0 + LABEL_FONT + 5.0)
         .round()
         .max(min[3]);
     let pw = (w - left - right).max(20.0);
@@ -1224,28 +1225,38 @@ fn build_layer_full(
         }
     }
 
-    // 坐标轴：只画左轴和下轴（Nature 风格，不闭合）
+    // 坐标轴：默认只画左轴和下轴（Nature 风格，不闭合）；四边框时闭合
+    let mut axis_pts = vec![[left, top], [left, top + ph], [left + pw, top + ph]];
+    if g.frame {
+        axis_pts.extend([[left + pw, top], [left, top]]);
+    }
     let data_end = push(
         Prim::Polyline {
-            pts: vec![[left, top], [left, top + ph], [left + pw, top + ph]],
+            pts: axis_pts,
             color: INK,
             width: AXIS_WIDTH,
         },
         false,
     ) - 1;
 
-    // 刻度：只在左轴和下轴，朝外
+    // 刻度：左轴和下轴带标签，方向按 tick_dir；四边框时顶边和右边画镜像刻度（无标签）
     let mut ticks = Vec::new();
+    let x_tick = |ticks: &mut Vec<[f64; 4]>, x: f64, len: f64| {
+        ticks.push([x, top + ph - len * fin, x, top + ph + len * fout]);
+        if g.frame {
+            ticks.push([x, top + len * fin, x, top - len * fout]);
+        }
+    };
     for t in &xa.ticks {
         let x = px(*t);
         if !inside_x(x) {
             continue;
         }
-        ticks.push([x, top + ph, x, top + ph + MAJOR_TICK]);
+        x_tick(&mut ticks, x, MAJOR_TICK);
         push(
             text(
                 x,
-                top + ph + MAJOR_TICK + TICK_GAP + TICK_FONT / 2.0,
+                top + ph + out + TICK_GAP + TICK_FONT / 2.0,
                 format_tick(*t),
                 TICK_FONT,
                 Anchor::Middle,
@@ -1256,24 +1267,30 @@ fn build_layer_full(
     for t in &xa.minor {
         let x = px(*t);
         if x > left && x < left + pw {
-            ticks.push([x, top + ph, x, top + ph + MINOR_TICK]);
+            x_tick(&mut ticks, x, MINOR_TICK);
         }
     }
+    let y_tick = |ticks: &mut Vec<[f64; 4]>, y: f64, len: f64| {
+        ticks.push([left + len * fin, y, left - len * fout, y]);
+        if g.frame {
+            ticks.push([left + pw - len * fin, y, left + pw + len * fout, y]);
+        }
+    };
     for t in &ya.ticks {
         let y = py(*t);
         if !inside_y(y) {
             continue;
         }
-        ticks.push([left, y, left - MAJOR_TICK, y]);
+        y_tick(&mut ticks, y, MAJOR_TICK);
         push(
-            text(left - MAJOR_TICK - TICK_GAP, y, format_tick(*t), TICK_FONT, Anchor::End),
+            text(left - out - TICK_GAP, y, format_tick(*t), TICK_FONT, Anchor::End),
             false,
         );
     }
     for t in &ya.minor {
         let y = py(*t);
         if y > top && y < top + ph {
-            ticks.push([left, y, left - MINOR_TICK, y]);
+            y_tick(&mut ticks, y, MINOR_TICK);
         }
     }
     push(
@@ -1290,7 +1307,7 @@ fn build_layer_full(
     push(
         text(
             left + pw / 2.0,
-            top + ph + MAJOR_TICK + TICK_GAP + TICK_FONT + 5.0 + LABEL_FONT / 2.0,
+            top + ph + out + TICK_GAP + TICK_FONT + 5.0 + LABEL_FONT / 2.0,
             g.x_axis_title(book),
             LABEL_FONT,
             Anchor::Middle,
@@ -1299,7 +1316,7 @@ fn build_layer_full(
     );
     push(
         Prim::Text {
-            x: left - MAJOR_TICK - TICK_GAP - ylab_w - 5.0 - LABEL_FONT / 2.0,
+            x: left - out - TICK_GAP - ylab_w - 5.0 - LABEL_FONT / 2.0,
             y: top + ph / 2.0,
             text: g.y_axis_title(book),
             size: LABEL_FONT,
@@ -1474,6 +1491,49 @@ mod tests {
             );
             assert!(s[3] - s[1] <= MAJOR_TICK * k + 1e-9 && s[0] - s[2] <= MAJOR_TICK * k + 1e-9);
         }
+    }
+
+    #[test]
+    fn frame_closes_the_box_and_inward_ticks_stay_inside() {
+        let mut p = Project::sample();
+        let base = build(p.graph(2).unwrap(), p.book(1), 800.0, 600.0, None);
+        let layer = p.graph_mut(2).unwrap().first_layer_mut();
+        layer.frame = true;
+        layer.tick_dir = crate::page::TickDir::In;
+        let sc = build(p.graph(2).unwrap(), p.book(1), 800.0, 600.0, None);
+        let [l, t, w, h] = sc.plot;
+        let eq = |a: f64, b: f64| (a - b).abs() < 1e-9;
+        // 闭合坐标框：五点折线回到起点
+        assert!(sc.items.iter().any(|i| matches!(&i.prim,
+            Prim::Polyline { pts, color, .. } if *color == INK && pts.len() == 5
+                && eq(pts[3][0], l + w) && eq(pts[3][1], t) && pts[4] == pts[0])));
+        let segs: Vec<[f64; 4]> = sc
+            .items
+            .iter()
+            .filter_map(|i| match &i.prim {
+                Prim::Segments {
+                    segs, dashed: false, ..
+                } => Some(segs.clone()),
+                _ => None,
+            })
+            .flatten()
+            .collect();
+        // 朝内：全部刻度在坐标框内；四条边都有刻度
+        let inside = |x: f64, y: f64| x >= l - 1e-9 && x <= l + w + 1e-9 && y >= t - 1e-9 && y <= t + h + 1e-9;
+        assert!(
+            segs.iter().all(|s| inside(s[0], s[1]) && inside(s[2], s[3])),
+            "{segs:?}"
+        );
+        for edge in [
+            &(|s: &[f64; 4]| eq(s[3], t + h) || eq(s[1], t + h)) as &dyn Fn(&[f64; 4]) -> bool,
+            &|s| eq(s[1], t) || eq(s[3], t),
+            &|s| eq(s[0], l) || eq(s[2], l),
+            &|s| eq(s[0], l + w) || eq(s[2], l + w),
+        ] {
+            assert!(segs.iter().any(|s| edge(s)));
+        }
+        // 刻度不占框外空间：坐标框比默认（朝外）更大
+        assert!(sc.plot[2] > base.plot[2] && sc.plot[3] > base.plot[3]);
     }
 
     #[test]

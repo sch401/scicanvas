@@ -2289,6 +2289,14 @@ impl SciApp {
                             ui.checkbox(&mut g.grid, "网格线");
                             ui.checkbox(&mut g.legend, "图例");
                             ui.checkbox(&mut g.labels.visible, "数据标签");
+                            ui.checkbox(&mut g.frame, "四边框");
+                        });
+                        ui.end_row();
+                        ui.label("刻度方向");
+                        ui.horizontal(|ui| {
+                            for dir in scicanvas_core::page::TickDir::ALL {
+                                ui.radio_value(&mut g.tick_dir, dir, dir.label());
+                            }
                         });
                         ui.end_row();
                         if g.labels.visible {
