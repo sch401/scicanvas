@@ -13,6 +13,10 @@ type Picked = (u64, Vec<String>, Option<(usize, usize)>);
 pub struct NlFitReport {
     pub name: String,
     pub fit: crate::nlfit::NlFit,
+    pub book_id: u64,
+    /// 原数据 Y 列与拟合曲线的 (X, Y) 列。
+    pub y_key: String,
+    pub curve: (String, String),
 }
 
 /// 列运算的运算符。
@@ -104,6 +108,9 @@ pub struct FitReport {
     pub book_id: u64,
     pub x_key: Option<String>,
     pub residual_key: String,
+    /// 原数据 Y 列与拟合曲线的 (X, Y) 列。
+    pub y_key: String,
+    pub curve: (String, String),
 }
 
 #[derive(Clone, Debug)]
@@ -342,8 +349,8 @@ impl Project {
                 g.y_keys.push(item.y.clone());
             }
             g.y_keys.push(ky.clone());
-            g.x_by_y.insert(ky.clone(), kx);
-            g.line_only.push(ky);
+            g.x_by_y.insert(ky.clone(), kx.clone());
+            g.line_only.push(ky.clone());
             graph = Some(gid);
             reports.push(FitReport {
                 name,
@@ -352,6 +359,8 @@ impl Project {
                 book_id: r.book_id,
                 x_key: item.x.clone(),
                 residual_key: kr,
+                y_key: item.y.clone(),
+                curve: (kx, ky),
             });
         }
         match graph {
@@ -363,6 +372,86 @@ impl Project {
                 order + 2
             )),
         }
+    }
+
+    /// 在拟合曲线的各个 X 上写置信带、预测带（下限、上限各一列，共四列），
+    /// 并作为线加到含这条拟合曲线的图层。`band(x)` 返回 (拟合值, 置信半宽, 预测半宽)。返回新列。
+    fn add_bands(
+        &mut self,
+        book_id: u64,
+        y_key: &str,
+        curve: &(String, String),
+        name: &str,
+        level: f64,
+        band: impl Fn(f64) -> (f64, f64, f64),
+    ) -> Result<Vec<String>, String> {
+        let book = self.book(book_id).ok_or("找不到工作簿")?;
+        let xs = book
+            .column(&curve.0)
+            .ok_or("拟合曲线的列已被删除，请重新拟合")?
+            .values();
+        if book.column(&curve.1).is_none() {
+            return Err("拟合曲线的列已被删除，请重新拟合".into());
+        }
+        let units = book.column(y_key).map(|c| c.units.clone()).unwrap_or_default();
+        let pct = fmt_num(level * 100.0);
+        let rows: Vec<(f64, f64, f64)> = xs.iter().map(|x| band(*x)).collect();
+        let mut keys = vec![];
+        // 依次为置信下限、置信上限、预测下限、预测上限
+        let value = |i: usize, b: &(f64, f64, f64)| match i {
+            0 => b.0 - b.1,
+            1 => b.0 + b.1,
+            2 => b.0 - b.2,
+            _ => b.0 + b.2,
+        };
+        for (i, label) in ["置信下限", "置信上限", "预测下限", "预测上限"].into_iter().enumerate() {
+            let mut c = Column::new("", Role::Y);
+            c.long_name = format!("{name} {pct}% {label}");
+            c.units = units.clone();
+            c.comment = "t 分布；置信带为拟合曲线的不确定度，预测带另含残差方差".into();
+            c.data = xs
+                .iter()
+                .zip(&rows)
+                .map(|(x, b)| {
+                    if x.is_finite() {
+                        fmt_num(value(i, b))
+                    } else {
+                        String::new()
+                    }
+                })
+                .collect();
+            keys.push(self.insert_result_column(book_id, y_key, c).unwrap());
+        }
+        for graph in &mut self.graphs {
+            for layer in graph.page.layers_mut() {
+                if layer.book_id == Some(book_id) && layer.y_keys.contains(&curve.1) {
+                    for k in &keys {
+                        layer.y_keys.push(k.clone());
+                        layer.x_by_y.insert(k.clone(), curve.0.clone());
+                        layer.line_only.push(k.clone());
+                    }
+                }
+            }
+        }
+        Ok(keys)
+    }
+
+    /// 线性/多项式拟合的置信带与预测带。
+    pub fn poly_bands(&mut self, r: &FitReport, level: f64) -> Result<Vec<String>, String> {
+        let fit = r.fit.clone();
+        self.add_bands(r.book_id, &r.y_key, &r.curve, &r.name, level, |x| {
+            let (c, p) = fit.band(x, level);
+            (fit.eval(x), c, p)
+        })
+    }
+
+    /// 非线性拟合的置信带与预测带（Δ 法）。
+    pub fn nlfit_bands(&mut self, r: &NlFitReport, level: f64) -> Result<Vec<String>, String> {
+        let fit = r.fit.clone();
+        self.add_bands(r.book_id, &r.y_key, &r.curve, &r.name, level, |x| {
+            let (c, p) = fit.band(x, level);
+            (fit.eval(x), c, p)
+        })
     }
 
     /// 残差图：各条拟合的残差对 X 的散点图，新建在工作簿所在目录。
@@ -537,10 +626,16 @@ impl Project {
                 g.y_keys.push(item.y.clone());
             }
             g.y_keys.push(ky.clone());
-            g.x_by_y.insert(ky.clone(), kx);
-            g.line_only.push(ky);
+            g.x_by_y.insert(ky.clone(), kx.clone());
+            g.line_only.push(ky.clone());
             graph = Some(gid);
-            reports.push(NlFitReport { name, fit });
+            reports.push(NlFitReport {
+                name,
+                fit,
+                book_id: r.book_id,
+                y_key: item.y.clone(),
+                curve: (kx, ky),
+            });
         }
         match graph {
             Some(g) => Ok((g, reports)),
@@ -1739,6 +1834,19 @@ mod tests {
         let (_, s) = g.series(p.book(1).unwrap());
         assert!(s[2].line_only && s[2].source.as_deref() == Some("B"));
         assert_eq!(s[2].points.len(), 200);
+        // 置信带与预测带：四列，加到同一图层，预测带比置信带宽
+        let bands = p.poly_bands(&reps[0], 0.95).unwrap();
+        assert_eq!(bands.len(), 4);
+        let book = p.book(1).unwrap();
+        let v = |k: &str| book.column(k).unwrap().values();
+        let (lo, hi, plo, phi, fitted) = (v(&bands[0]), v(&bands[1]), v(&bands[2]), v(&bands[3]), v("F"));
+        for i in 0..fitted.len() {
+            assert!(plo[i] < lo[i] && lo[i] < fitted[i] && fitted[i] < hi[i] && hi[i] < phi[i]);
+        }
+        let g = p.graph(2).unwrap().first_layer();
+        assert!(bands
+            .iter()
+            .all(|k| g.line_only.contains(k) && g.x_by_y.get(k).map(|s| s.as_str()) == Some("E")));
         // 残差图：残差对原 X 的散点图
         let rid = p.residual_plot(&reps).unwrap();
         let rg = p.graph(rid).unwrap().first_layer();

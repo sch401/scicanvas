@@ -181,6 +181,8 @@ pub enum Dialog {
 pub enum Action {
     SaveNote(String, String),
     ResidualPlot(Vec<FitReport>),
+    FitBands(Vec<FitReport>),
+    NlFitBands(Vec<NlFitReport>),
     ColumnProps(ColumnEdit),
     None,
     Close,
@@ -655,54 +657,37 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                 egui::ScrollArea::vertical().max_height(480.0).show(ui, |ui| {
                     for (ri, r) in reports.iter().enumerate() {
                         ui.label(RichText::new(format!("{} · {}", r.name, r.kind)).strong());
-                        egui::Grid::new(("fit-grid", ri))
-                            .striped(true)
-                            .num_columns(3)
-                            .spacing([24.0, 4.0])
-                            .show(ui, |ui| {
-                                ui.label(RichText::new("参数").color(pal.weak));
-                                ui.label(RichText::new("值").color(pal.weak));
-                                ui.label(RichText::new("标准误").color(pal.weak));
-                                ui.end_row();
-                                let linear = r.fit.coef.len() == 2;
-                                for (k, (c, se)) in r.fit.coef.iter().zip(&r.fit.se).enumerate() {
-                                    let name = if linear {
-                                        if k == 0 {
-                                            "截距 A".to_string()
-                                        } else {
-                                            "斜率 B".to_string()
-                                        }
-                                    } else if k == 0 {
-                                        "B0（常数项）".to_string()
-                                    } else {
-                                        format!("B{}", k)
-                                    };
-                                    ui.label(name);
-                                    ui.label(RichText::new(fmt_num(*c)).monospace());
-                                    ui.label(RichText::new(fmt_num(*se)).monospace());
-                                    ui.end_row();
-                                }
-                                let mut row = |k: &str, v: String| {
-                                    ui.label(k);
-                                    ui.label(RichText::new(v).monospace());
-                                    ui.label("");
-                                    ui.end_row();
-                                };
-                                row("R²", fmt_num(r.fit.r2));
-                                row("调整后 R²", fmt_num(r.fit.adj_r2));
-                                if let Some(pr) = r.fit.pearson_r() {
-                                    row("Pearson r", fmt_num(pr));
-                                }
-                                row("残差平方和", fmt_num(r.fit.rss));
-                                row("数据点数 N", r.fit.n.to_string());
-                            });
+                        table_grid(ui, ("fit-grid", ri), &fit_param_rows(r, false), pal);
+                        ui.add_space(4.0);
+                        let mut stats = vec![
+                            ("R²".to_string(), fmt_num(r.fit.r2)),
+                            ("调整后 R²".to_string(), fmt_num(r.fit.adj_r2)),
+                        ];
+                        if let Some(pr) = r.fit.pearson_r() {
+                            stats.push(("Pearson r".into(), fmt_num(pr)));
+                        }
+                        stats.push(("残差平方和".into(), fmt_num(r.fit.rss)));
+                        stats.push(("数据点数 N".into(), r.fit.n.to_string()));
+                        let stats: Vec<Vec<String>> = stats.into_iter().map(|(k, v)| vec![k, v]).collect();
+                        table_grid(
+                            ui,
+                            ("fit-stats", ri),
+                            &[vec!["统计量".into(), "值".into()]]
+                                .into_iter()
+                                .chain(stats)
+                                .collect::<Vec<_>>(),
+                            pal,
+                        );
+                        ui.add_space(4.0);
+                        ui.label(RichText::new("方差分析").color(pal.weak));
+                        table_grid(ui, ("fit-anova", ri), &fit_anova_rows(r), pal);
                         ui.add_space(4.0);
                         ui.label(RichText::new(r.fit.equation()).monospace());
                         ui.add_space(10.0);
                     }
                 });
                 ui.label(
-                    RichText::new("拟合曲线已加到工作簿（新增“拟合 X”和拟合值两列）和图形中。")
+                    RichText::new("拟合曲线和逐点残差已写入工作簿，拟合曲线加到图形中。")
                         .small()
                         .color(pal.weak),
                 );
@@ -711,7 +696,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                 ui.separator();
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
-                    center_buttons(ui, 4);
+                    center_buttons(ui, 5);
                     if ui
                         .add(plain("复制结果"))
                         .on_hover_text("复制为制表符分隔的文本，可粘贴到 Excel")
@@ -721,6 +706,9 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                     }
                     if ui.add(plain("残差图")).clicked() {
                         action = Action::ResidualPlot(reports.clone());
+                    }
+                    if ui.add(plain("置信/预测带")).on_hover_text("95%").clicked() {
+                        action = Action::FitBands(reports.clone());
                     }
                     if ui.add(plain("保存为 Note")).clicked() {
                         action = Action::SaveNote("拟合结果".into(), fit_markdown(reports));
@@ -1040,32 +1028,13 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                                 "迭代 500 次仍未收敛，结果仅供参考；可换用其他函数或检查数据",
                             );
                         }
-                        egui::Grid::new(("nlfit-grid", ri))
-                            .striped(true)
-                            .num_columns(3)
-                            .spacing([24.0, 4.0])
-                            .show(ui, |ui| {
-                                ui.label(RichText::new("参数").color(pal.weak));
-                                ui.label(RichText::new("值").color(pal.weak));
-                                ui.label(RichText::new("标准误").color(pal.weak));
-                                ui.end_row();
-                                for (k, name) in f.model.params().iter().enumerate() {
-                                    ui.label(*name);
-                                    ui.label(RichText::new(fmt_num(f.params[k])).monospace());
-                                    if f.fixed[k] {
-                                        ui.label(RichText::new("固定").color(pal.weak));
-                                    } else {
-                                        ui.label(RichText::new(nlfit_se(f, k)).monospace());
-                                    }
-                                    ui.end_row();
-                                }
-                                for (k, v) in nlfit_stats(f) {
-                                    ui.label(k);
-                                    ui.label(RichText::new(v).monospace());
-                                    ui.label("");
-                                    ui.end_row();
-                                }
-                            });
+                        table_grid(ui, ("nlfit-grid", ri), &nlfit_param_rows(f), pal);
+                        ui.add_space(4.0);
+                        let stats: Vec<Vec<String>> = [vec!["统计量".to_string(), "值".to_string()]]
+                            .into_iter()
+                            .chain(nlfit_stats(f).into_iter().map(|(k, v)| vec![k.to_string(), v]))
+                            .collect();
+                        table_grid(ui, ("nlfit-stats", ri), &stats, pal);
                         ui.add_space(10.0);
                     }
                 });
@@ -1073,13 +1042,16 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                 ui.separator();
                 ui.add_space(4.0);
                 ui.horizontal(|ui| {
-                    center_buttons(ui, 3);
+                    center_buttons(ui, 4);
                     if ui
                         .add(plain("复制结果"))
                         .on_hover_text("复制为制表符分隔的文本，可粘贴到 Excel")
                         .clicked()
                     {
                         ui.ctx().copy_text(nlfit_text(reports));
+                    }
+                    if ui.add(plain("置信/预测带")).on_hover_text("95%").clicked() {
+                        action = Action::NlFitBands(reports.clone());
                     }
                     if ui.add(plain("保存为 Note")).clicked() {
                         action = Action::SaveNote("非线性拟合结果".into(), nlfit_markdown(reports));
@@ -1747,22 +1719,105 @@ fn md_pairs(head: [&str; 2], rows: &[(String, String)]) -> String {
     md_table(&table)
 }
 
+/// 结果表格：首行为表头（淡色），首列为名称，其余等宽数字。
+fn table_grid(ui: &mut egui::Ui, id: impl std::hash::Hash, rows: &[Vec<String>], pal: &Palette) {
+    egui::Grid::new(id)
+        .striped(true)
+        .num_columns(rows.first().map_or(1, Vec::len))
+        .spacing([20.0, 4.0])
+        .show(ui, |ui| {
+            for (ri, row) in rows.iter().enumerate() {
+                for (ci, cell) in row.iter().enumerate() {
+                    if ri == 0 {
+                        ui.label(RichText::new(cell).color(pal.weak));
+                    } else if ci == 0 {
+                        ui.label(cell);
+                    } else {
+                        ui.label(RichText::new(cell).monospace());
+                    }
+                }
+                ui.end_row();
+            }
+        });
+}
+
+/// 线性/多项式参数表：参数、值、标准误、t、p。`exact` 为真时数值保留全部位数（复制到 Excel 用）。
+fn fit_param_rows(r: &FitReport, exact: bool) -> Vec<Vec<String>> {
+    let num = |v: f64| if exact { format!("{v}") } else { fmt_num(v) };
+    let linear = r.fit.coef.len() == 2;
+    let mut rows = vec![["参数", "值", "标准误", "t", "p"].map(String::from).to_vec()];
+    for (k, ((c, se), (t, p))) in r.fit.coef.iter().zip(&r.fit.se).zip(r.fit.t_tests()).enumerate() {
+        let name = match (linear, k) {
+            (true, 0) => "截距 A".to_string(),
+            (true, _) => "斜率 B".to_string(),
+            (false, 0) => "B0（常数项）".to_string(),
+            _ => format!("B{k}"),
+        };
+        rows.push(vec![name, num(*c), num(*se), num(t), num(p)]);
+    }
+    rows
+}
+
+/// 拟合方差分析表：来源、自由度、平方和、均方、F、p。
+fn fit_anova_rows(r: &FitReport) -> Vec<Vec<String>> {
+    let a = r.fit.anova();
+    vec![
+        ["来源", "自由度", "平方和", "均方", "F", "p"]
+            .map(String::from)
+            .to_vec(),
+        vec![
+            "回归".into(),
+            fmt_num(a.df_reg),
+            fmt_num(a.ss_reg),
+            fmt_num(a.ms_reg()),
+            fmt_num(a.f),
+            fmt_num(a.p),
+        ],
+        vec![
+            "残差".into(),
+            fmt_num(a.df_err),
+            fmt_num(a.ss_err),
+            fmt_num(a.ms_err()),
+            String::new(),
+            String::new(),
+        ],
+        vec![
+            "总计".into(),
+            fmt_num(a.df_tot),
+            fmt_num(a.ss_tot),
+            String::new(),
+            String::new(),
+            String::new(),
+        ],
+    ]
+}
+
+/// 非线性参数表：参数、值、标准误、t、p（固定参数只写值）。
+fn nlfit_param_rows(f: &scicanvas_core::nlfit::NlFit) -> Vec<Vec<String>> {
+    let mut rows = vec![["参数", "值", "标准误", "t", "p"].map(String::from).to_vec()];
+    for (k, (name, (t, p))) in f.model.params().iter().zip(f.t_tests()).enumerate() {
+        let (t, p) = if f.fixed[k] {
+            (String::new(), String::new())
+        } else {
+            (fmt_num(t), fmt_num(p))
+        };
+        rows.push(vec![name.to_string(), fmt_num(f.params[k]), nlfit_se(f, k), t, p]);
+    }
+    rows
+}
+
 fn nlfit_markdown(reports: &[NlFitReport]) -> String {
     reports
         .iter()
         .map(|r| {
             let f = &r.fit;
-            let mut params = vec![["参数", "值", "标准误"].map(String::from).to_vec()];
-            for (k, name) in f.model.params().iter().enumerate() {
-                params.push(vec![name.to_string(), fmt_num(f.params[k]), nlfit_se(f, k)]);
-            }
             let stats: Vec<(String, String)> = nlfit_stats(f).into_iter().map(|(k, v)| (k.to_string(), v)).collect();
             format!(
                 "## {} — {}\n\n`{}`\n\n{}\n{}",
                 md_cell(&r.name),
                 f.model.name(),
                 f.model.formula(),
-                md_table(&params),
+                md_table(&nlfit_param_rows(f)),
                 md_pairs(["统计量", "值"], &stats)
             )
         })
@@ -1776,10 +1831,6 @@ fn fit_markdown(reports: &[FitReport]) -> String {
     reports
         .iter()
         .map(|r| {
-            let mut params = vec![["参数", "值", "标准误"].map(String::from).to_vec()];
-            for (k, (c, se)) in r.fit.coef.iter().zip(&r.fit.se).enumerate() {
-                params.push(vec![format!("B{k}"), fmt_num(*c), fmt_num(*se)]);
-            }
             let stats = [
                 ("R²", fmt_num(r.fit.r2)),
                 ("调整后 R²", fmt_num(r.fit.adj_r2)),
@@ -1788,12 +1839,13 @@ fn fit_markdown(reports: &[FitReport]) -> String {
             ]
             .map(|(k, v)| (k.to_string(), v));
             format!(
-                "## {} — {}\n\n`{}`\n\n{}\n{}",
+                "## {} — {}\n\n`{}`\n\n{}\n{}\n### 方差分析\n\n{}",
                 md_cell(&r.name),
                 r.kind,
                 r.fit.equation(),
-                md_table(&params),
-                md_pairs(["统计量", "值"], &stats)
+                md_table(&fit_param_rows(r, false)),
+                md_pairs(["统计量", "值"], &stats),
+                md_table(&fit_anova_rows(r))
             )
         })
         .collect::<Vec<_>>()
@@ -1807,10 +1859,7 @@ fn nlfit_text(reports: &[NlFitReport]) -> String {
     for r in reports {
         let f = &r.fit;
         lines.push(format!("{}\t{}\t{}", r.name, f.model.name(), f.model.formula()));
-        lines.push("参数\t值\t标准误".into());
-        for (k, name) in f.model.params().iter().enumerate() {
-            lines.push(format!("{name}\t{}\t{}", fmt_num(f.params[k]), nlfit_se(f, k)));
-        }
+        lines.extend(nlfit_param_rows(f).iter().map(|row| row.join("\t")));
         for (k, v) in nlfit_stats(f) {
             lines.push(format!("{k}\t{v}"));
         }
@@ -1823,15 +1872,15 @@ fn fit_text(reports: &[FitReport]) -> String {
     reports
         .iter()
         .map(|r| {
-            let mut s = format!("{}\t{}\n{}\n参数\t值\t标准误\n", r.name, r.kind, r.fit.equation());
-            for (k, (c, se)) in r.fit.coef.iter().zip(&r.fit.se).enumerate() {
-                s.push_str(&format!("B{}\t{}\t{}\n", k, c, se));
-            }
-            s.push_str(&format!(
-                "R²\t{}\n调整后 R²\t{}\n残差平方和\t{}\nN\t{}",
-                r.fit.r2, r.fit.adj_r2, r.fit.rss, r.fit.n
-            ));
-            s
+            let mut lines = vec![format!("{}\t{}", r.name, r.kind), r.fit.equation()];
+            lines.extend(fit_param_rows(r, true).iter().map(|row| row.join("\t")));
+            lines.push(format!("R²\t{}", r.fit.r2));
+            lines.push(format!("调整后 R²\t{}", r.fit.adj_r2));
+            lines.push(format!("残差平方和\t{}", r.fit.rss));
+            lines.push(format!("N\t{}", r.fit.n));
+            lines.push(String::new());
+            lines.extend(fit_anova_rows(r).iter().map(|row| row.join("\t")));
+            lines.join("\n")
         })
         .collect::<Vec<_>>()
         .join("\n\n")

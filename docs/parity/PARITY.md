@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 97 项，P1 146 项，P2 259 项，不做 12 项。
-状态：已完成 26 项，已实现待验收 66 项，部分实现 31 项，未开始 379 项，不做 12 项。
+状态：已完成 26 项，已实现待验收 67 项，部分实现 30 项，未开始 379 项，不做 12 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -196,7 +196,7 @@
 | F135 | 参数初值自动估计 | Fitting Functions | P0 | 已实现待验收 | 当前 24 种内置非线性模型均有数据驱动初值估计；支持固定参数并报告未收敛状态 | nlfit.rs 模型估计和拟合回归已通过；退化数据、复杂初值与 Origin 实例验收待做 | 当前模型自动初值：已完成 0/24，待验收 24，部分实现 0；24 为当前内置模型数；完整函数库仍见 F514，退化数据与 Origin 实例待验收 |
 | F136 | 参数固定、上下界、线性约束 | Parameters,Bounds,Constraints and Weighting | P0 | 部分实现 | 非线性拟合对话框每个参数可设固定值、下限、上限：固定参数不计入自由度、标准误标为“固定”；上下界用活动集投影的 Levenberg–Marquardt（贴界且下降方向朝外的参数本步不动），初值先截到界内，停在边界上的参数在报告中标“（边界）”；参数间线性约束待做 | 固定参数与 SciPy curve_fit 一致；三组上下界（含生效与不生效）与 SciPy 1.17.1 curve_fit(bounds, method=trf) 参数（1e-6）、标准误（1e-4）、RSS 一致；对话框真实点击上界生效回归；线性约束待做 | — |
 | F137 | 加权拟合（误差列权重等） | Parameters,Bounds,Constraints and Weighting | P1 | 未开始 | — | 与 Origin 比较 | — |
-| F138 | 拟合报告（参数表、ANOVA、置信带、预测带） | Interpreting Regression Results | P0 | 部分实现 | 线性/多项式、非线性和多元回归已有临时报告，含参数/标准误、R²/RSS 等；多元回归还有 t/p 与整体 F 检验。完整拟合 ANOVA、置信/预测带、持久化报告待做 | 现有报告格式、数值及复制回归通过；完整拟合报告与带状输出待验收 | — |
+| F138 | 拟合报告（参数表、ANOVA、置信带、预测带） | Interpreting Regression Results | P0 | 已实现待验收 | 线性/多项式报告：参数、标准误、t、双侧 p，R²/调整 R²/Pearson r/RSS/N，以及方差分析表（回归、残差、总计的自由度、平方和、均方、F、p）；非线性报告：参数、标准误、t、p 与统计量；两类报告的“置信/预测带”按钮按 95% 写出置信下/上限、预测下/上限四列并加到拟合曲线所在图层（多项式用参数协方差，非线性用 Δ 法），一步撤销；报告可复制或保存为 Markdown Note 持久保存；多元回归另有 t/p 与整体 F 检验 | 多项式置信/预测带、方差分析、t/p 与 NumPy 范德蒙德最小二乘 + scipy.stats 一致（1e-9，p 值 1e-6，极小 p 值不下溢）；非线性置信/预测带与 scipy curve_fit pcov + 解析梯度 Δ 法一致；按钮真实点击与撤销/重做回归；Origin 报告对照待做 | — |
 | F139 | 残差图（残差-自变量、正态概率图） | Residual Plot Analysis | P1 | 未开始 | — | 与 Origin 比较 | — |
 | F140 | 多峰拟合 | Multiple Curves/Multiple Peaks | P1 | 未开始 | — | 与 Origin 比较 | — |
 | F141 | 全局拟合（多组数据共享参数） | Multiple Curves/Multiple Peaks | P1 | 未开始 | — | 与 Origin 比较 | — |

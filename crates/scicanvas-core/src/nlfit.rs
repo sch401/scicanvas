@@ -565,6 +565,10 @@ pub struct NlFit {
     pub fixed: Vec<bool>,
     /// 结果停在下限或上限上的参数。
     pub at_bound: Vec<bool>,
+    /// 残差自由度 n − 自由参数数。
+    pub dof: usize,
+    /// 参数协方差（固定参数的行列为 0）。
+    pub cov: Vec<Vec<f64>>,
     pub x_min: f64,
     pub x_max: f64,
 }
@@ -572,6 +576,36 @@ pub struct NlFit {
 impl NlFit {
     pub fn eval(&self, x: f64) -> f64 {
         self.model.eval(x, &self.params)
+    }
+
+    /// 在 x 处的置信带、预测带半宽（Δ 法：var(ŷ) = gᵀ·Cov·g，g 为中心差分梯度）。
+    pub fn band(&self, x: f64, level: f64) -> (f64, f64) {
+        let k = self.params.len();
+        let g: Vec<f64> = (0..k)
+            .map(|j| {
+                if self.fixed[j] {
+                    return 0.0;
+                }
+                let h = 1e-6 * self.params[j].abs().max(1e-6);
+                let (mut up, mut down) = (self.params.clone(), self.params.clone());
+                up[j] += h;
+                down[j] -= h;
+                (self.model.eval(x, &up) - self.model.eval(x, &down)) / (2.0 * h)
+            })
+            .collect();
+        let var: f64 = (0..k)
+            .map(|i| (0..k).map(|j| g[i] * self.cov[i][j] * g[j]).sum::<f64>())
+            .sum();
+        crate::analysis::band_half_widths(var, self.reduced_chi2, self.dof, level)
+    }
+
+    /// 各参数的 t 值和双侧 p 值（固定参数为 NaN）。
+    pub fn t_tests(&self) -> Vec<(f64, f64)> {
+        crate::analysis::coef_t_tests(&self.params, &self.se, self.dof)
+            .into_iter()
+            .zip(&self.fixed)
+            .map(|(tp, f)| if *f { (f64::NAN, f64::NAN) } else { tp })
+            .collect()
     }
 }
 
@@ -785,10 +819,14 @@ pub fn fit_with(
     let dof = (n - m) as f64;
     let reduced = cost / dof;
     let mut se = vec![0.0; all];
+    let mut cov = vec![vec![0.0; all]; all];
     match mat_inv(&a) {
         Some(inv) => {
             for (u, &k) in free.iter().enumerate() {
                 se[k] = (inv[u][u] * reduced).max(0.0).sqrt();
+                for (v, &l) in free.iter().enumerate() {
+                    cov[k][l] = inv[u][v] * reduced;
+                }
             }
         }
         None => {
@@ -819,6 +857,8 @@ pub fn fit_with(
         converged,
         fixed: (0..all).map(is_fixed).collect(),
         at_bound,
+        dof: n - m,
+        cov,
         x_min: xs[0],
         x_max: xs[n - 1],
     })
@@ -1305,6 +1345,40 @@ mod tests {
             "the dialog holds up to MAX_PARAMS parameters"
         );
         assert!(Model::ALL.iter().all(|m| Model::CATEGORIES.contains(&m.category())));
+    }
+
+    #[test]
+    fn nonlinear_bands_and_t_tests_match_delta_method() {
+        // 参考：scipy curve_fit 的 pcov 与解析梯度的 Δ 法，t 分布 95%（SciPy 1.17.1）
+        let (xs, ys) = data(Model::ExpDec1, 0.0, 8.0, &[0.3, 5.0, 1.7], 0.05);
+        let f = fit(Model::ExpDec1, &xs, &ys, None, &[]).unwrap();
+        let at = [0.0, 1.0, 2.5, 8.0];
+        let conf = [
+            0.036930037359520045,
+            0.016145292629534957,
+            0.014471897661722667,
+            0.015446935846694449,
+        ];
+        let pred = [
+            0.06780030389556413,
+            0.05910773234568062,
+            0.058672731067223025,
+            0.05892080596875095,
+        ];
+        for i in 0..4 {
+            let (c, p) = f.band(at[i], 0.95);
+            close(c, conf[i], 1e-5);
+            close(p, pred[i], 1e-6);
+        }
+        let t = [34.01123351318792, 286.66425189541997, 123.98923371068953];
+        let pv = [4.606615447919501e-30, 5.510180515572003e-65, 3.602688045999483e-51];
+        for (k, (tv, p)) in f.t_tests().into_iter().enumerate() {
+            close(tv, t[k], 1e-4);
+            close(p, pv[k], 1e-2);
+        }
+        // 固定参数没有 t 检验
+        let held = fit(Model::ExpDec1, &xs, &ys, None, &[None, None, Some(1.7)]).unwrap();
+        assert!(held.t_tests()[2].0.is_nan());
     }
 
     #[test]

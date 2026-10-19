@@ -19,10 +19,56 @@ pub struct PolyFit {
     pub dof: usize,
     pub x_min: f64,
     pub x_max: f64,
+    /// 总平方和（对均值）。
+    pub tss: f64,
     // 标准化后的系数，用来稳定地求值
     mx: f64,
     sx: f64,
     bt: Vec<f64>,
+    /// 标准化系数的协方差 σ²·(TᵀT)⁻¹。
+    cov_t: Vec<Vec<f64>>,
+}
+
+/// 回归的方差分析表：回归、残差、总计（对均值校正）。
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FitAnova {
+    pub df_reg: f64,
+    pub ss_reg: f64,
+    pub df_err: f64,
+    pub ss_err: f64,
+    pub df_tot: f64,
+    pub ss_tot: f64,
+    pub f: f64,
+    pub p: f64,
+}
+
+impl FitAnova {
+    pub fn ms_reg(&self) -> f64 {
+        self.ss_reg / self.df_reg
+    }
+    pub fn ms_err(&self) -> f64 {
+        self.ss_err / self.df_err
+    }
+}
+
+/// 置信带与预测带的半宽：t 分位数 × √var(ŷ) 与 × √(σ² + var(ŷ))。
+pub fn band_half_widths(var_fit: f64, sigma2: f64, dof: usize, level: f64) -> (f64, f64) {
+    let t = crate::stats::t_ppf(1.0 - (1.0 - level) / 2.0, dof as f64);
+    (t * var_fit.max(0.0).sqrt(), t * (sigma2 + var_fit.max(0.0)).sqrt())
+}
+
+/// 系数的 t 值与双侧 p 值。
+pub fn coef_t_tests(values: &[f64], se: &[f64], dof: usize) -> Vec<(f64, f64)> {
+    values
+        .iter()
+        .zip(se)
+        .map(|(v, s)| {
+            let t = v / s;
+            // 双侧尾概率直接取 I_{ν/(ν+t²)}(ν/2, 1/2)，避免 1 − CDF 在极小 p 时相减抵消
+            let df = dof as f64;
+            (t, crate::stats::beta_inc(df / 2.0, 0.5, df / (df + t * t)))
+        })
+        .collect()
 }
 
 impl PolyFit {
@@ -40,6 +86,39 @@ impl PolyFit {
 
     pub fn order(&self) -> usize {
         self.coef.len() - 1
+    }
+
+    /// 在 x 处的置信带、预测带半宽（`level` 如 0.95）。
+    pub fn band(&self, x: f64, level: f64) -> (f64, f64) {
+        let t = (x - self.mx) / self.sx;
+        let g: Vec<f64> = (0..self.bt.len()).map(|j| t.powi(j as i32)).collect();
+        let var: f64 = (0..g.len())
+            .map(|i| (0..g.len()).map(|j| g[i] * self.cov_t[i][j] * g[j]).sum::<f64>())
+            .sum();
+        band_half_widths(var, self.rss / self.dof as f64, self.dof, level)
+    }
+
+    /// 方差分析：回归自由度为阶数，残差自由度 n − 阶数 − 1。
+    pub fn anova(&self) -> FitAnova {
+        let df_reg = self.order() as f64;
+        let df_err = self.dof as f64;
+        let ss_reg = self.tss - self.rss;
+        let f = (ss_reg / df_reg) / (self.rss / df_err);
+        FitAnova {
+            df_reg,
+            ss_reg,
+            df_err,
+            ss_err: self.rss,
+            df_tot: (self.n - 1) as f64,
+            ss_tot: self.tss,
+            f,
+            p: crate::stats::f_sf(f, df_reg, df_err),
+        }
+    }
+
+    /// 各系数（原始 x 的幂次）的 t 值和双侧 p 值。
+    pub fn t_tests(&self) -> Vec<(f64, f64)> {
+        coef_t_tests(&self.coef, &self.se, self.dof)
     }
 
     /// 拟合多项式在 x 处的 k 阶导数（k = 0 即拟合值）。
@@ -169,9 +248,11 @@ pub fn polyfit(xs: &[f64], ys: &[f64], order: usize) -> Option<PolyFit> {
         dof: n - p,
         x_min: xs[..n].iter().copied().fold(f64::INFINITY, f64::min),
         x_max: xs[..n].iter().copied().fold(f64::NEG_INFINITY, f64::max),
+        tss: 0.0,
         mx,
         sx,
         bt,
+        cov_t: vec![],
     };
     let ym = ys[..n].iter().sum::<f64>() / n as f64;
     let (mut rss, mut tss) = (0.0, 0.0);
@@ -211,6 +292,8 @@ pub fn polyfit(xs: &[f64], ys: &[f64], order: usize) -> Option<PolyFit> {
         })
         .collect();
     fit.rss = rss;
+    fit.tss = tss;
+    fit.cov_t = inv.iter().map(|r| r.iter().map(|v| v * s2).collect()).collect();
     fit.r2 = if tss > 0.0 { 1.0 - rss / tss } else { f64::NAN };
     fit.adj_r2 = 1.0 - (1.0 - fit.r2) * (n - 1) as f64 / fit.dof as f64;
     Some(fit)
@@ -817,6 +900,53 @@ mod tests {
         ];
         for (g, w) in smooth(&t, &s, SmoothMethod::FftFilter, 5).iter().zip(want) {
             assert!((g - w).abs() < 1e-9, "{g} vs {w}");
+        }
+    }
+
+    #[test]
+    fn polynomial_bands_anova_and_t_tests_match_numpy_scipy() {
+        // 参考：NumPy 原始范德蒙德矩阵最小二乘 + scipy.stats（t、F 分布），二阶多项式，95%
+        let noise = |i: usize| (1.7 * i as f64).sin() * 0.6 + (0.37 * (i * i) as f64).cos() * 0.4;
+        let xs: Vec<f64> = (0..41).map(|i| i as f64 * 0.25).collect();
+        let ys: Vec<f64> = xs
+            .iter()
+            .enumerate()
+            .map(|(i, x)| 1.0 + 0.5 * x - 0.03 * x * x + 0.2 * noise(i))
+            .collect();
+        let fit = polyfit(&xs, &ys, 2).unwrap();
+        let close = |g: f64, w: f64, rel: f64| assert!((g - w).abs() <= rel * w.abs(), "{g} vs {w}");
+        let at = [0.0, 3.3, 7.7, 10.0, 12.0];
+        let conf = [
+            0.10150171944461821,
+            0.0488263171620758,
+            0.04851656672767118,
+            0.10150171944461794,
+            0.20421951132107755,
+        ];
+        let pred = [
+            0.24893031711680438,
+            0.2324816400864172,
+            0.2324167829066984,
+            0.24893031711680427,
+            0.30556392544585254,
+        ];
+        for i in 0..5 {
+            let (c, p) = fit.band(at[i], 0.95);
+            close(c, conf[i], 1e-9);
+            close(p, pred[i], 1e-9);
+        }
+        let a = fit.anova();
+        close(a.f, 639.0783635586567, 1e-9);
+        close(a.p, 5.611045444989869e-30, 1e-6);
+        close(a.ss_reg, 16.113114531602644, 1e-9);
+        close(a.ss_err, 0.4790479439730725, 1e-9);
+        close(a.ss_tot, 16.592162475575716, 1e-9);
+        assert_eq!((a.df_reg, a.df_err, a.df_tot), (2.0, 38.0, 40.0));
+        let t = [20.512546418687485, 21.589277997879766, -13.58972948708151];
+        let pv = [3.7382843618811248e-22, 6.215137765756575e-23, 3.610205994049847e-16];
+        for (k, (tv, p)) in fit.t_tests().into_iter().enumerate() {
+            close(tv, t[k], 1e-9);
+            close(p, pv[k], 1e-6);
         }
     }
 

@@ -1573,6 +1573,28 @@ impl SciApp {
                 self.finish_edit();
                 self.dialog = None;
             }
+            dialogs::Action::FitBands(reports) => {
+                self.finish_edit();
+                self.begin_edit("置信/预测带");
+                let made: Result<Vec<_>, _> = reports.iter().map(|r| self.project.poly_bands(r, 0.95)).collect();
+                self.status = match made {
+                    Ok(_) => "已写入 95% 置信带和预测带，并加到图中".into(),
+                    Err(e) => e,
+                };
+                self.history.changed();
+                self.finish_edit();
+            }
+            dialogs::Action::NlFitBands(reports) => {
+                self.finish_edit();
+                self.begin_edit("置信/预测带");
+                let made: Result<Vec<_>, _> = reports.iter().map(|r| self.project.nlfit_bands(r, 0.95)).collect();
+                self.status = match made {
+                    Ok(_) => "已写入 95% 置信带和预测带，并加到图中".into(),
+                    Err(e) => e,
+                };
+                self.history.changed();
+                self.finish_edit();
+            }
             dialogs::Action::ResidualPlot(reports) => {
                 self.finish_edit();
                 self.begin_edit("残差图");
@@ -3009,6 +3031,32 @@ mod history_tests {
     }
 
     #[test]
+    fn fit_reports_add_confidence_and_prediction_bands_in_one_step() {
+        for nonlinear in [false, true] {
+            let mut app = app();
+            app.active = Some(1);
+            app.selection.insert(1, vec!["C".into()]);
+            if nonlinear {
+                app.nlfit(scicanvas_core::nlfit::Model::PseudoFirstOrder, &[]);
+            } else {
+                app.fit(1);
+            }
+            let before = app.project.clone();
+            let columns = app.project.book(1).unwrap().columns.len();
+            press_dialog_button(&mut app, "置信/预测带");
+            let book = app.project.book(1).unwrap();
+            assert_eq!(book.columns.len(), columns + 4, "{}", app.status);
+            let names: Vec<&str> = book.columns[columns..].iter().map(|c| c.long_name.as_str()).collect();
+            assert!(
+                names.iter().any(|n| n.ends_with("95% 置信下限")) && names.iter().any(|n| n.ends_with("95% 预测上限"))
+            );
+            // 结果对话框保留
+            assert!(app.dialog.is_some());
+            roundtrip(&mut app, &before);
+        }
+    }
+
+    #[test]
     fn nlfit_dialog_upper_bound_stops_the_parameter_and_marks_it() {
         use scicanvas_core::nlfit::Model;
         let mut app = app();
@@ -3293,7 +3341,8 @@ mod history_tests {
             // 保存为 Markdown：标题、参数表和统计量表
             assert!(note.text.starts_with("## "), "{}", note.text);
             assert!(
-                note.text.contains("| 参数 | 值 | 标准误 |\n| --- | --- | --- |"),
+                note.text
+                    .contains("| 参数 | 值 | 标准误 | t | p |\n| --- | --- | --- | --- | --- |"),
                 "{}",
                 note.text
             );
