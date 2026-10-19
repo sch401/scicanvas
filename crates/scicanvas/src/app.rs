@@ -626,11 +626,24 @@ impl SciApp {
     }
 
     fn finish_edit(&mut self) {
+        self.recalc_formulas();
         self.history.commit(&self.project);
         self.last_history_group = None;
     }
 
+    /// 有改动时按保存的列公式重算（并入同一步撤销）；出错时在状态栏说明。
+    fn recalc_formulas(&mut self) {
+        if self.history.has_changes() {
+            let problems = self.project.recalc_formulas();
+            if !problems.is_empty() {
+                self.status = format!("公式重算出错：{}", problems.join("；"));
+            }
+        }
+    }
+
     fn finish_frame_edit(&mut self, group: Option<egui::Id>) {
+        // 连续输入时每帧重算，结果即时更新
+        self.recalc_formulas();
         if group.is_none() {
             self.finish_edit();
         } else {
@@ -1757,10 +1770,10 @@ impl SciApp {
                 self.history.changed();
                 self.finish_edit();
             }
-            dialogs::Action::SetValues(formula) => {
+            dialogs::Action::SetValues(formula, keep) => {
                 self.finish_edit();
                 self.begin_edit("设置列值");
-                if self.set_column_values(&formula) {
+                if self.set_column_values(&formula, keep) {
                     self.dialog = None;
                     self.history.changed();
                 }
@@ -4026,17 +4039,40 @@ mod history_tests {
     }
 
     #[test]
+    fn saved_formula_recalculates_when_a_source_cell_changes_in_the_same_undo_step() {
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["C".into()]);
+        app.begin_edit("设置列值");
+        assert!(app.set_column_values("B * 2", true));
+        app.history.changed();
+        app.finish_edit();
+        app.open_set_values_dialog();
+        assert!(matches!(&app.dialog, Some(Dialog::SetValues { formula, keep: true, .. }) if formula == "B * 2"));
+        app.dialog = None;
+        let before = app.project.clone();
+        // 改 B 列一个单元格：提交编辑时 C 跟着重算，撤销时一起回退
+        app.begin_edit("编辑单元格");
+        app.project.book_mut(1).unwrap().columns[1].set(0, "100".into());
+        app.history.changed();
+        app.finish_edit();
+        assert_eq!(app.project.book(1).unwrap().column("C").unwrap().values()[0], 200.0);
+        app.undo();
+        assert_eq!(app.project, before);
+    }
+
+    #[test]
     fn set_values_keeps_the_dialog_open_on_errors_and_undoes_in_one_step() {
         let mut app = app();
         app.active = Some(1);
         app.selection.insert(1, vec!["C".into()]);
         app.open_set_values_dialog();
         assert!(matches!(&app.dialog, Some(Dialog::SetValues { target, .. }) if target.starts_with('C')));
-        assert!(!app.set_column_values("B *"));
+        assert!(!app.set_column_values("B *", false));
         assert!(matches!(&app.dialog, Some(Dialog::SetValues { error: Some(_), .. })));
         let before = app.project.book(1).unwrap().columns[2].data.clone();
         app.begin_edit("设置列值");
-        assert!(app.set_column_values("B * 2"));
+        assert!(app.set_column_values("B * 2", false));
         app.history.changed();
         app.finish_edit();
         let book = app.project.book(1).unwrap();

@@ -163,6 +163,88 @@ fn x_for(book: &Book, y: &Column, among: &[&Column]) -> Option<String> {
         .or_else(|| book.columns.iter().find(|c| c.role == Role::X).map(|c| c.key.clone()))
 }
 
+/// 按公式计算目标列的新数据（保持目标列类型）；结果不是有限数的单元格留空，末尾空行去掉。
+fn formula_data(book: &Book, target: &str, formula: &str) -> Result<crate::ColumnData, String> {
+    let expr = crate::formula::parse(formula)?;
+    let mut cols = std::collections::HashMap::new();
+    for k in expr.columns() {
+        let c = book
+            .column(&k)
+            .ok_or_else(|| format!("工作簿里没有列 {k}（列用短名引用，如 A、B）"))?;
+        cols.insert(k, c.values());
+    }
+    let rows = if cols.is_empty() {
+        book.nrows()
+    } else {
+        cols.values().map(Vec::len).max().unwrap_or(0)
+    };
+    if rows == 0 {
+        return Err("没有可计算的行：公式不引用列时按工作簿已有的行数计算".into());
+    }
+    let value = |k: &str, i: usize| cols.get(k).and_then(|v| v.get(i)).copied().unwrap_or(f64::NAN);
+    // 列统计、按行序列先对整列算好
+    let expr = expr.prepare(rows, &value);
+    let mut data: Vec<String> = (0..rows)
+        .map(|i| {
+            let v = expr.eval(i, &value);
+            if v.is_finite() {
+                fmt_num(v)
+            } else {
+                String::new()
+            }
+        })
+        .collect();
+    while data.last().is_some_and(|s| s.is_empty()) {
+        data.pop();
+    }
+    book.column(target).ok_or("找不到目标列")?.data.replaced_texts(data)
+}
+
+/// 带公式的列按依赖排序（被引用的先算）；有循环依赖时报错。
+fn formula_order(book: &Book) -> Result<Vec<String>, String> {
+    let deps: std::collections::HashMap<String, Vec<String>> = book
+        .columns
+        .iter()
+        .filter_map(|c| {
+            let f = c.formula.as_deref()?;
+            Some((
+                c.key.clone(),
+                crate::formula::parse(f).map(|e| e.columns()).unwrap_or_default(),
+            ))
+        })
+        .collect();
+    // 0 未访问，1 访问中，2 完成
+    let mut state: std::collections::HashMap<&str, u8> = Default::default();
+    let mut order = vec![];
+    fn visit<'a>(
+        key: &'a str,
+        deps: &'a std::collections::HashMap<String, Vec<String>>,
+        state: &mut std::collections::HashMap<&'a str, u8>,
+        order: &mut Vec<String>,
+    ) -> Result<(), String> {
+        match state.get(key) {
+            Some(2) => return Ok(()),
+            Some(1) => return Err(format!("列公式循环引用（涉及 {key} 列）")),
+            _ => {}
+        }
+        state.insert(key, 1);
+        for d in deps.get(key).into_iter().flatten() {
+            if deps.contains_key(d) {
+                visit(d, deps, state, order)?;
+            }
+        }
+        state.insert(key, 2);
+        order.push(key.to_string());
+        Ok(())
+    }
+    let mut keys: Vec<&String> = deps.keys().collect();
+    keys.sort();
+    for k in keys {
+        visit(k, &deps, &mut state, &mut order)?;
+    }
+    Ok(order)
+}
+
 fn name_of(book: &Book, key: &str) -> String {
     book.column(key)
         .map(|c| c.display_name().to_string())
@@ -1457,46 +1539,73 @@ impl Project {
     /// 设置列值：按公式逐行计算，写入 `target` 列（覆盖原有内容）。公式里的列用短名引用，
     /// 可以引用目标列自身（用的是计算前的值）。结果不是有限数的单元格留空。返回写入的行数。
     pub fn set_column_values(&mut self, book_id: u64, target: &str, formula: &str) -> Result<usize, String> {
-        let expr = crate::formula::parse(formula)?;
         let book = self.book(book_id).ok_or("找不到工作簿")?;
         book.column(target).ok_or("找不到目标列")?;
-        let mut cols = std::collections::HashMap::new();
-        for k in expr.columns() {
-            let c = book
-                .column(&k)
-                .ok_or_else(|| format!("工作簿里没有列 {k}（列用短名引用，如 A、B）"))?;
-            cols.insert(k, c.values());
-        }
-        let rows = if cols.is_empty() {
-            book.nrows()
-        } else {
-            cols.values().map(Vec::len).max().unwrap_or(0)
-        };
-        if rows == 0 {
-            return Err("没有可计算的行：公式不引用列时按工作簿已有的行数计算".into());
-        }
-        let value = |k: &str, i: usize| cols.get(k).and_then(|v| v.get(i)).copied().unwrap_or(f64::NAN);
-        // 列统计、按行序列先对整列算好
-        let expr = expr.prepare(rows, &value);
-        let mut data: Vec<String> = (0..rows)
-            .map(|i| {
-                let v = expr.eval(i, &value);
-                if v.is_finite() {
-                    fmt_num(v)
-                } else {
-                    String::new()
-                }
-            })
-            .collect();
-        while data.last().is_some_and(|s| s.is_empty()) {
-            data.pop();
-        }
+        let data = formula_data(book, target, formula)?;
         let n = data.len();
-        let data = book.column(target).unwrap().data.replaced_texts(data)?;
         let book = self.book_mut(book_id).unwrap();
         book.freeze_error_sources();
         book.columns.iter_mut().find(|c| c.key == target).unwrap().data = data;
         Ok(n)
+    }
+
+    /// 设置列值，并按 `keep` 保存或去掉列公式；保存的公式在引用的列变化时自动重算。
+    pub fn set_column_formula(
+        &mut self,
+        book_id: u64,
+        target: &str,
+        formula: &str,
+        keep: bool,
+    ) -> Result<usize, String> {
+        if keep {
+            let book = self.book(book_id).ok_or("找不到工作簿")?;
+            if crate::formula::parse(formula)?.columns().iter().any(|k| k == target) {
+                return Err("保存的公式不能引用目标列自身（会循环重算）".into());
+            }
+            let mut trial = book.clone();
+            trial
+                .columns
+                .iter_mut()
+                .find(|c| c.key == target)
+                .ok_or("找不到目标列")?
+                .formula = Some(formula.into());
+            formula_order(&trial)?;
+        }
+        let n = self.set_column_values(book_id, target, formula)?;
+        let book = self.book_mut(book_id).unwrap();
+        book.columns.iter_mut().find(|c| c.key == target).unwrap().formula = keep.then(|| formula.to_string());
+        Ok(n)
+    }
+
+    /// 按保存的列公式重算全部工作簿（按依赖顺序）；结果不变的列不改动。返回出错的说明。
+    pub fn recalc_formulas(&mut self) -> Vec<String> {
+        let mut problems = vec![];
+        for b in 0..self.books.len() {
+            if !self.books[b].columns.iter().any(|c| c.formula.is_some()) {
+                continue;
+            }
+            let order = match formula_order(&self.books[b]) {
+                Ok(order) => order,
+                Err(e) => {
+                    problems.push(format!("{}：{e}", self.books[b].name));
+                    continue;
+                }
+            };
+            for key in order {
+                let book = &self.books[b];
+                let formula = book.column(&key).and_then(|c| c.formula.clone()).unwrap_or_default();
+                match formula_data(book, &key, &formula) {
+                    Ok(data) => {
+                        let col = self.books[b].columns.iter_mut().find(|c| c.key == key).unwrap();
+                        if col.data != data {
+                            col.data = data;
+                        }
+                    }
+                    Err(e) => problems.push(format!("{} 列 {key}：{e}", self.books[b].name)),
+                }
+            }
+        }
+        problems
     }
 
     /// 标准曲线反查：用标准点（浓度 `x`、响应 `y`）拟合直线，把样品响应列 `sample` 反查成浓度，
@@ -2049,6 +2158,48 @@ mod tests {
             .unwrap();
         let c = p.book(1).unwrap().columns[2].values();
         assert_eq!(&c[..4], &[-1.5, -0.5, 6.5, 11.5]);
+    }
+
+    #[test]
+    fn saved_formulas_recalculate_in_dependency_order() {
+        let mut p = Project::sample();
+        let book = p.book_mut(1).unwrap();
+        book.columns[0].data = ["1", "2", "3"].iter().map(|s| s.to_string()).collect();
+        let d = book.push_column(Role::Y);
+        let col = |p: &Project, k: &str| p.book(1).unwrap().column(k).unwrap().values();
+        // D 依赖 C，C 依赖 A：先算 C 再算 D
+        p.set_column_formula(1, "D", "C + 1", true).unwrap();
+        p.set_column_formula(1, "C", "A * 2", true).unwrap();
+        assert_eq!(col(&p, "C"), [2.0, 4.0, 6.0]);
+        p.book_mut(1).unwrap().columns[0].set(1, "10".into());
+        assert!(p.recalc_formulas().is_empty());
+        assert_eq!(col(&p, "C"), [2.0, 20.0, 6.0]);
+        assert_eq!(col(&p, &d), [3.0, 21.0, 7.0]);
+        // 自引用与循环依赖拒绝
+        assert!(p
+            .set_column_formula(1, "B", "B + 1", true)
+            .unwrap_err()
+            .contains("自身"));
+        assert!(p
+            .set_column_formula(1, "C", "D * 2", true)
+            .unwrap_err()
+            .contains("循环"));
+        // 去掉公式后不再重算
+        p.set_column_formula(1, "C", "A", false).unwrap();
+        assert_eq!(p.book(1).unwrap().column("C").unwrap().formula, None);
+        p.book_mut(1).unwrap().columns[0].set(0, "5".into());
+        p.recalc_formulas();
+        assert_eq!(col(&p, "C")[0], 1.0);
+        assert_eq!(col(&p, &d)[0], 2.0);
+        #[cfg(feature = "serde")]
+        {
+            let json = crate::project_file::to_json(&p).unwrap();
+            let back = crate::project_file::from_json(&json).unwrap();
+            assert_eq!(
+                back.book(1).unwrap().column(&d).unwrap().formula.as_deref(),
+                Some("C + 1")
+            );
+        }
     }
 
     #[test]

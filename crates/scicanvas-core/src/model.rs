@@ -60,6 +60,9 @@ pub struct Column {
     /// 误差列关联的 X/Y 列；空字符串表示来源已删除，None 按列顺序自动关联。
     #[cfg_attr(feature = "serde", serde(default))]
     pub error_for: Option<String>,
+    /// 保存的列公式：引用的列变化时自动重算（见 `Project::recalc_formulas`）。
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Option::is_none"))]
+    pub formula: Option<String>,
     /// 显示格式：只影响工作表里的显示。全部为“原样”时不写入文件。
     #[cfg_attr(
         feature = "serde",
@@ -79,6 +82,7 @@ impl Column {
             data: crate::ColumnData::default(),
             derived_from: None,
             error_for: None,
+            formula: None,
             format: Default::default(),
         }
     }

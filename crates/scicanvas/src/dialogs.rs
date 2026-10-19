@@ -132,6 +132,8 @@ pub enum Dialog {
     SetValues {
         target: String,
         formula: String,
+        /// 保存公式，数据变化时自动重算。
+        keep: bool,
         columns: Vec<(String, String)>,
         error: Option<String>,
     },
@@ -212,7 +214,7 @@ pub enum Action {
     Baseline(BaselineMethod),
     FftFilter(FilterKind),
     Fill(Sequence, usize),
-    SetValues(String),
+    SetValues(String, bool),
     NlFit(Model, Vec<scicanvas_core::nlfit::ParamLimits>, String),
     /// 运算符，以及常数（为空时用列 B）。
     ColumnMath(ColumnOp, Option<f64>),
@@ -1286,6 +1288,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
         Dialog::SetValues {
             target,
             formula,
+            keep,
             columns,
             error,
         } => {
@@ -1302,7 +1305,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                         *error = None;
                     }
                     if edit.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)) {
-                        action = Action::SetValues(formula.clone());
+                        action = Action::SetValues(formula.clone(), *keep);
                     }
                 });
                 if let Some(e) = error {
@@ -1341,9 +1344,10 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                     .small()
                     .color(pal.weak),
                 );
+                ui.checkbox(keep, "保存公式，引用的列变化时自动重算");
                 let (ok, cancel) = buttons(ui, "计算");
                 if ok {
-                    action = Action::SetValues(formula.clone());
+                    action = Action::SetValues(formula.clone(), *keep);
                 } else if cancel {
                     action = Action::Close;
                 }

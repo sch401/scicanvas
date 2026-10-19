@@ -57,6 +57,11 @@ impl History {
         self.pending.is_some()
     }
 
+    /// 当前事务里已有写入（用于提交前做公式重算等收尾）。
+    pub fn has_changes(&self) -> bool {
+        self.pending.as_ref().is_some_and(|p| p.changed)
+    }
+
     /// 实际写入后设置修改标记。空闲帧不比较或复制项目。
     pub fn changed(&mut self) {
         self.pending.as_mut().expect("写入前应开启撤销事务").changed = true;

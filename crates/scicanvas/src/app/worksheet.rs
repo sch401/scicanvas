@@ -328,7 +328,8 @@ impl SciApp {
         };
         self.dialog = Some(Dialog::SetValues {
             target: format!("{}（{}）", target.key, target.display_name()),
-            formula: String::new(),
+            formula: target.formula.clone().unwrap_or_default(),
+            keep: target.formula.is_some(),
             columns: book
                 .columns
                 .iter()
@@ -339,16 +340,20 @@ impl SciApp {
     }
 
     /// 按公式设置第一个点选列的值；公式有误时留在对话框里显示错误。
-    pub(super) fn set_column_values(&mut self, formula: &str) -> bool {
+    pub(super) fn set_column_values(&mut self, formula: &str, keep: bool) -> bool {
         let Some((id, keys)) = self.ttest_columns() else {
             return false;
         };
         let Some(target) = keys.first().cloned() else {
             return false;
         };
-        match self.project.set_column_values(id, &target, formula) {
+        match self.project.set_column_formula(id, &target, formula, keep) {
             Ok(n) => {
-                self.status = format!("已按公式设置列 {target}（{n} 行）");
+                self.status = if keep {
+                    format!("已按公式设置列 {target}（{n} 行），数据变化时自动重算")
+                } else {
+                    format!("已按公式设置列 {target}（{n} 行）")
+                };
                 true
             }
             Err(e) => {
@@ -505,7 +510,10 @@ impl SciApp {
                             for (ci, col) in book.columns.iter().enumerate() {
                                 header.col(|ui| {
                                     let rect = ui.max_rect();
-                                    let text = RichText::new(format!("{}({})", col.key, col.role.label())).strong();
+                                    // 带保存公式的列标 ƒ
+                                    let mark = if col.formula.is_some() { " ƒ" } else { "" };
+                                    let text =
+                                        RichText::new(format!("{}({}){mark}", col.key, col.role.label())).strong();
                                     let resp = ui
                                         .centered_and_justified(|ui| {
                                             ui.add(egui::SelectableLabel::new(sel_flags[ci], text))
