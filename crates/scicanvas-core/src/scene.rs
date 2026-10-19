@@ -109,6 +109,64 @@ pub struct Scene {
     pub layers: Vec<LayerView>,
 }
 
+/// 鼠标吸附到的数据点：曲线名、原始行（统计变换后为 None）、数据值和页面位置。
+#[derive(Clone, Debug, PartialEq)]
+pub struct PointHit {
+    pub series: String,
+    pub row: Option<usize>,
+    pub x: f64,
+    pub y: f64,
+    pub at: [f64; 2],
+}
+
+/// 页面坐标 (x, y) 附近 `radius` 以内最近的数据点（不含拟合等结果曲线）。
+/// 堆叠柱的 Y 取该段自身的值；水平条形图按交换后的轴定位。
+pub fn nearest_point(
+    layer: &Layer,
+    view: &LayerView,
+    book: Option<&Book>,
+    x: f64,
+    y: f64,
+    radius: f64,
+) -> Option<PointHit> {
+    let (_, series) = layer.series(book?);
+    let horizontal = layer.plot_type == PlotType::HorizontalBar;
+    let identity = layer.transform == crate::plotspec::Transform::Identity;
+    let map = Cartesian {
+        x: &view.xa,
+        y: &view.ya,
+        rect: view.plot,
+    };
+    let mut best: Option<(f64, PointHit)> = None;
+    for s in series.iter().filter(|s| !s.line_only) {
+        for (i, p) in s.points.iter().enumerate() {
+            let at = map.project(if horizontal { [p[1], p[0]] } else { *p });
+            if !at.iter().all(|v| v.is_finite()) || !view.contains(at[0], at[1]) {
+                continue;
+            }
+            let d = (at[0] - x).hypot(at[1] - y);
+            if d <= radius && best.as_ref().is_none_or(|(b, _)| d < *b) {
+                let value = if layer.plot_type.is_stacked() {
+                    p[1] - s.bases.get(i).copied().unwrap_or(0.0)
+                } else {
+                    p[1]
+                };
+                best = Some((
+                    d,
+                    PointHit {
+                        series: s.name.clone(),
+                        row: identity.then(|| s.rows.get(i).copied()).flatten(),
+                        x: p[0],
+                        y: value,
+                        at,
+                    },
+                ));
+            }
+        }
+    }
+    best.map(|(_, hit)| hit)
+}
+
 /// 各图层的版面与坐标轴，用于定位鼠标和独立视图交互。
 #[derive(Clone, Debug, PartialEq)]
 pub struct LayerView {

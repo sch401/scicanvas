@@ -309,3 +309,36 @@ fn bspline_and_bezier_connections_smooth_data_lines_only() {
     p.graph_mut(id).unwrap().first_layer_mut().connect = scicanvas_core::page::Connect::Bezier;
     assert_eq!(lines(&p), [2 * 16 + 1]);
 }
+
+#[test]
+fn nearest_point_uses_segment_values_and_swapped_axes() {
+    use scicanvas_core::coord::{Cartesian, Coord};
+    for kind in [PlotType::StackedBar, PlotType::HorizontalBar] {
+        let (mut p, id) = project(kind);
+        let b = p.book_mut(1).unwrap();
+        let mut c = Column::new("C", Role::Y);
+        c.data = vec!["3".into(); 4].into();
+        b.columns.push(c);
+        p.graph_mut(id).unwrap().first_layer_mut().y_keys.push("C".into());
+        let sc = scene::layout_page(p.graph(id).unwrap(), &p, &[]);
+        let view = &sc.layers[0];
+        let layer = p.graph(id).unwrap().first_layer();
+        let map = Cartesian {
+            x: &view.xa,
+            y: &view.ya,
+            rect: view.plot,
+        };
+        // 第二条曲线（C）第 2 行：堆叠后终点为 1 + 3，自身值为 3
+        let (_, series) = layer.series(p.book(1).unwrap());
+        let pt = series[1].points[1];
+        let at = map.project(if kind == PlotType::HorizontalBar {
+            [pt[1], pt[0]]
+        } else {
+            pt
+        });
+        let hit = scene::nearest_point(layer, view, p.book(1), at[0] + 1.0, at[1], 6.0).unwrap();
+        assert_eq!(hit.row, Some(1));
+        assert_eq!(hit.y, if kind == PlotType::StackedBar { 3.0 } else { pt[1] });
+        assert!(scene::nearest_point(layer, view, None, at[0], at[1], 6.0).is_none());
+    }
+}

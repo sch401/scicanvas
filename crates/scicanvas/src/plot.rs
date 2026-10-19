@@ -60,6 +60,8 @@ pub struct PlotOutput {
     pub zoomed: bool,
     pub selected_layer: Option<usize>,
     pub hover_layer: Option<usize>,
+    /// 鼠标吸附到的数据点。
+    pub point: Option<scene::PointHit>,
 }
 
 fn rgb(c: Rgb) -> Color32 {
@@ -271,6 +273,33 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize) ->
     if hover.is_some() && !response.dragged() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
     }
+    // 数据点提示：屏幕上 8 像素以内吸附到最近的数据点
+    let point = match (hovered, response.hover_pos()) {
+        (Some(index), Some(p)) if dragging.is_none() => {
+            let (x, y) = local(p);
+            let layer = &g.page.layers()[index];
+            let book = layer.book_id.and_then(|b| project.book(b));
+            scene::nearest_point(layer, &sc.layers[index], book, x, y, 8.0 / f64::from(transform.scaling))
+        }
+        _ => None,
+    };
+    if let Some(hit) = &point {
+        let at = transform * pos2(hit.at[0] as f32, hit.at[1] as f32);
+        ui.painter()
+            .circle_stroke(at, 5.0, Stroke::new(1.5_f32, ui.visuals().selection.bg_fill));
+        let mut text = hit.series.clone();
+        if let Some(row) = hit.row {
+            text.push_str(&format!("\n行 {}", row + 1));
+        }
+        text.push_str(&format!(
+            "\nX = {}\nY = {}",
+            scicanvas_core::fmt_num(hit.x),
+            scicanvas_core::fmt_num(hit.y)
+        ));
+        egui::show_tooltip_at_pointer(ui.ctx(), ui.layer_id(), id.with("point-tip"), |ui| {
+            ui.label(text);
+        });
+    }
     if dragging.is_some() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
     }
@@ -282,6 +311,7 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize) ->
         zoomed,
         selected_layer,
         hover_layer: hovered,
+        point,
     }
 }
 
@@ -431,6 +461,37 @@ mod tests {
     fn point(rect: Rect, sc: &Scene, index: usize) -> Pos2 {
         let [x, y, w, h] = sc.layers[index].plot;
         page_transform(rect, [sc.w, sc.h]) * pos2((x + w / 2.0) as f32, (y + h / 2.0) as f32)
+    }
+
+    #[test]
+    fn pointer_near_a_data_point_snaps_and_reports_its_row() {
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        let p = project();
+        let initial = frame(&ctx, &p, vec![]);
+        let sc = scene::layout_page(&p.graphs[0], &p, &[]);
+        // 第二个图层画 C 列；取第 6 行（下标 5）的数据点，鼠标偏开 3 像素
+        let layer = &p.graphs[0].page.layers()[1];
+        let (_, series) = layer.series(p.book(1).unwrap());
+        let s = &series[0];
+        let view = &sc.layers[1];
+        let map = scicanvas_core::coord::Cartesian {
+            x: &view.xa,
+            y: &view.ya,
+            rect: view.plot,
+        };
+        use scicanvas_core::coord::Coord;
+        let at = map.project(s.points[5]);
+        let screen = page_transform(initial.response.rect, [sc.w, sc.h]) * pos2(at[0] as f32, at[1] as f32);
+        let output = frame(&ctx, &p, vec![egui::Event::PointerMoved(screen + vec2(3.0, -2.0))]);
+        let hit = output.point.expect("snapped point");
+        assert_eq!(hit.row, Some(s.rows[5]));
+        assert_eq!((hit.x, hit.y), (s.points[5][0], s.points[5][1]));
+        // 远离数据点时不吸附
+        let [x, y, w, _] = view.plot;
+        let empty = page_transform(initial.response.rect, [sc.w, sc.h]) * pos2((x + w * 0.5) as f32, (y + 2.0) as f32);
+        let far = frame(&ctx, &p, vec![egui::Event::PointerMoved(empty)]);
+        assert!(far.point.is_none() || far.point.unwrap().at[1] > y + 2.0);
     }
 
     #[test]

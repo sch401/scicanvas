@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 97 项，P1 146 项，P2 259 项，不做 12 项。
-状态：已完成 26 项，已实现待验收 68 项，部分实现 29 项，未开始 379 项，不做 12 项。
+状态：已完成 26 项，已实现待验收 69 项，部分实现 28 项，未开始 379 项，不做 12 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -166,7 +166,7 @@
 
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
 |---|---|---|---|---|---|---|---|
-| F116 | 读取坐标 / 数据点提示 | Reading Coordinate Values in the Graph | P0 | 部分实现 | 自绘 plot.rs 已实现悬停坐标、十字光标与图层定位；最近数据点吸附及点信息提示待做 | 坐标逆变换、图层命中与缩放回归已通过；数据点提示待实现 | — |
+| F116 | 读取坐标 / 数据点提示 | Reading Coordinate Values in the Graph | P0 | 已实现待验收 | 自绘 plot.rs：悬停坐标、十字光标与图层定位；鼠标 8 像素内吸附到最近的数据点（不含拟合等结果曲线），画出高亮圈并弹出提示（曲线名、原始行号、X、Y），右下角坐标栏同步显示该点的值；堆叠柱显示本段值，水平条形按交换后的轴定位，统计变换图层不显示行号 | 坐标逆变换、图层命中与缩放回归；真实指针事件吸附到指定行、远离数据不吸附；堆叠柱段值与水平条形定位的核心测试；Windows 人工验收待做 | — |
 | F117 | 数据高亮联动（图 ↔ 工作表） | Data Highlighter: Selecting Points in both Graph and Source Worksheet | P1 | 未开始 | — | 手动操作 | — |
 | F118 | 屏蔽数据点（Mask） | Masking Data Points in the Graph or Worksheet | P1 | 未开始 | 掩码位图 | 屏蔽后拟合结果与 Origin 比较 | — |
 | F119 | 框选 / 删除 / 移动数据点 | Drawing or Moving, or Deleting Data Points | P2 | 未开始 | — | 手动操作 | — |

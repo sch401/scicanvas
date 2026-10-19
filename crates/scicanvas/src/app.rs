@@ -1915,12 +1915,22 @@ impl SciApp {
 
         // 右下角显示鼠标处的坐标
         if let Some((x, y)) = out.hover {
-            let text = format!(
-                "图层 {} · x = {}   y = {}",
-                out.hover_layer.unwrap_or(0) + 1,
-                round_sig(x, 4),
-                round_sig(y, 4)
-            );
+            // 吸附到数据点时显示该点的值，否则显示鼠标处坐标
+            let text = match &out.point {
+                Some(hit) => format!(
+                    "图层 {} · {} · x = {}   y = {}",
+                    out.hover_layer.unwrap_or(0) + 1,
+                    hit.series,
+                    scicanvas_core::fmt_num(hit.x),
+                    scicanvas_core::fmt_num(hit.y)
+                ),
+                None => format!(
+                    "图层 {} · x = {}   y = {}",
+                    out.hover_layer.unwrap_or(0) + 1,
+                    round_sig(x, 4),
+                    round_sig(y, 4)
+                ),
+            };
             ui.painter().text(
                 rect.right_bottom() + egui::vec2(-8.0, -6.0),
                 egui::Align2::RIGHT_BOTTOM,
