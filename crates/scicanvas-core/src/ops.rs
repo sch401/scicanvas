@@ -589,6 +589,16 @@ impl Project {
 
     /// 平滑。来源是图形时，平滑曲线也加到图里。返回新列标识。
     pub fn smooth(&mut self, src: &Source, method: SmoothMethod, window: usize) -> Result<Vec<String>, String> {
+        if method == SmoothMethod::FftFilter {
+            let r = self.resolve(src)?;
+            let book = self.book(r.book_id).ok_or("找不到工作簿")?;
+            for item in &r.items {
+                let (xs, _, _) = get_xy(book, item);
+                if item.x.is_some() {
+                    crate::fft::sample_interval(&xs).map_err(|e| format!("{}：{e}", name_of(book, &item.y)))?;
+                }
+            }
+        }
         let (r, made) = self.per_item_column(src, |book, item, xs, ys| {
             let y = book.column(&item.y).unwrap();
             (
@@ -2279,6 +2289,19 @@ mod tests {
         let keys = p.normalize(&book_src(&["C"]), NormalizeMethod::MinMax).unwrap();
         let v = p.book(1).unwrap().column(&keys[0]).unwrap().values();
         assert_eq!(v.iter().copied().fold(f64::NEG_INFINITY, f64::max), 1.0);
+    }
+
+    #[test]
+    fn fft_smoothing_needs_even_x_spacing() {
+        let mut p = Project::sample();
+        assert_eq!(
+            p.smooth(&book_src(&["B"]), SmoothMethod::FftFilter, 5).unwrap().len(),
+            1
+        );
+        assert_eq!(p.smooth(&book_src(&["B"]), SmoothMethod::Lowess, 7).unwrap().len(), 1);
+        p.book_mut(1).unwrap().columns[0].set(3, "1.7".into());
+        let err = p.smooth(&book_src(&["B"]), SmoothMethod::FftFilter, 5).unwrap_err();
+        assert!(err.contains("不等间距"), "{err}");
     }
 
     #[test]

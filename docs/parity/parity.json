@@ -2284,9 +2284,9 @@
   "feature": "平滑（移动平均、Savitzky-Golay、FFT 平滑、LOWESS）",
   "ref": "Smoothing",
   "pri": "P0",
-  "status": "部分实现",
-  "how": "移动平均与二阶 Savitzky–Golay 已接入；FFT 平滑与 LOWESS 待做",
-  "verify": "已有算法、窗口边界、写回与撤销回归已通过；补齐其余方法后验收",
+  "status": "已实现待验收",
+  "how": "平滑对话框四种方法：移动平均、二阶 Savitzky–Golay、LOWESS（每点取最近的窗口点数个近邻，tricube 权重局部加权线性回归，X 可无序、不等间距）、FFT 滤波（去掉首尾连线趋势后低通，截止频率 1/(窗口点数·ΔX)，再加回趋势；X 不等间距时提示先插值）；结果写新列，来源是图形时加为曲线，一步撤销",
+  "verify": "LOWESS 与 NumPy 逐点暴力实现（k=5/9，无序不等间距 X）一致、直线不变；FFT 平滑与 numpy rfft 掩模参考一致（误差 < 1e-9）；不等间距 X 拒绝 FFT 平滑；LOWESS 稳健迭代与 Origin 对照待做",
   "id": "F201",
   "milestone": "M1 日常够用",
   "sub_items": {

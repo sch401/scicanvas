@@ -222,20 +222,111 @@ pub enum SmoothMethod {
     MovingAverage,
     /// Savitzky-Golay 二阶（窗口内局部二次拟合）。
     SavitzkyGolay,
+    /// LOWESS：每点取最近的“窗口点数”个点，按 tricube 权重做局部加权线性回归。
+    Lowess,
+    /// FFT 低通：去掉首尾连线趋势后，滤掉高于 1/(窗口点数·Δx) 的频率再加回趋势；需要等间距 X。
+    FftFilter,
 }
 
 impl SmoothMethod {
+    pub const ALL: [SmoothMethod; 4] = [
+        SmoothMethod::SavitzkyGolay,
+        SmoothMethod::MovingAverage,
+        SmoothMethod::Lowess,
+        SmoothMethod::FftFilter,
+    ];
+
     pub fn label(self) -> &'static str {
         match self {
             SmoothMethod::MovingAverage => "移动平均",
             SmoothMethod::SavitzkyGolay => "Savitzky-Golay（二阶）",
+            SmoothMethod::Lowess => "LOWESS",
+            SmoothMethod::FftFilter => "FFT 滤波",
         }
+    }
+}
+
+/// LOWESS 局部加权线性回归（不做稳健迭代）：x 不必有序；每点取最近的 k 个点（k = 窗口点数，不超过总点数），
+/// 带宽为其中最远的距离，权重 (1 − (d/h)³)³。
+pub fn lowess(xs: &[f64], ys: &[f64], window: usize) -> Vec<f64> {
+    let n = ys.len().min(xs.len());
+    if n == 0 {
+        return vec![];
+    }
+    let k = window.max(2).min(n);
+    let mut order: Vec<usize> = (0..n).collect();
+    order.sort_by(|&a, &b| xs[a].total_cmp(&xs[b]));
+    let sx: Vec<f64> = order.iter().map(|&i| xs[i]).collect();
+    let mut out = vec![0.0; n];
+    for (pos, &i) in order.iter().enumerate() {
+        let x0 = sx[pos];
+        // 有序数组里向两侧扩展，每次取更近的一侧，得到最近的 k 个点
+        let (mut a, mut b) = (pos, pos);
+        while b - a + 1 < k {
+            if a == 0 {
+                b += 1;
+            } else if b == n - 1 || x0 - sx[a - 1] <= sx[b + 1] - x0 {
+                a -= 1;
+            } else {
+                b += 1;
+            }
+        }
+        let h = (x0 - sx[a]).max(sx[b] - x0);
+        let (mut sw, mut swx, mut swy, mut swxx, mut swxy) = (0.0, 0.0, 0.0, 0.0, 0.0);
+        for j in a..=b {
+            let w = if h > 0.0 {
+                let u = ((sx[j] - x0).abs() / h).min(1.0);
+                (1.0 - u * u * u).powi(3)
+            } else {
+                1.0
+            };
+            let (x, y) = (sx[j] - x0, ys[order[j]]);
+            sw += w;
+            swx += w * x;
+            swy += w * y;
+            swxx += w * x * x;
+            swxy += w * x * y;
+        }
+        // 以 x0 为原点的加权直线，截距即平滑值；退化时取加权平均
+        let det = sw * swxx - swx * swx;
+        out[i] = if det.abs() > 1e-12 * sw * swxx.max(f64::MIN_POSITIVE) {
+            (swxx * swy - swx * swxy) / det
+        } else if sw > 0.0 {
+            swy / sw
+        } else {
+            ys[i]
+        };
+    }
+    out
+}
+
+/// FFT 低通平滑：截止频率 1/(window·Δx)，Δx 取平均采样间隔。先减去首尾连线、滤波后加回，减少端点振铃。
+pub fn fft_smooth(xs: &[f64], ys: &[f64], window: usize) -> Vec<f64> {
+    let n = ys.len().min(xs.len());
+    if n < 3 {
+        return ys[..n].to_vec();
+    }
+    let dt = (xs[n - 1] - xs[0]) / (n - 1) as f64;
+    if !(dt.is_finite() && dt > 0.0) {
+        return ys[..n].to_vec();
+    }
+    let trend = |i: usize| ys[0] + (ys[n - 1] - ys[0]) * i as f64 / (n - 1) as f64;
+    let detrended: Vec<f64> = (0..n).map(|i| ys[i] - trend(i)).collect();
+    let cutoff = 1.0 / (window.max(2) as f64 * dt);
+    match crate::fft::filter(&detrended, dt, crate::fft::FilterKind::LowPass(cutoff)) {
+        Ok(v) => v.iter().enumerate().map(|(i, y)| y + trend(i)).collect(),
+        Err(_) => ys[..n].to_vec(),
     }
 }
 
 /// 平滑。窗口点数会被调整为不小于 3 的奇数。
 /// 移动平均在两端缩小窗口；Savitzky-Golay 在两端平移窗口保持点数，并按实际 x 间距拟合。
 pub fn smooth(xs: &[f64], ys: &[f64], method: SmoothMethod, window: usize) -> Vec<f64> {
+    match method {
+        SmoothMethod::Lowess => return lowess(xs, ys, window),
+        SmoothMethod::FftFilter => return fft_smooth(xs, ys, window),
+        _ => {}
+    }
     let n = ys.len();
     let w = (window.max(3)) | 1;
     let h = w / 2;
@@ -252,6 +343,7 @@ pub fn smooth(xs: &[f64], ys: &[f64], method: SmoothMethod, window: usize) -> Ve
                     .map(|f| f.eval(xs[i]))
                     .unwrap_or(ys[i])
             }
+            SmoothMethod::Lowess | SmoothMethod::FftFilter => unreachable!(),
         })
         .collect()
 }
@@ -588,6 +680,144 @@ mod tests {
         let q: Vec<f64> = xs.iter().map(|x| 3.0 * x * x - x + 2.0).collect();
         assert!(sg_derivative(&xs, &q, 51, 2, 2).iter().all(|d| (d - 6.0).abs() < 1e-9));
         assert!(sg_derivative(&xs[..2], &q[..2], 5, 2, 1).iter().all(|d| d.is_nan()));
+    }
+
+    #[test]
+    fn lowess_and_fft_smoothing_match_numpy_references() {
+        // LOWESS 参考：NumPy 逐点取最近 k 点、tricube 权重加权线性最小二乘（输入 x 无序、不等间距）
+        let xp = [
+            2.359807621135331,
+            0.0,
+            12.419160170741758,
+            5.826012958872607,
+            0.75,
+            10.47846096908265,
+            4.0590169943749475,
+            7.65,
+            1.5414213562373094,
+            11.443608329051592,
+            4.934846922834953,
+            8.581138830084189,
+            3.1999999999999997,
+            9.52414363469547,
+            6.731370849898476,
+        ];
+        let yp = [
+            1.2393594152648446,
+            0.3,
+            0.9397088056528399,
+            -0.1587369139173762,
+            0.6250147004584157,
+            -0.12135780705562005,
+            -0.3990030405357141,
+            1.6745176613308415,
+            0.9967635735845345,
+            0.5036763647294626,
+            -0.2639511451346272,
+            1.4903286340883781,
+            0.04936229817811538,
+            1.1037479321589518,
+            1.3407074170470343,
+        ];
+        for (k, want) in [
+            (
+                5,
+                [
+                    0.826048407995424,
+                    0.3074982986326627,
+                    0.8181299180348789,
+                    0.24031276460305978,
+                    0.6263820870553979,
+                    0.41252336187186567,
+                    -0.22880148376920403,
+                    1.524568480510214,
+                    0.9560102423787585,
+                    0.5542156948059328,
+                    -0.27294086351347413,
+                    1.4329321951511074,
+                    0.26854767808896873,
+                    0.8648323762458509,
+                    1.0007572160338059,
+                ],
+            ),
+            (
+                9,
+                [
+                    0.43884185987169244,
+                    0.7824099153254878,
+                    0.4624738639160305,
+                    0.44560105972254715,
+                    0.6901662289415013,
+                    0.782390633499318,
+                    0.14366653566629586,
+                    1.0424922975400932,
+                    0.5702685475123925,
+                    0.6214830336031489,
+                    0.1812709093135082,
+                    1.0624786705017357,
+                    0.3025465641716403,
+                    0.9192846532158123,
+                    0.7992514043812813,
+                ],
+            ),
+        ] {
+            let got = smooth(&xp, &yp, SmoothMethod::Lowess, k);
+            for (g, w) in got.iter().zip(want) {
+                assert!((g - w).abs() < 1e-9, "k={k}: {g} vs {w}");
+            }
+        }
+        // 直线不变
+        let line: Vec<f64> = xp.iter().map(|x| 2.0 * x - 1.0).collect();
+        assert!(lowess(&xp, &line, 5)
+            .iter()
+            .zip(&line)
+            .all(|(a, b)| (a - b).abs() < 1e-9));
+        // FFT 平滑参考：numpy.fft.rfft 去首尾趋势、频率 > 1/(5·0.1) 置零、irfft 后加回趋势
+        let t: Vec<f64> = (0..32).map(|i| i as f64 * 0.1).collect();
+        let s: Vec<f64> = t
+            .iter()
+            .map(|t| {
+                let tau = 2.0 * std::f64::consts::PI;
+                (tau * 0.8 * t).sin() + 0.25 * (tau * 4.0 * t).sin() + 0.5 * t
+            })
+            .collect();
+        let want = [
+            0.09023167491837975,
+            0.4803506441091951,
+            0.923918654360487,
+            1.1756623432721311,
+            1.1244989072477463,
+            0.8238938517285221,
+            0.40491277963974576,
+            -0.015327456136765671,
+            -0.35212032417634176,
+            -0.5261824557321666,
+            -0.4644858113706162,
+            -0.1467352511104726,
+            0.35766069828793345,
+            0.9135268792082749,
+            1.3861355697679818,
+            1.687261598598019,
+            1.7733249019269877,
+            1.6297979476553839,
+            1.2825163237032107,
+            0.822669805404732,
+            0.39549121175389823,
+            0.13814642664674448,
+            0.11710981980833912,
+            0.32228619407436376,
+            0.7091457467732173,
+            1.2241424069950442,
+            1.7797380040387454,
+            2.229453934181274,
+            2.41861869394293,
+            2.3034414995185717,
+            2.027537549636495,
+            1.8523774107559259,
+        ];
+        for (g, w) in smooth(&t, &s, SmoothMethod::FftFilter, 5).iter().zip(want) {
+            assert!((g - w).abs() < 1e-9, "{g} vs {w}");
+        }
     }
 
     #[test]

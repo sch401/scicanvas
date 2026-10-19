@@ -462,7 +462,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                         egui::ComboBox::from_id_salt("smooth-method")
                             .selected_text(method.label())
                             .show_ui(ui, |ui| {
-                                for m in [SmoothMethod::SavitzkyGolay, SmoothMethod::MovingAverage] {
+                                for m in SmoothMethod::ALL {
                                     ui.selectable_value(method, m, m.label());
                                 }
                             });
@@ -472,9 +472,13 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                         ui.end_row();
                     });
                 ui.label(
-                    RichText::new("窗口点数取奇数。Savitzky-Golay 能更好地保留峰形。")
-                        .small()
-                        .color(pal.weak),
+                    RichText::new(match method {
+                        SmoothMethod::Lowess => "窗口点数即每点参与局部回归的近邻数。",
+                        SmoothMethod::FftFilter => "滤掉高于 1/(窗口点数·ΔX) 的频率，需要等间距 X。",
+                        _ => "窗口点数取奇数。Savitzky-Golay 能更好地保留峰形。",
+                    })
+                    .small()
+                    .color(pal.weak),
                 );
                 let (ok, cancel) = buttons(ui, "平滑");
                 if ok {
