@@ -155,6 +155,146 @@ pub fn axis(vals: &[f64], auto: bool, min: f64, max: f64, log: bool, force_zero:
     }
 }
 
+/// 日期刻度的时间单位，决定标签写法。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DateUnit {
+    Second,
+    Minute,
+    Hour,
+    Day,
+    Month,
+    Year,
+}
+
+const SECOND: f64 = 1000.0;
+const MINUTE: f64 = 60.0 * SECOND;
+const HOUR: f64 = 60.0 * MINUTE;
+const DAY: f64 = 24.0 * HOUR;
+
+/// 日期轴（值为 UTC 毫秒）：从秒到年挑一个使刻度间隔不超过 5 个（月、年为 6 个）的整步长；
+/// 秒、分、时、日按固定间隔对齐到 UTC，月、年按日历取整。`auto` 时把范围扩到整步长。
+pub fn date_axis(lo: f64, hi: f64, auto: bool) -> (Axis, DateUnit) {
+    let (lo, hi) = if hi > lo {
+        (lo, hi)
+    } else {
+        (lo - DAY / 2.0, lo + DAY / 2.0)
+    };
+    let span = hi - lo;
+    let fixed: [(f64, DateUnit); 21] = [
+        (SECOND, DateUnit::Second),
+        (2.0 * SECOND, DateUnit::Second),
+        (5.0 * SECOND, DateUnit::Second),
+        (10.0 * SECOND, DateUnit::Second),
+        (15.0 * SECOND, DateUnit::Second),
+        (30.0 * SECOND, DateUnit::Second),
+        (MINUTE, DateUnit::Minute),
+        (2.0 * MINUTE, DateUnit::Minute),
+        (5.0 * MINUTE, DateUnit::Minute),
+        (10.0 * MINUTE, DateUnit::Minute),
+        (15.0 * MINUTE, DateUnit::Minute),
+        (30.0 * MINUTE, DateUnit::Minute),
+        (HOUR, DateUnit::Hour),
+        (2.0 * HOUR, DateUnit::Hour),
+        (3.0 * HOUR, DateUnit::Hour),
+        (6.0 * HOUR, DateUnit::Hour),
+        (12.0 * HOUR, DateUnit::Hour),
+        (DAY, DateUnit::Day),
+        (2.0 * DAY, DateUnit::Day),
+        (7.0 * DAY, DateUnit::Day),
+        (14.0 * DAY, DateUnit::Day),
+    ];
+    let make = |lo: f64, hi: f64, ticks: Vec<f64>| {
+        let minor = ticks
+            .windows(2)
+            .map(|w| (w[0] + w[1]) / 2.0)
+            .filter(|m| *m > lo && *m < hi)
+            .collect();
+        Axis {
+            lo,
+            hi,
+            ticks,
+            minor,
+            log: false,
+        }
+    };
+    if let Some(&(step, unit)) = fixed.iter().find(|(step, _)| span / step <= 5.0) {
+        let (a, b) = if auto {
+            ((lo / step).floor() * step, (hi / step).ceil() * step)
+        } else {
+            (lo, hi)
+        };
+        let first = (a / step - 1e-9).ceil() as i64;
+        let last = (b / step + 1e-9).floor() as i64;
+        return (make(a, b, (first..=last).map(|k| k as f64 * step).collect()), unit);
+    }
+    // 月、年：在日历上按月数步进
+    use chrono::{Datelike, TimeZone, Utc};
+    let to_month = |ms: f64| {
+        let t = chrono::DateTime::from_timestamp_millis(ms as i64).unwrap_or_default();
+        t.year() as i64 * 12 + t.month0() as i64
+    };
+    let month_ms = |m: i64| {
+        Utc.with_ymd_and_hms(m.div_euclid(12) as i32, m.rem_euclid(12) as u32 + 1, 1, 0, 0, 0)
+            .single()
+            .map_or(f64::NAN, |t| t.timestamp_millis() as f64)
+    };
+    let months = (to_month(hi) - to_month(lo) + 1).max(1);
+    let steps = [1, 2, 3, 6, 12, 24, 60, 120, 240, 600, 1200];
+    let step = steps
+        .iter()
+        .copied()
+        .find(|s| months / s <= 6)
+        .unwrap_or(12 * ((months / 72) + 1));
+    let unit = if step >= 12 { DateUnit::Year } else { DateUnit::Month };
+    let m0 = to_month(lo).div_euclid(step) * step;
+    let start = if month_ms(m0) < lo && !auto { m0 + step } else { m0 };
+    let (a, b) = if auto {
+        let end = to_month(hi) + if month_ms(to_month(hi)) < hi { 1 } else { 0 };
+        let end = (end + step - 1).div_euclid(step) * step;
+        (month_ms(m0), month_ms(end))
+    } else {
+        (lo, hi)
+    };
+    let mut ticks = vec![];
+    let mut m = start;
+    while month_ms(m) <= b + 1e-6 {
+        ticks.push(month_ms(m));
+        m += step;
+    }
+    (make(a, b, ticks), unit)
+}
+
+/// 日期刻度标签（UTC）。
+pub fn format_date_tick(ms: f64, unit: DateUnit) -> String {
+    let Some(t) = chrono::DateTime::from_timestamp_millis(ms.round() as i64) else {
+        return String::new();
+    };
+    let pattern = match unit {
+        DateUnit::Year => "%Y",
+        DateUnit::Month => "%Y-%m",
+        DateUnit::Day => "%Y-%m-%d",
+        DateUnit::Hour | DateUnit::Minute => "%m-%d %H:%M",
+        DateUnit::Second => "%H:%M:%S",
+    };
+    t.format(pattern).to_string()
+}
+
+/// 一个坐标轴的刻度标签写法：数字格式（Auto 为默认写法）或日期。
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum TickLabel {
+    Number(crate::format::NumberFormat),
+    Date(DateUnit),
+}
+
+impl TickLabel {
+    pub fn text(self, v: f64) -> String {
+        match self {
+            TickLabel::Number(f) => f.apply(v).unwrap_or_else(|| format_tick(v)),
+            TickLabel::Date(unit) => format_date_tick(v, unit),
+        }
+    }
+}
+
 fn superscript(n: i32) -> String {
     n.to_string()
         .chars()
@@ -253,5 +393,56 @@ mod tests {
         assert_eq!(format_tick(f64::NAN), "NaN");
         assert_eq!(format_tick(f64::INFINITY), "inf");
         assert_eq!(format_tick(f64::NEG_INFINITY), "-inf");
+    }
+
+    fn ms(text: &str) -> f64 {
+        chrono::NaiveDateTime::parse_from_str(text, "%Y-%m-%d %H:%M:%S")
+            .unwrap()
+            .and_utc()
+            .timestamp_millis() as f64
+    }
+
+    #[test]
+    fn date_axes_pick_calendar_steps_and_labels() {
+        let labels = |a: &Axis, u: DateUnit| a.ticks.iter().map(|t| format_date_tick(*t, u)).collect::<Vec<_>>();
+        // 3 天：按日，对齐到 UTC 零点
+        let (a, u) = date_axis(ms("2026-10-18 06:00:00"), ms("2026-10-20 20:00:00"), true);
+        assert_eq!(u, DateUnit::Day);
+        assert_eq!(labels(&a, u), ["2026-10-18", "2026-10-19", "2026-10-20", "2026-10-21"]);
+        assert_eq!((a.lo, a.hi), (ms("2026-10-18 00:00:00"), ms("2026-10-21 00:00:00")));
+        // 10 小时：每 2 小时
+        let (a, u) = date_axis(ms("2026-10-18 01:10:00"), ms("2026-10-18 11:00:00"), true);
+        assert_eq!(u, DateUnit::Hour);
+        assert_eq!(labels(&a, u).first().unwrap(), "10-18 00:00");
+        assert!(a.ticks.windows(2).all(|w| w[1] - w[0] == 2.0 * HOUR));
+        // 一年多：每 3 个月，落在 1/4/7/10 月 1 日
+        let (a, u) = date_axis(ms("2025-08-15 00:00:00"), ms("2026-10-01 00:00:00"), true);
+        assert_eq!(u, DateUnit::Month);
+        assert_eq!(
+            labels(&a, u),
+            ["2025-07", "2025-10", "2026-01", "2026-04", "2026-07", "2026-10"]
+        );
+        // 三十年：每 5 年
+        let (a, u) = date_axis(ms("1996-03-01 00:00:00"), ms("2026-10-01 00:00:00"), true);
+        assert_eq!(u, DateUnit::Year);
+        assert_eq!(
+            labels(&a, u),
+            ["1995", "2000", "2005", "2010", "2015", "2020", "2025", "2030"]
+        );
+        // 手动范围：不扩展，只取范围内的整刻度
+        let (a, u) = date_axis(ms("2026-10-18 06:00:00"), ms("2026-10-20 20:00:00"), false);
+        assert_eq!((a.lo, labels(&a, u).len()), (ms("2026-10-18 06:00:00"), 2));
+    }
+
+    #[test]
+    fn tick_labels_follow_number_formats() {
+        use crate::format::NumberFormat;
+        assert_eq!(TickLabel::Number(NumberFormat::Auto).text(2e-4), "2×10⁻⁴");
+        assert_eq!(TickLabel::Number(NumberFormat::Decimal { places: 2 }).text(1.5), "1.50");
+        assert_eq!(TickLabel::Number(NumberFormat::Percent { places: 0 }).text(0.25), "25%");
+        assert_eq!(
+            TickLabel::Number(NumberFormat::Engineering { places: 1 }).text(0.0012),
+            "1.2m"
+        );
     }
 }

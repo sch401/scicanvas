@@ -7,7 +7,7 @@
 use crate::coord::{Cartesian, Coord};
 use crate::model::{series_styles, Book, Graph, PlotType, Symbol};
 use crate::page::Layer;
-use crate::ticks::{axis, format_tick, Axis};
+use crate::ticks::{axis, Axis, TickLabel};
 
 pub type Rgb = (u8, u8, u8);
 
@@ -724,10 +724,12 @@ fn build_layer_full(
 ) -> Scene {
     let horizontal = g.plot_type == PlotType::HorizontalBar;
     // 数据（对数轴去掉非正值）
-    let (_, mut series) = match book {
+    let (x_col, mut series) = match book {
         Some(b) => g.series(b),
         None => (None, Vec::new()),
     };
+    // 日期时间列做 X：用日期刻度（值为 UTC 毫秒）
+    let x_date = !horizontal && !g.x_log && x_col.is_some_and(|c| c.data.kind() == crate::DataKind::DateTime);
     if horizontal {
         for s in &mut series {
             for p in &mut s.points {
@@ -876,12 +878,27 @@ fn build_layer_full(
             (xa, ya)
         }
     };
+    let (xa, x_label) = if x_date {
+        let (axis, unit) = match view {
+            Some(v) => crate::ticks::date_axis(v.x.0, v.x.1, false),
+            None if g.x_auto && !all_x.is_empty() => {
+                let lo = all_x.iter().copied().fold(f64::INFINITY, f64::min);
+                let hi = all_x.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                crate::ticks::date_axis(lo, hi, true)
+            }
+            None => crate::ticks::date_axis(xa.lo, xa.hi, false),
+        };
+        (axis, TickLabel::Date(unit))
+    } else {
+        (xa, TickLabel::Number(g.x_format))
+    };
+    let y_label = TickLabel::Number(g.y_format);
 
     // 版面：刻度朝外，刻度标签和轴标题依次排在左轴、下轴外侧
     let ylab_w = ya
         .ticks
         .iter()
-        .map(|t| text_width(&format_tick(*t), TICK_FONT))
+        .map(|t| text_width(&y_label.text(*t), TICK_FONT))
         .fold(8.0, f64::max);
     let has_title = !g.title.trim().is_empty();
     // 刻度在框外的长度：朝内时刻度标签直接贴近坐标轴
@@ -1323,7 +1340,7 @@ fn build_layer_full(
             text(
                 x,
                 top + ph + out + TICK_GAP + TICK_FONT / 2.0,
-                format_tick(*t),
+                x_label.text(*t),
                 TICK_FONT,
                 Anchor::Middle,
             ),
@@ -1349,7 +1366,7 @@ fn build_layer_full(
         }
         y_tick(&mut ticks, y, MAJOR_TICK);
         push(
-            text(left - out - TICK_GAP, y, format_tick(*t), TICK_FONT, Anchor::End),
+            text(left - out - TICK_GAP, y, y_label.text(*t), TICK_FONT, Anchor::End),
             false,
         );
     }

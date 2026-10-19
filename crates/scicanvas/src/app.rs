@@ -2298,6 +2298,32 @@ impl SciApp {
                         );
                         ui.end_row();
 
+                        // 刻度格式：日期列做 X 时自动用日期刻度，这里只设数字格式
+                        for (label, format, salt) in [
+                            ("X 刻度格式", &mut g.x_format, "props-x-format"),
+                            ("Y 刻度格式", &mut g.y_format, "props-y-format"),
+                        ] {
+                            use scicanvas_core::format::NumberFormat;
+                            ui.label(label);
+                            ui.horizontal(|ui| {
+                                let mut kind = format.index();
+                                let mut places = format.places();
+                                egui::ComboBox::from_id_salt(salt)
+                                    .selected_text(NumberFormat::KINDS[kind])
+                                    .show_ui(ui, |ui| {
+                                        for (i, name) in NumberFormat::KINDS.iter().enumerate() {
+                                            ui.selectable_value(&mut kind, i, *name);
+                                        }
+                                    });
+                                if kind != 0 {
+                                    ui.label("小数位");
+                                    ui.add(egui::DragValue::new(&mut places).range(0..=10));
+                                }
+                                *format = NumberFormat::from_index(kind, places);
+                            });
+                            ui.end_row();
+                        }
+
                         ui.label("X 范围");
                         ui.horizontal(|ui| {
                             ui.checkbox(&mut g.x_auto, "自动");

@@ -342,3 +342,40 @@ fn nearest_point_uses_segment_values_and_swapped_axes() {
         assert!(scene::nearest_point(layer, view, None, at[0], at[1], 6.0).is_none());
     }
 }
+
+#[test]
+fn datetime_x_columns_get_date_tick_labels() {
+    let (mut p, id) = project(PlotType::LineSymbol);
+    let b = p.book_mut(1).unwrap();
+    b.columns[0].data = ["2026-10-18", "2026-10-19", "2026-10-20", "2026-10-21"]
+        .map(str::to_string)
+        .to_vec()
+        .into();
+    b.convert_columns(&["A".into()], scicanvas_core::DataKind::DateTime)
+        .unwrap();
+    let texts: Vec<String> = scene::layout_page(p.graph(id).unwrap(), &p, &[])
+        .items
+        .iter()
+        .filter_map(|it| match &it.prim {
+            Prim::Text { text, .. } if it.clip.is_none() => Some(text.clone()),
+            _ => None,
+        })
+        .collect();
+    for day in ["2026-10-18", "2026-10-19", "2026-10-20", "2026-10-21"] {
+        assert!(texts.iter().any(|t| t == day), "{texts:?}");
+    }
+    // Y 轴数字格式
+    p.graph_mut(id).unwrap().first_layer_mut().y_format = scicanvas_core::format::NumberFormat::Decimal { places: 2 };
+    let texts: Vec<String> = scene::layout_page(p.graph(id).unwrap(), &p, &[])
+        .items
+        .iter()
+        .filter_map(|it| match &it.prim {
+            Prim::Text { text, .. } if it.clip.is_none() => Some(text.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        texts.iter().any(|t| t == "0.20") && texts.iter().any(|t| t == "1.00"),
+        "{texts:?}"
+    );
+}

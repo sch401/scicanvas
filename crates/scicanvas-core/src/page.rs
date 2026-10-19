@@ -153,6 +153,11 @@ pub struct Layer {
     pub frame: bool,
     #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "TickDir::is_out"))]
     pub tick_dir: TickDir,
+    /// 刻度标签的数字格式（日期列做 X 时自动用日期刻度）。
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "is_auto_number"))]
+    pub x_format: crate::format::NumberFormat,
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "is_auto_number"))]
+    pub y_format: crate::format::NumberFormat,
     /// 折线、点线图的连接方式。
     #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Connect::is_straight"))]
     pub connect: Connect,
@@ -187,6 +192,11 @@ impl Connect {
 #[cfg(feature = "serde")]
 fn is_false(v: &bool) -> bool {
     !*v
+}
+
+#[cfg(feature = "serde")]
+fn is_auto_number(f: &crate::format::NumberFormat) -> bool {
+    *f == crate::format::NumberFormat::Auto
 }
 
 /// 刻度方向（相对坐标框）。
@@ -251,6 +261,8 @@ impl Default for Layer {
             frame: false,
             tick_dir: TickDir::Out,
             connect: Connect::Straight,
+            x_format: crate::format::NumberFormat::Auto,
+            y_format: crate::format::NumberFormat::Auto,
         }
     }
 }
