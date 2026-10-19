@@ -330,7 +330,12 @@ impl SciApp {
             .extension()
             .and_then(|e| e.to_str())
             .is_some_and(|e| ["xlsx", "xlsm", "xls"].iter().any(|x| e.eq_ignore_ascii_case(x)));
-        let tables: Vec<(String, Vec<Vec<String>>)> = if excel {
+        // Excel 读成行表；CSV 直接由文本建表（流式写入类型化列，大文件占内存少）
+        enum Table {
+            Rows(Vec<Vec<String>>),
+            Text(String),
+        }
+        let tables: Vec<(String, Table)> = if excel {
             match scicanvas_core::xlsx::read(&bytes) {
                 Ok(sheets) => {
                     let sheets: Vec<_> = sheets.into_iter().filter(|s| !s.rows.is_empty()).collect();
@@ -343,7 +348,7 @@ impl SciApp {
                             } else {
                                 format!("{stem}-{}", s.name)
                             };
-                            (name, s.rows)
+                            (name, Table::Rows(s.rows))
                         })
                         .collect()
                 }
@@ -353,23 +358,32 @@ impl SciApp {
                 }
             }
         } else {
-            vec![(stem, csv::parse_table(&csv::decode(&bytes)))]
+            vec![(stem, Table::Text(csv::decode(&bytes)))]
         };
-        let tables: Vec<_> = tables.into_iter().filter(|(_, rows)| !rows.is_empty()).collect();
+        let tables: Vec<_> = tables
+            .into_iter()
+            .filter(|(_, t)| match t {
+                Table::Rows(rows) => !rows.is_empty(),
+                Table::Text(text) => !text.trim().is_empty(),
+            })
+            .collect();
         if tables.is_empty() {
             self.status = "文件里没有数据".into();
             return;
         }
         let mut done = vec![];
         let mut last = None;
-        for (base, rows) in tables {
+        for (base, table) in tables {
             let name = if self.project.books.iter().any(|b| b.name == base) {
                 self.project.unique_name(&format!("{}_", base))
             } else {
                 base
             };
             let id = self.project.alloc_id();
-            let book = csv::book_from_table(id, &name, rows);
+            let book = match table {
+                Table::Rows(rows) => csv::book_from_table(id, &name, rows),
+                Table::Text(text) => csv::book_from_text(id, &name, &text),
+            };
             done.push(format!("{}（{} 行 × {} 列）", name, book.nrows(), book.columns.len()));
             self.project.books.push(book);
             let parent = self.current_folder();
@@ -2836,6 +2850,71 @@ mod history_tests {
 
     fn app() -> SciApp {
         SciApp::initial(theme::palette(egui::Theme::Light))
+    }
+
+    /// 百万行十列的首帧测量（不进 CI）：
+    /// `cargo test --release -p scicanvas --bin scicanvas million_row_first_frame -- --ignored --nocapture`
+    /// 计时包括导入、建图和完整界面首帧（布局与三角化，不含 GPU 提交）；进程峰值内存由外部采样。
+    #[test]
+    #[ignore]
+    fn million_row_first_frame() {
+        use std::fmt::Write;
+        use std::time::Instant;
+        let rows = 1_000_000;
+        let mut input = String::from("X,Y1,Y2,Y3,Y4,Y5,Y6,Y7,Y8,Y9\n");
+        for i in (0..rows).rev() {
+            writeln!(
+                input,
+                "{i},{},{},{},{},{},{},{},{},{}",
+                i % 97,
+                i % 89,
+                i % 83,
+                i % 79,
+                i % 73,
+                i % 71,
+                i % 67,
+                i % 61,
+                i % 59
+            )
+            .unwrap();
+        }
+        let mut app = app();
+        let t = Instant::now();
+        let id = app.project.alloc_id();
+        let book = scicanvas_core::csv::book_from_text(id, "Million", &input);
+        drop(input);
+        app.project.books.push(book);
+        let import = t.elapsed();
+        let t = Instant::now();
+        let (gid, _) = app
+            .project
+            .plot_from_selection(id, &["B".into()], PlotType::Scatter)
+            .unwrap();
+        app.show_item(id);
+        app.show_item(gid);
+        let plot = t.elapsed();
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        egui_extras::install_image_loaders(&ctx);
+        let input = || egui::RawInput {
+            screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1600.0, 900.0))),
+            ..Default::default()
+        };
+        let frame = |app: &mut SciApp| {
+            let t = Instant::now();
+            let out = ctx.run(input(), |ctx| app.ui_frame(ctx));
+            let meshes = ctx.tessellate(out.shapes, out.pixels_per_point);
+            (t.elapsed(), meshes.len())
+        };
+        let (first, meshes) = frame(&mut app);
+        let (second, _) = frame(&mut app);
+        println!(
+            "PERF import_ms={:.1} plot_ms={:.1} first_frame_ms={:.1} second_frame_ms={:.1} meshes={meshes}",
+            import.as_secs_f64() * 1000.0,
+            plot.as_secs_f64() * 1000.0,
+            first.as_secs_f64() * 1000.0,
+            second.as_secs_f64() * 1000.0
+        );
     }
 
     fn roundtrip(app: &mut SciApp, before: &Project) {

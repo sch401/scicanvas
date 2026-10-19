@@ -32,11 +32,22 @@ enum Delim {
 /// 支持双引号包裹的字段（字段里可以有分隔符，"" 表示一个引号）。
 pub fn parse_table(text: &str) -> Vec<Vec<String>> {
     let text = text.replace("\r\n", "\n").replace('\r', "\n");
+    let lines = table_lines(&text);
+    let delim = detect_delim(&lines);
+    lines.iter().map(|l| split_line(l, delim)).collect()
+}
+
+/// 按行切分，去掉末尾的空行。
+fn table_lines(text: &str) -> Vec<&str> {
     let mut lines: Vec<&str> = text.split('\n').collect();
     while lines.last().is_some_and(|l| l.trim().is_empty()) {
         lines.pop();
     }
-    let delim = if lines.iter().any(|l| l.contains('\t')) {
+    lines
+}
+
+fn detect_delim(lines: &[&str]) -> Delim {
+    if lines.iter().any(|l| l.contains('\t')) {
         Delim::Char('\t')
     } else if lines.iter().any(|l| l.contains(',')) {
         Delim::Char(',')
@@ -44,8 +55,53 @@ pub fn parse_table(text: &str) -> Vec<Vec<String>> {
         Delim::Char(';')
     } else {
         Delim::Whitespace
+    }
+}
+
+/// 由文本直接建工作簿（结果与 `book_from_table(parse_table(text))` 相同）：逐行解析后直接写入
+/// 类型化列，不生成整张字符串表，百万行导入时峰值内存小得多。
+pub fn book_from_text(id: u64, name: &str, text: &str) -> Book {
+    let normalized;
+    let text = if text.contains('\r') {
+        normalized = text.replace("\r\n", "\n").replace('\r', "\n");
+        normalized.as_str()
+    } else {
+        text
     };
-    lines.iter().map(|l| split_line(l, delim)).collect()
+    let lines = table_lines(text);
+    let delim = detect_delim(&lines);
+    let mut book = Book::new(id, name);
+    let first = lines.first().map(|l| split_line(l, delim));
+    let header = first.filter(|row| lines.len() > 1 && row.iter().any(|s| !s.trim().is_empty() && !looks_numeric(s)));
+    let add_column = |book: &mut Book, j: usize, rows_so_far: usize| {
+        let key = book.push_column(if j == 0 { Role::X } else { Role::Y });
+        let col = book.columns.iter_mut().find(|c| c.key == key).unwrap();
+        if let Some(h) = &header {
+            let (n, u) = split_name_units(h.get(j).map(|s| s.as_str()).unwrap_or(""));
+            col.long_name = n;
+            col.units = u;
+        }
+        for _ in 0..rows_so_far {
+            col.data.push(String::new());
+        }
+    };
+    for j in 0..header.as_ref().map_or(0, Vec::len) {
+        add_column(&mut book, j, 0);
+    }
+    let skip = usize::from(header.is_some());
+    for (r, line) in lines.iter().skip(skip).enumerate() {
+        let cells = split_line(line, delim);
+        while book.columns.len() < cells.len() {
+            let j = book.columns.len();
+            add_column(&mut book, j, r);
+        }
+        let mut cells = cells.into_iter();
+        for col in &mut book.columns {
+            col.data.push(cells.next().unwrap_or_default());
+        }
+    }
+    finish_columns(&mut book);
+    book
 }
 
 fn split_line(line: &str, delim: Delim) -> Vec<String> {
@@ -133,9 +189,14 @@ pub fn book_from_table(id: u64, name: &str, mut rows: Vec<Vec<String>>) -> Book 
             col.data.push(cells.next().unwrap_or_default());
         }
     }
+    finish_columns(&mut book);
+    book
+}
+
+/// 去掉末尾空值；全部是日期写法的文本列（如 Excel 日期、ISO 日期）转为日期时间列。
+fn finish_columns(book: &mut Book) {
     for col in &mut book.columns {
         col.data.trim_empty();
-        // 全部是日期写法的文本列（如 Excel 日期、ISO 日期）转为日期时间列
         if col.data.kind() == crate::DataKind::Text
             && (0..col.data.len()).any(|r| !col.data.text_at(r).trim().is_empty())
         {
@@ -144,7 +205,6 @@ pub fn book_from_table(id: u64, name: &str, mut rows: Vec<Vec<String>>) -> Book 
             }
         }
     }
-    book
 }
 
 /// 文本里有制表符或换行时视为多单元格粘贴（从 Excel 复制的一块区域）。
@@ -200,6 +260,48 @@ pub fn paste_into(book: &mut Book, col: usize, row: usize, text: &str) -> (usize
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn streaming_import_matches_the_row_table_import() {
+        for text in [
+            "时间 (s),电压 (mV)
+0,1.5
+1,2.5
+",
+            "1 2 3
+4 5 6
+",
+            "a	b
+\"x, y\"	2
+3	\"he said \"\"hi\"\"\"
+",
+            "X,Y
+1,2
+3,4,5,6
+7
+",
+            "日期,值
+2026-10-18,1
+2026-10-19,2
+
+
+",
+            "A,B,C,D
+1,2
+",
+            "only
+",
+            "",
+            "1;2
+3;x
+;5
+",
+        ] {
+            let a = book_from_text(1, "T", text);
+            let b = book_from_table(1, "T", parse_table(text));
+            assert_eq!(a, b, "{text:?}");
+        }
+    }
 
     #[test]
     fn detects_delimiters() {

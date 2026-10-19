@@ -608,6 +608,50 @@ fn row_runs(s: &crate::Series) -> Vec<std::ops::Range<usize>> {
     out
 }
 
+/// 大数据折线抽点：点数超过坐标框宽度的 4 倍时，按页面上的每个像素列保留首点、最低点、最高点和末点
+/// （保持顺序），曲线外形与逐点绘制相同。
+fn decimate_line(pts: Vec<[f64; 2]>, width: f64) -> Vec<[f64; 2]> {
+    if (pts.len() as f64) <= 4.0 * width.max(1.0) {
+        return pts;
+    }
+    let mut out = Vec::with_capacity((4.0 * width) as usize + 8);
+    let mut start = 0;
+    while start < pts.len() {
+        let column = pts[start][0].floor();
+        let mut end = start + 1;
+        while end < pts.len() && pts[end][0].floor() == column {
+            end += 1;
+        }
+        let group = &pts[start..end];
+        let (mut lo, mut hi) = (0, 0);
+        for (i, p) in group.iter().enumerate() {
+            if p[1] < group[lo][1] {
+                lo = i;
+            }
+            if p[1] > group[hi][1] {
+                hi = i;
+            }
+        }
+        let mut keep = vec![0, lo, hi, group.len() - 1];
+        keep.sort_unstable();
+        keep.dedup();
+        out.extend(keep.into_iter().map(|i| group[i]));
+        start = end;
+    }
+    out
+}
+
+/// 大数据符号去重：点数超过坐标框宽度的 4 倍时，同一个 0.5 单位格子里只画一个符号。
+fn decimate_symbols(pts: Vec<[f64; 2]>, width: f64) -> Vec<[f64; 2]> {
+    if (pts.len() as f64) <= 4.0 * width.max(1.0) {
+        return pts;
+    }
+    let mut seen = std::collections::HashSet::with_capacity(pts.len().min(1 << 20));
+    pts.into_iter()
+        .filter(|p| seen.insert(((p[0] * 2.0).round() as i64, (p[1] * 2.0).round() as i64)))
+        .collect()
+}
+
 /// 面积和样条用的分段：每段按 X 排序。
 fn data_runs(s: &crate::Series) -> Vec<Vec<[f64; 2]>> {
     row_runs(s)
@@ -1271,7 +1315,7 @@ fn build_layer_full(
                         crate::page::Connect::Bezier if !s.line_only => crate::spline::bezier(run, 16),
                         _ => run.to_vec(),
                     };
-                    curve.iter().map(|p| [px(p[0]), py(p[1])]).collect()
+                    decimate_line(curve.iter().map(|p| [px(p[0]), py(p[1])]).collect(), pw)
                 };
                 push(
                     Prim::Polyline {
@@ -1284,12 +1328,14 @@ fn build_layer_full(
             }
         }
         if st.kind.has_symbol() {
-            let pts: Vec<[f64; 2]> = s
-                .points
-                .iter()
-                .map(|p| [px(p[0]), py(p[1])])
-                .filter(|p| inside_x(p[0]) && inside_y(p[1]))
-                .collect();
+            let pts: Vec<[f64; 2]> = decimate_symbols(
+                s.points
+                    .iter()
+                    .map(|p| [px(p[0]), py(p[1])])
+                    .filter(|p| inside_x(p[0]) && inside_y(p[1]))
+                    .collect(),
+                pw,
+            );
             symbols.push(Prim::Symbols {
                 sym: st.symbol,
                 pts,
@@ -1794,6 +1840,29 @@ mod tests {
             );
             assert!(s[3] - s[1] <= MAJOR_TICK * k + 1e-9 && s[0] - s[2] <= MAJOR_TICK * k + 1e-9);
         }
+    }
+
+    #[test]
+    fn decimation_keeps_extremes_per_pixel_column_and_small_data_untouched() {
+        let small: Vec<[f64; 2]> = (0..10).map(|i| [i as f64, (i * i) as f64]).collect();
+        assert_eq!(decimate_line(small.clone(), 100.0), small);
+        assert_eq!(decimate_symbols(small.clone(), 100.0), small);
+        // 10 万点挤在 100 个像素列里：每列至多 4 点，保留每列的最高与最低点
+        let pts: Vec<[f64; 2]> = (0..100_000)
+            .map(|i| [i as f64 / 1000.0, ((i as f64) * 0.37).sin() * 50.0])
+            .collect();
+        let out = decimate_line(pts.clone(), 100.0);
+        assert!(out.len() <= 400, "{}", out.len());
+        for column in 0..100 {
+            let group: Vec<&[f64; 2]> = pts.iter().filter(|p| p[0].floor() == column as f64).collect();
+            let kept: Vec<&[f64; 2]> = out.iter().filter(|p| p[0].floor() == column as f64).collect();
+            let max = group.iter().map(|p| p[1]).fold(f64::MIN, f64::max);
+            let min = group.iter().map(|p| p[1]).fold(f64::MAX, f64::min);
+            assert!(kept.iter().any(|p| p[1] == max) && kept.iter().any(|p| p[1] == min));
+            assert_eq!(kept.first().unwrap(), group.first().unwrap());
+            assert_eq!(kept.last().unwrap(), group.last().unwrap());
+        }
+        assert!(decimate_symbols(pts, 100.0).len() < 100_000);
     }
 
     #[test]

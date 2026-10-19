@@ -22,6 +22,99 @@ struct Saved {
     spec: scicanvas_core::plotspec::PlotSpec,
 }
 
+/// 场景缓存：图形设置、视图和所引用的数据都没变时，复用上一帧的排版（百万点的图不必每帧重算）。
+#[derive(Clone)]
+struct CachedScene {
+    graph: Graph,
+    views: Vec<Option<View>>,
+    data: u64,
+    scene: std::sync::Arc<Scene>,
+}
+
+/// 图形引用的列（X、Y、浮动柱下端、误差列、标签列）的内容指纹：数值、文字、名称和单位都参与。
+fn data_fingerprint(g: &Graph, project: &Project) -> u64 {
+    use scicanvas_core::Role;
+    let mut h: u64 = 0xcbf2_9ce4_8422_2325;
+    let mut mix = |v: u64| {
+        h = (h ^ v).wrapping_mul(0x0000_0100_0000_01b3);
+    };
+    let text = |t: &str, mix: &mut dyn FnMut(u64)| {
+        mix(t.len() as u64);
+        for chunk in t.as_bytes().chunks(8) {
+            let mut b = [0u8; 8];
+            b[..chunk.len()].copy_from_slice(chunk);
+            mix(u64::from_le_bytes(b));
+        }
+    };
+    for layer in g.page.layers() {
+        let Some(book) = layer.book_id.and_then(|b| project.book(b)) else {
+            mix(0);
+            continue;
+        };
+        mix(book.id);
+        let used = |k: &str| {
+            layer.x_key.as_deref() == Some(k)
+                || layer.y_keys.iter().any(|y| y == k)
+                || layer.x_by_y.values().any(|x| x == k)
+                || layer.base_by_y.values().any(|b| b == k)
+                || layer.labels.column.as_deref() == Some(k)
+        };
+        for col in &book.columns {
+            if !used(&col.key) && !matches!(col.role, Role::XError | Role::YError | Role::Label) {
+                continue;
+            }
+            text(&col.key, &mut mix);
+            text(&col.long_name, &mut mix);
+            text(&col.units, &mut mix);
+            mix(col.role as u64);
+            mix(col.format.utc_offset as u64);
+            mix(col.data.len() as u64);
+            if let Some(levels) = col.data.category_levels() {
+                for l in &levels {
+                    text(l, &mut mix);
+                }
+            }
+            for row in 0..col.data.len() {
+                match col.data.f64_at(row) {
+                    Some(v) => mix(v.to_bits()),
+                    None => text(&col.data.text_at(row), &mut mix),
+                }
+            }
+        }
+    }
+    h
+}
+
+/// 取场景：与缓存的图形、视图、数据指纹都相同时复用，否则重新排版并更新缓存。
+fn cached_layout(
+    ui: &egui::Ui,
+    id: egui::Id,
+    g: &Graph,
+    project: &Project,
+    views: Vec<Option<View>>,
+) -> std::sync::Arc<Scene> {
+    let key = id.with("scene-cache");
+    let data = data_fingerprint(g, project);
+    if let Some(c) = ui.data(|d| d.get_temp::<CachedScene>(key)) {
+        if c.data == data && c.views == views && c.graph == *g {
+            return c.scene;
+        }
+    }
+    let scene = std::sync::Arc::new(scene::layout_page(g, project, &views));
+    ui.data_mut(|d| {
+        d.insert_temp(
+            key,
+            CachedScene {
+                graph: g.clone(),
+                views,
+                data,
+                scene: scene.clone(),
+            },
+        )
+    });
+    scene
+}
+
 fn axis_key(g: &Layer) -> [f64; 8] {
     let b = |v: bool| if v { 1.0 } else { 0.0 };
     [
@@ -163,7 +256,7 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize) ->
         }
     }
     let views = |saved: &[Option<Saved>]| saved.iter().map(|s| s.as_ref().map(|s| s.view)).collect::<Vec<_>>();
-    let mut sc = scene::layout_page(g, project, &views(&saved));
+    let mut sc = cached_layout(ui, id, g, project, views(&saved));
     let hovered = response.hover_pos().and_then(|p| {
         let (x, y) = local(p);
         sc.layer_at(x, y).filter(|index| sc.layers[*index].contains(x, y))
@@ -248,7 +341,7 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize) ->
         }
     }
     if changed {
-        sc = scene::layout_page(g, project, &views(&saved));
+        sc = cached_layout(ui, id, g, project, views(&saved));
     }
     paint(ui, rect, &sc);
     if sc.layers.len() > 1 {
