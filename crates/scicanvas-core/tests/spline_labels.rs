@@ -286,3 +286,26 @@ fn label_and_z_columns_are_not_curves_and_label_column_feeds_data_labels() {
         assert_eq!(roles[2..], [Role::Label, Role::Z]);
     }
 }
+
+#[test]
+fn bspline_and_bezier_connections_smooth_data_lines_only() {
+    let (mut p, id) = project(PlotType::Line);
+    let b = p.book_mut(1).unwrap();
+    b.columns[0].data = ["0", "1", "2", "3", "4", "5"].map(str::to_string).to_vec().into();
+    b.columns[1].data = ["0", "2", "-1", "3", "0.5", "2"].map(str::to_string).to_vec().into();
+    let lines = |p: &Project| -> Vec<usize> {
+        scene::layout_page(p.graph(id).unwrap(), p, &[])
+            .items
+            .iter()
+            .filter_map(|it| match &it.prim {
+                Prim::Polyline { pts, .. } if it.clip.is_some() => Some(pts.len()),
+                _ => None,
+            })
+            .collect()
+    };
+    assert_eq!(lines(&p), [6]);
+    p.graph_mut(id).unwrap().first_layer_mut().connect = scicanvas_core::page::Connect::BSpline;
+    assert_eq!(lines(&p), [3 * 16 + 1]);
+    p.graph_mut(id).unwrap().first_layer_mut().connect = scicanvas_core::page::Connect::Bezier;
+    assert_eq!(lines(&p), [2 * 16 + 1]);
+}

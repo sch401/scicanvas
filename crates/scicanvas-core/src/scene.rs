@@ -1025,7 +1025,13 @@ fn build_layer_full(
                     }
                     pts
                 } else {
-                    run.iter().map(|p| [px(p[0]), py(p[1])]).collect()
+                    // B 样条、Bezier 在数据坐标里算曲线（落在控制点凸包内，不改坐标范围）
+                    let curve = match g.connect {
+                        crate::page::Connect::BSpline if !s.line_only => crate::spline::bspline(run, 16),
+                        crate::page::Connect::Bezier if !s.line_only => crate::spline::bezier(run, 16),
+                        _ => run.to_vec(),
+                    };
+                    curve.iter().map(|p| [px(p[0]), py(p[1])]).collect()
                 };
                 push(
                     Prim::Polyline {

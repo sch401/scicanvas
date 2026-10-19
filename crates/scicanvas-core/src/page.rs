@@ -153,6 +153,35 @@ pub struct Layer {
     pub frame: bool,
     #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "TickDir::is_out"))]
     pub tick_dir: TickDir,
+    /// 折线、点线图的连接方式。
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Connect::is_straight"))]
+    pub connect: Connect,
+}
+
+/// 连线方式（只用于折线和点线图；样条、阶梯另有图型）。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum Connect {
+    #[default]
+    Straight,
+    BSpline,
+    Bezier,
+}
+
+impl Connect {
+    pub const ALL: [Connect; 3] = [Connect::Straight, Connect::BSpline, Connect::Bezier];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Connect::Straight => "直线",
+            Connect::BSpline => "B 样条",
+            Connect::Bezier => "Bezier",
+        }
+    }
+
+    pub fn is_straight(&self) -> bool {
+        *self == Connect::Straight
+    }
 }
 
 #[cfg(feature = "serde")]
@@ -221,6 +250,7 @@ impl Default for Layer {
             legend: true,
             frame: false,
             tick_dir: TickDir::Out,
+            connect: Connect::Straight,
         }
     }
 }

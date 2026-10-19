@@ -2196,6 +2196,16 @@ impl SciApp {
                             });
                         ui.end_row();
 
+                        if matches!(g.plot_type, PlotType::Line | PlotType::LineSymbol) {
+                            ui.label("连接方式");
+                            ui.horizontal(|ui| {
+                                for c in scicanvas_core::page::Connect::ALL {
+                                    ui.radio_value(&mut g.connect, c, c.label());
+                                }
+                            });
+                            ui.end_row();
+                        }
+
                         if g.plot_type == PlotType::HorizontalBar {
                             ui.label("条形方向");
                             ui.label("X 列为纵向位置，Y 列为横向数值");

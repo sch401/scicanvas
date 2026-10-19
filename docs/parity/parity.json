@@ -5568,16 +5568,16 @@
   "feature": "曲线连接方式（直线 / 样条 / B 样条 / 阶梯 / Bezier）",
   "ref": "Plot Details / Line / Connect",
   "pri": "P0",
-  "status": "部分实现",
-  "how": "已有直线、自然样条、水平/垂直阶梯；B 样条与 Bezier 待实现",
-  "verify": "现有连接方式已有几何和 SVG 回归；补齐其余方式后对照验收",
+  "status": "已实现待验收",
+  "how": "直线、自然样条（样条/样条点线图型）、水平/垂直阶梯（阶梯图型）；折线与点线图在属性窗口可选连接方式：B 样条（两端钳位均匀三次 B 样条，数据点为控制点，经过首尾点）、Bezier（每 4 点一段三次 Bezier，经过第 1、4、7… 点，余下点降阶）；拟合等结果曲线不受影响，未设置时项目文件不变",
+  "verify": "B 样条与 scipy.interpolate.BSpline 同节点向量逐点一致（< 1e-12）；Bezier 端点、分段与二次尾段的解析值一致；场景折线点数回归；Origin 目视对照待做",
   "milestone": "M1 日常够用",
   "sub_items": {
    "连接方式": {
     "total": 6,
     "done": 0,
-    "review": 4,
-    "note": "直线、自然样条、水平/垂直阶梯待验收；B 样条、Bezier 未开始"
+    "review": 6,
+    "note": "直线、自然样条、水平/垂直阶梯、B 样条、Bezier 均已接入，待人工与 Origin 对照"
    }
   }
  },
