@@ -96,6 +96,8 @@ pub enum Dialog {
         model: Model,
         /// 每个参数：(固定?, 固定值, 有下限?, 下限, 有上限?, 上限)。
         limits: [(bool, f64, bool, f64, bool, f64); scicanvas_core::nlfit::MAX_PARAMS],
+        /// 参数间线性约束，一行一条。
+        constraints: String,
     },
     /// 非线性拟合结果。
     NlFitReport(Vec<NlFitReport>),
@@ -204,7 +206,7 @@ pub enum Action {
     FftFilter(FilterKind),
     Fill(Sequence, usize),
     SetValues(String),
-    NlFit(Model, Vec<scicanvas_core::nlfit::ParamLimits>),
+    NlFit(Model, Vec<scicanvas_core::nlfit::ParamLimits>, String),
     /// 运算符，以及常数（为空时用列 B）。
     ColumnMath(ColumnOp, Option<f64>),
 }
@@ -936,7 +938,11 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                 });
             });
         }
-        Dialog::NlFit { model, limits } => {
+        Dialog::NlFit {
+            model,
+            limits,
+            constraints,
+        } => {
             window(ctx, "非线性拟合").show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label("类别");
@@ -997,6 +1003,15 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                             ui.end_row();
                         }
                     });
+                ui.add_space(4.0);
+                ui.label(RichText::new("参数约束").color(pal.weak));
+                ui.add(
+                    egui::TextEdit::multiline(constraints)
+                        .desired_rows(2)
+                        .desired_width(f32::INFINITY)
+                        .font(egui::TextStyle::Monospace)
+                        .hint_text("每行一条，如 A1 + A2 = 1、t2 >= t1"),
+                );
                 let (ok, cancel) = buttons(ui, "拟合");
                 if ok {
                     let held = model
@@ -1009,7 +1024,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                             upper: (!fix && has_hi).then_some(hi),
                         })
                         .collect();
-                    action = Action::NlFit(*model, held);
+                    action = Action::NlFit(*model, held, constraints.clone());
                 } else if cancel {
                     action = Action::Close;
                 }
@@ -1022,6 +1037,9 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                         let f = &r.fit;
                         ui.label(RichText::new(format!("{} · {}", r.name, f.model.name())).strong());
                         ui.label(RichText::new(f.model.formula()).monospace().small());
+                        for c in &f.constraints {
+                            ui.label(RichText::new(format!("约束：{c}")).small().color(pal.weak));
+                        }
                         if !f.converged {
                             ui.colored_label(
                                 egui::Color32::from_rgb(182, 67, 66),
@@ -1829,11 +1847,13 @@ fn nlfit_markdown(reports: &[NlFitReport]) -> String {
         .map(|r| {
             let f = &r.fit;
             let stats: Vec<(String, String)> = nlfit_stats(f).into_iter().map(|(k, v)| (k.to_string(), v)).collect();
+            let constraints: String = f.constraints.iter().map(|c| format!("约束：`{c}`\n\n")).collect();
             format!(
-                "## {} — {}\n\n`{}`\n\n{}\n{}",
+                "## {} — {}\n\n`{}`\n\n{}{}\n{}",
                 md_cell(&r.name),
                 f.model.name(),
                 f.model.formula(),
+                constraints,
                 md_table(&nlfit_param_rows(f)),
                 md_pairs(["统计量", "值"], &stats)
             )
@@ -1876,6 +1896,7 @@ fn nlfit_text(reports: &[NlFitReport]) -> String {
     for r in reports {
         let f = &r.fit;
         lines.push(format!("{}\t{}\t{}", r.name, f.model.name(), f.model.formula()));
+        lines.extend(f.constraints.iter().map(|c| format!("约束\t{c}")));
         lines.extend(nlfit_param_rows(f).iter().map(|row| row.join("\t")));
         for (k, v) in nlfit_stats(f) {
             lines.push(format!("{k}\t{v}"));

@@ -569,6 +569,8 @@ pub struct NlFit {
     pub dof: usize,
     /// 参数协方差（固定参数的行列为 0）。
     pub cov: Vec<Vec<f64>>,
+    /// 用到的线性约束（用户写法）。
+    pub constraints: Vec<String>,
     pub x_min: f64,
     pub x_max: f64,
 }
@@ -655,6 +657,190 @@ impl ParamLimits {
     }
 }
 
+/// 线性约束的关系。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Rel {
+    Eq,
+    Le,
+    Ge,
+}
+
+/// 参数间的线性约束 Σ coef[k]·p[k]（关系）rhs。
+#[derive(Clone, Debug, PartialEq)]
+pub struct LinearConstraint {
+    pub coef: Vec<f64>,
+    pub rel: Rel,
+    pub rhs: f64,
+    /// 用户写法，用于报告。
+    pub text: String,
+}
+
+/// 解析参数约束：每行（或用分号隔开）一条，如 `A1 + A2 = 1`、`t2 >= t1 + 3`、`2*w <= 5`。
+/// 两边都必须是参数的线性式（参数只能乘、除常数）。
+pub fn parse_constraints(model: Model, text: &str) -> Result<Vec<LinearConstraint>, String> {
+    let names = model.params();
+    let mut out = vec![];
+    for line in text.split(['\n', ';', '；']).map(str::trim).filter(|l| !l.is_empty()) {
+        let line_norm = line.replace("≤", "<=").replace("≥", ">=").replace("==", "=");
+        let (lhs, rel, rhs) = if let Some((a, b)) = line_norm.split_once("<=") {
+            (a, Rel::Le, b)
+        } else if let Some((a, b)) = line_norm.split_once(">=") {
+            (a, Rel::Ge, b)
+        } else if let Some((a, b)) = line_norm.split_once('<') {
+            (a, Rel::Le, b)
+        } else if let Some((a, b)) = line_norm.split_once('>') {
+            (a, Rel::Ge, b)
+        } else if let Some((a, b)) = line_norm.split_once('=') {
+            (a, Rel::Eq, b)
+        } else {
+            return Err(format!("约束“{line}”缺少 =、<= 或 >="));
+        };
+        let (cl, kl) = linear_expr(lhs, names).map_err(|e| format!("约束“{line}”：{e}"))?;
+        let (cr, kr) = linear_expr(rhs, names).map_err(|e| format!("约束“{line}”：{e}"))?;
+        let coef: Vec<f64> = cl.iter().zip(&cr).map(|(a, b)| a - b).collect();
+        if coef.iter().all(|c| *c == 0.0) {
+            return Err(format!("约束“{line}”里没有参数"));
+        }
+        out.push(LinearConstraint {
+            coef,
+            rel,
+            rhs: kr - kl,
+            text: line.to_string(),
+        });
+    }
+    Ok(out)
+}
+
+/// 线性式：返回 (各参数系数, 常数项)。
+fn linear_expr(src: &str, names: &[&str]) -> Result<(Vec<f64>, f64), String> {
+    // 词法：数字、参数名、+ − * /
+    let cs: Vec<char> = src.chars().collect();
+    let mut toks: Vec<String> = vec![];
+    let mut i = 0;
+    while i < cs.len() {
+        let c = cs[i];
+        if c.is_whitespace() {
+            i += 1;
+        } else if c.is_ascii_digit() || c == '.' {
+            let start = i;
+            while i < cs.len()
+                && (cs[i].is_ascii_digit() || cs[i] == '.' || ((cs[i] == 'e' || cs[i] == 'E') && i + 1 < cs.len()))
+            {
+                if (cs[i] == 'e' || cs[i] == 'E') && i + 1 < cs.len() && (cs[i + 1] == '-' || cs[i + 1] == '+') {
+                    i += 1;
+                }
+                i += 1;
+            }
+            toks.push(cs[start..i].iter().collect());
+        } else if c.is_alphabetic() || c == '_' {
+            let start = i;
+            while i < cs.len() && (cs[i].is_alphanumeric() || cs[i] == '_') {
+                i += 1;
+            }
+            toks.push(cs[start..i].iter().collect());
+        } else if "+-*/−".contains(c) {
+            toks.push(if c == '−' { "-".into() } else { c.to_string() });
+            i += 1;
+        } else {
+            return Err(format!("无法识别的字符“{c}”"));
+        }
+    }
+    if toks.is_empty() {
+        return Err("缺少表达式".into());
+    }
+    let mut coef = vec![0.0; names.len()];
+    let mut constant = 0.0;
+    let mut pos = 0;
+    let mut sign = 1.0;
+    loop {
+        // 一项：可带正负号，由数字和至多一个参数相乘除组成
+        while pos < toks.len() && (toks[pos] == "+" || toks[pos] == "-") {
+            if toks[pos] == "-" {
+                sign = -sign;
+            }
+            pos += 1;
+        }
+        let mut value = sign;
+        let mut param: Option<usize> = None;
+        let mut op = "*".to_string();
+        loop {
+            let t = toks.get(pos).ok_or("表达式不完整")?;
+            if let Ok(v) = t.parse::<f64>() {
+                if op == "*" {
+                    value *= v
+                } else {
+                    value /= v
+                }
+            } else if let Some(k) = names.iter().position(|n| n == t) {
+                if param.is_some() || op == "/" {
+                    return Err("约束必须是参数的线性式".into());
+                }
+                param = Some(k);
+            } else {
+                return Err(format!("“{t}”不是参数名，可用 {}", names.join("、")));
+            }
+            pos += 1;
+            match toks.get(pos).map(String::as_str) {
+                Some(o @ ("*" | "/")) => {
+                    op = o.to_string();
+                    pos += 1;
+                }
+                _ => break,
+            }
+        }
+        match param {
+            Some(k) => coef[k] += value,
+            None => constant += value,
+        }
+        sign = 1.0;
+        match toks.get(pos).map(String::as_str) {
+            None => break,
+            Some("+") | Some("-") => {}
+            Some(t) => return Err(format!("“{t}”的位置不对")),
+        }
+    }
+    Ok((coef, constant))
+}
+
+/// 矩阵行张成空间的正交补（每个基向量长 `dim`）；`rows` 为空时返回单位基。
+fn null_space(rows: &[Vec<f64>], dim: usize) -> Vec<Vec<f64>> {
+    let dot = |a: &[f64], b: &[f64]| a.iter().zip(b).map(|(x, y)| x * y).sum::<f64>();
+    let mut basis: Vec<Vec<f64>> = vec![];
+    let orth = |v: &[f64], basis: &mut Vec<Vec<f64>>| {
+        let mut w = v.to_vec();
+        for _ in 0..2 {
+            for b in basis.iter() {
+                let d = dot(&w, b);
+                w.iter_mut().zip(b).for_each(|(x, y)| *x -= d * y);
+            }
+        }
+        let norm = dot(&w, &w).sqrt();
+        let scale = dot(v, v).sqrt().max(1.0);
+        if norm > 1e-10 * scale {
+            basis.push(w.iter().map(|x| x / norm).collect());
+            true
+        } else {
+            false
+        }
+    };
+    for r in rows {
+        orth(r, &mut basis);
+    }
+    let rank = basis.len();
+    let mut out = vec![];
+    for j in 0..dim {
+        let mut e = vec![0.0; dim];
+        e[j] = 1.0;
+        if orth(&e, &mut basis) {
+            out.push(basis.last().unwrap().clone());
+        }
+        if out.len() + rank == dim {
+            break;
+        }
+    }
+    out
+}
+
 /// 拟合 `model`；`initial` 为空时自动估计初值。`fixed` 为空或逐个参数给出固定值（`Some`）。
 /// 非有限的点会被跳过。
 pub fn fit(
@@ -682,6 +868,20 @@ pub fn fit_with(
     ys: &[f64],
     initial: Option<&[f64]>,
     limits: &[ParamLimits],
+) -> Result<NlFit, String> {
+    fit_constrained(model, xs, ys, initial, limits, &[])
+}
+
+/// 带参数限制与线性约束的拟合。等式约束和“贴边且下降方向朝外”的不等式在零空间里求步长，
+/// 其余不等式与上下界按步长截断，保持每一步可行；标准误按停止点的约束零空间计算，
+/// 自由度扣除约束个数（与代入消元后的拟合相同）。
+pub fn fit_constrained(
+    model: Model,
+    xs: &[f64],
+    ys: &[f64],
+    initial: Option<&[f64]>,
+    limits: &[ParamLimits],
+    constraints: &[LinearConstraint],
 ) -> Result<NlFit, String> {
     let fixed: Vec<Option<f64>> = limits.iter().map(|l| l.fixed).collect();
     let fixed = fixed.as_slice();
@@ -718,12 +918,37 @@ pub fn fit_with(
         return Err("固定参数的值必须是有限数".into());
     }
     let n = xs.len();
-    if n <= m {
+    // 约束只作用在自由参数上：固定参数的贡献移到右边
+    let rows: Vec<(Vec<f64>, Rel, f64)> = constraints
+        .iter()
+        .map(|c| {
+            let a: Vec<f64> = free.iter().map(|&k| c.coef.get(k).copied().unwrap_or(0.0)).collect();
+            let b = c.rhs
+                - (0..all)
+                    .filter(|&k| is_fixed(k))
+                    .map(|k| c.coef.get(k).copied().unwrap_or(0.0) * fixed[k].unwrap())
+                    .sum::<f64>();
+            (a, c.rel, b)
+        })
+        .collect();
+    if rows.iter().any(|(a, _, _)| a.iter().all(|v| *v == 0.0)) {
+        return Err("约束只涉及固定参数，请去掉或改为固定值".into());
+    }
+    let n_eq = null_space(
+        &rows
+            .iter()
+            .filter(|r| r.1 == Rel::Eq)
+            .map(|r| r.0.clone())
+            .collect::<Vec<_>>(),
+        m,
+    )
+    .len();
+    if n <= n_eq {
         return Err(format!(
             "{} 有 {} 个参数，至少需要 {} 个有效数据点",
             model.name(),
-            m,
-            m + 1
+            n_eq,
+            n_eq + 1
         ));
     }
     let mut p = match initial {
@@ -738,6 +963,43 @@ pub fn fit_with(
     for &k in &free {
         p[k] = limit(k).clamp(p[k]);
     }
+    let lhs = |p: &[f64], a: &[f64]| free.iter().zip(a).map(|(&k, c)| c * p[k]).sum::<f64>();
+    let violation = |p: &[f64], (a, rel, b): &(Vec<f64>, Rel, f64)| {
+        let d = lhs(p, a) - b;
+        match rel {
+            Rel::Eq => d,
+            Rel::Le => d.max(0.0),
+            Rel::Ge => d.min(0.0),
+        }
+    };
+    if !rows.is_empty() {
+        // 初值投影到可行域：交替投影到各约束（超平面/半空间）并截到上下界
+        let tol = |p: &[f64]| 1e-9 * free.iter().map(|&k| p[k].abs()).fold(1.0, f64::max);
+        for _ in 0..500 {
+            for row in &rows {
+                let d = violation(&p, row);
+                let norm2: f64 = row.0.iter().map(|c| c * c).sum();
+                if d != 0.0 {
+                    for (&k, c) in free.iter().zip(&row.0) {
+                        p[k] -= d * c / norm2;
+                    }
+                }
+            }
+            for &k in &free {
+                p[k] = limit(k).clamp(p[k]);
+            }
+            if rows.iter().all(|r| violation(&p, r).abs() <= tol(&p)) {
+                break;
+            }
+        }
+        if rows
+            .iter()
+            .any(|r| violation(&p, r).abs() > 1e-6 * free.iter().map(|&k| p[k].abs()).fold(1.0, f64::max))
+        {
+            return Err("约束之间（或与上下限、固定值）互相矛盾，找不到满足全部约束的参数".into());
+        }
+    }
+    let active_tol = |p: &[f64]| 1e-8 * free.iter().map(|&k| p[k].abs()).fold(1.0, f64::max);
     let mut cost = rss(model, &xs, &ys, &p);
     if !cost.is_finite() {
         return Err("初值处函数值无效，请检查数据是否适合该函数".into());
@@ -767,6 +1029,135 @@ pub fn fit_with(
             })
             .collect();
         let mut stepped = false;
+        if !rows.is_empty() {
+            // 约束：等式与“贴边且朝外”的不等式进入零空间，其余不等式与上下界截断步长。
+            // 截断到 0 的那条约束（或上下界）说明它在挡路：加入活动集后重新求步。
+            let mut active: Vec<usize> = (0..rows.len())
+                .filter(|&i| {
+                    let r = &rows[i];
+                    let ag: f64 = r.0.iter().zip(&g).map(|(a, g)| a * g).sum();
+                    let tight = (lhs(&p, &r.0) - r.2).abs() <= active_tol(&p);
+                    match r.1 {
+                        Rel::Eq => true,
+                        Rel::Le => tight && ag > 0.0,
+                        Rel::Ge => tight && ag < 0.0,
+                    }
+                })
+                .collect();
+            let mut held: Vec<usize> = vec![];
+            'solve: loop {
+                let open_now: Vec<usize> = open.iter().copied().filter(|u| !held.contains(u)).collect();
+                let c_open: Vec<Vec<f64>> = active
+                    .iter()
+                    .map(|&i| open_now.iter().map(|&u| rows[i].0[u]).collect())
+                    .collect();
+                let basis = null_space(&c_open, open_now.len());
+                if basis.is_empty() {
+                    break 'solve;
+                }
+                let r = basis.len();
+                // H = Nᵀ A N，b = Nᵀ g
+                let an: Vec<Vec<f64>> = open_now
+                    .iter()
+                    .map(|&u| {
+                        (0..r)
+                            .map(|q| open_now.iter().enumerate().map(|(j, &v)| a[u][v] * basis[q][j]).sum())
+                            .collect()
+                    })
+                    .collect();
+                let h0: Vec<Vec<f64>> = (0..r)
+                    .map(|q1| {
+                        (0..r)
+                            .map(|q2| (0..open_now.len()).map(|i| basis[q1][i] * an[i][q2]).sum())
+                            .collect()
+                    })
+                    .collect();
+                let nb: Vec<f64> = (0..r)
+                    .map(|q| open_now.iter().enumerate().map(|(i, &u)| basis[q][i] * g[u]).sum())
+                    .collect();
+                while lambda < 1e16 {
+                    let mut h = h0.clone();
+                    for (q, row) in h.iter_mut().enumerate() {
+                        row[q] += lambda * row[q].max(1e-12);
+                    }
+                    let Some(inv) = mat_inv(&h) else {
+                        lambda *= 10.0;
+                        continue;
+                    };
+                    let z: Vec<f64> = (0..r).map(|q| (0..r).map(|q2| inv[q][q2] * nb[q2]).sum()).collect();
+                    let mut delta = vec![0.0; m];
+                    for (i, &u) in open_now.iter().enumerate() {
+                        delta[u] = (0..r).map(|q| basis[q][i] * z[q]).sum();
+                    }
+                    // 不越过不在活动集里的不等式和上下界；记下最先挡住的那个
+                    let mut alpha: f64 = 1.0;
+                    let mut blocker: Option<(bool, usize)> = None;
+                    for (i, row) in rows.iter().enumerate() {
+                        if active.contains(&i) {
+                            continue;
+                        }
+                        let ad: f64 = row.0.iter().zip(&delta).map(|(a, d)| a * d).sum();
+                        let slack = row.2 - lhs(&p, &row.0);
+                        let limit_here = match row.1 {
+                            Rel::Le if ad > 0.0 => slack.max(0.0) / ad,
+                            Rel::Ge if ad < 0.0 => slack.min(0.0) / ad,
+                            _ => continue,
+                        };
+                        if limit_here < alpha {
+                            alpha = limit_here;
+                            blocker = Some((true, i));
+                        }
+                    }
+                    for (u, &k) in free.iter().enumerate() {
+                        let l = limit(k);
+                        let limit_here = match (l.lower, l.upper) {
+                            (_, Some(hi)) if delta[u] > 0.0 => (hi - p[k]).max(0.0) / delta[u],
+                            (Some(lo), _) if delta[u] < 0.0 => (lo - p[k]).min(0.0) / delta[u],
+                            _ => continue,
+                        };
+                        if limit_here < alpha {
+                            alpha = limit_here;
+                            blocker = Some((false, u));
+                        }
+                    }
+                    if alpha <= 1e-12 {
+                        match blocker {
+                            Some((true, i)) => active.push(i),
+                            Some((false, u)) => held.push(u),
+                            None => {}
+                        }
+                        continue 'solve;
+                    }
+                    let mut trial = p.clone();
+                    for (u, &k) in free.iter().enumerate() {
+                        trial[k] = limit(k).clamp(p[k] + alpha * delta[u]);
+                    }
+                    let new_cost = rss(model, &xs, &ys, &trial);
+                    if new_cost < cost {
+                        let small_step = free
+                            .iter()
+                            .all(|&k| (trial[k] - p[k]).abs() <= 1e-10 * p[k].abs().max(1e-10));
+                        let small_gain = cost - new_cost <= 1e-14 * cost.max(1e-300);
+                        p = trial;
+                        cost = new_cost;
+                        lambda = (lambda / 10.0).max(1e-12);
+                        stepped = true;
+                        // 被约束截短的一步不算收敛：下一步会把挡路的约束纳入活动集
+                        converged = small_gain || (small_step && alpha >= 1.0);
+                        break 'solve;
+                    }
+                    lambda *= 10.0;
+                }
+                break 'solve;
+            }
+            if !stepped {
+                converged = true;
+            }
+            if converged {
+                break;
+            }
+            continue;
+        }
         while lambda < 1e16 && !open.is_empty() {
             let mut damped: Vec<Vec<f64>> = open.iter().map(|&u| open.iter().map(|&v| a[u][v]).collect()).collect();
             for (i, row) in damped.iter_mut().enumerate() {
@@ -816,22 +1207,63 @@ pub fn fit_with(
             }
         }
     }
-    let dof = (n - m) as f64;
+    // 约束：在停止点的等式与贴边不等式零空间里算协方差，自由度扣除约束个数
+    let tight: Vec<Vec<f64>> = rows
+        .iter()
+        .filter(|r| r.1 == Rel::Eq || (lhs(&p, &r.0) - r.2).abs() <= active_tol(&p))
+        .map(|r| r.0.clone())
+        .collect();
+    let basis = null_space(&tight, m);
+    let dof_n = n - basis.len();
+    let dof = dof_n as f64;
     let reduced = cost / dof;
     let mut se = vec![0.0; all];
     let mut cov = vec![vec![0.0; all]; all];
-    match mat_inv(&a) {
-        Some(inv) => {
-            for (u, &k) in free.iter().enumerate() {
-                se[k] = (inv[u][u] * reduced).max(0.0).sqrt();
-                for (v, &l) in free.iter().enumerate() {
-                    cov[k][l] = inv[u][v] * reduced;
+    if !rows.is_empty() {
+        let r = basis.len();
+        let h: Vec<Vec<f64>> = (0..r)
+            .map(|q1| {
+                (0..r)
+                    .map(|q2| {
+                        (0..m)
+                            .map(|u| (0..m).map(|v| basis[q1][u] * a[u][v] * basis[q2][v]).sum::<f64>())
+                            .sum()
+                    })
+                    .collect()
+            })
+            .collect();
+        match mat_inv(&h) {
+            Some(inv) => {
+                for (u, &k) in free.iter().enumerate() {
+                    for (v, &l) in free.iter().enumerate() {
+                        cov[k][l] = (0..r)
+                            .map(|q1| (0..r).map(|q2| basis[q1][u] * inv[q1][q2] * basis[q2][v]).sum::<f64>())
+                            .sum::<f64>()
+                            * reduced;
+                    }
+                    se[k] = cov[k][k].max(0.0).sqrt();
+                }
+            }
+            None => {
+                for &k in &free {
+                    se[k] = f64::NAN;
                 }
             }
         }
-        None => {
-            for &k in &free {
-                se[k] = f64::NAN;
+    } else {
+        match mat_inv(&a) {
+            Some(inv) => {
+                for (u, &k) in free.iter().enumerate() {
+                    se[k] = (inv[u][u] * reduced).max(0.0).sqrt();
+                    for (v, &l) in free.iter().enumerate() {
+                        cov[k][l] = inv[u][v] * reduced;
+                    }
+                }
+            }
+            None => {
+                for &k in &free {
+                    se[k] = f64::NAN;
+                }
             }
         }
     }
@@ -857,8 +1289,9 @@ pub fn fit_with(
         converged,
         fixed: (0..all).map(is_fixed).collect(),
         at_bound,
-        dof: n - m,
+        dof: dof_n,
         cov,
+        constraints: constraints.iter().map(|c| c.text.clone()).collect(),
         x_min: xs[0],
         x_max: xs[n - 1],
     })
@@ -1379,6 +1812,110 @@ mod tests {
         // 固定参数没有 t 检验
         let held = fit(Model::ExpDec1, &xs, &ys, None, &[None, None, Some(1.7)]).unwrap();
         assert!(held.t_tests()[2].0.is_nan());
+    }
+
+    #[test]
+    fn linear_constraints_match_scipy_substitution() {
+        // 参考值：SciPy 1.17.1 curve_fit 对代入约束后的模型（等式消元；生效的不等式按等式代入）
+        let (xs, ys) = data(Model::ExpDec2, 0.0, 10.0, &[0.5, 4.0, 0.8, 2.0, 4.0], 0.02);
+        let cases: [(&str, &[f64], &[f64], f64); 3] = [
+            (
+                "A1 + A2 = 6.5",
+                &[
+                    -0.008869506971709452,
+                    4.599838952542216,
+                    0.9059992722022512,
+                    1.9001610474577841,
+                    9.03039219176094,
+                ],
+                &[
+                    0.020674970458570655,
+                    0.031508185530406595,
+                    0.013377031324750327,
+                    0.031508185530406595,
+                    0.333684070913209,
+                ],
+                0.020842198807211432,
+            ),
+            (
+                "t2 >= t1 + 3.5",
+                &[
+                    0.46666306034400296,
+                    4.094307934602258,
+                    0.8113114174798253,
+                    1.9476663075416343,
+                    4.311311417479825,
+                ],
+                &[
+                    0.004800016887384544,
+                    0.016949920857287096,
+                    0.0063353188402990365,
+                    0.020885120441479183,
+                    0.0063353188402990365,
+                ],
+                0.0048867135867287775,
+            ),
+            (
+                "t2 - t1 >= 1",
+                &[
+                    0.4937960013006856,
+                    4.01551121614994,
+                    0.7974110921387975,
+                    2.002545767816202,
+                    4.046387326181638,
+                ],
+                &[
+                    0.019735941188441294,
+                    0.06279795003108511,
+                    0.012293474333771807,
+                    0.048313578591315055,
+                    0.1865327482325991,
+                ],
+                0.00466318079317071,
+            ),
+        ];
+        for (text, params, se, rss) in cases {
+            let constraints = parse_constraints(Model::ExpDec2, text).unwrap();
+            let f = fit_constrained(Model::ExpDec2, &xs, &ys, None, &[], &constraints).unwrap();
+            assert!(f.converged, "{text}");
+            for (g, w) in f.params.iter().zip(params) {
+                close(*g, *w, 1e-5);
+            }
+            for (g, w) in f.se.iter().zip(se) {
+                close(*g, *w, 1e-3);
+            }
+            close(f.rss, rss, 1e-7);
+            assert_eq!(f.constraints, [text]);
+        }
+    }
+
+    #[test]
+    fn constraint_parsing_and_errors() {
+        let c = parse_constraints(Model::Gauss, "2*w - xc/2 <= 3 + y0；A = 1").unwrap();
+        assert_eq!(c.len(), 2);
+        assert_eq!(
+            (c[0].coef.clone(), c[0].rel, c[0].rhs),
+            (vec![-1.0, -0.5, 2.0, 0.0], Rel::Le, 3.0)
+        );
+        assert_eq!(
+            (c[1].coef.clone(), c[1].rel, c[1].rhs),
+            (vec![0.0, 0.0, 0.0, 1.0], Rel::Eq, 1.0)
+        );
+        for (text, msg) in [
+            ("w * xc = 1", "线性"),
+            ("q = 1", "不是参数名"),
+            ("w 1", "缺少"),
+            ("3 = 3", "没有参数"),
+        ] {
+            let e = parse_constraints(Model::Gauss, text).unwrap_err();
+            assert!(e.contains(msg), "{text}: {e}");
+        }
+        // 互相矛盾的约束
+        let (xs, ys) = data(Model::Gauss, 0.0, 10.0, &[1.0, 4.2, 1.5, 6.0], 0.05);
+        let bad = parse_constraints(Model::Gauss, "w >= 3; w <= 2").unwrap();
+        assert!(fit_constrained(Model::Gauss, &xs, &ys, None, &[], &bad)
+            .unwrap_err()
+            .contains("矛盾"));
     }
 
     #[test]

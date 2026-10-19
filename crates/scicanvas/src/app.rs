@@ -926,12 +926,18 @@ impl SciApp {
         self.dialog = Some(Dialog::NlFit {
             model: scicanvas_core::nlfit::Model::Gauss,
             limits: [(false, 0.0, false, 0.0, false, 1.0); scicanvas_core::nlfit::MAX_PARAMS],
+            constraints: String::new(),
         });
     }
 
-    fn nlfit(&mut self, model: scicanvas_core::nlfit::Model, limits: &[scicanvas_core::nlfit::ParamLimits]) {
+    fn nlfit(
+        &mut self,
+        model: scicanvas_core::nlfit::Model,
+        limits: &[scicanvas_core::nlfit::ParamLimits],
+        constraints: &[scicanvas_core::nlfit::LinearConstraint],
+    ) {
         let Some(src) = self.analysis_source() else { return };
-        match self.project.nlfit(&src, model, limits) {
+        match self.project.nlfit(&src, model, limits, constraints) {
             Ok((gid, reports)) => {
                 self.after_analysis(Some(gid));
                 let unconverged = reports.iter().filter(|r| !r.fit.converged).count();
@@ -1715,11 +1721,19 @@ impl SciApp {
                 self.finish_edit();
             }
             dialogs::Action::TTest(kind, level) => self.run_ttest(kind, level),
-            dialogs::Action::NlFit(model, limits) => {
+            dialogs::Action::NlFit(model, limits, text) => {
+                let constraints = match scicanvas_core::nlfit::parse_constraints(model, &text) {
+                    Ok(c) => c,
+                    Err(e) => {
+                        // 约束写错时保留对话框，方便修改
+                        self.status = e;
+                        return;
+                    }
+                };
                 self.finish_edit();
                 self.begin_edit("非线性拟合");
                 self.dialog = None;
-                self.nlfit(model, &limits);
+                self.nlfit(model, &limits, &constraints);
                 self.history.changed();
                 self.finish_edit();
             }
@@ -3083,7 +3097,7 @@ mod history_tests {
             app.active = Some(1);
             app.selection.insert(1, vec!["C".into()]);
             if nonlinear {
-                app.nlfit(scicanvas_core::nlfit::Model::PseudoFirstOrder, &[]);
+                app.nlfit(scicanvas_core::nlfit::Model::PseudoFirstOrder, &[], &[]);
             } else {
                 app.fit(1);
             }
@@ -3103,13 +3117,40 @@ mod history_tests {
     }
 
     #[test]
+    fn nlfit_dialog_linear_constraint_holds_and_bad_text_keeps_the_dialog() {
+        use scicanvas_core::nlfit::Model;
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["C".into()]);
+        app.run_command("fit.nonlinear");
+        let Some(Dialog::NlFit { model, constraints, .. }) = app.dialog.as_mut() else {
+            panic!("nlfit dialog not open");
+        };
+        *model = Model::ExpDec1;
+        *constraints = "y0 + A1 = q".into();
+        press_dialog_button(&mut app, "拟合");
+        assert!(matches!(app.dialog, Some(Dialog::NlFit { .. })), "dialog kept");
+        assert!(app.status.contains("不是参数名"), "{}", app.status);
+        if let Some(Dialog::NlFit { constraints, .. }) = app.dialog.as_mut() {
+            *constraints = "y0 + A1 = 0".into();
+        }
+        press_dialog_button(&mut app, "拟合");
+        let Some(Dialog::NlFitReport(reports)) = &app.dialog else {
+            panic!("no report: {}", app.status);
+        };
+        let f = &reports[0].fit;
+        assert!((f.params[0] + f.params[1]).abs() < 1e-9, "{:?}", f.params);
+        assert_eq!(f.constraints, ["y0 + A1 = 0"]);
+    }
+
+    #[test]
     fn nlfit_dialog_upper_bound_stops_the_parameter_and_marks_it() {
         use scicanvas_core::nlfit::Model;
         let mut app = app();
         app.active = Some(1);
         app.selection.insert(1, vec!["C".into()]);
         app.run_command("fit.nonlinear");
-        let Some(Dialog::NlFit { model, limits }) = app.dialog.as_mut() else {
+        let Some(Dialog::NlFit { model, limits, .. }) = app.dialog.as_mut() else {
             panic!("nlfit dialog not open");
         };
         // C 列是 8(1 − e^{−t/4}) 加噪声；ExpDec1 的 t1 约为 4，限制 t1 ≤ 3
@@ -3337,7 +3378,7 @@ mod history_tests {
             let mut app = app();
             app.active = Some(1);
             if nonlinear {
-                app.nlfit(scicanvas_core::nlfit::Model::ALL[0], &[]);
+                app.nlfit(scicanvas_core::nlfit::Model::ALL[0], &[], &[]);
             } else {
                 app.fit(1);
             }
@@ -3727,7 +3768,7 @@ mod history_tests {
         app.finish_edit();
         app.begin_edit("非线性拟合");
         app.dialog = None;
-        app.nlfit(Model::ExpDec1, &[]);
+        app.nlfit(Model::ExpDec1, &[], &[]);
         app.history.changed();
         app.finish_edit();
         match &app.dialog {

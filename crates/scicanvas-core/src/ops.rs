@@ -577,6 +577,7 @@ impl Project {
         src: &Source,
         model: crate::nlfit::Model,
         limits: &[crate::nlfit::ParamLimits],
+        constraints: &[crate::nlfit::LinearConstraint],
     ) -> Result<(u64, Vec<NlFitReport>), String> {
         let r = self.resolve(src)?;
         let mut reports = vec![];
@@ -586,7 +587,7 @@ impl Project {
             let book = self.book(r.book_id).unwrap();
             let (xs, ys, _) = get_xy(book, item);
             let name = name_of(book, &item.y);
-            let fit = match crate::nlfit::fit_with(model, &xs, &ys, None, limits) {
+            let fit = match crate::nlfit::fit_constrained(model, &xs, &ys, None, limits, constraints) {
                 Ok(f) => f,
                 Err(e) => {
                     problems.push(format!("{name}：{e}"));
@@ -1889,7 +1890,7 @@ mod tests {
         use crate::nlfit::Model;
         let mut p = Project::sample();
         // C 列是充电曲线 8(1 − e^{−t/4}) 加噪声，用 ExpDec1（A1 为负）拟合
-        let (gid, reports) = p.nlfit(&book_src(&["C"]), Model::ExpDec1, &[]).unwrap();
+        let (gid, reports) = p.nlfit(&book_src(&["C"]), Model::ExpDec1, &[], &[]).unwrap();
         assert_eq!(reports.len(), 1);
         let f = &reports[0].fit;
         assert!(f.converged && f.r2 > 0.99);
@@ -1904,7 +1905,7 @@ mod tests {
         assert!(y.comment.contains("y = y0 + A1·exp(−x/t1)") && y.comment.contains("t1 = "));
         let layer = p.graph(gid).unwrap().first_layer();
         assert!(layer.line_only.contains(&y.key) && layer.x_by_y.contains_key(&y.key));
-        assert!(p.nlfit(&book_src(&["C"]), Model::Gauss, &[]).is_ok());
+        assert!(p.nlfit(&book_src(&["C"]), Model::Gauss, &[], &[]).is_ok());
         let id = p.new_book();
         p.book_mut(id).unwrap().columns[1].data = vec!["1".into(), "2".into()].into();
         let src = Source::Book {
@@ -1912,7 +1913,7 @@ mod tests {
             selected: vec![],
             rows: None,
         };
-        assert!(p.nlfit(&src, Model::Gauss, &[]).unwrap_err().contains("至少需要"));
+        assert!(p.nlfit(&src, Model::Gauss, &[], &[]).unwrap_err().contains("至少需要"));
     }
 
     #[test]
