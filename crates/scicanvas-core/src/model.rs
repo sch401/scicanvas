@@ -563,6 +563,7 @@ pub fn palette_hex(i: usize) -> String {
 
 /// 符号递增顺序：圆、方块、上三角、下三角、菱形……
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Symbol {
     Square,
     Circle,
@@ -635,13 +636,17 @@ impl SeriesColor {
 /// 每条曲线的画法。SVG 导出和界面共用，保证两边一致。
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SeriesStyle {
-    /// 结果曲线固定为 Line，其余跟随图类型。
+    /// 结果曲线固定为 Line，其余跟随图类型（可被逐曲线设置覆盖）。
     pub kind: PlotType,
     pub color: SeriesColor,
     pub symbol: Symbol,
     /// 柱状图里这条曲线是第几组、一共几组。
     pub bar_index: usize,
     pub bar_count: usize,
+    pub line_width: f32,
+    pub symbol_size: f32,
+    /// 画在右侧 Y 轴上。
+    pub right: bool,
 }
 
 /// 颜色和符号只在数据曲线之间递增，结果曲线不占顺序。
@@ -663,6 +668,9 @@ pub fn series_styles(series: &[Series], plot_type: PlotType) -> Vec<SeriesStyle>
                     symbol: Symbol::Square,
                     bar_index: 0,
                     bar_count,
+                    line_width: 1.0,
+                    symbol_size: 4.5,
+                    right: false,
                 }
             } else {
                 let i = data_index;
@@ -674,6 +682,9 @@ pub fn series_styles(series: &[Series], plot_type: PlotType) -> Vec<SeriesStyle>
                     symbol: SYMBOLS[i % SYMBOLS.len()],
                     bar_index: i,
                     bar_count,
+                    line_width: 1.0,
+                    symbol_size: 4.5,
+                    right: false,
                 }
             }
         })

@@ -137,8 +137,16 @@ pub fn nearest_point(
         y: &view.ya,
         rect: view.plot,
     };
+    let right_axis = view.ya2.clone().unwrap_or_else(|| view.ya.clone());
+    let map_right = Cartesian {
+        x: &view.xa,
+        y: &right_axis,
+        rect: view.plot,
+    };
     let mut best: Option<(f64, PointHit)> = None;
     for s in series.iter().filter(|s| !s.line_only) {
+        let right = view.ya2.is_some() && layer.curves.get(&s.key).is_some_and(|c| c.right_axis);
+        let map = if right { &map_right } else { &map };
         for (i, p) in s.points.iter().enumerate() {
             let at = map.project(if horizontal { [p[1], p[0]] } else { *p });
             if !at.iter().all(|v| v.is_finite()) || !view.contains(at[0], at[1]) {
@@ -174,6 +182,8 @@ pub struct LayerView {
     pub plot: [f64; 4],
     pub xa: Axis,
     pub ya: Axis,
+    /// 右侧 Y 轴（有曲线放在右轴时）。
+    pub ya2: Option<Axis>,
 }
 impl LayerView {
     pub fn contains(&self, x: f64, y: f64) -> bool {
@@ -810,26 +820,78 @@ fn build_layer_full(
         let mut flags = keep.iter();
         s.rows.retain(|_| *flags.next().unwrap());
     }
+    // 样式：默认按图层递增，再用逐曲线设置覆盖（图型、颜色、符号、线宽、符号大小、右侧 Y 轴）
+    let mut styles = series_styles(&series, g.plot_type);
+    if g.color_map != crate::colormap::ColorMap::Origin {
+        let n = series.iter().filter(|s| !s.line_only).count();
+        for style in &mut styles {
+            if let crate::SeriesColor::Palette(i) = style.color {
+                style.color = crate::SeriesColor::Rgb(g.color_map.sample(i as f64 / n.saturating_sub(1).max(1) as f64));
+            }
+        }
+    }
+    for (s, st) in series.iter().zip(&mut styles) {
+        st.line_width = g.line_width;
+        st.symbol_size = g.symbol_size;
+        let Some(c) = g.curves.get(&s.key).filter(|_| !s.line_only) else {
+            continue;
+        };
+        if let Some(kind) = c.kind.filter(|_| !g.plot_type.is_stacked() && !horizontal) {
+            st.kind = kind;
+        }
+        if let Some([r, gg, b]) = c.color {
+            st.color = crate::SeriesColor::Rgb((r, gg, b));
+        }
+        if let Some(sym) = c.symbol {
+            st.symbol = sym;
+        }
+        if let Some(w) = c.line_width {
+            st.line_width = w;
+        }
+        if let Some(z) = c.symbol_size {
+            st.symbol_size = z;
+        }
+        st.right = c.right_axis && !horizontal;
+    }
+    // 图型覆盖后重新给柱子分组
+    if g.curves.values().any(|c| c.kind.is_some()) {
+        let bars: Vec<usize> = (0..series.len())
+            .filter(|&i| styles[i].kind.is_bar() && !series[i].line_only)
+            .collect();
+        for (n, &i) in bars.iter().enumerate() {
+            styles[i].bar_index = n;
+            styles[i].bar_count = bars.len();
+        }
+    }
     let mut all_x: Vec<f64> = series.iter().flat_map(|s| s.points.iter().map(|p| p[0])).collect();
-    let mut all_y: Vec<f64> = series.iter().flat_map(|s| s.points.iter().map(|p| p[1])).collect();
+    // 右侧 Y 轴的曲线单独定范围
+    let mut all_y: Vec<f64> = series
+        .iter()
+        .zip(&styles)
+        .filter(|(_, st)| !st.right)
+        .flat_map(|(s, _)| s.points.iter().map(|p| p[1]))
+        .collect();
+    let mut all_y2: Vec<f64> = series
+        .iter()
+        .zip(&styles)
+        .filter(|(_, st)| st.right)
+        .flat_map(|(s, _)| s.points.iter().map(|p| p[1]))
+        .collect();
     let splines: Vec<_> = series
         .iter()
-        .map(|s| {
-            if g.plot_type.is_spline() && !s.line_only {
+        .zip(&styles)
+        .map(|(s, st)| {
+            if st.kind.is_spline() && !s.line_only {
                 spline_paths(s)
             } else {
                 Vec::new()
             }
         })
         .collect();
-    all_y.extend(
-        splines
-            .iter()
-            .flatten()
-            .flatten()
-            .map(|p| p[1])
-            .filter(|v| !g.y_log || *v > 0.0),
-    );
+    for (paths, st) in splines.iter().zip(&styles) {
+        let target = if st.right { &mut all_y2 } else { &mut all_y };
+        target.extend(paths.iter().flatten().map(|p| p[1]).filter(|v| !g.y_log || *v > 0.0));
+    }
     if g.plot_type.is_bar() && g.plot_type != PlotType::Bar && !horizontal {
         all_y.extend(
             series
@@ -840,9 +902,10 @@ fn build_layer_full(
         );
     }
     if g.error_bars.visible {
-        for s in &series {
+        for (s, st) in series.iter().zip(&styles) {
             for (point, errors) in s.points.iter().zip(&s.errors) {
-                for (dim, values, log) in [(0, &mut all_x, g.x_log), (1, &mut all_y, g.y_log)] {
+                let ys = if st.right { &mut all_y2 } else { &mut all_y };
+                for (dim, values, log) in [(0, &mut all_x, g.x_log), (1, ys, g.y_log)] {
                     if let Some(error) = errors[dim] {
                         values.extend(
                             [point[dim] - error, point[dim] + error]
@@ -854,16 +917,7 @@ fn build_layer_full(
             }
         }
     }
-    let is_bar = g.plot_type.is_bar();
-    let mut styles = series_styles(&series, g.plot_type);
-    if g.color_map != crate::colormap::ColorMap::Origin {
-        let n = series.iter().filter(|s| !s.line_only).count();
-        for style in &mut styles {
-            if let crate::SeriesColor::Palette(i) = style.color {
-                style.color = crate::SeriesColor::Rgb(g.color_map.sample(i as f64 / n.saturating_sub(1).max(1) as f64));
-            }
-        }
-    }
+    let is_bar = g.plot_type.is_bar() || styles.iter().any(|st| st.kind.is_bar());
     // 柱宽只按数据曲线的 X 间距算（拟合曲线是 200 个密集点）
     let data_x: Vec<f64> = series
         .iter()
@@ -906,7 +960,7 @@ fn build_layer_full(
             let marks: Vec<[f64; 2]> = series
                 .iter()
                 .zip(&styles)
-                .filter(|(s, st)| !s.line_only && st.kind.has_symbol())
+                .filter(|(s, st)| !s.line_only && st.kind.has_symbol() && !st.right)
                 .flat_map(|(s, _)| s.points.iter().copied())
                 .collect();
             if !marks.is_empty() {
@@ -969,6 +1023,25 @@ fn build_layer_full(
         Some(names) => TickLabel::Category(names),
         None => TickLabel::Number(g.y_format),
     };
+    // 右侧 Y 轴：自动范围；带符号的点落在端点时同样留 4%
+    let ya2 = (!all_y2.is_empty()).then(|| {
+        let mut a = axis(&all_y2, true, 0.0, 0.0, g.y_log, false);
+        let marks: Vec<f64> = series
+            .iter()
+            .zip(&styles)
+            .filter(|(s, st)| !s.line_only && st.kind.has_symbol() && st.right)
+            .flat_map(|(s, _)| s.points.iter().map(|p| p[1]))
+            .collect();
+        pad_ends(&mut a, marks.into_iter());
+        a
+    });
+    let y2_label = TickLabel::Number(g.y_format);
+    let ylab2_w = ya2.as_ref().map_or(0.0, |a| {
+        a.ticks
+            .iter()
+            .map(|t| text_width(&y2_label.text(*t), TICK_FONT))
+            .fold(8.0, f64::max)
+    });
 
     // 版面：刻度朝外，刻度标签和轴标题依次排在左轴、下轴外侧
     let ylab_w = ya
@@ -981,7 +1054,12 @@ fn build_layer_full(
     let (fout, fin) = g.tick_dir.factors();
     let out = MAJOR_TICK * fout;
     let left = (out + TICK_GAP + ylab_w + 5.0 + LABEL_FONT + 4.0).round().max(min[0]);
-    let right = 14.0f64.max(min[2]);
+    let right = if ya2.is_some() {
+        (out + TICK_GAP + ylab2_w + 5.0 + LABEL_FONT + 4.0).round()
+    } else {
+        14.0
+    }
+    .max(min[2]);
     let top = (if has_title { 12.0 + TITLE_FONT + 6.0 } else { 10.0f64 }).max(min[1]);
     let bottom = (out + TICK_GAP + TICK_FONT + 5.0 + LABEL_FONT + 5.0)
         .round()
@@ -995,6 +1073,16 @@ fn build_layer_full(
     };
     let px = |v: f64| coord.project([v, ya.lo])[0];
     let py = |v: f64| coord.project([xa.lo, v])[1];
+    // 右侧 Y 轴的映射；曲线按自己的轴选用
+    let ya2_or = ya2.clone().unwrap_or_else(|| ya.clone());
+    let coord2 = Cartesian {
+        x: &xa,
+        y: &ya2_or,
+        rect: [left, top, pw, ph],
+    };
+    let py2 = |v: f64| coord2.project([xa.lo, v])[1];
+    let py_left: &dyn Fn(f64) -> f64 = &py;
+    let py_right: &dyn Fn(f64) -> f64 = &py2;
     let inside_x = |x: f64| x >= left - 0.5 && x <= left + pw + 0.5;
     let inside_y = |y: f64| y >= top - 0.5 && y <= top + ph + 0.5;
 
@@ -1068,6 +1156,7 @@ fn build_layer_full(
     }
     let mut symbols: Vec<Prim> = Vec::new();
     for ((s, st), paths) in series.iter().zip(&styles).zip(&splines) {
+        let (ya, py) = if st.right { (&ya2_or, py_right) } else { (&ya, py_left) };
         let color = st.color.rgb();
         if st.kind.is_bar() {
             let gw = dx * 0.7;
@@ -1076,9 +1165,9 @@ fn build_layer_full(
             let bw = gw / count as f64;
             for (p, base) in s.points.iter().zip(&s.bases) {
                 let (category, value, ca, va) = if horizontal {
-                    (p[1], p[0], &ya, &xa)
+                    (p[1], p[0], ya, &xa)
                 } else {
-                    (p[0], p[1], &xa, &ya)
+                    (p[0], p[1], &xa, ya)
                 };
                 let start = category - gw / 2.0 + index as f64 * bw;
                 let end = category - gw / 2.0 + (index as f64 + 1.0) * bw;
@@ -1124,7 +1213,7 @@ fn build_layer_full(
                         Prim::Polyline {
                             pts,
                             color,
-                            width: f64::from(g.line_width),
+                            width: f64::from(st.line_width),
                         },
                         true,
                     );
@@ -1138,7 +1227,7 @@ fn build_layer_full(
                 Prim::Segments {
                     segs: s.points.iter().map(|p| [px(p[0]), base, px(p[0]), py(p[1])]).collect(),
                     color,
-                    width: f64::from(g.line_width),
+                    width: f64::from(st.line_width),
                     dashed: false,
                 },
                 true,
@@ -1152,7 +1241,7 @@ fn build_layer_full(
                             Prim::Polyline {
                                 pts: run.iter().map(|p| [px(p[0]), py(p[1])]).collect(),
                                 color,
-                                width: f64::from(g.line_width),
+                                width: f64::from(st.line_width),
                             },
                             true,
                         );
@@ -1188,7 +1277,7 @@ fn build_layer_full(
                     Prim::Polyline {
                         pts,
                         color,
-                        width: g.line_width as f64,
+                        width: f64::from(st.line_width),
                     },
                     true,
                 );
@@ -1204,13 +1293,14 @@ fn build_layer_full(
             symbols.push(Prim::Symbols {
                 sym: st.symbol,
                 pts,
-                r: g.symbol_size as f64 / 2.0,
+                r: f64::from(st.symbol_size) / 2.0,
                 color,
             });
         }
     }
     if g.error_bars.visible {
         for (s, st) in series.iter().zip(&styles) {
+            let (ya, py) = if st.right { (&ya2_or, py_right) } else { (&ya, py_left) };
             let mut segs = Vec::new();
             let offset = if st.kind.is_bar() && !st.kind.is_stacked() {
                 dx * 0.7 * ((st.bar_index as f64 + 0.5) / st.bar_count.max(1) as f64 - 0.5)
@@ -1271,6 +1361,7 @@ fn build_layer_full(
     if g.labels.visible {
         use crate::page::LabelSource;
         for (s, st) in series.iter().zip(&styles).filter(|(s, _)| !s.line_only) {
+            let py = if st.right { py_right } else { py_left };
             let offset = if st.kind.is_bar() && !st.kind.is_stacked() {
                 dx * 0.7 * ((st.bar_index as f64 + 0.5) / st.bar_count.max(1) as f64 - 0.5)
             } else {
@@ -1431,7 +1522,7 @@ fn build_layer_full(
     }
     let y_tick = |ticks: &mut Vec<[f64; 4]>, y: f64, len: f64| {
         ticks.push([left + len * fin, y, left - len * fout, y]);
-        if g.frame {
+        if g.frame && ya2.is_none() {
             ticks.push([left + pw - len * fin, y, left + pw + len * fout, y]);
         }
     };
@@ -1473,6 +1564,58 @@ fn build_layer_full(
         ),
         false,
     );
+    // 右侧 Y 轴：轴线、刻度、标签与标题
+    if let Some(a2) = &ya2 {
+        let mut ticks2 = Vec::new();
+        for t in &a2.ticks {
+            let y = py2(*t);
+            if !inside_y(y) {
+                continue;
+            }
+            ticks2.push([left + pw - MAJOR_TICK * fin, y, left + pw + MAJOR_TICK * fout, y]);
+            push(
+                text(
+                    left + pw + out + TICK_GAP,
+                    y,
+                    y2_label.text(*t),
+                    TICK_FONT,
+                    Anchor::Start,
+                ),
+                false,
+            );
+        }
+        for t in &a2.minor {
+            let y = py2(*t);
+            if y > top && y < top + ph {
+                ticks2.push([left + pw - MINOR_TICK * fin, y, left + pw + MINOR_TICK * fout, y]);
+            }
+        }
+        if !g.frame {
+            ticks2.push([left + pw, top, left + pw, top + ph]);
+        }
+        push(
+            Prim::Segments {
+                segs: ticks2,
+                color: INK,
+                width: AXIS_WIDTH,
+                dashed: false,
+            },
+            false,
+        );
+        push(
+            Prim::Text {
+                x: left + pw + out + TICK_GAP + ylab2_w + 5.0 + LABEL_FONT / 2.0,
+                y: top + ph / 2.0,
+                text: g.y2_axis_title(book),
+                size: LABEL_FONT,
+                anchor: Anchor::Middle,
+                vertical: true,
+                bold: false,
+                color: INK,
+            },
+            false,
+        );
+    }
     push(
         Prim::Text {
             x: left - out - TICK_GAP - ylab_w - 5.0 - LABEL_FONT / 2.0,
@@ -1570,14 +1713,14 @@ fn build_layer_full(
                     push(Prim::Polyline {
                         pts: vec![[x0, cy], [x0 + sw, cy]],
                         color,
-                        width: g.line_width as f64,
+                        width: f64::from(st.line_width),
                     });
                 }
                 if st.kind.has_symbol() {
                     push(Prim::Symbols {
                         sym: st.symbol,
                         pts: vec![[x0 + sw / 2.0, cy]],
-                        r: g.symbol_size as f64 / 2.0,
+                        r: f64::from(st.symbol_size) / 2.0,
                         color,
                     });
                 }
@@ -1595,6 +1738,7 @@ fn build_layer_full(
             plot: [left, top, pw, ph],
             xa: xa.clone(),
             ya: ya.clone(),
+            ya2: ya2.clone(),
         }],
         xa,
         ya,

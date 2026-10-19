@@ -2515,6 +2515,119 @@ impl SciApp {
                         );
                         ui.end_row();
                     });
+                // 逐曲线样式：选一条数据曲线，单独设图型、颜色、符号、线宽、符号大小和右侧 Y 轴
+                let curve_keys: Vec<String> = g.y_keys.iter().filter(|k| !g.line_only.contains(k)).cloned().collect();
+                if !curve_keys.is_empty() {
+                    egui::CollapsingHeader::new("曲线样式")
+                        .id_salt(("props-curves", gid, props_layer))
+                        .show(ui, |ui| {
+                            use scicanvas_core::page::CurveStyle;
+                            let pick_id = egui::Id::new(("props-curve-pick", gid, props_layer));
+                            let mut key = ui
+                                .data(|d| d.get_temp::<String>(pick_id))
+                                .filter(|k| curve_keys.contains(k))
+                                .unwrap_or_else(|| curve_keys[0].clone());
+                            let name_of = |k: &str| {
+                                cols.iter()
+                                    .find(|(c, _)| c == k)
+                                    .map_or(k.to_string(), |(_, n)| n.clone())
+                            };
+                            egui::ComboBox::from_id_salt(("props-curve", gid))
+                                .selected_text(name_of(&key))
+                                .show_ui(ui, |ui| {
+                                    for k in &curve_keys {
+                                        ui.selectable_value(&mut key, k.clone(), name_of(k));
+                                    }
+                                });
+                            ui.data_mut(|d| d.insert_temp(pick_id, key.clone()));
+                            let mut style = g.curves.get(&key).cloned().unwrap_or_default();
+                            egui::Grid::new(("props-curve-grid", gid, props_layer))
+                                .num_columns(2)
+                                .spacing([10.0, 6.0])
+                                .show(ui, |ui| {
+                                    ui.label("图型");
+                                    let text = style.kind.map_or("跟随图层", |k| k.label());
+                                    ui.add_enabled_ui(
+                                        !g.plot_type.is_stacked() && g.plot_type != PlotType::HorizontalBar,
+                                        |ui| {
+                                            egui::ComboBox::from_id_salt(("props-curve-kind", gid))
+                                                .selected_text(text)
+                                                .show_ui(ui, |ui| {
+                                                    ui.selectable_value(&mut style.kind, None, "跟随图层");
+                                                    for k in CurveStyle::KINDS {
+                                                        ui.selectable_value(&mut style.kind, Some(k), k.label());
+                                                    }
+                                                });
+                                        },
+                                    );
+                                    ui.end_row();
+                                    ui.label("颜色");
+                                    ui.horizontal(|ui| {
+                                        let mut own = style.color.is_some();
+                                        ui.checkbox(&mut own, "自定");
+                                        let mut rgb = style.color.unwrap_or([15, 77, 146]);
+                                        let r = ui.add_enabled_ui(own, |ui| ui.color_edit_button_srgb(&mut rgb)).inner;
+                                        edit_group(&r, history_group);
+                                        style.color = own.then_some(rgb);
+                                    });
+                                    ui.end_row();
+                                    ui.label("符号");
+                                    const NAMES: [&str; 8] =
+                                        ["圆", "方块", "上三角", "下三角", "菱形", "左三角", "右三角", "六边形"];
+                                    let label = |sym: scicanvas_core::Symbol| {
+                                        scicanvas_core::SYMBOLS
+                                            .iter()
+                                            .position(|s| *s == sym)
+                                            .map_or("", |i| NAMES[i])
+                                    };
+                                    egui::ComboBox::from_id_salt(("props-curve-symbol", gid))
+                                        .selected_text(style.symbol.map_or("跟随图层", label))
+                                        .show_ui(ui, |ui| {
+                                            ui.selectable_value(&mut style.symbol, None, "跟随图层");
+                                            for sym in scicanvas_core::SYMBOLS {
+                                                ui.selectable_value(&mut style.symbol, Some(sym), label(sym));
+                                            }
+                                        });
+                                    ui.end_row();
+                                    for (name, value, default, range) in [
+                                        ("线宽", &mut style.line_width, g.line_width, 0.2..=8.0),
+                                        ("符号大小", &mut style.symbol_size, g.symbol_size, 1.0..=20.0),
+                                    ] {
+                                        ui.label(name);
+                                        ui.horizontal(|ui| {
+                                            let mut own = value.is_some();
+                                            ui.checkbox(&mut own, "自定");
+                                            let mut v = value.unwrap_or(default);
+                                            let r = ui
+                                                .add_enabled(own, egui::DragValue::new(&mut v).range(range).speed(0.1));
+                                            edit_group(&r, history_group);
+                                            *value = own.then_some(v);
+                                        });
+                                        ui.end_row();
+                                    }
+                                    ui.label("坐标轴");
+                                    ui.checkbox(&mut style.right_axis, "右侧 Y 轴");
+                                    ui.end_row();
+                                });
+                            if style.is_default() {
+                                g.curves.remove(&key);
+                            } else if g.curves.get(&key) != Some(&style) {
+                                g.curves.insert(key, style);
+                            }
+                            if g.curves.values().any(|c| c.right_axis) {
+                                ui.horizontal(|ui| {
+                                    ui.label("右轴标题");
+                                    edit_group(
+                                        &ui.add(
+                                            egui::TextEdit::singleline(&mut g.y2_title)
+                                                .hint_text("自动：长名称 (单位)"),
+                                        ),
+                                        history_group,
+                                    );
+                                });
+                            }
+                        });
+                }
                 ui.add_space(6.0);
                 ui.label(
                     RichText::new("修改即时生效。导出 SVG 时使用这里的设置。")

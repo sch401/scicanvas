@@ -424,3 +424,81 @@ fn category_x_columns_get_a_category_axis_in_custom_order() {
         );
     }
 }
+
+#[test]
+fn curve_styles_override_type_color_width_and_use_a_right_axis() {
+    use scicanvas_core::page::CurveStyle;
+    let (mut p, id) = project(PlotType::Line);
+    let b = p.book_mut(1).unwrap();
+    let mut c = Column::new("C", Role::Y);
+    c.long_name = "流量".into();
+    c.units = "L/min".into();
+    c.data = ["100", "300", "200", "400"].map(str::to_string).to_vec().into();
+    b.columns.push(c);
+    p.graph_mut(id).unwrap().first_layer_mut().y_keys.push("C".into());
+    let base = scene::layout_page(p.graph(id).unwrap(), &p, &[]);
+    type Line = ((u8, u8, u8), f64, Vec<[f64; 2]>);
+    let polylines = |sc: &Scene| -> Vec<Line> {
+        sc.items
+            .iter()
+            .filter_map(|it| match &it.prim {
+                Prim::Polyline { pts, color, width } if it.clip.is_some() => Some((*color, *width, pts.clone())),
+                _ => None,
+            })
+            .collect()
+    };
+    assert_eq!(polylines(&base).len(), 2);
+    // B 改成散点；C 改成红色 2.5 线宽并放到右侧 Y 轴
+    let l = p.graph_mut(id).unwrap().first_layer_mut();
+    l.curves.insert(
+        "B".into(),
+        CurveStyle {
+            kind: Some(PlotType::Scatter),
+            ..Default::default()
+        },
+    );
+    l.curves.insert(
+        "C".into(),
+        CurveStyle {
+            color: Some([200, 30, 30]),
+            line_width: Some(2.5),
+            right_axis: true,
+            ..Default::default()
+        },
+    );
+    let sc = scene::layout_page(p.graph(id).unwrap(), &p, &[]);
+    let lines = polylines(&sc);
+    assert_eq!(lines.len(), 1, "B is now a scatter");
+    let (color, width, pts) = &lines[0];
+    let k = p.graph(id).unwrap().page.scale();
+    assert_eq!(*color, (200, 30, 30));
+    assert!((width - 2.5 * k).abs() < 1e-9);
+    assert!(sc.items.iter().any(|it| matches!(it.prim, Prim::Symbols { .. })));
+    // 左轴只按 B（0–1）定范围，C（100–400）在右轴：画在坐标框内
+    assert!(sc.ya.hi <= 1.5, "{:?}", sc.ya);
+    let [l0, t0, w0, h0] = sc.plot;
+    assert!(pts
+        .iter()
+        .all(|q| q[1] >= t0 - 1e-6 && q[1] <= t0 + h0 + 1e-6 && q[0] >= l0 - 1e-6 && q[0] <= l0 + w0 + 1e-6));
+    let texts: Vec<String> = sc
+        .items
+        .iter()
+        .filter_map(|it| match &it.prim {
+            Prim::Text { text, .. } if it.clip.is_none() => Some(text.clone()),
+            _ => None,
+        })
+        .collect();
+    assert!(texts.iter().any(|t| t == "流量 (L/min)"), "{texts:?}");
+    assert!(texts.iter().any(|t| t == "400"), "{texts:?}");
+    // 右轴占用右侧边距，坐标框变窄
+    assert!(sc.plot[2] < base.plot[2]);
+    #[cfg(feature = "serde")]
+    {
+        let json = scicanvas_core::project_file::to_json(&p).unwrap();
+        let back = scicanvas_core::project_file::from_json(&json).unwrap();
+        assert_eq!(
+            back.graph(id).unwrap().first_layer().curves,
+            p.graph(id).unwrap().first_layer().curves
+        );
+    }
+}

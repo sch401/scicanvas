@@ -182,6 +182,15 @@ pub struct Layer {
     pub frame: bool,
     #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "TickDir::is_out"))]
     pub tick_dir: TickDir,
+    /// 逐曲线样式（按 Y 列标识）：图型、颜色、符号、线宽、符号大小、右侧 Y 轴。
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")
+    )]
+    pub curves: std::collections::BTreeMap<String, CurveStyle>,
+    /// 右侧 Y 轴标题（空则用右轴第一条曲线的列名和单位）。
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "String::is_empty"))]
+    pub y2_title: String,
     /// 坐标轴联动：X、Y 轴的范围跟随另一个图层（图层序号）。
     #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Option::is_none"))]
     pub link_x: Option<usize>,
@@ -195,6 +204,39 @@ pub struct Layer {
     /// 折线、点线图的连接方式。
     #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Connect::is_straight"))]
     pub connect: Connect,
+}
+
+/// 一条曲线的单独样式；None 表示跟随图层设置。
+#[derive(Clone, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize), serde(default))]
+pub struct CurveStyle {
+    pub kind: Option<crate::PlotType>,
+    pub color: Option<[u8; 3]>,
+    pub symbol: Option<crate::Symbol>,
+    pub line_width: Option<f32>,
+    pub symbol_size: Option<f32>,
+    /// 画在右侧 Y 轴上（双 Y 轴）。
+    pub right_axis: bool,
+}
+
+impl CurveStyle {
+    /// 逐曲线可选的图型（同一图层里可以混合）；堆叠类、浮动柱和条形图按整层设置。
+    pub const KINDS: [crate::PlotType; 10] = [
+        crate::PlotType::Line,
+        crate::PlotType::Scatter,
+        crate::PlotType::LineSymbol,
+        crate::PlotType::Bar,
+        crate::PlotType::Area,
+        crate::PlotType::Spline,
+        crate::PlotType::SplineSymbol,
+        crate::PlotType::VerticalDrop,
+        crate::PlotType::StepHorizontal,
+        crate::PlotType::StepVertical,
+    ];
+
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
 }
 
 /// 连线方式（只用于折线和点线图；样条、阶梯另有图型）。
@@ -295,6 +337,8 @@ impl Default for Layer {
             frame: false,
             tick_dir: TickDir::Out,
             connect: Connect::Straight,
+            curves: Default::default(),
+            y2_title: String::new(),
             link_x: None,
             link_y: None,
             x_format: crate::format::NumberFormat::Auto,
@@ -438,8 +482,29 @@ impl Layer {
                 return range;
             }
         }
-        book.and_then(|b| self.y_keys.first().and_then(|k| b.column(k)))
-            .map(|c| c.axis_label())
-            .unwrap_or_default()
+        // 右侧 Y 轴的曲线不参与左轴标题
+        book.and_then(|b| {
+            self.y_keys
+                .iter()
+                .find(|k| !self.curves.get(*k).is_some_and(|c| c.right_axis))
+                .and_then(|k| b.column(k))
+        })
+        .map(|c| c.axis_label())
+        .unwrap_or_default()
+    }
+
+    /// 右侧 Y 轴标题：自定义标题，或右轴第一条曲线的列名和单位。
+    pub fn y2_axis_title(&self, book: Option<&Book>) -> String {
+        if !self.y2_title.trim().is_empty() {
+            return self.y2_title.clone();
+        }
+        book.and_then(|b| {
+            self.y_keys
+                .iter()
+                .find(|k| self.curves.get(*k).is_some_and(|c| c.right_axis))
+                .and_then(|k| b.column(k))
+        })
+        .map(|c| c.axis_label())
+        .unwrap_or_default()
     }
 }
