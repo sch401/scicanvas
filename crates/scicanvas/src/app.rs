@@ -925,7 +925,7 @@ impl SciApp {
     pub(crate) fn open_nlfit_dialog(&mut self) {
         self.dialog = Some(Dialog::NlFit {
             model: scicanvas_core::nlfit::Model::Gauss,
-            fixed: [(false, 0.0); 4],
+            fixed: [(false, 0.0); scicanvas_core::nlfit::MAX_PARAMS],
         });
     }
 

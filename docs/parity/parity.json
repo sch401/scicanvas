@@ -1495,16 +1495,16 @@
   "ref": "Fitting Functions",
   "pri": "P0",
   "status": "已实现待验收",
-  "how": "当前 11 种内置非线性模型均有数据驱动初值估计；支持固定参数并报告未收敛状态",
+  "how": "当前 24 种内置非线性模型均有数据驱动初值估计；支持固定参数并报告未收敛状态",
   "verify": "nlfit.rs 模型估计和拟合回归已通过；退化数据、复杂初值与 Origin 实例验收待做",
   "id": "F135",
   "milestone": "M1 日常够用",
   "sub_items": {
    "当前模型自动初值": {
-    "total": 11,
+    "total": 24,
     "done": 0,
-    "review": 11,
-    "note": "11 为当前内置模型数；完整函数库仍见 F514，退化数据与 Origin 实例待验收"
+    "review": 24,
+    "note": "24 为当前内置模型数；完整函数库仍见 F514，退化数据与 Origin 实例待验收"
    }
   }
  },
@@ -1661,9 +1661,9 @@
   "feature": "内置拟合函数：峰函数（Gauss、Lorentz、Voigt、PsdVoigt、LogNormal 等）",
   "ref": "Curve Fitting Functions（共 239 个）",
   "pri": "P0",
-  "status": "部分实现",
-  "how": "峰函数：Gauss、Lorentz（Origin 公式与参数名）；Voigt、PsdVoigt、LogNormal 等待做",
-  "verify": "与 SciPy 1.17.1 curve_fit 的参数（1e-6）、标准误（1e-4）一致，从自动初值收敛；Origin 对照待做",
+  "status": "已实现待验收",
+  "how": "峰函数：Gauss、Lorentz、Voigt（Gauss wG 与 Lorentz wL 卷积，面积 A；Faddeeva 函数用 Weideman N=64 有理展开）、PsdVoigt1、LogNormal，公式与参数名同 Origin，均有数据驱动初值",
+  "verify": "从自动初值收敛到 SciPy 1.17.1 curve_fit（p0 取真值）的参数（1e-5）、标准误（1e-3）与 RSS；Voigt 线形与 scipy.special.voigt_profile 一致（< 1e-12）；Origin 对照待做",
   "id": "F148",
   "milestone": "M1 日常够用"
  },
@@ -1672,9 +1672,9 @@
   "feature": "内置拟合函数：指数类（ExpDec1-3、ExpGrow、ExpAssoc 等）",
   "ref": "Curve Fitting Functions（共 239 个）",
   "pri": "P0",
-  "status": "部分实现",
-  "how": "指数类：ExpDec1；ExpDec2/3、ExpGrow、ExpAssoc 等待做",
-  "verify": "与 SciPy 1.17.1 curve_fit 的参数（1e-6）、标准误（1e-4）一致，从自动初值收敛；Origin 对照待做",
+  "status": "已实现待验收",
+  "how": "指数类：ExpDec1/2/3、ExpGro1、ExpAssoc，公式与参数名同 Origin，均有数据驱动初值（多指数由单指数估计拆分）",
+  "verify": "从自动初值收敛到 SciPy 1.17.1 curve_fit 的参数（1e-5）、标准误（1e-3）与 RSS；Origin 对照待做",
   "id": "F149",
   "milestone": "M1 日常够用"
  },
@@ -1683,9 +1683,9 @@
   "feature": "内置拟合函数：S 形与生长（Boltzmann、Logistic、DoseResp、Hill、Gompertz 等）",
   "ref": "Curve Fitting Functions（共 239 个）",
   "pri": "P0",
-  "status": "部分实现",
-  "how": "S 形：Boltzmann、Logistic；DoseResp、Hill、Gompertz 等待做",
-  "verify": "与 SciPy 1.17.1 curve_fit 的参数（1e-6）、标准误（1e-4）一致，从自动初值收敛；Origin 对照待做",
+  "status": "已实现待验收",
+  "how": "S 形与生长：Boltzmann、Logistic、DoseResp、Hill、Gompertz，公式与参数名同 Origin，均有数据驱动初值",
+  "verify": "从自动初值收敛到 SciPy 1.17.1 curve_fit 的参数（1e-5）、标准误（1e-3）与 RSS；Origin 对照待做",
   "id": "F150",
   "milestone": "M1 日常够用"
  },
@@ -1694,9 +1694,9 @@
   "feature": "内置拟合函数：幂函数与对数（Power、Allometric、Log 等）",
   "ref": "Curve Fitting Functions（共 239 个）",
   "pri": "P0",
-  "status": "部分实现",
-  "how": "幂函数：Allometric1；Power、Log 等待做",
-  "verify": "与 SciPy 1.17.1 curve_fit 的参数（1e-6）、标准误（1e-4）一致，从自动初值收敛；Origin 对照待做",
+  "status": "已实现待验收",
+  "how": "幂函数与对数：Allometric1、Allometric2、Power1、Log3P1，公式与参数名同 Origin，均有数据驱动初值",
+  "verify": "从自动初值收敛到 SciPy 1.17.1 curve_fit 的参数（1e-5）、标准误（1e-3）与 RSS；Origin 对照待做",
   "id": "F151",
   "milestone": "M1 日常够用"
  },

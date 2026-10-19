@@ -9,10 +9,23 @@ use crate::analysis::mat_inv;
 pub enum Model {
     Gauss,
     Lorentz,
+    Voigt,
+    PsdVoigt1,
+    LogNormal,
     ExpDec1,
+    ExpDec2,
+    ExpDec3,
+    ExpGro1,
+    ExpAssoc,
     Boltzmann,
     Logistic,
+    DoseResp,
+    Hill,
+    Gompertz,
     Allometric1,
+    Allometric2,
+    Power1,
+    Log3P1,
     Langmuir,
     Freundlich,
     PseudoFirstOrder,
@@ -20,14 +33,30 @@ pub enum Model {
     MichaelisMenten,
 }
 
+/// 内置函数的最多参数个数（ExpDec3）。
+pub const MAX_PARAMS: usize = 7;
+
 impl Model {
-    pub const ALL: [Model; 11] = [
+    pub const ALL: [Model; 24] = [
         Model::Gauss,
         Model::Lorentz,
+        Model::Voigt,
+        Model::PsdVoigt1,
+        Model::LogNormal,
         Model::ExpDec1,
+        Model::ExpDec2,
+        Model::ExpDec3,
+        Model::ExpGro1,
+        Model::ExpAssoc,
         Model::Boltzmann,
         Model::Logistic,
+        Model::DoseResp,
+        Model::Hill,
+        Model::Gompertz,
         Model::Allometric1,
+        Model::Allometric2,
+        Model::Power1,
+        Model::Log3P1,
         Model::Langmuir,
         Model::Freundlich,
         Model::PseudoFirstOrder,
@@ -35,14 +64,38 @@ impl Model {
         Model::MichaelisMenten,
     ];
 
+    /// 对话框里的类别顺序。
+    pub const CATEGORIES: [&'static str; 7] = [
+        "峰函数",
+        "指数",
+        "S 形",
+        "幂函数与对数",
+        "吸附等温线",
+        "吸附动力学",
+        "酶动力学",
+    ];
+
     pub fn name(self) -> &'static str {
         match self {
             Model::Gauss => "Gauss",
             Model::Lorentz => "Lorentz",
+            Model::Voigt => "Voigt",
+            Model::PsdVoigt1 => "PsdVoigt1",
+            Model::LogNormal => "LogNormal",
             Model::ExpDec1 => "ExpDec1",
+            Model::ExpDec2 => "ExpDec2",
+            Model::ExpDec3 => "ExpDec3",
+            Model::ExpGro1 => "ExpGro1",
+            Model::ExpAssoc => "ExpAssoc",
             Model::Boltzmann => "Boltzmann",
             Model::Logistic => "Logistic",
+            Model::DoseResp => "DoseResp",
+            Model::Hill => "Hill",
+            Model::Gompertz => "Gompertz",
             Model::Allometric1 => "Allometric1",
+            Model::Allometric2 => "Allometric2",
+            Model::Power1 => "Power1",
+            Model::Log3P1 => "Log3P1",
             Model::Langmuir => "Langmuir",
             Model::Freundlich => "Freundlich",
             Model::PseudoFirstOrder => "准一级动力学",
@@ -53,10 +106,10 @@ impl Model {
 
     pub fn category(self) -> &'static str {
         match self {
-            Model::Gauss | Model::Lorentz => "峰函数",
-            Model::ExpDec1 => "指数",
-            Model::Boltzmann | Model::Logistic => "S 形",
-            Model::Allometric1 => "幂函数",
+            Model::Gauss | Model::Lorentz | Model::Voigt | Model::PsdVoigt1 | Model::LogNormal => "峰函数",
+            Model::ExpDec1 | Model::ExpDec2 | Model::ExpDec3 | Model::ExpGro1 | Model::ExpAssoc => "指数",
+            Model::Boltzmann | Model::Logistic | Model::DoseResp | Model::Hill | Model::Gompertz => "S 形",
+            Model::Allometric1 | Model::Allometric2 | Model::Power1 | Model::Log3P1 => "幂函数与对数",
             Model::Langmuir | Model::Freundlich => "吸附等温线",
             Model::PseudoFirstOrder | Model::PseudoSecondOrder => "吸附动力学",
             Model::MichaelisMenten => "酶动力学",
@@ -67,10 +120,23 @@ impl Model {
         match self {
             Model::Gauss => "y = y0 + A/(w·√(π/2))·exp(−2((x − xc)/w)²)",
             Model::Lorentz => "y = y0 + (2A/π)·w/(4(x − xc)² + w²)",
+            Model::Voigt => "y = y0 + A·(Gauss wG ⊗ Lorentz wL)，面积 A",
+            Model::PsdVoigt1 => "y = y0 + A·[mu·L(w) + (1 − mu)·G(w)]",
+            Model::LogNormal => "y = y0 + A/(√(2π)·w·x)·exp(−ln²(x/xc)/(2w²))",
             Model::ExpDec1 => "y = y0 + A1·exp(−x/t1)",
+            Model::ExpDec2 => "y = y0 + A1·exp(−x/t1) + A2·exp(−x/t2)",
+            Model::ExpDec3 => "y = y0 + Σ Ai·exp(−x/ti)，i = 1…3",
+            Model::ExpGro1 => "y = y0 + A1·exp(x/t1)",
+            Model::ExpAssoc => "y = y0 + A1(1 − exp(−x/t1)) + A2(1 − exp(−x/t2))",
             Model::Boltzmann => "y = A2 + (A1 − A2)/(1 + exp((x − x0)/dx))",
             Model::Logistic => "y = A2 + (A1 − A2)/(1 + (x/x0)^p)",
+            Model::DoseResp => "y = A1 + (A2 − A1)/(1 + 10^((LOGx0 − x)·p))",
+            Model::Hill => "y = START + (END − START)·xⁿ/(kⁿ + xⁿ)",
+            Model::Gompertz => "y = a·exp(−exp(−k(x − xc)))",
             Model::Allometric1 => "y = a·x^b",
+            Model::Allometric2 => "y = a + b·x^c",
+            Model::Power1 => "y = A·(x − xc)^p",
+            Model::Log3P1 => "y = a − b·ln(x + c)",
             Model::Langmuir => "q = qm·KL·C/(1 + KL·C)",
             Model::Freundlich => "q = KF·C^(1/n)",
             Model::PseudoFirstOrder => "qt = qe·(1 − exp(−k1·t))",
@@ -82,10 +148,23 @@ impl Model {
     pub fn params(self) -> &'static [&'static str] {
         match self {
             Model::Gauss | Model::Lorentz => &["y0", "xc", "w", "A"],
+            Model::Voigt => &["y0", "xc", "A", "wG", "wL"],
+            Model::PsdVoigt1 => &["y0", "xc", "A", "w", "mu"],
+            Model::LogNormal => &["y0", "xc", "w", "A"],
             Model::ExpDec1 => &["y0", "A1", "t1"],
+            Model::ExpDec2 => &["y0", "A1", "t1", "A2", "t2"],
+            Model::ExpDec3 => &["y0", "A1", "t1", "A2", "t2", "A3", "t3"],
+            Model::ExpGro1 => &["y0", "A1", "t1"],
+            Model::ExpAssoc => &["y0", "A1", "t1", "A2", "t2"],
             Model::Boltzmann => &["A1", "A2", "x0", "dx"],
             Model::Logistic => &["A1", "A2", "x0", "p"],
+            Model::DoseResp => &["A1", "A2", "LOGx0", "p"],
+            Model::Hill => &["START", "END", "k", "n"],
+            Model::Gompertz => &["a", "xc", "k"],
             Model::Allometric1 => &["a", "b"],
+            Model::Allometric2 => &["a", "b", "c"],
+            Model::Power1 => &["A", "xc", "p"],
+            Model::Log3P1 => &["a", "b", "c"],
             Model::Langmuir => &["qm", "KL"],
             Model::Freundlich => &["KF", "n"],
             Model::PseudoFirstOrder => &["qe", "k1"],
@@ -104,10 +183,41 @@ impl Model {
                 let (y0, xc, w, a) = (p[0], p[1], p[2], p[3]);
                 y0 + 2.0 * a / std::f64::consts::PI * w / (4.0 * (x - xc).powi(2) + w * w)
             }
+            Model::Voigt => {
+                let (y0, xc, a, wg, wl) = (p[0], p[1], p[2], p[3], p[4]);
+                if !(wg > 0.0 && wl >= 0.0) {
+                    return f64::NAN;
+                }
+                y0 + a * voigt_profile(x - xc, wg / (2.0 * (2.0 * LN2).sqrt()), wl / 2.0)
+            }
+            Model::PsdVoigt1 => {
+                let (y0, xc, a, w, mu) = (p[0], p[1], p[2], p[3], p[4]);
+                let d = x - xc;
+                let lorentz = 2.0 / PI * w / (4.0 * d * d + w * w);
+                let gauss = (4.0 * LN2).sqrt() / (PI.sqrt() * w) * (-4.0 * LN2 * d * d / (w * w)).exp();
+                y0 + a * (mu * lorentz + (1.0 - mu) * gauss)
+            }
+            Model::LogNormal => {
+                let (y0, xc, w, a) = (p[0], p[1], p[2], p[3]);
+                y0 + a / ((2.0 * PI).sqrt() * w * x) * (-(x / xc).ln().powi(2) / (2.0 * w * w)).exp()
+            }
             Model::ExpDec1 => p[0] + p[1] * (-x / p[2]).exp(),
+            Model::ExpDec2 => p[0] + p[1] * (-x / p[2]).exp() + p[3] * (-x / p[4]).exp(),
+            Model::ExpDec3 => p[0] + p[1] * (-x / p[2]).exp() + p[3] * (-x / p[4]).exp() + p[5] * (-x / p[6]).exp(),
+            Model::ExpGro1 => p[0] + p[1] * (x / p[2]).exp(),
+            Model::ExpAssoc => p[0] + p[1] * (1.0 - (-x / p[2]).exp()) + p[3] * (1.0 - (-x / p[4]).exp()),
             Model::Boltzmann => p[1] + (p[0] - p[1]) / (1.0 + ((x - p[2]) / p[3]).exp()),
             Model::Logistic => p[1] + (p[0] - p[1]) / (1.0 + (x / p[2]).powf(p[3])),
+            Model::DoseResp => p[0] + (p[1] - p[0]) / (1.0 + 10f64.powf((p[2] - x) * p[3])),
+            Model::Hill => {
+                let xn = x.powf(p[3]);
+                p[0] + (p[1] - p[0]) * xn / (p[2].powf(p[3]) + xn)
+            }
+            Model::Gompertz => p[0] * (-(-p[2] * (x - p[1])).exp()).exp(),
             Model::Allometric1 => p[0] * x.powf(p[1]),
+            Model::Allometric2 => p[0] + p[1] * x.powf(p[2]),
+            Model::Power1 => p[0] * (x - p[1]).powf(p[2]),
+            Model::Log3P1 => p[0] - p[1] * (x + p[2]).ln(),
             Model::Langmuir => p[0] * p[1] * x / (1.0 + p[1] * x),
             Model::Freundlich => p[0] * x.powf(1.0 / p[1]),
             Model::PseudoFirstOrder => p[0] * (1.0 - (-p[1] * x).exp()),
@@ -145,6 +255,115 @@ impl Model {
                 } else {
                     vec![y0, xs[peak], fwhm, h * std::f64::consts::PI * fwhm / 2.0]
                 }
+            }
+            Model::Voigt | Model::PsdVoigt1 => {
+                let g = Model::Gauss.guess(xs, ys);
+                let (y0, xc, h) = (g[0], g[1], g[3] / (g[2] * (PI / 2.0).sqrt()));
+                let fwhm = g[2] * (2.0 * 2f64.ln()).sqrt();
+                if self == Model::Voigt {
+                    // 两个宽度相等时 Voigt 半峰宽约为 1.64 倍
+                    let w = fwhm / 1.64;
+                    vec![y0, xc, h * fwhm * 1.3, w, w]
+                } else {
+                    vec![y0, xc, h * fwhm * 1.3, fwhm, 0.5]
+                }
+            }
+            Model::LogNormal => {
+                let g = Model::Gauss.guess(xs, ys);
+                let (y0, xpeak, h) = (g[0], g[1].max(1e-12), g[3] / (g[2] * (PI / 2.0).sqrt()));
+                let fwhm = g[2] * (2.0 * 2f64.ln()).sqrt();
+                // 半高处 x 的对数宽度 ≈ 2√(2ln2)·w
+                let (left, right) = ((xpeak - fwhm / 2.0).max(xpeak * 0.05), xpeak + fwhm / 2.0);
+                let w = ((right / left).ln() / (2.0 * (2.0 * LN2).sqrt())).clamp(0.05, 3.0);
+                let xc = xpeak * (w * w).exp();
+                vec![y0, xc, w, h * (2.0 * PI).sqrt() * w * xc * (-w * w / 2.0).exp()]
+            }
+            Model::ExpDec2 | Model::ExpDec3 => {
+                let e = Model::ExpDec1.guess(xs, ys);
+                if self == Model::ExpDec2 {
+                    vec![e[0], e[1] / 2.0, e[2] / 2.0, e[1] / 2.0, e[2] * 2.0]
+                } else {
+                    vec![e[0], e[1] / 3.0, e[2] / 3.0, e[1] / 3.0, e[2], e[1] / 3.0, e[2] * 3.0]
+                }
+            }
+            Model::ExpGro1 => {
+                // y0 略低于最小值，ln(y − y0) 对 x 做直线
+                let y0 = lo - 0.01 * (hi - lo).max(1e-12);
+                let (slope, intercept) = linreg(xs.iter().zip(ys).map(|(x, y)| (*x, (y - y0).ln())));
+                let t1 = if slope > 0.0 {
+                    1.0 / slope
+                } else {
+                    (xs[n - 1] - xs[0]) / 3.0
+                };
+                vec![y0, intercept.exp(), t1]
+            }
+            Model::ExpAssoc => {
+                let y0 = mean(&ys[..k]);
+                let total = mean(&ys[n - k..]) - y0;
+                let tc = (crossing(y0 + 0.632 * total) - xs[0])
+                    .abs()
+                    .max((xs[n - 1] - xs[0]) / n as f64);
+                vec![y0, total / 2.0, tc / 2.0, total / 2.0, tc * 2.0]
+            }
+            Model::DoseResp | Model::Hill => {
+                let a1 = mean(&ys[..k]);
+                let a2 = mean(&ys[n - k..]);
+                let mid = crossing(0.5 * (a1 + a2));
+                if self == Model::DoseResp {
+                    // 中点处斜率 = (A2 − A1)·p·ln10/4
+                    let i = (1..n).find(|&i| xs[i] >= mid).unwrap_or(n - 1);
+                    let slope = (ys[i] - ys[i - 1]) / (xs[i] - xs[i - 1]).max(1e-12);
+                    let p = 4.0 * slope / ((a2 - a1) * std::f64::consts::LN_10);
+                    vec![a1, a2, mid, if p.is_finite() && p != 0.0 { p } else { 1.0 }]
+                } else {
+                    vec![a1, a2, mid.abs().max(1e-12), 2.0]
+                }
+            }
+            Model::Gompertz => {
+                // 渐近值 a；y = a/e 时 x = xc；最大斜率 a·k/e 出现在 xc
+                let a = if ys[n - 1] >= ys[0] { hi } else { lo };
+                let xc = crossing(a / std::f64::consts::E);
+                let max_slope = (1..n)
+                    .map(|i| (ys[i] - ys[i - 1]) / (xs[i] - xs[i - 1]).max(1e-12))
+                    .fold(0.0, |m: f64, s| if s.abs() > m.abs() { s } else { m });
+                let k = std::f64::consts::E * max_slope / a;
+                vec![a, xc, if k.is_finite() && k != 0.0 { k } else { 1.0 }]
+            }
+            Model::Allometric2 => {
+                // a 取略低于最小值，再对 ln(y − a) ~ ln x 做直线
+                let a = lo - 0.05 * (hi - lo).max(1e-12);
+                let (c, ln_b) = linreg(
+                    xs.iter()
+                        .zip(ys)
+                        .filter(|(x, _)| **x > 0.0)
+                        .map(|(x, y)| (x.ln(), (y - a).ln())),
+                );
+                if c.is_finite() {
+                    vec![a, ln_b.exp(), c]
+                } else {
+                    vec![a, 1.0, 1.0]
+                }
+            }
+            Model::Power1 => {
+                let span = (xs[n - 1] - xs[0]).max(1e-12);
+                let xc = xs[0] - 0.05 * span;
+                let (p, ln_a) = linreg(
+                    xs.iter()
+                        .zip(ys)
+                        .filter(|(_, y)| **y > 0.0)
+                        .map(|(x, y)| ((x - xc).ln(), y.ln())),
+                );
+                if p.is_finite() {
+                    vec![ln_a.exp(), xc, p]
+                } else {
+                    vec![1.0, xc, 1.0]
+                }
+            }
+            Model::Log3P1 => {
+                let span = (xs[n - 1] - xs[0]).max(1e-12);
+                let c = if xs[0] > 0.0 { 0.0 } else { 0.05 * span - xs[0] };
+                let (slope, intercept) = linreg(xs.iter().zip(ys).map(|(x, y)| ((x + c).ln(), *y)));
+                vec![intercept, -slope, c]
             }
             Model::ExpDec1 => {
                 // 先取略低于最小值的 y0，再对 ln(y − y0) 做直线拟合
@@ -253,6 +472,60 @@ impl Model {
             }
         }
     }
+}
+
+use std::f64::consts::{LN_2 as LN2, PI};
+
+/// 归一化 Voigt 线形（面积 1）：σ 为 Gauss 标准差，γ 为 Lorentz 半宽半高；
+/// V = Re w(z)/(σ√(2π))，z = (x + iγ)/(σ√2)，与 `scipy.special.voigt_profile` 相同。
+pub fn voigt_profile(x: f64, sigma: f64, gamma: f64) -> f64 {
+    if gamma <= 0.0 {
+        return (-x * x / (2.0 * sigma * sigma)).exp() / (sigma * (2.0 * PI).sqrt());
+    }
+    let s = sigma * 2f64.sqrt();
+    faddeeva_re(x / s, gamma / s) / (sigma * (2.0 * PI).sqrt())
+}
+
+/// Faddeeva 函数 w(z) 的实部（Im z > 0），Weideman (1994) 有理展开，N = 64。
+fn faddeeva_re(x: f64, y: f64) -> f64 {
+    use std::sync::OnceLock;
+    const N: usize = 64;
+    static COEF: OnceLock<Vec<f64>> = OnceLock::new();
+    let a = COEF.get_or_init(|| {
+        let m = 2 * N;
+        let m2 = 2 * m;
+        let l = (N as f64 / 2f64.sqrt()).sqrt();
+        // f(k) 对 k = −M+1 … M−1，前面补一个 0，共 2M 个点；fftshift 后做 FFT
+        let mut f = vec![0.0; m2];
+        for (idx, k) in (-(m as i64) + 1..m as i64).enumerate() {
+            let t = l * (k as f64 * PI / m as f64 / 2.0).tan();
+            f[idx + 1] = (-t * t).exp() * (l * l + t * t);
+        }
+        let shifted: Vec<f64> = f[m..].iter().chain(&f[..m]).copied().collect();
+        let (re, _) = crate::fft::dft(&shifted, &vec![0.0; m2]);
+        (1..=N).map(|j| re[j] / m2 as f64).collect()
+    });
+    let l = (N as f64 / 2f64.sqrt()).sqrt();
+    // Z = (L + iz)/(L − iz)，iz = −y + ix
+    let (nr, ni) = (l - y, x);
+    let (dr, di) = (l + y, -x);
+    let den = dr * dr + di * di;
+    let (zr, zi) = ((nr * dr + ni * di) / den, (ni * dr - nr * di) / den);
+    // 多项式 p(Z) = Σ a_j Z^j（霍纳法）
+    let (mut pr, mut pi) = (0.0, 0.0);
+    for c in a.iter().rev() {
+        let (r, i) = (pr * zr - pi * zi + c, pr * zi + pi * zr);
+        pr = r;
+        pi = i;
+    }
+    // w = 2p/(L − iz)² + 1/(√π (L − iz))
+    let (ur, ui) = (dr, di);
+    let u2r = ur * ur - ui * ui;
+    let u2i = 2.0 * ur * ui;
+    let u2 = u2r * u2r + u2i * u2i;
+    let term1 = 2.0 * (pr * u2r + pi * u2i) / u2;
+    let term2 = ur / (PI.sqrt() * (ur * ur + ui * ui));
+    term1 + term2
 }
 
 /// 最小二乘直线 (斜率, 截距)；点数不足或 x 不变时返回 (NaN, NaN)。
@@ -500,6 +773,268 @@ mod tests {
     }
 
     #[test]
+    fn added_builtin_functions_converge_to_scipy_curve_fit() {
+        // 参考值：scipy.optimize.curve_fit（SciPy 1.17.1，p0 取真值）；这里用自动初值
+        let cases: [Case; 13] = [
+            (
+                Model::Voigt,
+                0.0,
+                10.0,
+                &[0.5, 5.0, 8.0, 1.2, 0.8],
+                0.03,
+                &[
+                    0.502987389692305,
+                    4.9994087742597,
+                    7.98905574485161,
+                    1.212719629821541,
+                    0.790032894133966,
+                ],
+                &[
+                    0.006207464376162809,
+                    0.0022433759402392768,
+                    0.07572102365167718,
+                    0.025374812557617577,
+                    0.03208450677549791,
+                ],
+                0.01072010972019333,
+            ),
+            (
+                Model::PsdVoigt1,
+                0.0,
+                10.0,
+                &[0.3, 4.5, 6.0, 1.5, 0.4],
+                0.03,
+                &[
+                    0.3009534141880661,
+                    4.499172087721348,
+                    6.021337487717337,
+                    1.4959212882150772,
+                    0.4103596138827938,
+                ],
+                &[
+                    0.005587425411888454,
+                    0.0023442627654601854,
+                    0.06509666834675183,
+                    0.0071941672597614845,
+                    0.024730834968163404,
+                ],
+                0.010758003239766188,
+            ),
+            (
+                Model::LogNormal,
+                0.2,
+                10.0,
+                &[0.2, 3.0, 0.4, 10.0],
+                0.03,
+                &[
+                    0.20191298275817007,
+                    3.000019482867363,
+                    0.40007606359111575,
+                    10.005413179919492,
+                ],
+                &[
+                    0.004615721739269777,
+                    0.0036396418783872795,
+                    0.0012550820665772344,
+                    0.038148829178791185,
+                ],
+                0.010908537439269561,
+            ),
+            (
+                Model::ExpDec2,
+                0.0,
+                10.0,
+                &[0.5, 4.0, 0.8, 2.0, 4.0],
+                0.02,
+                &[
+                    0.4937960013006856,
+                    4.01551121614994,
+                    0.7974110921387975,
+                    2.002545767816202,
+                    4.046387326181638,
+                ],
+                &[
+                    0.019735941188441294,
+                    0.06279795003108511,
+                    0.012293474333771807,
+                    0.048313578591315055,
+                    0.1865327482325991,
+                ],
+                0.00466318079317071,
+            ),
+            (
+                Model::ExpDec3,
+                0.0,
+                20.0,
+                &[0.2, 3.0, 0.5, 2.0, 2.5, 1.5, 9.0],
+                0.01,
+                &[
+                    0.1559698425034319,
+                    3.0833964991005396,
+                    0.5123124336847743,
+                    2.1498771149859217,
+                    2.7657495595984742,
+                    1.3151952150003738,
+                    10.713480339384695,
+                ],
+                &[
+                    0.04963758730807458,
+                    0.05390947691399579,
+                    0.008111631918091625,
+                    0.16100156150396602,
+                    0.22126250699496686,
+                    0.15655332356926485,
+                    1.9724746003585718,
+                ],
+                0.001095159831052157,
+            ),
+            (
+                Model::ExpGro1,
+                0.0,
+                5.0,
+                &[1.0, 0.5, 1.5],
+                0.05,
+                &[1.0036677407365988, 0.5015354665130808, 1.5017889664546158],
+                &[0.013547135634189463, 0.005649400152885607, 0.005030990698243008],
+                0.02974095858852069,
+            ),
+            (
+                Model::ExpAssoc,
+                0.0,
+                10.0,
+                &[0.5, 3.0, 0.7, 2.0, 4.0],
+                0.02,
+                &[
+                    0.5121172136536161,
+                    2.982998017016836,
+                    0.7024269163748263,
+                    1.9988689165175193,
+                    3.9534873311285605,
+                ],
+                &[
+                    0.010467899233794022,
+                    0.049455331835194315,
+                    0.012954363639320485,
+                    0.03733528622375226,
+                    0.15270653325894512,
+                ],
+                0.0046612916151662015,
+            ),
+            (
+                Model::DoseResp,
+                -3.0,
+                3.0,
+                &[1.0, 9.0, 0.3, 1.2],
+                0.05,
+                &[
+                    1.0074086343720887,
+                    8.998715240450007,
+                    0.29953788120668495,
+                    1.203679123501137,
+                ],
+                &[
+                    0.007757719078944026,
+                    0.009197507525541885,
+                    0.0025321707989441815,
+                    0.00744571058800078,
+                ],
+                0.029938095567038366,
+            ),
+            (
+                Model::Hill,
+                0.1,
+                10.0,
+                &[1.0, 8.0, 2.5, 2.2],
+                0.05,
+                &[
+                    1.0189718518346893,
+                    7.98959662778498,
+                    2.500333429637884,
+                    2.217168150144736,
+                ],
+                &[
+                    0.01797666302307224,
+                    0.017193247431952313,
+                    0.009893466179771038,
+                    0.020345891202554135,
+                ],
+                0.02953457394949384,
+            ),
+            (
+                Model::Gompertz,
+                0.0,
+                10.0,
+                &[6.0, 3.0, 0.9],
+                0.05,
+                &[6.001514782537589, 2.997167483936787, 0.9002960676563785],
+                &[0.008223440236067856, 0.005550430110585135, 0.006264636574684849],
+                0.03056073914187006,
+            ),
+            (
+                Model::Allometric2,
+                0.5,
+                10.0,
+                &[1.0, 0.8, 1.6],
+                0.05,
+                &[1.0063233380609855, 0.8003853338039472, 1.5996609617553645],
+                &[0.01309187654574319, 0.0038208430944108016, 0.0020292713044496834],
+                0.029939208157724446,
+            ),
+            (
+                Model::Power1,
+                1.0,
+                10.0,
+                &[2.0, 0.5, 0.7],
+                0.02,
+                &[1.9994608903244961, 0.4967582288374258, 0.7000192675871021],
+                &[0.0071972334099453935, 0.007057862408701341, 0.0015076629812576963],
+                0.004784781759805734,
+            ),
+            (
+                Model::Log3P1,
+                0.5,
+                10.0,
+                &[3.0, 1.2, 0.5],
+                0.02,
+                &[2.997125235443011, 1.1988014402935538, 0.4915073331562746],
+                &[0.020361190029973577, 0.00866411045169326, 0.02210971956403735],
+                0.0047744246482707055,
+            ),
+        ];
+        for (model, from, to, truth, amp, params, se, rss) in cases {
+            let (xs, ys) = data(model, from, to, truth, amp);
+            let f = fit(model, &xs, &ys, None, &[]).unwrap_or_else(|e| panic!("{}: {e}", model.name()));
+            assert!(f.converged, "{}", model.name());
+            for (g, w) in f.params.iter().zip(params) {
+                close(*g, *w, 1e-5);
+            }
+            for (g, w) in f.se.iter().zip(se) {
+                close(*g, *w, 1e-3);
+            }
+            close(f.rss, rss, 1e-7);
+        }
+    }
+
+    #[test]
+    fn voigt_profile_matches_scipy() {
+        // scipy.special.voigt_profile(x, sigma, gamma)
+        for (x, sigma, gamma, want) in [
+            (0.0, 1.0, 0.5, 0.27895547038929436),
+            (1.3, 0.4, 0.2, 0.05594361959542218),
+            (-2.5, 0.7, 1.1, 0.05536634494387373),
+            (0.05, 2.0, 0.01, 0.19861602219299082),
+            (8.0, 0.5, 0.3, 0.0015077335480456885),
+            (0.3, 0.1, 3.0, 0.10494211022325665),
+        ] {
+            let got = voigt_profile(x, sigma, gamma);
+            assert!(
+                (got - want).abs() <= 1e-12 * want.abs().max(1e-300) + 1e-15,
+                "{x} {sigma} {gamma}: {got} vs {want}"
+            );
+        }
+    }
+
+    #[test]
     fn auto_initial_values_converge_to_scipy_curve_fit() {
         // 参考值：scipy.optimize.curve_fit（SciPy 1.17.1，p0 取真值）
         let cases: [Case; 6] = [
@@ -686,11 +1221,12 @@ mod tests {
             }
             close(f.rss, rss, 1e-8);
         }
-        assert_eq!(Model::ALL.len(), 11);
+        assert_eq!(Model::ALL.len(), 24);
         assert!(
-            Model::ALL.iter().all(|m| m.params().len() <= 4),
-            "the dialog holds up to 4 parameters"
+            Model::ALL.iter().all(|m| m.params().len() <= MAX_PARAMS),
+            "the dialog holds up to MAX_PARAMS parameters"
         );
+        assert!(Model::ALL.iter().all(|m| Model::CATEGORIES.contains(&m.category())));
     }
 
     #[test]

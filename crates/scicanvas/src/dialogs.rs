@@ -94,7 +94,7 @@ pub enum Dialog {
     /// 非线性拟合：选择内置函数；每个参数可固定为指定值（最多 4 个参数）。
     NlFit {
         model: Model,
-        fixed: [(bool, f64); 4],
+        fixed: [(bool, f64); scicanvas_core::nlfit::MAX_PARAMS],
     },
     /// 非线性拟合结果。
     NlFitReport(Vec<NlFitReport>),
@@ -949,12 +949,28 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
         }
         Dialog::NlFit { model, fixed } => {
             window(ctx, "非线性拟合").show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    ui.label("类别");
+                    let mut category = model.category();
+                    egui::ComboBox::from_id_salt("nlfit-category")
+                        .selected_text(category)
+                        .show_ui(ui, |ui| {
+                            for c in Model::CATEGORIES {
+                                ui.selectable_value(&mut category, c, c);
+                            }
+                        });
+                    if category != model.category() {
+                        if let Some(m) = Model::ALL.into_iter().find(|m| m.category() == category) {
+                            *model = m;
+                        }
+                    }
+                });
                 egui::Grid::new("nlfit-models")
-                    .num_columns(3)
+                    .num_columns(2)
                     .spacing([12.0, 6.0])
                     .show(ui, |ui| {
-                        for m in Model::ALL {
-                            ui.label(RichText::new(m.category()).color(pal.weak));
+                        let category = model.category();
+                        for m in Model::ALL.into_iter().filter(|m| m.category() == category) {
                             ui.radio_value(model, m, m.name());
                             ui.label(RichText::new(m.formula()).monospace());
                             ui.end_row();
