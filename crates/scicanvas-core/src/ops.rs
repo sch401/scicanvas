@@ -1474,9 +1474,12 @@ impl Project {
         if rows == 0 {
             return Err("没有可计算的行：公式不引用列时按工作簿已有的行数计算".into());
         }
+        let value = |k: &str, i: usize| cols.get(k).and_then(|v| v.get(i)).copied().unwrap_or(f64::NAN);
+        // 列统计、按行序列先对整列算好
+        let expr = expr.prepare(rows, &value);
         let mut data: Vec<String> = (0..rows)
             .map(|i| {
-                let v = expr.eval(i, &|k| cols.get(k).and_then(|v| v.get(i)).copied().unwrap_or(f64::NAN));
+                let v = expr.eval(i, &value);
                 if v.is_finite() {
                     fmt_num(v)
                 } else {
@@ -2040,6 +2043,11 @@ mod tests {
         assert!(p.set_column_values(1, "C", "Z * 2").unwrap_err().contains("没有列 Z"));
         assert!(p.set_column_values(1, "C", "2 +").is_err());
         assert!(p.set_column_values(1, "Q", "1").unwrap_err().contains("目标列"));
+        // 列统计与按行序列：A = 1..4
+        p.set_column_values(1, "C", "A - mean(A) + cumsum(A) * (A > 2)")
+            .unwrap();
+        let c = p.book(1).unwrap().columns[2].values();
+        assert_eq!(&c[..4], &[-1.5, -0.5, 6.5, 11.5]);
     }
 
     #[test]

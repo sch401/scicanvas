@@ -1230,17 +1230,34 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                     ui.label(RichText::new(e.as_str()).color(ui.visuals().error_fg_color));
                 }
                 ui.add_space(4.0);
-                ui.label(RichText::new("点击插入列").small().color(pal.weak));
                 ui.horizontal_wrapped(|ui| {
+                    ui.label(RichText::new("插入").small().color(pal.weak));
                     for (key, name) in columns.iter() {
                         if ui.small_button(key.as_str()).on_hover_text(name.as_str()).clicked() {
                             formula.push_str(key);
                         }
                     }
+                    // 函数目录：按类别列出，点击插入“函数名(”
+                    ui.menu_button("函数", |ui| {
+                        use scicanvas_core::formula::{CATEGORIES, FUNCTIONS};
+                        for category in CATEGORIES {
+                            ui.menu_button(category, |ui| {
+                                egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
+                                    for func in FUNCTIONS.iter().filter(|f| f.category == category) {
+                                        if ui.button(RichText::new(func.usage).monospace()).clicked() {
+                                            formula.push_str(func.name);
+                                            formula.push('(');
+                                            ui.close_menu();
+                                        }
+                                    }
+                                });
+                            });
+                        }
+                    });
                 });
                 ui.label(
                     RichText::new(
-                        "列用短名引用（A、B 或 col(A)），i 是行号（从 1 开始），常数 pi、e。\n运算符 + − × ÷ ^ 与括号；函数 sin cos tan asin acos atan sinh cosh tanh exp ln log10 sqrt abs\nfloor ceil round sign，以及两个参数的 pow atan2 min max mod。\n结果覆盖目标列；缺失值或无意义的结果（如负数开方）处留空，可撤销。",
+                        "列用短名（A、B 或 col(A)），i 为行号，常数 pi、e；比较 < > <= >= == != 结果为 1 或 0。\n结果覆盖目标列，无效结果留空，可撤销。",
                     )
                     .small()
                     .color(pal.weak),

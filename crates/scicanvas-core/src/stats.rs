@@ -250,8 +250,30 @@ pub fn t_test(kind: TTestKind, a: &[f64], b: &[f64], level: f64) -> Result<TTest
     })
 }
 
+/// 正则化下不完全 Gamma 函数 P(a, x)；x < a + 1 时直接用级数，避免 1 − Q 的相减误差。
+pub fn gamma_p(a: f64, x: f64) -> f64 {
+    if x <= 0.0 {
+        return 0.0;
+    }
+    if x < a + 1.0 {
+        let front = (-x + a * x.ln() - ln_gamma(a)).exp();
+        let (mut term, mut sum, mut ap) = (1.0 / a, 1.0 / a, a);
+        for _ in 0..1000 {
+            ap += 1.0;
+            term *= x / ap;
+            sum += term;
+            if term.abs() < sum.abs() * 1e-17 {
+                break;
+            }
+        }
+        sum * front
+    } else {
+        1.0 - gamma_q(a, x)
+    }
+}
+
 /// 正则化上不完全 Gamma 函数 Q(a, x)：x < a + 1 时用级数，否则用连分式。
-fn gamma_q(a: f64, x: f64) -> f64 {
+pub fn gamma_q(a: f64, x: f64) -> f64 {
     if x <= 0.0 {
         return 1.0;
     }
@@ -515,7 +537,7 @@ pub fn one_way_anova(groups: &[Vec<f64>]) -> Result<Anova, String> {
 }
 
 /// 标准正态分布函数 Φ(x)。
-fn norm_cdf(x: f64) -> f64 {
+pub fn norm_cdf(x: f64) -> f64 {
     0.5 * erfc(-x / std::f64::consts::SQRT_2)
 }
 

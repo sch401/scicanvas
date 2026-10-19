@@ -5697,16 +5697,16 @@
   "feature": "列公式函数库",
   "ref": "Set Column Values / Functions",
   "pri": "P0",
-  "status": "部分实现",
-  "how": "表达式引擎已有 24 个函数调用名，对应 23 个独立函数（log/log10 同义），首批 120 函数目标、聚合函数及函数目录仍待补齐",
-  "verify": "已有解析和计算回归；当前函数按实现计入待验收，逐函数参考值覆盖与大数据验收待补",
+  "status": "已实现待验收",
+  "how": "表达式引擎 121 个函数，分 8 类：数学、三角与双曲、特殊函数（Γ、B、erf/erfinv、不完全 B/Γ 等）、逻辑与比较（if/and/or/not/xor/between，另有比较运算符 < > <= >= == !=）、概率分布（正态/t/F/χ²/二项/泊松/指数的密度、分布函数与分位数）、列统计（sum mean median std var sem count range rms percentile skewness kurtosis，min/max 单参数为整列）、按行序列（cumsum cumprod diff rank zscore lag lead）、日期时间（年月日时分秒、星期、日序、date/time）；设置列值对话框“函数”菜单按类别插入",
+  "verify": "全部标量函数与 Python math / SciPy 1.17.1 / NumPy 2.4.4 参考值一致（相对 1e-9）；偏度、峰度、百分位数、标准差、标准误与 scipy.stats 一致；列统计与按行序列的整列计算及缺失值处理测试；目录名称唯一、≥120 个",
   "milestone": "M1 日常够用",
   "sub_items": {
-   "规划函数（独立功能）": {
+   "列公式函数": {
     "total": 120,
     "done": 0,
-    "review": 23,
-    "note": "当前 24 个调用名中 log/log10 为同一函数；23 个功能按代码枚举计入待验收，逐函数参考验收待补；120 为 SciCanvas 首批目标"
+    "review": 120,
+    "note": "当前 121 个函数名，首批 120 个目标已达到，待人工与 Origin 对照"
    }
   }
  },
