@@ -332,7 +332,43 @@ fn compose<'a>(g: &Graph, book: impl Fn(u64) -> Option<&'a Book>, w: f64, h: f64
         .max(1);
     let cols = g.page.columns.min(grid_count).max(1);
     let rows = grid_count.div_ceil(cols);
-    let (cw, ch) = (gw / cols as f64, gh / rows as f64);
+    // 网格间距（逻辑单位），不超过可用宽高
+    let (gap_x, gap_y) = (
+        (g.page.gap_mm[0] * 96.0 / 25.4 * sx).min(gw * 0.5 / cols.max(2) as f64),
+        (g.page.gap_mm[1] * 96.0 / 25.4 * sy).min(gh * 0.5 / rows.max(2) as f64),
+    );
+    let (cw, ch) = (
+        (gw - gap_x * (cols - 1) as f64) / cols as f64,
+        (gh - gap_y * (rows - 1) as f64) / rows as f64,
+    );
+    // 坐标轴联动：先按各自设置求出目标图层的范围，再把联动图层的视图设成目标范围
+    let mut linked: Vec<Option<View>> = (0..g.page.layers().len())
+        .map(|i| views.get(i).copied().flatten())
+        .collect();
+    if g.page.layers().iter().any(|l| l.link_x.is_some() || l.link_y.is_some()) {
+        let own: Vec<View> = g
+            .page
+            .layers()
+            .iter()
+            .enumerate()
+            .map(|(i, layer)| {
+                build_layer(layer, layer.book_id.and_then(&book), 400.0, 300.0, linked[i]).layers[0].view()
+            })
+            .collect();
+        for (i, layer) in g.page.layers().iter().enumerate() {
+            if layer.link_x.is_none() && layer.link_y.is_none() {
+                continue;
+            }
+            let pick = |link: Option<usize>, axis: fn(&View) -> (f64, f64)| {
+                link.and_then(|j| own.get(j)).map_or(axis(&own[i]), axis)
+            };
+            linked[i] = Some(View {
+                x: pick(layer.link_x, |v| v.x),
+                y: pick(layer.link_y, |v| v.y),
+            });
+        }
+    }
+    let views = &linked[..];
     // 各图层先按 89 mm 一栏的参考尺寸排版，再把坐标、字号、线宽和符号同乘 k：
     // A4 等宽页面上的文字、点和线与单栏图成比例，版面相同只是整体放大。
     let k = g.page.scale();
@@ -382,7 +418,12 @@ fn compose<'a>(g: &Graph, book: impl Fn(u64) -> Option<&'a Book>, w: f64, h: f64
             None => {
                 let index = grid_index;
                 grid_index += 1;
-                [ox + (index % cols) as f64 * cw, oy + (index / cols) as f64 * ch, cw, ch]
+                [
+                    ox + (index % cols) as f64 * (cw + gap_x),
+                    oy + (index / cols) as f64 * (ch + gap_y),
+                    cw,
+                    ch,
+                ]
             }
         };
         let mut sc = build_layer_min(

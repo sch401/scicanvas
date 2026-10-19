@@ -2133,7 +2133,35 @@ impl SciApp {
                                 ui.selectable_value(&mut props_layer, i, format!("图层 {}", i + 1));
                             }
                         });
+                    ui.label("间距 mm");
+                    for gap in graph.page.gap_mm.iter_mut() {
+                        edit_group(
+                            &ui.add(egui::DragValue::new(gap).range(0.0..=100.0).speed(0.5)),
+                            history_group,
+                        );
+                    }
                 });
+                let layer_count = graph.page.layers().len();
+                if layer_count > 1 {
+                    let g = &mut graph.page.layers_mut()[props_layer];
+                    ui.horizontal(|ui| {
+                        for (label, link, salt) in [
+                            ("联动 X 轴", &mut g.link_x, "props-link-x"),
+                            ("联动 Y 轴", &mut g.link_y, "props-link-y"),
+                        ] {
+                            ui.label(label);
+                            let text = link.map_or("无".to_string(), |j| format!("图层 {}", j + 1));
+                            egui::ComboBox::from_id_salt(salt)
+                                .selected_text(text)
+                                .show_ui(ui, |ui| {
+                                    ui.selectable_value(link, None, "无");
+                                    for j in (0..layer_count).filter(|&j| j != props_layer) {
+                                        ui.selectable_value(link, Some(j), format!("图层 {}", j + 1));
+                                    }
+                                });
+                        }
+                    });
+                }
                 let g = &mut graph.page.layers_mut()[props_layer];
                 ui.horizontal(|ui| {
                     let mut custom = g.placement.is_some();

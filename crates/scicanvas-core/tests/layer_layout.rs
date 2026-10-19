@@ -157,3 +157,51 @@ fn page_margins_shift_grid_layers_and_background_colors_the_page() {
     page.margin_mm = [-1.0, 0.0, 0.0, 0.0];
     assert!(page.validate().is_err());
 }
+
+#[test]
+fn grid_gaps_separate_panels_and_linked_axes_follow_their_target() {
+    let mut p = Project::sample();
+    // 两个网格图层：第 2 层只画 C 列（范围不同）
+    let mut second = p.graphs[0].first_layer().clone();
+    second.y_keys = vec!["C".into()];
+    second.x_auto = false;
+    second.x_min = 5.0;
+    second.x_max = 12.0;
+    p.graphs[0].page.add_layer(second);
+    p.graphs[0].page.columns = 2;
+    let mm = 96.0 / 25.4;
+    let layout = |p: &Project, views: &[Option<scene::View>]| scene::layout_page(&p.graphs[0], p, views);
+    let before = layout(&p, &[]);
+    p.graphs[0].page.gap_mm = [10.0, 0.0];
+    p.graphs[0].page.validate().unwrap();
+    let sc = layout(&p, &[]);
+    let [x0, _, w0, _] = sc.layers[0].bounds;
+    let [x1, _, _, _] = sc.layers[1].bounds;
+    assert!((x1 - (x0 + w0) - 10.0 * mm).abs() < 1e-9);
+    assert!(w0 < before.layers[0].bounds[2]);
+    // 第 2 层 X 轴联动到第 1 层：范围相同，第 1 层缩放时跟着变
+    p.graphs[0].page.layers_mut()[1].link_x = Some(0);
+    p.graphs[0].page.validate().unwrap();
+    let sc = layout(&p, &[]);
+    assert_eq!(
+        (sc.layers[1].xa.lo, sc.layers[1].xa.hi),
+        (sc.layers[0].xa.lo, sc.layers[0].xa.hi)
+    );
+    assert_eq!(sc.layers[1].xa.ticks, sc.layers[0].xa.ticks);
+    let zoom = scene::View {
+        x: (2.0, 6.0),
+        y: (sc.layers[0].ya.lo, sc.layers[0].ya.hi),
+    };
+    let sc = layout(&p, &[Some(zoom), None]);
+    assert_eq!((sc.layers[1].xa.lo, sc.layers[1].xa.hi), (2.0, 6.0));
+    // 联动到自身或不存在的图层：拒绝
+    p.graphs[0].page.layers_mut()[1].link_x = Some(1);
+    assert!(p.graphs[0].page.validate().is_err());
+    p.graphs[0].page.layers_mut()[1].link_x = Some(5);
+    assert!(p.graphs[0].page.validate().is_err());
+    // 删除目标图层后联动取消
+    p.graphs[0].page.layers_mut()[1].link_x = Some(0);
+    p.graphs[0].page.remove_layer(0).unwrap();
+    assert_eq!(p.graphs[0].page.layers()[0].link_x, None);
+    p.graphs[0].page.validate().unwrap();
+}

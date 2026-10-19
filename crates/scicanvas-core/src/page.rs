@@ -16,6 +16,14 @@ pub struct Page {
     /// 页边距 mm（左、上、右、下）：网格排版的图层放在边距以内；自定义位置的图层仍按整页定位。
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "no_margin"))]
     pub margin_mm: [f64; 4],
+    /// 网格图层之间的间距 mm（横向、纵向）。
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "no_gap"))]
+    pub gap_mm: [f64; 2],
+}
+
+#[cfg(feature = "serde")]
+fn no_gap(g: &[f64; 2]) -> bool {
+    *g == [0.0; 2]
 }
 
 #[cfg(feature = "serde")]
@@ -41,6 +49,7 @@ impl Default for Page {
             layers: vec![Layer::default()],
             background: None,
             margin_mm: [0.0; 4],
+            gap_mm: [0.0; 2],
         }
     }
 }
@@ -88,6 +97,16 @@ impl Page {
         }
         let layer = self.layers.remove(index);
         self.columns = self.columns.min(self.layers.len());
+        // 联动到被删图层的取消，后面的图层序号前移
+        for l in &mut self.layers {
+            for link in [&mut l.link_x, &mut l.link_y] {
+                *link = match *link {
+                    Some(j) if j == index => None,
+                    Some(j) if j > index => Some(j - 1),
+                    other => other,
+                };
+            }
+        }
         Ok(layer)
     }
     pub fn validate(&self) -> Result<(), String> {
@@ -108,6 +127,16 @@ impl Page {
             || self.height_mm - t - b < 1.0
         {
             return Err("页边距必须非负，且留给图层的区域至少 1 mm".into());
+        }
+        if self.gap_mm.iter().any(|g| !g.is_finite() || *g < 0.0) {
+            return Err("网格间距必须是非负数".into());
+        }
+        for (i, layer) in self.layers.iter().enumerate() {
+            for link in [layer.link_x, layer.link_y].into_iter().flatten() {
+                if link == i || link >= self.layers.len() {
+                    return Err("坐标轴联动的目标图层无效".into());
+                }
+            }
         }
         for layer in &self.layers {
             if let Some(rect) = layer.placement {
@@ -153,6 +182,11 @@ pub struct Layer {
     pub frame: bool,
     #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "TickDir::is_out"))]
     pub tick_dir: TickDir,
+    /// 坐标轴联动：X、Y 轴的范围跟随另一个图层（图层序号）。
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Option::is_none"))]
+    pub link_x: Option<usize>,
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Option::is_none"))]
+    pub link_y: Option<usize>,
     /// 刻度标签的数字格式（日期列做 X 时自动用日期刻度）。
     #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "is_auto_number"))]
     pub x_format: crate::format::NumberFormat,
@@ -261,6 +295,8 @@ impl Default for Layer {
             frame: false,
             tick_dir: TickDir::Out,
             connect: Connect::Straight,
+            link_x: None,
+            link_y: None,
             x_format: crate::format::NumberFormat::Auto,
             y_format: crate::format::NumberFormat::Auto,
         }
