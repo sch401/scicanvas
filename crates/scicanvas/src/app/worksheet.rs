@@ -251,6 +251,29 @@ impl SciApp {
             .filter(|c| *c < book.columns.len())
     }
 
+    /// 自定义排序对话框：主关键字默认为选中的第一列或当前单元格所在列。
+    pub(crate) fn open_sort_dialog(&mut self) {
+        let Some(bid) = self.active_book_id() else { return };
+        let Some(book) = self.project.book(bid) else { return };
+        let columns: Vec<(String, String)> = book
+            .columns
+            .iter()
+            .map(|c| (c.key.clone(), format!("{}（{}）", c.key, c.display_name())))
+            .collect();
+        if columns.is_empty() {
+            self.status = "工作表没有列".into();
+            return;
+        }
+        let first = self.sort_column(bid).unwrap_or(0);
+        self.dialog = Some(Dialog::Sort {
+            book: bid,
+            columns,
+            keys: [(Some(first), true), (None, true), (None, true)],
+            selected: self.selected_keys(bid),
+            only_selected: false,
+        });
+    }
+
     pub(crate) fn sort_active(&mut self, ascending: bool) {
         let Some(bid) = self.active_book_id() else { return };
         let Some(col) = self.sort_column(bid) else { return };

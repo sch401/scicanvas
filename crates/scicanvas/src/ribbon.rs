@@ -205,7 +205,7 @@ pub static TABS: &[Tab] = &[
             },
             Group {
                 label: "排序",
-                items: &[Smalls(&["sort.asc", "sort.desc"])],
+                items: &[Smalls(&["sort.asc", "sort.desc", "sort.custom"])],
             },
             Group {
                 label: "导出",

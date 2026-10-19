@@ -1643,6 +1643,26 @@ impl SciApp {
                 self.history.changed();
                 self.finish_edit();
             }
+            dialogs::Action::Sort(book, keys, within) => {
+                self.finish_edit();
+                self.begin_edit("排序");
+                match self.project.sort_rows(book, &keys, within.as_deref()) {
+                    Ok(()) => {
+                        let names: Vec<String> = keys
+                            .iter()
+                            .map(|(k, asc)| format!("{k}{}", if *asc { "升序" } else { "降序" }))
+                            .collect();
+                        self.status = match &within {
+                            Some(cols) => format!("已按 {} 排序 {} 列，其余列不动", names.join("、"), cols.join("、")),
+                            None => format!("已按 {} 排序整张工作表", names.join("、")),
+                        };
+                        self.dialog = None;
+                        self.history.changed();
+                    }
+                    Err(e) => self.status = e,
+                }
+                self.finish_edit();
+            }
             dialogs::Action::SgDiff(w, order, deriv) => {
                 self.finish_edit();
                 self.begin_edit("SG 平滑求导");
@@ -2944,6 +2964,75 @@ mod history_tests {
         ui.click(&mut app, note_pos);
         assert_eq!(app.explorer_selection, vec![folder, 2, note]);
         assert!(app.history.undo_label().is_none());
+    }
+
+    /// 渲染当前对话框并点击文字为 `label` 的按钮。
+    fn press_dialog_button(app: &mut SciApp, label: &str) {
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        ctx.style_mut(|style| style.animation_time = 0.0);
+        let mut time = 0.0;
+        let mut frame = |app: &mut SciApp, events| {
+            time += 0.02;
+            ctx.run(
+                egui::RawInput {
+                    time: Some(time),
+                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1400.0, 1000.0))),
+                    events,
+                    ..Default::default()
+                },
+                |ctx| app.dialogs(ctx),
+            )
+        };
+        frame(app, vec![]);
+        let output = frame(app, vec![]);
+        let pos = output
+            .shapes
+            .iter()
+            .find_map(|s| match &s.shape {
+                egui::Shape::Text(t) if t.galley.job.text == label => Some(t.pos + egui::vec2(5.0, 5.0)),
+                _ => None,
+            })
+            .unwrap_or_else(|| panic!("missing button {label}"));
+        frame(app, vec![egui::Event::PointerMoved(pos)]);
+        for pressed in [true, false] {
+            frame(
+                app,
+                vec![egui::Event::PointerButton {
+                    pos,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+            );
+        }
+    }
+
+    #[test]
+    fn custom_sort_dialog_sorts_by_two_keys_or_only_selected_columns() {
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["B".into()]);
+        app.run_command("sort.custom");
+        let Some(Dialog::Sort {
+            keys, only_selected, ..
+        }) = app.dialog.as_mut()
+        else {
+            panic!("sort dialog not open");
+        };
+        // 主关键字默认为选中的 B 列；改为降序、只排 B 列
+        assert_eq!(keys[0], (Some(1), true));
+        keys[0].1 = false;
+        *only_selected = true;
+        let before = app.project.clone();
+        let a_before = app.project.book(1).unwrap().columns[0].values();
+        press_dialog_button(&mut app, "排序");
+        assert!(app.dialog.is_none(), "{}", app.status);
+        let book = app.project.book(1).unwrap();
+        let b = book.columns[1].values();
+        assert!(b.windows(2).all(|w| w[0] >= w[1]));
+        assert_eq!(book.columns[0].values(), a_before);
+        roundtrip(&mut app, &before);
     }
 
     #[test]

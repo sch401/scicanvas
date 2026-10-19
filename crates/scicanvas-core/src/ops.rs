@@ -1637,15 +1637,53 @@ impl Project {
 
     /// 按某一列排序整张工作表，各行数据一起移动。数值排在文本前面，空单元格排在最后。
     pub fn sort_book(&mut self, book_id: u64, col: usize, ascending: bool) -> Result<(), String> {
+        let key = self
+            .book(book_id)
+            .ok_or("找不到工作簿")?
+            .columns
+            .get(col)
+            .ok_or("没有这一列")?
+            .key
+            .clone();
+        self.sort_rows(book_id, &[(key, ascending)], None)
+    }
+
+    /// 多关键字排序：先按第一个关键字，相同时按下一个，再相同保持原顺序（稳定）。
+    /// `within` 为 None 时整张表各行一起移动；否则只重排这些列（关键字列须在其中），其余列不动。
+    pub fn sort_rows(
+        &mut self,
+        book_id: u64,
+        keys: &[(String, bool)],
+        within: Option<&[String]>,
+    ) -> Result<(), String> {
         let book = self.book_mut(book_id).ok_or("找不到工作簿")?;
-        if col >= book.columns.len() {
-            return Err("没有这一列".into());
+        if keys.is_empty() {
+            return Err("请至少选择一个排序关键字".into());
         }
-        let n = book.nrows();
-        let data = &book.columns[col].data;
+        let moving: Vec<usize> = match within {
+            None => (0..book.columns.len()).collect(),
+            Some(cols) => cols.iter().filter_map(|k| book.column_index(k)).collect(),
+        };
+        let mut key_cols = vec![];
+        for (k, asc) in keys {
+            let i = book.column_index(k).ok_or_else(|| format!("找不到列 {k}"))?;
+            if !moving.contains(&i) {
+                return Err(format!("排序关键字 {k} 不在要排序的列里"));
+            }
+            key_cols.push((i, *asc));
+        }
+        let n = moving.iter().map(|&i| book.columns[i].data.len()).max().unwrap_or(0);
         let mut idx: Vec<usize> = (0..n).collect();
-        idx.sort_by(|&i, &j| data.compare_rows(i, j, ascending).then(i.cmp(&j)));
-        for c in &mut book.columns {
+        idx.sort_by(|&i, &j| {
+            key_cols
+                .iter()
+                .map(|&(c, asc)| book.columns[c].data.compare_rows(i, j, asc))
+                .find(|o| o.is_ne())
+                .unwrap_or(std::cmp::Ordering::Equal)
+                .then(i.cmp(&j))
+        });
+        for &c in &moving {
+            let c = &mut book.columns[c];
             c.data = c.data.reordered(&idx);
             while c.data.last().is_some_and(|s| s.trim().is_empty()) {
                 c.data.pop();
@@ -2323,6 +2361,36 @@ mod tests {
         assert_eq!(b.nrows(), 2);
         assert_eq!(b.columns[1].data, vec!["41", "41"]);
         assert_eq!(b.columns[0].data.text_at(0), "B · 电压 A");
+    }
+
+    #[test]
+    fn multi_key_and_selected_column_sorting() {
+        let mut p = Project::default();
+        let id = p.new_book();
+        let b = p.book_mut(id).unwrap();
+        b.ensure_columns(3);
+        b.columns[0].data = ["b", "a", "b", "a", "c"].iter().map(|s| s.to_string()).collect();
+        b.columns[1].data = ["2", "5", "1", "5", "0"].iter().map(|s| s.to_string()).collect();
+        b.columns[2].data = ["r0", "r1", "r2", "r3", "r4"].iter().map(|s| s.to_string()).collect();
+        let col = |p: &Project, i: usize| {
+            (0..5)
+                .map(|r| p.book(id).unwrap().columns[i].data.text_at(r).into_owned())
+                .collect::<Vec<String>>()
+        };
+        // 先按 A 升序，再按 B 降序；A、B 都相同的两行保持原顺序（r1 在 r3 前）
+        p.sort_rows(id, &[("A".into(), true), ("B".into(), false)], None)
+            .unwrap();
+        assert_eq!(col(&p, 0), ["a", "a", "b", "b", "c"]);
+        assert_eq!(col(&p, 1), ["5", "5", "2", "1", "0"]);
+        assert_eq!(col(&p, 2), ["r1", "r3", "r0", "r2", "r4"]);
+        // 只排 B 列：A、C 不动
+        p.sort_rows(id, &[("B".into(), true)], Some(&["B".into()])).unwrap();
+        assert_eq!(col(&p, 1), ["0", "1", "2", "5", "5"]);
+        assert_eq!(col(&p, 0), ["a", "a", "b", "b", "c"]);
+        assert_eq!(col(&p, 2), ["r1", "r3", "r0", "r2", "r4"]);
+        // 关键字不在要排序的列里、没有关键字时拒绝
+        assert!(p.sort_rows(id, &[("A".into(), true)], Some(&["B".into()])).is_err());
+        assert!(p.sort_rows(id, &[], None).is_err());
     }
 
     #[test]

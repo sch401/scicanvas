@@ -893,6 +893,16 @@ fn build() -> Vec<Command> {
         )
         .modifies(),
         c(
+            "sort.custom",
+            "自定义排序…",
+            "sortasc",
+            "",
+            "排序",
+            "sort custom multiple keys 多列排序 多关键字 自定义排序 只排选中列",
+            need_book,
+            |a| a.open_sort_dialog(),
+        ),
+        c(
             "sort.asc",
             "升序排序",
             "sortasc",

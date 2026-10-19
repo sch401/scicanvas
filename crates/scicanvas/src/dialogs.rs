@@ -54,6 +54,15 @@ pub enum Dialog {
         two_sided: bool,
         odd: bool,
     },
+    /// 自定义排序：可选列（标识、显示名）、最多三级关键字（列序号，None 为不用；是否升序）、
+    /// 选中的列及是否只排选中列。
+    Sort {
+        book: u64,
+        columns: Vec<(String, String)>,
+        keys: [(Option<usize>, bool); 3],
+        selected: Vec<String>,
+        only_selected: bool,
+    },
     /// Savitzky–Golay 平滑求导：窗口点数、多项式阶数、导数阶数。
     SgDiff {
         window: usize,
@@ -178,6 +187,7 @@ pub enum Action {
     Fit(usize),
     Smooth(SmoothMethod, usize),
     SgDiff(usize, usize, usize),
+    Sort(u64, Vec<(String, bool)>, Option<Vec<String>>),
     Ifft(u64, String, Option<String>, scicanvas_core::fft::InverseInput),
     Normalize(NormalizeMethod),
     ExportPng(u32),
@@ -483,6 +493,58 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
                 let (ok, cancel) = buttons(ui, "平滑");
                 if ok {
                     action = Action::Smooth(*method, (*w).max(3) | 1);
+                } else if cancel {
+                    action = Action::Close;
+                }
+            });
+        }
+        Dialog::Sort {
+            book,
+            columns,
+            keys,
+            selected,
+            only_selected,
+        } => {
+            window(ctx, "排序").show(ctx, |ui| {
+                egui::Grid::new("sort-grid")
+                    .num_columns(3)
+                    .spacing([12.0, 8.0])
+                    .show(ui, |ui| {
+                        for (level, (col, asc)) in keys.iter_mut().enumerate() {
+                            ui.label(["主关键字", "次关键字", "第三关键字"][level]);
+                            let text = col.map_or("无".to_string(), |i| columns[i].1.clone());
+                            egui::ComboBox::from_id_salt(("sort-key", level))
+                                .selected_text(text)
+                                .width(160.0)
+                                .show_ui(ui, |ui| {
+                                    if level > 0 {
+                                        ui.selectable_value(col, None, "无");
+                                    }
+                                    for (i, (_, label)) in columns.iter().enumerate() {
+                                        ui.selectable_value(col, Some(i), label);
+                                    }
+                                });
+                            ui.horizontal(|ui| {
+                                ui.radio_value(asc, true, "升序");
+                                ui.radio_value(asc, false, "降序");
+                            });
+                            ui.end_row();
+                        }
+                    });
+                if !selected.is_empty() {
+                    ui.checkbox(
+                        only_selected,
+                        format!("只排选中列（{}），其余列不动", selected.join("、")),
+                    );
+                }
+                let (ok, cancel) = buttons(ui, "排序");
+                if ok {
+                    let keys: Vec<(String, bool)> = keys
+                        .iter()
+                        .filter_map(|(c, asc)| c.map(|i| (columns[i].0.clone(), *asc)))
+                        .collect();
+                    let within = (*only_selected && !selected.is_empty()).then(|| selected.clone());
+                    action = Action::Sort(*book, keys, within);
                 } else if cancel {
                     action = Action::Close;
                 }
