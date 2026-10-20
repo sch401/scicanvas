@@ -145,6 +145,7 @@ impl Command {
 
 fn build() -> Vec<Command> {
     let mut commands = vec![
+        c("analysis.curves", "分析曲线…", "graph", "", "分析", "select curves 数据选择 跨表", need_graph, |a| a.open_analysis_curves()),
         // 文件
         c(
             "project.folder.new",
@@ -1164,7 +1165,7 @@ fn build() -> Vec<Command> {
             "",
             "统计",
             "normality test shapiro wilk normal distribution 正态性 正态分布 检验",
-            need_book,
+            need_data,
             |a| a.normality(),
         ),
         c(
@@ -1174,7 +1175,7 @@ fn build() -> Vec<Command> {
             "",
             "统计",
             "grubbs outlier test 异常值 离群值 可疑值 检验",
-            need_book,
+            need_data,
             |a| a.grubbs(),
         ),
         c(
@@ -1195,7 +1196,7 @@ fn build() -> Vec<Command> {
             "",
             "统计",
             "anova one way analysis of variance f test 方差分析 单因素 F 检验",
-            need_book,
+            need_data,
             |a| a.anova(),
         ),
         c(
@@ -1205,7 +1206,7 @@ fn build() -> Vec<Command> {
             "",
             "统计",
             "correlation pearson spearman kendall rank 相关 相关系数 秩相关",
-            need_book,
+            need_data,
             |a| a.correlations(),
         ),
         c(
@@ -1215,7 +1216,7 @@ fn build() -> Vec<Command> {
             "",
             "统计",
             "t test ttest student welch paired one sample hypothesis 假设检验 显著性 p 值",
-            need_book,
+            need_data,
             |a| a.open_ttest_dialog(),
         ),
         c(

@@ -3,7 +3,7 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-pub const PROJECT_VERSION: u32 = 10;
+pub const PROJECT_VERSION: u32 = 11;
 
 /// 列的绘图角色，对应 Origin 里的 X / Y / 忽略。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -790,7 +790,7 @@ impl Project {
     /// 界面、预设和未来脚本共用的声明式作图入口；校验成功后才修改项目。
     pub fn plot_spec(&mut self, spec: crate::plotspec::PlotSpec) -> Result<u64, String> {
         let book = self.book(spec.book_id.ok_or("请选择工作簿")?).ok_or("找不到工作簿")?;
-        spec.validate(book)?;
+        spec.validate_in(book, &|id| self.book(id))?;
         let parent = self.folder_of(book.id);
         let id = self.alloc_id();
         let mut graph = Graph::new(id, self.unique_name("Graph"));
@@ -862,13 +862,10 @@ impl Project {
         self.books.retain(|b| b.id != id);
         self.graphs.retain(|g| g.id != id);
         self.notes.retain(|n| n.id != id);
+        let books = &self.books;
         for g in &mut self.graphs {
             for layer in g.page.layers_mut() {
-                if layer.book_id == Some(id) {
-                    layer.book_id = None;
-                } else {
-                    layer.drop_foreign(id, None);
-                }
+                layer.remove_source_book(id, &|id| books.iter().find(|b| b.id == id));
             }
         }
     }
@@ -920,6 +917,7 @@ impl Project {
                 if layer.book_id == Some(book_id) {
                     layer.y_keys.retain(|k| !keys.contains(k));
                     layer.line_only.retain(|k| !keys.contains(k));
+                    layer.row_by_y.retain(|k, _| !keys.contains(k));
                     layer.x_by_y.retain(|y, x| !keys.contains(y) && !keys.contains(x));
                     // 保留缺失下端的映射，避免删除后把浮动柱静默改成从零开始。
                     layer.base_by_y.retain(|y, _| !keys.contains(y));
@@ -982,19 +980,34 @@ impl Project {
 
     /// 按 `map` 平移引用 `book_id` 的图层行范围；端点被删除时向内收缩，整段删除则清除范围。
     fn shift_row_ranges(&mut self, book_id: u64, map: impl Fn(usize) -> Option<usize>) {
-        for g in &mut self.graphs {
-            for layer in g.page.layers_mut() {
-                if layer.book_id != Some(book_id) {
-                    continue;
-                }
-                let Some((a, b)) = layer.rows else { continue };
-                // 起点被删时取删除段之后的第一行，终点被删时取删除段之前的最后一行
+        let shift = |range: &mut Option<(usize, usize)>| {
+            if let Some((a, b)) = *range {
                 let start = (a..=b).find_map(&map);
                 let end = (a..=b).rev().find_map(&map);
-                layer.rows = match (start, end) {
+                *range = match (start, end) {
                     (Some(s), Some(e)) if s <= e => Some((s, e)),
                     _ => None,
                 };
+            }
+        };
+        if let Some(book) = self.book_mut(book_id) {
+            for col in &mut book.columns {
+                if let Some(operation) = &mut col.op {
+                    shift(&mut operation.rows);
+                }
+            }
+        }
+        for g in &mut self.graphs {
+            for layer in g.page.layers_mut() {
+                let main = layer.book_id;
+                if main == Some(book_id) {
+                    shift(&mut layer.rows);
+                }
+                for (key, range) in &mut layer.spec.row_by_y {
+                    if crate::plotspec::DataRef::from_key(main, key).is_some_and(|r| r.book == book_id) {
+                        shift(range);
+                    }
+                }
             }
         }
     }

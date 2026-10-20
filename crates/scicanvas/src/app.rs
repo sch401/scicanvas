@@ -44,6 +44,7 @@ enum ColAction {
 }
 
 pub struct SciApp {
+    analysis_curves: HashMap<(u64, usize), Vec<scicanvas_core::plotspec::DataRef>>,
     pub(crate) project: Project,
     pub(crate) history: History,
     history_group: Option<egui::Id>,
@@ -142,6 +143,7 @@ impl SciApp {
 
     fn initial(pal: Palette) -> Self {
         let mut app = SciApp {
+            analysis_curves: HashMap::new(),
             project: Project::default(),
             history: History::default(),
             history_group: None,
@@ -187,6 +189,7 @@ impl SciApp {
     }
 
     fn load_project(&mut self, project: Project, path: Option<PathBuf>) {
+        self.analysis_curves.clear();
         self.active_layers.clear();
         self.plot_draft = None;
         self.history = History::default();
@@ -696,6 +699,18 @@ impl SciApp {
 
     fn restore_history(&mut self, project: Project) {
         self.project = project;
+        self.analysis_curves.retain(|(graph, index), curves| {
+            let Some(layer) = self.project.graph(*graph).and_then(|g| g.page.layers().get(*index)) else {
+                return false;
+            };
+            curves.retain(|r| {
+                layer
+                    .y_keys
+                    .iter()
+                    .any(|key| scicanvas_core::plotspec::DataRef::from_key(layer.book_id, key).as_ref() == Some(r))
+            });
+            true
+        });
         self.active_layers.retain(|id, index| {
             if let Some(graph) = self.project.graph(*id) {
                 *index = (*index).min(graph.page.layers().len() - 1);
@@ -832,6 +847,14 @@ impl SciApp {
     /// 分析的输入：当前图形里的数据曲线，或当前工作簿里选中的列。
     pub(crate) fn analysis_source(&self) -> Option<Source> {
         if let Some(g) = self.active_graph_id() {
+            let index = self.layer_index(g);
+            if let Some(curves) = self.analysis_curves.get(&(g, index)) {
+                return Some(Source::Curves {
+                    graph_id: g,
+                    index,
+                    curves: curves.clone(),
+                });
+            }
             return self
                 .active_layer()
                 .and_then(|layer| layer.book_id)
@@ -912,6 +935,7 @@ impl SciApp {
         let graph = self.project.graph_mut(id).unwrap();
         match graph.page.remove_layer(index) {
             Ok(_) => {
+                self.analysis_curves.retain(|(graph_id, _), _| *graph_id != id);
                 self.active_layers.insert(id, index.min(graph.page.layers().len() - 1));
                 self.status = "已删除图层".into();
             }
@@ -1183,6 +1207,39 @@ impl SciApp {
     }
 
     /// 当前工作簿里按点选顺序参与检验的列（没有点选列时用单元格选区覆盖的列）。
+    pub(crate) fn open_analysis_curves(&mut self) {
+        let Some(graph) = self.active_graph_id() else { return };
+        let layer = self.layer_index(graph);
+        match self.project.resolve(&Source::Layer {
+            graph_id: graph,
+            index: layer,
+        }) {
+            Ok(resolved) => {
+                let selected = self.analysis_curves.get(&(graph, layer));
+                let curves = resolved
+                    .items
+                    .iter()
+                    .map(|item| {
+                        let reference = scicanvas_core::plotspec::DataRef::new(item.book_id, &item.y);
+                        let book = self.project.book(item.book_id).unwrap();
+                        let name = format!("{}：{}", book.name, book.column(&item.y).unwrap().display_name());
+                        let checked = selected.is_none_or(|s| s.contains(&reference));
+                        (reference, name, checked)
+                    })
+                    .collect();
+                self.dialog = Some(Dialog::AnalysisCurves { graph, layer, curves });
+            }
+            Err(error) => self.status = error,
+        }
+    }
+
+    fn statistical_columns(&self) -> Option<Vec<scicanvas_core::ops::AnalysisColumn>> {
+        if self.active_book_id().is_some_and(|id| self.picked(id).0.is_empty()) {
+            return Some(Vec::new());
+        }
+        self.project.analysis_columns(&self.analysis_source()?).ok()
+    }
+
     fn ttest_columns(&self) -> Option<(u64, Vec<String>)> {
         let id = self.active_book_id()?;
         let book = self.project.book(id)?;
@@ -1201,8 +1258,8 @@ impl SciApp {
             .analysis_source()
             .and_then(|src| self.project.resolve(&src).ok())
             .and_then(|r| {
-                let book = self.project.book(r.book_id)?;
                 let item = r.items.first()?;
+                let book = self.project.book(item.book_id)?;
                 let (xs, _, _) = scicanvas_core::ops::get_xy(book, item);
                 match item.x {
                     Some(_) => scicanvas_core::fft::sample_interval(&xs).ok(),
@@ -1310,19 +1367,19 @@ impl SciApp {
 
     /// 点选的各列分别做 Shapiro–Wilk 正态性检验。
     pub(crate) fn normality(&mut self) {
-        let Some((id, keys)) = self.ttest_columns() else { return };
-        if keys.is_empty() {
+        let Some(columns) = self.statistical_columns() else {
+            return;
+        };
+        if columns.is_empty() {
             self.status = "请先在工作表里单击选中要检验的列".into();
             return;
         }
-        let book = self.project.book(id).unwrap();
         let mut rows = vec![["列", "N", "W", "p", "α = 0.05"].map(String::from).to_vec()];
         let mut problems = vec![];
-        for k in &keys {
-            let c = book.column(k).unwrap();
-            match scicanvas_core::stats::shapiro_wilk(&c.values()) {
+        for c in &columns {
+            match scicanvas_core::stats::shapiro_wilk(&c.values.clone()) {
                 Ok(r) => rows.push(vec![
-                    c.display_name().to_owned(),
+                    c.name.as_str().to_owned(),
                     r.n.to_string(),
                     fmt_num(round_sig(r.w, 6)),
                     fmt_num(round_sig(r.p, 6)),
@@ -1333,7 +1390,7 @@ impl SciApp {
                     }
                     .into(),
                 ]),
-                Err(e) => problems.push(format!("{}：{e}", c.display_name())),
+                Err(e) => problems.push(format!("{}：{e}", c.name.as_str())),
             }
         }
         if rows.len() == 1 {
@@ -1354,21 +1411,21 @@ impl SciApp {
 
     /// 点选的各列分别做 Grubbs 异常值检验（双侧，α = 0.05）。
     pub(crate) fn grubbs(&mut self) {
-        let Some((id, keys)) = self.ttest_columns() else { return };
-        if keys.is_empty() {
+        let Some(columns) = self.statistical_columns() else {
+            return;
+        };
+        if columns.is_empty() {
             self.status = "请先在工作表里单击选中要检验的列".into();
             return;
         }
-        let book = self.project.book(id).unwrap();
         let mut rows = vec![["列", "N", "可疑值", "所在行", "G", "临界值 G(0.05)", "p", "结论"]
             .map(String::from)
             .to_vec()];
         let mut problems = vec![];
-        for k in &keys {
-            let c = book.column(k).unwrap();
-            match scicanvas_core::stats::grubbs(&c.values(), 0.05) {
+        for c in &columns {
+            match scicanvas_core::stats::grubbs(&c.values.clone(), 0.05) {
                 Ok(r) => rows.push(vec![
-                    c.display_name().to_owned(),
+                    c.name.as_str().to_owned(),
                     r.n.to_string(),
                     fmt_num(r.value),
                     (r.index + 1).to_string(),
@@ -1382,7 +1439,7 @@ impl SciApp {
                     }
                     .into(),
                 ]),
-                Err(e) => problems.push(format!("{}：{e}", c.display_name())),
+                Err(e) => problems.push(format!("{}：{e}", c.name.as_str())),
             }
         }
         if rows.len() == 1 {
@@ -1423,17 +1480,15 @@ impl SciApp {
 
     /// 每个点选的列作为一组做单因素方差分析。
     pub(crate) fn anova(&mut self) {
-        let Some((id, keys)) = self.ttest_columns() else { return };
-        if keys.len() < 2 {
+        let Some(columns) = self.statistical_columns() else {
+            return;
+        };
+        if columns.len() < 2 {
             self.status = "请先在工作表里单击选中至少两列（每列一组）".into();
             return;
         }
-        let book = self.project.book(id).unwrap();
-        let groups: Vec<Vec<f64>> = keys.iter().map(|k| book.column(k).unwrap().values()).collect();
-        let names: Vec<String> = keys
-            .iter()
-            .map(|k| book.column(k).unwrap().display_name().to_owned())
-            .collect();
+        let groups: Vec<Vec<f64>> = columns.iter().map(|c| c.values.clone()).collect();
+        let names: Vec<String> = columns.iter().map(|c| c.name.clone()).collect();
         match scicanvas_core::stats::one_way_anova(&groups) {
             Ok(result) => {
                 self.status = format!(
@@ -1451,24 +1506,25 @@ impl SciApp {
     /// 点选的列两两计算 Pearson、Spearman、Kendall 相关系数。
     pub(crate) fn correlations(&mut self) {
         use scicanvas_core::stats::{correlation, CorrMethod};
-        let Some((id, keys)) = self.ttest_columns() else { return };
-        if keys.len() < 2 {
+        let Some(columns) = self.statistical_columns() else {
+            return;
+        };
+        if columns.len() < 2 {
             self.status = "请先在工作表里单击选中至少两列（Ctrl+单击多选）".into();
             return;
         }
-        let book = self.project.book(id).unwrap();
         let mut pairs = vec![];
         let mut problems = vec![];
-        for i in 0..keys.len() {
-            for j in i + 1..keys.len() {
-                let (a, b) = (book.column(&keys[i]).unwrap(), book.column(&keys[j]).unwrap());
+        for i in 0..columns.len() {
+            for j in i + 1..columns.len() {
+                let (a, b) = (&columns[i], &columns[j]);
                 let found: Result<Vec<_>, String> = CorrMethod::ALL
                     .iter()
-                    .map(|m| correlation(&a.values(), &b.values(), *m))
+                    .map(|m| correlation(&a.values.clone(), &b.values.clone(), *m))
                     .collect();
                 match found {
-                    Ok(cs) => pairs.push((a.display_name().to_owned(), b.display_name().to_owned(), cs)),
-                    Err(e) => problems.push(format!("{} 与 {}：{e}", a.display_name(), b.display_name())),
+                    Ok(cs) => pairs.push((a.name.as_str().to_owned(), b.name.as_str().to_owned(), cs)),
+                    Err(e) => problems.push(format!("{} 与 {}：{e}", a.name.as_str(), b.name.as_str())),
                 }
             }
         }
@@ -1485,16 +1541,14 @@ impl SciApp {
     }
 
     pub(crate) fn open_ttest_dialog(&mut self) {
-        let Some((id, keys)) = self.ttest_columns() else { return };
-        let book = self.project.book(id).unwrap();
-        let columns = keys
-            .iter()
-            .take(2)
-            .map(|k| book.column(k).unwrap().display_name().to_owned())
-            .collect();
+        let Some(columns) = self.statistical_columns() else {
+            return;
+        };
+        let count = columns.len();
+        let columns = columns.iter().take(2).map(|c| c.name.clone()).collect();
         self.dialog = Some(Dialog::TTest {
             columns,
-            kind: if keys.len() >= 2 { 1 } else { 0 },
+            kind: if count >= 2 { 1 } else { 0 },
             mu: 0.0,
             equal_var: false,
             level: 0.95,
@@ -1502,15 +1556,14 @@ impl SciApp {
     }
 
     fn run_ttest(&mut self, kind: scicanvas_core::stats::TTestKind, level: f64) {
-        let Some((id, keys)) = self.ttest_columns() else { return };
-        let book = self.project.book(id).unwrap();
-        let values = |k: Option<&String>| k.and_then(|k| book.column(k)).map(|c| c.values()).unwrap_or_default();
-        let names = keys
-            .iter()
-            .take(2)
-            .map(|k| book.column(k).unwrap().display_name().to_owned())
-            .collect();
-        match scicanvas_core::stats::t_test(kind, &values(keys.first()), &values(keys.get(1)), level) {
+        let Some(columns) = self.statistical_columns() else {
+            return;
+        };
+        let names = columns.iter().take(2).map(|c| c.name.clone()).collect();
+        let empty = Vec::new();
+        let a = columns.first().map(|c| &c.values).unwrap_or(&empty);
+        let b = columns.get(1).map(|c| &c.values).unwrap_or(&empty);
+        match scicanvas_core::stats::t_test(kind, a, b, level) {
             Ok(result) => {
                 self.status = format!(
                     "{}：t = {}，p = {}",
@@ -1610,6 +1663,10 @@ impl SciApp {
     fn dialogs(&mut self, ctx: &egui::Context) {
         let Some(d) = self.dialog.as_mut() else { return };
         match dialogs::show(ctx, d, &self.pal) {
+            dialogs::Action::AnalysisCurves(graph, layer, curves) => {
+                self.analysis_curves.insert((graph, layer), curves);
+                self.dialog = None;
+            }
             dialogs::Action::SaveNote(title, text) => {
                 self.finish_edit();
                 self.begin_edit("保存结果为 Note");
@@ -3050,6 +3107,107 @@ mod history_tests {
         assert_eq!(&app.project, before);
         app.run_command("edit.redo");
         assert_eq!(app.project, after);
+    }
+
+    #[test]
+    fn graph_analysis_curve_dialog_selects_foreign_source_and_history_is_atomic() {
+        let mut app = app();
+        let mut p = Project::default();
+        let a = p.new_book();
+        let b = p.new_book();
+        for (id, slope) in [(a, 2.0), (b, 3.0)] {
+            let book = p.book_mut(id).unwrap();
+            book.columns[0].data = (1..13).map(|x| x.to_string()).collect();
+            book.columns[1].data = (1..13).map(|x| (slope * x as f64 + 1.0).to_string()).collect();
+        }
+        let (gid, _) = p.plot_from_selection(a, &[], PlotType::LineSymbol).unwrap();
+        p.add_curves(gid, 0, b, &["B".into()]).unwrap();
+        app.load_project(p, None);
+        let before = app.project.clone();
+        app.run_command("analysis.curves");
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        ctx.style_mut(|style| style.animation_time = 0.0);
+        let mut time = 0.0;
+        let mut frame = |app: &mut SciApp, events| {
+            time += 0.02;
+            ctx.run(
+                egui::RawInput {
+                    time: Some(time),
+                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1000.0, 700.0))),
+                    events,
+                    ..Default::default()
+                },
+                |ctx| app.dialogs(ctx),
+            )
+        };
+        let at = |output: &egui::FullOutput, label: &str| {
+            output
+                .shapes
+                .iter()
+                .find_map(|s| match &s.shape {
+                    egui::Shape::Text(t) if t.galley.job.text == label => Some(t.pos + egui::vec2(4.0, 4.0)),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("missing {label}"))
+        };
+        frame(&mut app, vec![]);
+        frame(&mut app, vec![]);
+        let output = frame(&mut app, vec![]);
+        let pos = at(&output, "Book1：B");
+        for pressed in [true, false] {
+            frame(
+                &mut app,
+                vec![
+                    egui::Event::PointerMoved(pos),
+                    egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+            );
+        }
+        let pos = at(&frame(&mut app, vec![]), "应用");
+        for pressed in [true, false] {
+            frame(
+                &mut app,
+                vec![
+                    egui::Event::PointerMoved(pos),
+                    egui::Event::PointerButton {
+                        pos,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+            );
+        }
+        assert!(app.dialog.is_none());
+        assert!(app.history.undo_label().is_none());
+        assert_eq!(
+            app.project.resolve(&app.analysis_source().unwrap()).unwrap().items[0].book_id,
+            b
+        );
+        app.run_command("fit.linear");
+        assert_eq!(app.project.book(a), before.book(a));
+        assert!(app.project.book(b).unwrap().columns.len() > before.book(b).unwrap().columns.len());
+        let Some(Dialog::FitReport(reports)) = &app.dialog else {
+            panic!("{}", app.status)
+        };
+        assert_eq!(reports.len(), 1);
+        assert_eq!(reports[0].book_id, b);
+        assert!((reports[0].fit.coef[1] - 3.0).abs() < 1e-10);
+        roundtrip(&mut app, &before);
+        app.analysis_curves.clear();
+        app.anova();
+        let Some(Dialog::Anova { names, .. }) = &app.dialog else {
+            panic!("{}", app.status)
+        };
+        assert_eq!(names, &["Book1：B", "Book2：B"]);
+        app.correlations();
+        assert!(matches!(&app.dialog, Some(Dialog::Correlations(pairs)) if pairs.len() == 1));
     }
 
     #[test]

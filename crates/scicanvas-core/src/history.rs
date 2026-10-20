@@ -165,6 +165,7 @@ fn estimated_bytes(p: &Project) -> usize {
     for g in &p.graphs {
         bytes += g.name.capacity() + std::mem::size_of_val(g.page.layers());
         for layer in g.page.layers() {
+            bytes += layer.row_by_y.keys().map(|key| 128 + key.capacity()).sum::<usize>();
             bytes += [&layer.title, &layer.x_title, &layer.y_title]
                 .iter()
                 .map(|s| s.capacity())

@@ -124,6 +124,10 @@ pub static TABS: &[Tab] = &[
         ctx: None,
         groups: &[
             Group {
+                label: "数据选择",
+                items: &[Smalls(&["analysis.curves"])],
+            },
+            Group {
                 label: "拟合",
                 items: &[
                     Big("fit.linear"),

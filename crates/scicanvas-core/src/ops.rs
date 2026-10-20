@@ -6,7 +6,12 @@ use crate::interpolate::{self, InterpMethod};
 use crate::model::{fmt_num, round_sig, Book, Column, Graph, PlotType, Project, Role};
 
 /// 统计类操作选中的数据：工作簿编号、列标识和可选的行范围。
-type Picked = (u64, Vec<String>, Option<(usize, usize)>);
+pub struct AnalysisColumn {
+    pub source: crate::plotspec::DataRef,
+    pub name: String,
+    pub values: Vec<f64>,
+    pub rows: Option<(usize, usize)>,
+}
 
 /// 结果列的重算方式：来源变化时自动重算、只在“重算”命令时重算、或保持不变。
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -136,6 +141,7 @@ impl Operation {
             book.column(x)?;
         }
         let item = Item {
+            book_id: book.id,
             y: self.y.clone(),
             x: self.x.clone(),
             rows: self.rows,
@@ -233,6 +239,12 @@ pub enum Source {
     Graph(u64),
     /// 指定页面中的图层；Graph 保留为第一图层的兼容入口。
     Layer { graph_id: u64, index: usize },
+    /// 图层内明确选中的曲线；空列表表示没有选择，不隐式改为全部。
+    Curves {
+        graph_id: u64,
+        index: usize,
+        curves: Vec<crate::plotspec::DataRef>,
+    },
     /// 工作簿里选中的列；什么都没选时用全部 Y 列。`rows` 为选区覆盖的行。
     Book {
         id: u64,
@@ -244,6 +256,7 @@ pub enum Source {
 /// 一组要分析的数据：Y 列、对应的 X 列、行范围。
 #[derive(Clone, Debug, PartialEq)]
 pub struct Item {
+    pub book_id: u64,
     pub y: String,
     pub x: Option<String>,
     pub rows: Option<(usize, usize)>,
@@ -254,6 +267,17 @@ pub struct Resolved {
     pub graph_id: Option<u64>,
     pub layer_index: usize,
     pub items: Vec<Item>,
+}
+
+impl Resolved {
+    fn name(&self, book: &Book, item: &Item) -> String {
+        let name = name_of(book, &item.y);
+        if self.items.iter().any(|i| i.book_id != book.id) {
+            format!("{}：{name}", book.name)
+        } else {
+            name
+        }
+    }
 }
 
 /// 一条拟合的结果，供界面显示报告。
@@ -422,9 +446,9 @@ impl Project {
     /// 把分析输入解析成具体的数据组。
     pub fn resolve(&self, src: &Source) -> Result<Resolved, String> {
         match src {
-            Source::Graph(gid) | Source::Layer { graph_id: gid, .. } => {
+            Source::Graph(gid) | Source::Layer { graph_id: gid, .. } | Source::Curves { graph_id: gid, .. } => {
                 let layer_index = match src {
-                    Source::Layer { index, .. } => *index,
+                    Source::Layer { index, .. } | Source::Curves { index, .. } => *index,
                     _ => 0,
                 };
                 let graph = self.graph(*gid).ok_or("找不到图形")?;
@@ -433,20 +457,32 @@ impl Project {
                     return Err("统计变换图层的分析请从工作簿选择原始数据执行".into());
                 }
                 let bid = g.book_id.ok_or("这个图形没有关联数据")?;
-                let book = self.book(bid).ok_or("这个图形没有关联数据")?;
+                self.book(bid).ok_or("这个图形没有关联数据")?;
                 let items: Vec<Item> = g
                     .y_keys
                     .iter()
-                    .filter(|k| {
-                        !g.line_only.contains(k)
-                            && book
-                                .column(k)
-                                .is_some_and(|c| !matches!(c.role, Role::XError | Role::YError))
-                    })
-                    .map(|k| Item {
-                        y: k.clone(),
-                        x: g.x_by_y.get(k).cloned().or_else(|| g.x_key.clone()),
-                        rows: g.rows,
+                    .filter_map(|k| {
+                        let source = crate::plotspec::DataRef::from_key(g.book_id, k)?;
+                        let source_book = self.book(source.book)?;
+                        let curve = g.curve_mapping(k, Some(source_book))?;
+                        if curve.line_only
+                            || source_book
+                                .column(&curve.y.col)
+                                .is_none_or(|c| matches!(c.role, Role::XError | Role::YError))
+                        {
+                            return None;
+                        }
+                        if let Source::Curves { curves, .. } = src {
+                            if !curves.contains(&curve.y) {
+                                return None;
+                            }
+                        }
+                        Some(Item {
+                            book_id: curve.y.book,
+                            y: curve.y.col,
+                            x: curve.x.filter(|x| x.book == source_book.id).map(|x| x.col),
+                            rows: curve.rows,
+                        })
                     })
                     .collect();
                 if items.is_empty() {
@@ -478,6 +514,7 @@ impl Project {
                 let items = ys
                     .iter()
                     .map(|y| Item {
+                        book_id: *id,
                         y: y.key.clone(),
                         x: x_for(book, y, &cols),
                         rows: *rows,
@@ -518,8 +555,7 @@ impl Project {
         }
         for graph in &self.graphs {
             if let Some(index) = graph.page.layers().iter().position(|g| {
-                g.book_id == Some(r.book_id)
-                    && g.y_keys.contains(&item.y)
+                g.y_keys.contains(&g.result_key(item.book_id, &item.y))
                     && g.transform == crate::plotspec::Transform::Identity
             }) {
                 return (graph.id, index);
@@ -527,13 +563,13 @@ impl Project {
         }
         let id = self.alloc_id();
         let mut g = Graph::new(id, self.unique_name("Graph"));
-        g.first_layer_mut().book_id = Some(r.book_id);
+        g.first_layer_mut().book_id = Some(item.book_id);
         g.first_layer_mut().x_key = item.x.clone();
         g.first_layer_mut().y_keys = vec![item.y.clone()];
         g.first_layer_mut().plot_type = PlotType::Scatter;
         g.first_layer_mut().rows = item.rows;
         self.graphs.push(g);
-        self.move_project_item(id, self.folder_of(r.book_id)).unwrap();
+        self.move_project_item(id, self.folder_of(item.book_id)).unwrap();
         (id, 0)
     }
 
@@ -550,9 +586,9 @@ impl Project {
         let mut graph = None;
         let mut skipped = vec![];
         for item in &r.items {
-            let book = self.book(r.book_id).unwrap();
+            let book = self.book(item.book_id).unwrap();
             let (xs, ys, rows) = get_xy(book, item);
-            let name = name_of(book, &item.y);
+            let name = r.name(book, item);
             let nrows = book.nrows();
             let Some(fit) = analysis::polyfit(&xs, &ys, order) else {
                 skipped.push(name);
@@ -588,7 +624,7 @@ impl Project {
                 })
             };
             cr.op = op(OpKind::PolyResidual { order });
-            let kr = self.insert_result_column(r.book_id, &item.y, cr).unwrap();
+            let kr = self.insert_result_column(item.book_id, &item.y, cr).unwrap();
             const N: usize = 200;
             let fx: Vec<f64> = (0..N)
                 .map(|i| fit.x_min + (fit.x_max - fit.x_min) * i as f64 / (N - 1) as f64)
@@ -605,22 +641,17 @@ impl Project {
             cy.comment = fit.equation();
             cy.data = fx.iter().map(|x| fmt_num(fit.eval(*x))).collect();
             cy.op = op(OpKind::PolyFitY { order });
-            let kx = self.insert_result_column(r.book_id, &item.y, cx).unwrap();
-            let ky = self.insert_result_column(r.book_id, &item.y, cy).unwrap();
+            let kx = self.insert_result_column(item.book_id, &item.y, cx).unwrap();
+            let ky = self.insert_result_column(item.book_id, &item.y, cy).unwrap();
             let (gid, index) = self.graph_for_result(&r, item);
             let g = &mut self.graph_mut(gid).unwrap().page.layers_mut()[index];
-            if !g.y_keys.contains(&item.y) {
-                g.y_keys.push(item.y.clone());
-            }
-            g.y_keys.push(ky.clone());
-            g.x_by_y.insert(ky.clone(), kx.clone());
-            g.line_only.push(ky.clone());
+            g.add_analysis_result(item.book_id, &item.y, &ky, Some(&kx));
             graph = Some(gid);
             reports.push(FitReport {
                 name,
                 kind: kind.clone(),
                 fit,
-                book_id: r.book_id,
+                book_id: item.book_id,
                 x_key: item.x.clone(),
                 residual_key: kr,
                 y_key: item.y.clone(),
@@ -688,11 +719,9 @@ impl Project {
         }
         for graph in &mut self.graphs {
             for layer in graph.page.layers_mut() {
-                if layer.book_id == Some(book_id) && layer.y_keys.contains(&curve.1) {
+                if layer.y_keys.contains(&layer.result_key(book_id, &curve.1)) {
                     for k in &keys {
-                        layer.y_keys.push(k.clone());
-                        layer.x_by_y.insert(k.clone(), curve.0.clone());
-                        layer.line_only.push(k.clone());
+                        layer.add_analysis_result(book_id, &curve.1, k, Some(&curve.0));
                     }
                 }
             }
@@ -727,14 +756,15 @@ impl Project {
             plot_type: PlotType::Scatter,
             ..Default::default()
         };
-        let book = self.book(first.book_id).ok_or("找不到工作簿")?;
         for r in reports {
-            if r.book_id != first.book_id || book.column(&r.residual_key).is_none() {
+            let book = self.book(r.book_id).ok_or("找不到工作簿")?;
+            if book.column(&r.residual_key).is_none() {
                 return Err("残差列已被删除或不在同一工作簿".into());
             }
-            spec.y_keys.push(r.residual_key.clone());
+            let key = spec.result_key(r.book_id, &r.residual_key);
+            spec.y_keys.push(key.clone());
             if let Some(x) = &r.x_key {
-                spec.x_by_y.insert(r.residual_key.clone(), x.clone());
+                spec.x_by_y.insert(key, spec.result_key(r.book_id, x));
             }
         }
         self.plot_spec(spec)
@@ -743,11 +773,11 @@ impl Project {
     /// 分析输入里全部有效点的 X 范围（插值对话框的默认范围）。
     pub fn x_range(&self, src: &Source) -> Option<(f64, f64)> {
         let r = self.resolve(src).ok()?;
-        let book = self.book(r.book_id)?;
         let xs: Vec<f64> = r
             .items
             .iter()
             .flat_map(|item| {
+                let book = self.book(item.book_id).unwrap();
                 let (xs, ys, _) = get_xy(book, item);
                 xs.into_iter()
                     .zip(ys)
@@ -776,9 +806,9 @@ impl Project {
         let mut made = vec![];
         let mut problems = vec![];
         for item in &r.items {
-            let book = self.book(r.book_id).unwrap();
+            let book = self.book(item.book_id).unwrap();
             let (xs, ys, _) = get_xy(book, item);
-            let name = name_of(book, &item.y);
+            let name = r.name(book, item);
             let (lo, hi) = range.unwrap_or_else(|| {
                 let finite = || xs.iter().zip(&ys).filter(|(x, y)| x.is_finite() && y.is_finite());
                 (
@@ -816,16 +846,11 @@ impl Project {
             cy.units = y_units;
             cy.comment = note;
             cy.data = fy.iter().map(|y| fmt_num(*y)).collect();
-            let kx = self.insert_result_column(r.book_id, &item.y, cx).unwrap();
-            let ky = self.insert_result_column(r.book_id, &item.y, cy).unwrap();
+            let kx = self.insert_result_column(item.book_id, &item.y, cx).unwrap();
+            let ky = self.insert_result_column(item.book_id, &item.y, cy).unwrap();
             let (gid, index) = self.graph_for_result(&r, item);
             let g = &mut self.graph_mut(gid).unwrap().page.layers_mut()[index];
-            if !g.y_keys.contains(&item.y) {
-                g.y_keys.push(item.y.clone());
-            }
-            g.y_keys.push(ky.clone());
-            g.x_by_y.insert(ky.clone(), kx);
-            g.line_only.push(ky.clone());
+            g.add_analysis_result(item.book_id, &item.y, &ky, Some(&kx));
             graph = Some(gid);
             made.push(ky);
         }
@@ -848,9 +873,9 @@ impl Project {
         let mut graph = None;
         let mut problems = vec![];
         for item in &r.items {
-            let book = self.book(r.book_id).unwrap();
+            let book = self.book(item.book_id).unwrap();
             let (xs, ys, _) = get_xy(book, item);
-            let name = name_of(book, &item.y);
+            let name = r.name(book, item);
             let fit = match crate::nlfit::fit_constrained(model, &xs, &ys, None, limits, constraints) {
                 Ok(f) => f,
                 Err(e) => {
@@ -883,21 +908,16 @@ impl Project {
             cy.units = y_units;
             cy.comment = format!("{}；{}", model.formula(), equation);
             cy.data = fx.iter().map(|x| fmt_num(fit.eval(*x))).collect();
-            let kx = self.insert_result_column(r.book_id, &item.y, cx).unwrap();
-            let ky = self.insert_result_column(r.book_id, &item.y, cy).unwrap();
+            let kx = self.insert_result_column(item.book_id, &item.y, cx).unwrap();
+            let ky = self.insert_result_column(item.book_id, &item.y, cy).unwrap();
             let (gid, index) = self.graph_for_result(&r, item);
             let g = &mut self.graph_mut(gid).unwrap().page.layers_mut()[index];
-            if !g.y_keys.contains(&item.y) {
-                g.y_keys.push(item.y.clone());
-            }
-            g.y_keys.push(ky.clone());
-            g.x_by_y.insert(ky.clone(), kx.clone());
-            g.line_only.push(ky.clone());
+            g.add_analysis_result(item.book_id, &item.y, &ky, Some(&kx));
             graph = Some(gid);
             reports.push(NlFitReport {
                 name,
                 fit,
-                book_id: r.book_id,
+                book_id: item.book_id,
                 y_key: item.y.clone(),
                 curve: (kx, ky),
             });
@@ -918,7 +938,7 @@ impl Project {
         let r = self.resolve(src)?;
         let mut made = vec![];
         for item in &r.items {
-            let book = self.book(r.book_id).unwrap();
+            let book = self.book(item.book_id).unwrap();
             let (xs, ys, idx) = get_xy(book, item);
             if xs.len() < 3 {
                 continue;
@@ -946,7 +966,7 @@ impl Project {
                 rows: item.rows,
                 mode: RecalcMode::Auto,
             });
-            let key = self.insert_result_column(r.book_id, &item.y, c).unwrap();
+            let key = self.insert_result_column(item.book_id, &item.y, c).unwrap();
             made.push((item.clone(), key));
         }
         if made.is_empty() {
@@ -959,8 +979,8 @@ impl Project {
     pub fn smooth(&mut self, src: &Source, method: SmoothMethod, window: usize) -> Result<Vec<String>, String> {
         if method == SmoothMethod::FftFilter {
             let r = self.resolve(src)?;
-            let book = self.book(r.book_id).ok_or("找不到工作簿")?;
             for item in &r.items {
+                let book = self.book(item.book_id).unwrap();
                 let (xs, _, _) = get_xy(book, item);
                 if item.x.is_some() {
                     crate::fft::sample_interval(&xs).map_err(|e| format!("{}：{e}", name_of(book, &item.y)))?;
@@ -979,13 +999,7 @@ impl Project {
         if let Some(gid) = r.graph_id {
             let g = &mut self.graph_mut(gid).unwrap().page.layers_mut()[r.layer_index];
             for (item, key) in &made {
-                g.y_keys.push(key.clone());
-                g.line_only.push(key.clone());
-                if item.x != g.x_key {
-                    if let Some(x) = &item.x {
-                        g.x_by_y.insert(key.clone(), x.clone());
-                    }
-                }
+                g.add_analysis_result(item.book_id, &item.y, key, item.x.as_deref());
             }
         }
         Ok(made.into_iter().map(|(_, k)| k).collect())
@@ -1009,7 +1023,7 @@ impl Project {
         })?;
         let mut made = vec![];
         for (item, bkey) in &base {
-            let book = self.book(r.book_id).unwrap();
+            let book = self.book(item.book_id).unwrap();
             let (_, ys, idx) = get_xy(book, item);
             let bv = book.column(bkey).unwrap().values();
             let y = book.column(&item.y).unwrap();
@@ -1034,19 +1048,13 @@ impl Project {
             while c.data.last().is_some_and(|s| s.is_empty()) {
                 c.data.pop();
             }
-            let key = self.insert_result_column(r.book_id, &item.y, c).unwrap();
+            let key = self.insert_result_column(item.book_id, &item.y, c).unwrap();
             made.push((bkey.clone(), key));
         }
         if let Some(gid) = r.graph_id {
             let g = &mut self.graph_mut(gid).unwrap().page.layers_mut()[r.layer_index];
             for (item, key) in &base {
-                g.y_keys.push(key.clone());
-                g.line_only.push(key.clone());
-                if item.x != g.x_key {
-                    if let Some(x) = &item.x {
-                        g.x_by_y.insert(key.clone(), x.clone());
-                    }
-                }
+                g.add_analysis_result(item.book_id, &item.y, key, item.x.as_deref());
             }
         }
         Ok(made)
@@ -1055,8 +1063,8 @@ impl Project {
     /// FFT 滤波：每条曲线的滤波结果写成新列；来源是图形时也加到图里。X 需要等间距。
     pub fn fft_filter(&mut self, src: &Source, kind: crate::fft::FilterKind) -> Result<Vec<String>, String> {
         let r = self.resolve(src)?;
-        let book = self.book(r.book_id).unwrap();
         for item in &r.items {
+            let book = self.book(item.book_id).unwrap();
             let (xs, _, _) = get_xy(book, item);
             if item.x.is_some() && xs.len() >= 2 {
                 crate::fft::sample_interval(&xs).map_err(|e| format!("{}：{e}", name_of(book, &item.y)))?;
@@ -1083,13 +1091,7 @@ impl Project {
         if let Some(gid) = r.graph_id {
             let g = &mut self.graph_mut(gid).unwrap().page.layers_mut()[r.layer_index];
             for (item, key) in &made {
-                g.y_keys.push(key.clone());
-                g.line_only.push(key.clone());
-                if item.x != g.x_key {
-                    if let Some(x) = &item.x {
-                        g.x_by_y.insert(key.clone(), x.clone());
-                    }
-                }
+                g.add_analysis_result(item.book_id, &item.y, key, item.x.as_deref());
             }
         }
         Ok(made.into_iter().map(|(_, k)| k).collect())
@@ -1225,9 +1227,9 @@ impl Project {
         if r.items.len() < 2 {
             return Err("至少需要两条曲线".into());
         }
-        let book = self.book(r.book_id).unwrap();
         let mut curves = vec![];
         for item in &r.items {
+            let book = self.book(item.book_id).unwrap();
             let (xs, ys, _) = get_xy(book, item);
             if xs.len() < 2 {
                 return Err(format!("{}：数据点太少", name_of(book, &item.y)));
@@ -1257,6 +1259,7 @@ impl Project {
             .map(|i| (ys.iter().map(|v| (v[i] - mean[i]).powi(2)).sum::<f64>() / (k - 1.0)).sqrt())
             .collect();
         let first = &r.items[0];
+        let book = self.book(first.book_id).unwrap();
         let x_units = first
             .x
             .as_deref()
@@ -1270,7 +1273,7 @@ impl Project {
             fmt_num(lo),
             fmt_num(hi)
         );
-        let folder = self.folder_of(r.book_id);
+        let folder = self.folder_of(first.book_id);
         let id = self.alloc_id();
         let mut nb = Book::new(id, self.unique_name("曲线平均"));
         let mut mean_key = String::new();
@@ -1392,6 +1395,14 @@ impl Project {
                 format!("梯形法累积积分，总面积 {}", fmt_num(total)),
             )
         })?;
+        if made
+            .first()
+            .is_some_and(|(first, _)| made.iter().any(|(item, _)| item.book_id != first.book_id))
+        {
+            for (area, (item, _)) in areas.iter_mut().zip(&made) {
+                area.name = format!("{}：{}", self.book(item.book_id).unwrap().name, area.name);
+            }
+        }
         Ok((made.into_iter().map(|(_, k)| k).collect(), areas))
     }
 
@@ -1412,16 +1423,9 @@ impl Project {
     /// 列统计：结果放进新的工作簿，每行是一列数据的统计量。返回新工作簿。
     /// 来源是工作簿时统计选中的列（任意列属性），没选时统计全部 Y 列。
     /// 统计类操作的输入：工作簿、要统计的列（图层里的曲线或工作簿中选中的列，没选时用全部 Y 列）和行范围。
-    fn picked_columns(&self, src: &Source) -> Result<Picked, String> {
+    fn picked_columns(&self, src: &Source) -> Result<Vec<Item>, String> {
         Ok(match src {
-            Source::Graph(_) | Source::Layer { .. } => {
-                let r = self.resolve(src)?;
-                (
-                    r.book_id,
-                    r.items.iter().map(|i| i.y.clone()).collect(),
-                    r.items[0].rows,
-                )
-            }
+            Source::Graph(_) | Source::Layer { .. } | Source::Curves { .. } => self.resolve(src)?.items,
             Source::Book { id, selected, rows } => {
                 let book = self.book(*id).ok_or("找不到工作簿")?;
                 let keys = if selected.is_empty() {
@@ -1433,25 +1437,56 @@ impl Project {
                 } else {
                     selected.clone()
                 };
-                (*id, keys, *rows)
+                keys.into_iter()
+                    .map(|y| Item {
+                        book_id: *id,
+                        y,
+                        x: None,
+                        rows: *rows,
+                    })
+                    .collect()
             }
         })
     }
 
+    pub fn analysis_columns(&self, src: &Source) -> Result<Vec<AnalysisColumn>, String> {
+        let items = self.picked_columns(src)?;
+        let mixed = items
+            .first()
+            .is_some_and(|first| items.iter().any(|i| i.book_id != first.book_id));
+        items
+            .iter()
+            .map(|item| {
+                let book = self.book(item.book_id).ok_or("找不到工作簿")?;
+                let col = book.column(&item.y).ok_or("找不到数据列")?;
+                let mut values = col.values();
+                if let Some((a, b)) = item.rows {
+                    values = values.into_iter().skip(a).take(b + 1 - a).collect();
+                }
+                Ok(AnalysisColumn {
+                    source: crate::plotspec::DataRef::new(book.id, &item.y),
+                    name: if mixed {
+                        format!("{}：{}", book.name, col.display_name())
+                    } else {
+                        col.display_name().into()
+                    },
+                    values,
+                    rows: item.rows,
+                })
+            })
+            .collect()
+    }
+
     pub fn stats_on_columns(&mut self, src: &Source) -> Result<u64, String> {
-        let (book_id, keys, rows) = self.picked_columns(src)?;
+        let columns = self.analysis_columns(src)?;
+        let first = columns.first().ok_or("请选择数据曲线")?;
+        let book_id = first.source.book;
+        let rows = first.rows;
         let book = self.book(book_id).ok_or("找不到工作簿")?;
         let src_name = book.name.clone();
-        let stats: Vec<(String, Describe)> = keys
+        let stats: Vec<(String, Describe)> = columns
             .iter()
-            .filter_map(|k| {
-                let c = book.column(k)?;
-                let mut v = c.values();
-                if let Some((a, b)) = rows {
-                    v = v.into_iter().skip(a).take(b + 1 - a).collect();
-                }
-                analysis::describe(&v).map(|d| (format!("{} · {}", c.key, c.display_name()), d))
-            })
+            .filter_map(|c| analysis::describe(&c.values).map(|d| (format!("{} · {}", c.source.col, c.name), d)))
             .collect();
         if stats.is_empty() {
             return Err("选中的数据里没有数值".into());
@@ -1496,12 +1531,11 @@ impl Project {
     /// 放在源工作簿所在的文件夹。X 必须等间距；没有 X 列时采样间隔按 1。返回 (工作簿, 图形) 编号。
     pub fn fft(&mut self, src: &Source, window: crate::fft::Window) -> Result<Vec<(u64, u64)>, String> {
         let r = self.resolve(src)?;
-        let folder = self.folder_of(r.book_id);
         let mut made = vec![];
         let mut problems = vec![];
         for item in &r.items {
-            let book = self.book(r.book_id).unwrap();
-            let name = name_of(book, &item.y);
+            let book = self.book(item.book_id).unwrap();
+            let name = r.name(book, item);
             let (xs, ys, _) = get_xy(book, item);
             let x_units = item
                 .x
@@ -1556,7 +1590,7 @@ impl Project {
                 }
             }
             self.books.push(nb);
-            self.move_project_item(id, folder)?;
+            self.move_project_item(id, self.folder_of(item.book_id))?;
             let (gid, _) = self.plot_from_selection(id, &[amp_key], PlotType::Line)?;
             made.push((id, gid));
         }
@@ -1662,12 +1696,11 @@ impl Project {
     /// X 需要单调；递减的 X（如红外光谱的波数）会先反转。返回新工作簿编号。
     pub fn find_peaks(&mut self, src: &Source, min_prominence: f64) -> Result<Vec<u64>, String> {
         let r = self.resolve(src)?;
-        let folder = self.folder_of(r.book_id);
         let mut made = vec![];
         let mut problems = vec![];
         for item in &r.items {
-            let book = self.book(r.book_id).unwrap();
-            let name = name_of(book, &item.y);
+            let book = self.book(item.book_id).unwrap();
+            let name = r.name(book, item);
             let (mut xs, mut ys, _) = get_xy(book, item);
             let unit = |k: Option<&str>| {
                 k.and_then(|k| book.column(k))
@@ -1728,7 +1761,7 @@ impl Project {
                 c.data = peaks.iter().map(|p| fmt_num(get(p, &xs))).collect();
             }
             self.books.push(nb);
-            self.move_project_item(id, folder)?;
+            self.move_project_item(id, self.folder_of(item.book_id))?;
             made.push(id);
         }
         if made.is_empty() {
@@ -1905,6 +1938,7 @@ impl Project {
                     v
                 } else {
                     let item = Item {
+                        book_id: book.id,
                         y: k.clone(),
                         x: xb.clone(),
                         rows: None,
@@ -1967,18 +2001,12 @@ impl Project {
 
     /// 统计类操作选中列的数值范围（频数统计对话框的默认范围）。
     pub fn value_range(&self, src: &Source) -> Option<(f64, f64)> {
-        let (book_id, keys, rows) = self.picked_columns(src).ok()?;
-        let book = self.book(book_id)?;
-        let (mut lo, mut hi) = (f64::INFINITY, f64::NEG_INFINITY);
-        for key in &keys {
-            let v = book.column(key)?.values();
-            let v = match rows {
-                Some((a, b)) => v.into_iter().skip(a).take(b + 1 - a).collect(),
-                None => v,
-            };
-            for x in v.into_iter().filter(|x| x.is_finite()) {
-                (lo, hi) = (lo.min(x), hi.max(x));
-            }
+        let columns = self.analysis_columns(src).ok()?;
+        let mut lo = f64::INFINITY;
+        let mut hi = f64::NEG_INFINITY;
+        for value in columns.iter().flat_map(|c| c.values.iter()).filter(|v| v.is_finite()) {
+            lo = lo.min(*value);
+            hi = hi.max(*value);
         }
         (lo < hi).then_some((lo, hi))
     }
@@ -1991,21 +2019,24 @@ impl Project {
         bins: Option<usize>,
         range: Option<(f64, f64)>,
     ) -> Result<Vec<u64>, String> {
-        let (book_id, keys, rows) = self.picked_columns(src)?;
-        let book = self.book(book_id).ok_or("找不到工作簿")?;
-        let src_name = book.name.clone();
+        let columns = self.analysis_columns(src)?;
         let mut results = vec![];
         let mut problems = vec![];
-        for key in &keys {
-            let Some(c) = book.column(key) else { continue };
-            let mut v = c.values();
-            if let Some((a, b)) = rows {
-                v = v.into_iter().skip(a).take(b + 1 - a).collect();
-            }
+        for input in &columns {
+            let book = self.book(input.source.book).unwrap();
+            let c = book.column(&input.source.col).unwrap();
+            let v = &input.values;
             let n = v.iter().filter(|x| x.is_finite()).count();
             let k = bins.unwrap_or_else(|| crate::stats::sturges_bins(n));
-            match crate::stats::histogram(&v, k, range) {
-                Ok(b) => results.push((c.display_name().to_owned(), c.units.clone(), b)),
+            match crate::stats::histogram(v, k, range) {
+                Ok(b) => results.push((
+                    input.source.book,
+                    input.rows,
+                    book.name.clone(),
+                    input.name.clone(),
+                    c.units.clone(),
+                    b,
+                )),
                 Err(e) => problems.push(format!("{}：{e}", c.display_name())),
             }
         }
@@ -2016,9 +2047,9 @@ impl Project {
                 problems.join("；")
             });
         }
-        let folder = self.folder_of(book_id);
         let mut ids = vec![];
-        for (name, units, bins) in results {
+        for (book_id, rows, src_name, name, units, bins) in results {
+            let folder = self.folder_of(book_id);
             let id = self.alloc_id();
             let mut nb = Book::new(id, self.unique_name(&format!("{name} 频数")));
             let total: usize = bins.iter().map(|b| b.count).sum();

@@ -445,6 +445,87 @@ impl std::ops::DerefMut for Layer {
     }
 }
 impl Layer {
+    /// 删除主表后，以仍存活的曲线为数据源，保留样式和各曲线映射。
+    pub fn remove_source_book<'a>(&mut self, deleted: u64, books: crate::plotspec::BookLookup<'a, '_>) {
+        if self.book_id != Some(deleted) {
+            self.drop_foreign(deleted, None);
+            return;
+        }
+        let remaining: Vec<_> = self
+            .y_keys
+            .iter()
+            .filter_map(|key| {
+                let y = crate::plotspec::DataRef::from_key(self.book_id, key)?;
+                if y.book == deleted {
+                    return None;
+                }
+                let book = books(y.book)?;
+                Some((self.curve_mapping(key, Some(book))?, self.curves.get(key).cloned()))
+            })
+            .collect();
+        let Some((first, _)) = remaining.first() else {
+            self.book_id = None;
+            return;
+        };
+        let main = Some(first.y.book);
+        self.spec.book_id = main;
+        self.spec.x_key = first.x.as_ref().map(|x| x.col.clone());
+        self.spec.rows = None;
+        self.spec.y_keys.clear();
+        self.spec.x_by_y.clear();
+        self.spec.base_by_y.clear();
+        self.spec.row_by_y.clear();
+        self.spec.line_only.clear();
+        self.curves.clear();
+        self.labels.column = None;
+        for (mapping, style) in remaining {
+            let key = mapping.y.key(main);
+            self.spec.y_keys.push(key.clone());
+            if let Some(x) = mapping.x {
+                self.spec.x_by_y.insert(key.clone(), x.key(main));
+            }
+            if let Some(base) = mapping.base {
+                self.spec.base_by_y.insert(key.clone(), base.key(main));
+            }
+            if let Some(rows) = mapping.rows {
+                self.spec.row_by_y.insert(key.clone(), Some(rows));
+            }
+            if mapping.line_only {
+                self.spec.line_only.push(key.clone());
+            }
+            if let Some(style) = style {
+                self.curves.insert(key, style);
+            }
+        }
+    }
+
+    pub fn add_analysis_result(&mut self, book: u64, source: &str, result: &str, x: Option<&str>) {
+        let source = self.result_key(book, source);
+        let key = self.result_key(book, result);
+        if !self.y_keys.contains(&source) {
+            self.y_keys.push(source.clone());
+        }
+        if !self.y_keys.contains(&key) {
+            self.y_keys.push(key.clone());
+        }
+        if !self.line_only.contains(&key) {
+            self.line_only.push(key.clone());
+        }
+        if let Some(x) = x {
+            let x = self.result_key(book, x);
+            self.x_by_y.insert(key.clone(), x);
+        }
+        if self.curves.get(&source).is_some_and(|s| s.right_axis) {
+            self.curves.insert(
+                key,
+                CurveStyle {
+                    right_axis: true,
+                    ..Default::default()
+                },
+            );
+        }
+    }
+
     /// 从图层移除一条曲线，连同它的单独样式。
     pub fn remove_curve(&mut self, key: &str) {
         self.spec.remove_curve(key);

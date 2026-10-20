@@ -28,6 +28,11 @@ pub struct ColumnEdit {
 }
 
 pub enum Dialog {
+    AnalysisCurves {
+        graph: u64,
+        layer: usize,
+        curves: Vec<(scicanvas_core::plotspec::DataRef, String, bool)>,
+    },
     /// 列属性：编辑内容、第一行的数值（数值列或日期列的毫秒，用于格式预览）、转换失败等错误。
     ColumnProps {
         edit: ColumnEdit,
@@ -191,6 +196,7 @@ pub enum Dialog {
 
 /// 对话框里用户做出的选择，由 app.rs 执行。
 pub enum Action {
+    AnalysisCurves(u64, usize, Vec<scicanvas_core::plotspec::DataRef>),
     SaveNote(String, String),
     ResidualPlot(Vec<FitReport>),
     FitBands(Vec<FitReport>),
@@ -306,6 +312,46 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
     let mut action = Action::None;
     let esc = ctx.input(|i| i.key_pressed(egui::Key::Escape));
     match dialog {
+        Dialog::AnalysisCurves { graph, layer, curves } => {
+            window(ctx, "分析曲线").show(ctx, |ui| {
+                ui.horizontal(|ui| {
+                    if ui.button("全选").clicked() {
+                        for (_, _, checked) in curves.iter_mut() {
+                            *checked = true;
+                        }
+                    }
+                    if ui.button("清空").clicked() {
+                        for (_, _, checked) in curves.iter_mut() {
+                            *checked = false;
+                        }
+                    }
+                });
+                egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
+                    for (_, name, checked) in curves.iter_mut() {
+                        ui.checkbox(checked, name.as_str());
+                    }
+                });
+                ui.horizontal(|ui| {
+                    if ui
+                        .add_enabled(curves.iter().any(|(_, _, checked)| *checked), plain("应用"))
+                        .clicked()
+                    {
+                        action = Action::AnalysisCurves(
+                            *graph,
+                            *layer,
+                            curves
+                                .iter()
+                                .filter(|(_, _, checked)| *checked)
+                                .map(|(reference, _, _)| reference.clone())
+                                .collect(),
+                        );
+                    }
+                    if ui.add(plain("取消")).clicked() {
+                        action = Action::Close;
+                    }
+                });
+            });
+        }
         Dialog::ColumnProps { edit, sample, error } => {
             use scicanvas_core::format::{DateFormat, NumberFormat};
             use scicanvas_core::{DataKind, Role};

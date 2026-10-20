@@ -64,7 +64,7 @@ fn old_projects_get_empty_notes_and_note_ids_repair_next_id() {
         old["version"] = version.into();
         let p = project_file::from_json(&old.to_string()).unwrap();
         assert!(p.notes.is_empty());
-        assert_eq!(p.version, 10);
+        assert_eq!(p.version, project_file::CURRENT_VERSION);
     }
     let mut p = Project::default();
     p.add_note("Note", "result".into());

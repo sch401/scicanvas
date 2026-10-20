@@ -6,6 +6,62 @@ use serde::{Deserialize, Serialize};
 /// 按编号查工作簿：图层里的曲线可以来自其他工作簿。
 pub type BookLookup<'a, 'b> = &'b dyn Fn(u64) -> Option<&'a Book>;
 
+/// 明确的列引用；列名相同的不同工作簿始终是不同的数据源。
+#[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize), serde(deny_unknown_fields))]
+pub struct DataRef {
+    pub book: u64,
+    pub col: String,
+}
+
+impl DataRef {
+    pub fn new(book: u64, col: impl Into<String>) -> Self {
+        Self { book, col: col.into() }
+    }
+
+    pub fn from_key(main: Option<u64>, key: &str) -> Option<Self> {
+        let (col, book) = split_key(key);
+        Some(Self::new(book.or(main)?, col))
+    }
+
+    /// 现有属性控件使用的键；文件保存和分析使用 DataRef。
+    pub fn key(&self, main: Option<u64>) -> String {
+        if main == Some(self.book) && !self.col.contains('@') {
+            self.col.clone()
+        } else {
+            foreign_key(self.book, &self.col)
+        }
+    }
+}
+
+/// 绘图、分析和文件共用的一条曲线映射。
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize), serde(deny_unknown_fields))]
+pub struct CurveMapping {
+    pub y: DataRef,
+    pub x: Option<DataRef>,
+    pub base: Option<DataRef>,
+    pub rows: Option<(usize, usize)>,
+    pub line_only: bool,
+}
+
+impl CurveMapping {
+    pub fn validate(&self) -> Result<(), String> {
+        for r in std::iter::once(&self.y).chain(self.x.iter()).chain(self.base.iter()) {
+            if r.book == 0 || r.book == u64::MAX || r.col.is_empty() {
+                return Err("曲线引用的工作簿编号和列标识应有效".into());
+            }
+            if r.book != self.y.book {
+                return Err("一条曲线的 X、Y 和下端列应来自同一工作簿".into());
+            }
+        }
+        if self.rows.is_some_and(|(a, b)| a > b || b == usize::MAX) {
+            return Err("曲线行范围无效".into());
+        }
+        Ok(())
+    }
+}
+
 /// 其他工作簿的列在曲线键里写成 `列标识@工作簿编号`；不带编号的是图层所绑工作簿的列。
 pub fn foreign_key(book_id: u64, col: &str) -> String {
     format!("{col}@{book_id}")
@@ -48,6 +104,11 @@ pub struct PlotSpec {
     pub line_only: Vec<String>,
     #[cfg_attr(feature = "serde", serde(default))]
     pub rows: Option<(usize, usize)>,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")
+    )]
+    pub row_by_y: std::collections::BTreeMap<String, Option<(usize, usize)>>,
     #[cfg_attr(feature = "serde", serde(default))]
     pub transform: Transform,
     #[cfg_attr(feature = "serde", serde(default))]
@@ -64,6 +125,7 @@ impl Default for PlotSpec {
             base_by_y: Default::default(),
             line_only: vec![],
             rows: None,
+            row_by_y: Default::default(),
             transform: Transform::Identity,
             color_map: Default::default(),
         }
@@ -78,6 +140,42 @@ pub enum Transform {
     Mean,
 }
 impl PlotSpec {
+    pub fn curve_mapping(&self, key: &str, book: Option<&Book>) -> Option<CurveMapping> {
+        let y = DataRef::from_key(self.book_id, key)?;
+        let local = self.book_id == Some(y.book);
+        let line_only = self.line_only.iter().any(|k| k == key);
+        let x = self
+            .x_by_y
+            .get(key)
+            .and_then(|x| DataRef::from_key(self.book_id, x))
+            .or_else(|| {
+                if local {
+                    self.x_key.as_ref().map(|x| DataRef::new(y.book, x))
+                } else {
+                    book.and_then(|b| default_x(b, &y.col)).map(|x| DataRef::new(y.book, x))
+                }
+            });
+        Some(CurveMapping {
+            base: self
+                .base_by_y
+                .get(key)
+                .and_then(|base| DataRef::from_key(self.book_id, base)),
+            rows: self
+                .row_by_y
+                .get(key)
+                .copied()
+                .unwrap_or(if local && !line_only { self.rows } else { None }),
+            y,
+            x,
+            line_only,
+        })
+    }
+
+    /// 把分析结果绑定回其来源曲线所在的图层，保留左右轴及来源样式。
+    pub fn result_key(&self, book: u64, col: &str) -> String {
+        DataRef::new(book, col).key(self.book_id)
+    }
+
     /// 换用另一张表作图：`defaults` 是该表的默认映射（`from_selection` 选中全部列的结果，没有 Y 列时为 None）。
     /// 保留图类型（新表不适用时用默认类型）、统计变换和配色；没有 Y 列时只关联表，列留空待选。
     pub fn rebound(&self, book_id: u64, defaults: Option<&PlotSpec>) -> PlotSpec {
@@ -235,6 +333,7 @@ impl PlotSpec {
         self.line_only.retain(|k| k != key);
         self.x_by_y.remove(key);
         self.base_by_y.remove(key);
+        self.row_by_y.remove(key);
     }
 
     /// 曲线在列表里显示的名称：其他工作簿的曲线带上工作簿名。
@@ -303,7 +402,6 @@ impl PlotSpec {
     pub fn series_in<'a>(&self, book: &'a Book, others: BookLookup<'a, '_>) -> (Option<&'a Column>, Vec<Series>) {
         let xcol = self.x_key.as_deref().and_then(|k| book.column(k));
         use crate::ColumnView;
-        let main_xv = xcol;
         let mixed = self
             .y_keys
             .iter()
@@ -332,20 +430,16 @@ impl PlotSpec {
             } else {
                 None
             };
-            let own_x = match self.x_by_y.get(key) {
-                Some(k) => self
-                    .resolve(book, others, k)
-                    .filter(|(b, _)| b.id == cbook.id)
-                    .map(|(_, c)| c),
-                None if foreign => default_x(cbook, &c.key).and_then(|k| cbook.column(&k)),
-                None => None,
-            };
-            let own_xv = own_x;
-            let xv = if own_x.is_some() || foreign { &own_xv } else { &main_xv };
+            let mapping = self.curve_mapping(key, Some(cbook)).unwrap();
+            let own_x = mapping
+                .x
+                .as_ref()
+                .and_then(|x| if x.book == cbook.id { cbook.column(&x.col) } else { None });
+            let xv = own_x;
             let n = yv.len().max(xv.as_ref().map_or(0, |v| v.len()));
-            let (i0, i1) = match (self.rows, own_x.is_some() || foreign) {
-                (Some((a, b)), false) => (a, (b + 1).min(n)),
-                _ => (0, n),
+            let (i0, i1) = match mapping.rows {
+                Some((a, b)) => (a, b.saturating_add(1).min(n)),
+                None => (0, n),
             };
             let mut pts = Vec::with_capacity(i1.saturating_sub(i0));
             let error_values = [crate::Role::XError, crate::Role::YError].map(|role| {
@@ -410,7 +504,10 @@ impl PlotSpec {
                 rows,
                 bases,
                 line_only: self.line_only.contains(key),
-                source: c.derived_from.clone(),
+                source: c
+                    .derived_from
+                    .as_ref()
+                    .map(|source| DataRef::new(cbook.id, source).key(self.book_id)),
             });
         }
         if self.transform == Transform::Mean {
