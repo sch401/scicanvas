@@ -37,6 +37,7 @@ pub fn show(ctx: &egui::Context, project: &Project, draft: &mut Option<PlotSpec>
     let mut apply = false;
     egui::Window::new("作图面板与图库")
         .id(egui::Id::new("plot-builder"))
+        .constrain(false)
         .open(&mut open)
         .default_width(880.0)
         .resizable(true)

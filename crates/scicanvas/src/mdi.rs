@@ -56,8 +56,11 @@ pub enum Snap {
     BottomRight,
 }
 
-/// 拖动标题栏时鼠标位置对应的贴靠方式。工作区外（如功能区、侧栏）也算靠近对应边缘。
+/// 仅在工作区边缘附近贴靠，拖远到工作区外时保持自由位置。
 pub fn snap_at(ws: Rect, p: Pos2) -> Option<Snap> {
+    if !ws.expand(SNAP_EDGE).contains(p) {
+        return None;
+    }
     let (left, right) = (p.x <= ws.left() + SNAP_EDGE, p.x >= ws.right() - SNAP_EDGE);
     let (top, bottom) = (p.y <= ws.top() + SNAP_EDGE, p.y >= ws.bottom() - SNAP_EDGE);
     let (near_top, near_bottom) = (p.y <= ws.top() + SNAP_CORNER, p.y >= ws.bottom() - SNAP_CORNER);
@@ -232,13 +235,6 @@ pub fn window(
     add_body: impl FnOnce(&mut egui::Ui),
 ) -> WinResponse {
     let mut out = WinResponse::default();
-    // 窗口至少有一部分标题栏留在工作区里
-    if geom.state == WinState::Normal {
-        let r = geom.rect;
-        let x = r.left().clamp(-r.width() + 80.0, (ws.width() - 80.0).max(0.0));
-        let y = r.top().clamp(0.0, (ws.height() - TITLE_H).max(0.0));
-        geom.rect = Rect::from_min_size(pos2(x, y), r.size());
-    }
     let rect = match geom.state {
         WinState::Max => ws,
         WinState::Min => minimized_rect(ws, min_slot),
@@ -568,13 +564,31 @@ mod tests {
     }
 
     #[test]
+    fn windows_can_move_past_workspace_edges_without_being_pulled_back() {
+        let ctx = egui::Context::default();
+        let mut geom = Geom::new(pos2(80.0, 70.0), vec2(320.0, 220.0));
+        let released = drag_title(&ctx, &mut geom, pos2(650.0, 220.0), pos2(950.0, 220.0));
+        assert!(released.snapped.is_none());
+        assert_eq!(geom.state, WinState::Normal);
+        assert!(geom.rect.left() > 720.0);
+        assert!(geom.rect.right() > 800.0);
+        let moved = geom.rect;
+        frame(&ctx, &mut geom, vec![]);
+        assert_eq!(geom.rect, moved);
+        geom.rect = Rect::from_min_size(pos2(-420.0, -90.0), vec2(320.0, 220.0));
+        let outside = geom.rect;
+        frame(&ctx, &mut geom, vec![]);
+        assert_eq!(geom.rect, outside);
+    }
+
+    #[test]
     fn snap_zones_follow_windows_11_edges_and_corners() {
         let ws = Rect::from_min_size(pos2(100.0, 50.0), vec2(800.0, 600.0));
         for (p, snap) in [
             (pos2(500.0, 52.0), Some(Snap::Max)),
-            (pos2(500.0, 20.0), Some(Snap::Max)),
+            (pos2(500.0, 20.0), None),
             (pos2(101.0, 300.0), Some(Snap::Left)),
-            (pos2(60.0, 300.0), Some(Snap::Left)),
+            (pos2(60.0, 300.0), None),
             (pos2(899.0, 300.0), Some(Snap::Right)),
             (pos2(101.0, 90.0), Some(Snap::TopLeft)),
             (pos2(150.0, 52.0), Some(Snap::TopLeft)),

@@ -275,7 +275,7 @@ pub static TABS: &[Tab] = &[
                 label: "窗口",
                 items: &[
                     Smalls(&["win.cascade", "win.tile", "win.minall"]),
-                    Smalls(&["win.showall", "win.hideall"]),
+                    Smalls(&["win.showall", "win.hideall", "win.reset"]),
                 ],
             },
             Group {
@@ -980,10 +980,11 @@ pub fn palette(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palett
     let mut close = false;
     egui::Window::new("命令面板")
         .id(egui::Id::new("scicanvas-palette"))
-        .title_bar(false)
+        .constrain(false)
         .resizable(false)
         .collapsible(false)
-        .anchor(Align2::CENTER_TOP, vec2(0.0, 80.0))
+        .pivot(Align2::CENTER_TOP)
+        .default_pos(egui::pos2(ctx.screen_rect().center().x, 80.0))
         .fixed_size(vec2(520.0, 440.0))
         .show(ctx, |ui| {
             let te = ui.add(

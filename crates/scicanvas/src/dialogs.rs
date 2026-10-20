@@ -514,6 +514,7 @@ fn ttest_rows(r: &TTest, names: &[String]) -> Vec<(String, String)> {
 pub(crate) fn window(ctx: &egui::Context, title: &str) -> egui::Window<'static> {
     egui::Window::new(RichText::new(title).strong())
         .id(egui::Id::new(("scicanvas-dialog", title)))
+        .constrain(false)
         .collapsible(false)
         .resizable(false)
         .pivot(Align2::CENTER_CENTER)

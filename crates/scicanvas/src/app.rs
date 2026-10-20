@@ -89,6 +89,7 @@ pub struct SciApp {
     pub(crate) theme_pref: egui::ThemePreference,
     /// 命令改了主题后，下一帧交给 egui。
     pub(crate) pending_theme: Option<egui::ThemePreference>,
+    pub(crate) pending_window_reset: bool,
     /// 功能区、文件页、命令面板的界面状态。
     pub(crate) ui: UiState,
     /// 当前打开的分析对话框。
@@ -176,6 +177,7 @@ impl SciApp {
             pal,
             theme_pref: egui::ThemePreference::System,
             pending_theme: None,
+            pending_window_reset: false,
             ui: UiState::default(),
             dialog: None,
             quit: false,
@@ -2299,6 +2301,7 @@ impl SciApp {
         let mut close = false;
         egui::Window::new(title)
             .id(egui::Id::new("scicanvas-props"))
+            .constrain(false)
             .open(&mut open)
             .collapsible(false)
             .resizable(false)
@@ -2941,6 +2944,7 @@ impl SciApp {
     fn help_window(&mut self, ctx: &egui::Context) {
         egui::Window::new("快速上手")
             .id(egui::Id::new("scicanvas-help"))
+            .constrain(false)
             .open(&mut self.show_help)
             .collapsible(false)
             .default_width(460.0)
@@ -3005,6 +3009,16 @@ impl eframe::App for SciApp {
 
 impl SciApp {
     fn ui_frame(&mut self, ctx: &egui::Context) {
+        let reset = egui::Modifiers {
+            shift: true,
+            ..egui::Modifiers::COMMAND
+        };
+        if ctx.input_mut(|input| input.consume_key(reset, egui::Key::R)) {
+            self.run_command("win.reset");
+        }
+        if std::mem::take(&mut self.pending_window_reset) {
+            ctx.memory_mut(|memory| memory.reset_areas());
+        }
         crate::chrome::edges(ctx, &self.pal);
         self.dropped_files(ctx);
         if self.last_history_group.is_some()
@@ -3169,6 +3183,83 @@ mod history_tests {
         assert_eq!(&app.project, before);
         app.run_command("edit.redo");
         assert_eq!(app.project, after);
+    }
+
+    #[test]
+    fn floating_dialog_moves_beyond_screen_edge_and_reset_preserves_its_draft() {
+        let mut app = app();
+        app.run_command("layer.contents");
+        let Some(Dialog::LayerContents(edit)) = &mut app.dialog else {
+            panic!()
+        };
+        edit.draft.legend = !edit.before.legend;
+        let draft = edit.draft.clone();
+        let before = app.project.clone();
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        ctx.style_mut(|s| s.animation_time = 0.0);
+        let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1400.0, 1000.0));
+        let id = egui::Id::new(("scicanvas-dialog", "图层内容"));
+        let mut time = 0.0;
+        let mut frame = |app: &mut SciApp, events| {
+            time += 0.02;
+            let _ = ctx.run(
+                egui::RawInput {
+                    time: Some(time),
+                    screen_rect: Some(screen),
+                    events,
+                    ..Default::default()
+                },
+                |ctx| app.ui_frame(ctx),
+            );
+            ctx.memory(|memory| memory.area_rect(id)).unwrap()
+        };
+        frame(&mut app, vec![]);
+        frame(&mut app, vec![]);
+        let rect = frame(&mut app, vec![]);
+        let start = egui::pos2(rect.center().x, rect.top() + 12.0);
+        let button = |pos, pressed| egui::Event::PointerButton {
+            pos,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        };
+        frame(&mut app, vec![egui::Event::PointerMoved(start), button(start, true)]);
+        frame(&mut app, vec![egui::Event::PointerMoved(start + egui::vec2(60.0, 0.0))]);
+        let end = egui::pos2(screen.right() - 10.0, start.y);
+        frame(&mut app, vec![egui::Event::PointerMoved(end)]);
+        frame(&mut app, vec![button(end, false)]);
+        let moved = frame(&mut app, vec![]);
+        assert!(moved.right() > screen.right() + 100.0, "{moved:?}");
+        assert_eq!(frame(&mut app, vec![]).min, moved.min);
+        app.geoms.get_mut(&1).unwrap().rect =
+            egui::Rect::from_min_size(egui::pos2(3000.0, 3000.0), egui::vec2(400.0, 300.0));
+        app.ui.open_palette();
+        frame(
+            &mut app,
+            vec![egui::Event::Key {
+                key: egui::Key::R,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers {
+                    ctrl: true,
+                    command: true,
+                    shift: true,
+                    ..Default::default()
+                },
+            }],
+        );
+        frame(&mut app, vec![]);
+        let reset = frame(&mut app, vec![]);
+        assert!(reset.left() >= screen.left() && reset.right() <= screen.right());
+        assert!(app.geoms[&1].rect.left() < app.ws.width());
+        let Some(Dialog::LayerContents(edit)) = &app.dialog else {
+            panic!()
+        };
+        assert_eq!(edit.draft, draft);
+        assert_eq!(app.project, before);
+        assert!(app.history.undo_label().is_none());
     }
 
     #[test]

@@ -283,6 +283,12 @@ impl SciApp {
     }
 
     /// 层叠（false）或平铺（true）所有打开的窗口。
+    pub(crate) fn reset_windows(&mut self) {
+        self.pending_window_reset = true;
+        self.snap_assist = None;
+        self.arrange_windows(false);
+    }
+
     pub(crate) fn arrange_windows(&mut self, tile: bool) {
         let ids: Vec<u64> = self
             .all_ids()
