@@ -866,9 +866,39 @@ impl Project {
             for layer in g.page.layers_mut() {
                 if layer.book_id == Some(id) {
                     layer.book_id = None;
+                } else {
+                    layer.drop_foreign(id, None);
                 }
             }
         }
+    }
+
+    /// 把工作簿的若干数据列加为图层曲线，工作簿可以与图层原来的不同；
+    /// 图层还没有数据时改绑到这个工作簿。已在图层里的列不重复添加，返回新加的条数。
+    pub fn add_curves(&mut self, graph_id: u64, layer: usize, book_id: u64, keys: &[String]) -> Result<usize, String> {
+        let book = self.books.iter().find(|b| b.id == book_id).ok_or("找不到工作簿")?;
+        let keys: Vec<&String> = keys
+            .iter()
+            .filter(|k| book.column(k).is_some_and(|c| matches!(c.role, Role::Y | Role::Z)))
+            .collect();
+        if keys.is_empty() {
+            return Err("选中的列里没有 Y 列".into());
+        }
+        let main_alive = |id: Option<u64>| id.is_some_and(|id| self.books.iter().any(|b| b.id == id));
+        let graph = self.graphs.iter_mut().find(|g| g.id == graph_id).ok_or("找不到图形")?;
+        let l = graph.page.layers_mut().get_mut(layer).ok_or("找不到图层")?;
+        if !main_alive(l.book_id) {
+            l.book_id = Some(book_id);
+            l.y_keys.retain(|k| crate::plotspec::split_key(k).1.is_some());
+            l.x_key = crate::plotspec::default_x(book, keys[0]);
+        }
+        let mut added = 0;
+        for k in keys {
+            let before = l.y_keys.len();
+            l.add_curve(book, k)?;
+            added += l.y_keys.len() - before;
+        }
+        Ok(added)
     }
 
     /// 删除工作簿中的若干列，并从图形里去掉对它们的引用。
@@ -884,6 +914,9 @@ impl Project {
         }
         for g in &mut self.graphs {
             for layer in g.page.layers_mut() {
+                if layer.book_id != Some(book_id) {
+                    layer.drop_foreign(book_id, Some(keys));
+                }
                 if layer.book_id == Some(book_id) {
                     layer.y_keys.retain(|k| !keys.contains(k));
                     layer.line_only.retain(|k| !keys.contains(k));

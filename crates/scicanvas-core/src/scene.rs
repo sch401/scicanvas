@@ -7,6 +7,7 @@
 use crate::coord::{Cartesian, Coord};
 use crate::model::{series_styles, Book, Graph, PlotType, Symbol};
 use crate::page::Layer;
+use crate::plotspec::BookLookup;
 use crate::ticks::{axis, Axis, TickLabel};
 
 pub type Rgb = (u8, u8, u8);
@@ -113,6 +114,8 @@ pub struct Scene {
 #[derive(Clone, Debug, PartialEq)]
 pub struct PointHit {
     pub series: String,
+    /// 曲线键（图层 y_keys 里的项）。
+    pub key: String,
     pub row: Option<usize>,
     pub x: f64,
     pub y: f64,
@@ -121,15 +124,15 @@ pub struct PointHit {
 
 /// 页面坐标 (x, y) 附近 `radius` 以内最近的数据点（不含拟合等结果曲线）。
 /// 堆叠柱的 Y 取该段自身的值；水平条形图按交换后的轴定位。
-pub fn nearest_point(
+pub fn nearest_point<'a>(
     layer: &Layer,
     view: &LayerView,
-    book: Option<&Book>,
+    books: BookLookup<'a, '_>,
     x: f64,
     y: f64,
     radius: f64,
 ) -> Option<PointHit> {
-    let (_, series) = layer.series(book?);
+    let (_, series) = layer.series_in(books(layer.book_id?)?, books);
     let horizontal = layer.plot_type == PlotType::HorizontalBar;
     let identity = layer.transform == crate::plotspec::Transform::Identity;
     let map = Cartesian {
@@ -163,6 +166,7 @@ pub fn nearest_point(
                     d,
                     PointHit {
                         series: s.name.clone(),
+                        key: s.key.clone(),
                         row: identity.then(|| s.rows.get(i).copied()).flatten(),
                         x: p[0],
                         y: value,
@@ -325,6 +329,7 @@ pub fn layout_page(g: &Graph, project: &crate::Project, views: &[Option<View>]) 
 }
 
 fn compose<'a>(g: &Graph, book: impl Fn(u64) -> Option<&'a Book>, w: f64, h: f64, views: &[Option<View>]) -> Scene {
+    let others: BookLookup<'a, '_> = &book;
     // 网格区域：整页扣除页边距（按当前画布与逻辑页面的比例换算）
     let [lw0, lh0] = g.page.logical_size();
     let [ox, oy, gw, gh] = g.page.content_rect();
@@ -362,7 +367,7 @@ fn compose<'a>(g: &Graph, book: impl Fn(u64) -> Option<&'a Book>, w: f64, h: f64
             .iter()
             .enumerate()
             .map(|(i, layer)| {
-                build_layer(layer, layer.book_id.and_then(&book), 400.0, 300.0, linked[i]).layers[0].view()
+                build_layer(layer, layer.book_id.and_then(&book), others, 400.0, 300.0, linked[i]).layers[0].view()
             })
             .collect();
         for (i, layer) in g.page.layers().iter().enumerate() {
@@ -394,6 +399,7 @@ fn compose<'a>(g: &Graph, book: impl Fn(u64) -> Option<&'a Book>, w: f64, h: f64
                 let sc = build_layer(
                     layer,
                     layer.book_id.and_then(&book),
+                    others,
                     rw,
                     rh,
                     views.get(i).copied().flatten(),
@@ -439,6 +445,7 @@ fn compose<'a>(g: &Graph, book: impl Fn(u64) -> Option<&'a Book>, w: f64, h: f64
         let mut sc = build_layer_min(
             layer,
             layer.book_id.and_then(&book),
+            others,
             lw / k,
             lh / k,
             views.get(i).copied().flatten(),
@@ -462,7 +469,7 @@ fn compose<'a>(g: &Graph, book: impl Fn(u64) -> Option<&'a Book>, w: f64, h: f64
     });
     let mut page = scenes
         .next()
-        .unwrap_or_else(|| build_layer(&Layer::default(), None, w, h, None));
+        .unwrap_or_else(|| build_layer(&Layer::default(), None, &|_| None, w, h, None));
     page.w = w;
     page.h = h;
     if g.page.layers().len() > 1
@@ -798,19 +805,36 @@ fn coverage(obstacles: &[Obstacle], [x, y, w, h]: [f64; 4]) -> usize {
     count
 }
 
-fn build_layer(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View>) -> Scene {
-    build_layer_min(g, book, w, h, view, [0.0; 4])
+fn build_layer<'a>(
+    g: &Layer,
+    book: Option<&'a Book>,
+    others: BookLookup<'a, '_>,
+    w: f64,
+    h: f64,
+    view: Option<View>,
+) -> Scene {
+    build_layer_min(g, book, others, w, h, view, [0.0; 4])
 }
 
 /// `min` 为绘图区四周的最小边距 [左, 上, 右, 下]，用于多面板对齐。
-fn build_layer_min(g: &Layer, book: Option<&Book>, w: f64, h: f64, view: Option<View>, min: [f64; 4]) -> Scene {
-    build_layer_full(g, book, w, h, view, min, false)
+fn build_layer_min<'a>(
+    g: &Layer,
+    book: Option<&'a Book>,
+    others: BookLookup<'a, '_>,
+    w: f64,
+    h: f64,
+    view: Option<View>,
+    min: [f64; 4],
+) -> Scene {
+    build_layer_full(g, book, others, w, h, view, min, false)
 }
 
 /// `legend_outside` 为真时，图例放在坐标框右侧（右边距已按图例宽度留出）。
-fn build_layer_full(
+#[allow(clippy::too_many_arguments)]
+fn build_layer_full<'a>(
     g: &Layer,
-    book: Option<&Book>,
+    book: Option<&'a Book>,
+    others: BookLookup<'a, '_>,
     w: f64,
     h: f64,
     view: Option<View>,
@@ -820,7 +844,7 @@ fn build_layer_full(
     let horizontal = g.plot_type == PlotType::HorizontalBar;
     // 数据（对数轴去掉非正值）
     let (x_col, mut series) = match book {
-        Some(b) => g.series(b),
+        Some(b) => g.series_in(b, others),
         None => (None, Vec::new()),
     };
     // 日期时间列做 X：用日期刻度（值为 UTC 毫秒）；分类列做 X：分类轴（水平条形图在 Y 轴）
@@ -1448,16 +1472,24 @@ fn build_layer_full(
                     LabelSource::Row if g.transform == crate::plotspec::Transform::Identity => {
                         (s.rows[i] + 1).to_string()
                     }
-                    LabelSource::Column if g.transform == crate::plotspec::Transform::Identity => g
-                        .labels
-                        .column
-                        .as_deref()
-                        .and_then(|k| book.and_then(|b| b.column(k)))
-                        // 没有指定列时用工作表里的标签列
-                        .or_else(|| book.and_then(|b| b.columns.iter().find(|c| c.role == crate::Role::Label)))
-                        .and_then(|c| c.data.get(s.rows[i]))
-                        .map(std::borrow::Cow::into_owned)
-                        .unwrap_or_default(),
+                    LabelSource::Column if g.transform == crate::plotspec::Transform::Identity => {
+                        // 曲线所在的工作簿：其他工作簿的曲线用该表的标签列
+                        let own = book.and_then(|b| g.resolve(b, others, &s.key)).map(|(b, _)| b);
+                        let local = own.is_none_or(|b| Some(b.id) == g.book_id);
+                        g.labels
+                            .column
+                            .as_deref()
+                            .filter(|_| local)
+                            .and_then(|k| book.and_then(|b| b.column(k)))
+                            // 没有指定列时用工作表里的标签列
+                            .or_else(|| {
+                                own.or(book)
+                                    .and_then(|b| b.columns.iter().find(|c| c.role == crate::Role::Label))
+                            })
+                            .and_then(|c| c.data.get(s.rows[i]))
+                            .map(std::borrow::Cow::into_owned)
+                            .unwrap_or_default()
+                    }
                     _ => String::new(),
                 };
                 let label = label.replace(['\r', '\n'], " ");
@@ -1604,7 +1636,7 @@ fn build_layer_full(
         text(
             left + pw / 2.0,
             top + ph + out + TICK_GAP + TICK_FONT + 5.0 + LABEL_FONT / 2.0,
-            g.x_axis_title(book),
+            g.x_axis_title_in(book, others),
             LABEL_FONT,
             Anchor::Middle,
         ),
@@ -1652,7 +1684,7 @@ fn build_layer_full(
             Prim::Text {
                 x: left + pw + out + TICK_GAP + ylab2_w + 5.0 + LABEL_FONT / 2.0,
                 y: top + ph / 2.0,
-                text: g.y2_axis_title(book),
+                text: g.y2_axis_title_in(book, others),
                 size: LABEL_FONT,
                 anchor: Anchor::Middle,
                 vertical: true,
@@ -1666,7 +1698,7 @@ fn build_layer_full(
         Prim::Text {
             x: left - out - TICK_GAP - ylab_w - 5.0 - LABEL_FONT / 2.0,
             y: top + ph / 2.0,
-            text: g.y_axis_title(book),
+            text: g.y_axis_title_in(book, others),
             size: LABEL_FONT,
             anchor: Anchor::Middle,
             vertical: true,
@@ -1722,7 +1754,7 @@ fn build_layer_full(
         } else if score((lx, ly)) > 0 && lw + gap + 14.0 < w * 0.35 {
             let mut wider = min;
             wider[2] = wider[2].max(lw + gap + 14.0);
-            return build_layer_full(g, book, w, h, view, wider, true);
+            return build_layer_full(g, book, others, w, h, view, wider, true);
         }
         // 上面借用过 items，图例图元（都不裁剪）改用新的 push 推入
         let mut push = |prim: Prim| items.push(Item { prim, clip: None });

@@ -445,22 +445,75 @@ impl std::ops::DerefMut for Layer {
     }
 }
 impl Layer {
+    /// 从图层移除一条曲线，连同它的单独样式。
+    pub fn remove_curve(&mut self, key: &str) {
+        self.spec.remove_curve(key);
+        self.curves.remove(key);
+    }
+
+    /// 去掉引用另一工作簿 `book_id` 中列的曲线（`keys` 为 None 时去掉该表的全部曲线）。
+    pub fn drop_foreign(&mut self, book_id: u64, keys: Option<&[String]>) {
+        let hit = |k: &str| match crate::plotspec::split_key(k) {
+            (col, Some(id)) => id == book_id && keys.is_none_or(|keys| keys.iter().any(|x| x == col)),
+            _ => false,
+        };
+        let gone: Vec<String> = self
+            .y_keys
+            .iter()
+            .filter(|k| hit(k) || self.x_by_y.get(*k).is_some_and(|x| hit(x)))
+            .cloned()
+            .collect();
+        for k in gone {
+            self.remove_curve(&k);
+        }
+        for base in self.base_by_y.values_mut() {
+            if hit(base) {
+                base.clear();
+            }
+        }
+    }
+
     pub fn x_axis_title(&self, book: Option<&Book>) -> String {
+        self.x_axis_title_in(book, &|_| None)
+    }
+
+    pub fn y_axis_title(&self, book: Option<&Book>) -> String {
+        self.y_axis_title_in(book, &|_| None)
+    }
+
+    /// 曲线列（可能来自其他工作簿）的坐标轴标签。
+    fn curve_axis_label<'a>(
+        &self,
+        book: Option<&'a Book>,
+        others: crate::plotspec::BookLookup<'a, '_>,
+        key: &str,
+    ) -> Option<String> {
+        book.and_then(|b| self.resolve(b, others, key))
+            .map(|(_, c)| c.axis_label())
+    }
+
+    pub fn x_axis_title_in<'a>(&self, book: Option<&'a Book>, others: crate::plotspec::BookLookup<'a, '_>) -> String {
         if !self.x_title.trim().is_empty() {
             return self.x_title.clone();
         }
         if self.plot_type == crate::PlotType::HorizontalBar {
-            return book
-                .and_then(|b| self.y_keys.first().and_then(|k| b.column(k)))
-                .map(|c| c.axis_label())
+            return self
+                .y_keys
+                .first()
+                .and_then(|k| self.curve_axis_label(book, others, k))
                 .unwrap_or_default();
         }
         book.and_then(|b| self.x_key.as_deref().and_then(|k| b.column(k)))
             .map(|c| c.axis_label())
+            // 本表没有 X 列时用第一条曲线自己的 X 列
+            .or_else(|| {
+                let first = self.y_keys.first()?;
+                self.curve_axis_label(book, others, self.x_by_y.get(first)?)
+            })
             .unwrap_or_else(|| "行号".to_string())
     }
 
-    pub fn y_axis_title(&self, book: Option<&Book>) -> String {
+    pub fn y_axis_title_in<'a>(&self, book: Option<&'a Book>, others: crate::plotspec::BookLookup<'a, '_>) -> String {
         if !self.y_title.trim().is_empty() {
             return self.y_title.clone();
         }
@@ -483,28 +536,26 @@ impl Layer {
             }
         }
         // 右侧 Y 轴的曲线不参与左轴标题
-        book.and_then(|b| {
-            self.y_keys
-                .iter()
-                .find(|k| !self.curves.get(*k).is_some_and(|c| c.right_axis))
-                .and_then(|k| b.column(k))
-        })
-        .map(|c| c.axis_label())
-        .unwrap_or_default()
+        self.y_keys
+            .iter()
+            .find(|k| !self.curves.get(*k).is_some_and(|c| c.right_axis))
+            .and_then(|k| self.curve_axis_label(book, others, k))
+            .unwrap_or_default()
     }
 
     /// 右侧 Y 轴标题：自定义标题，或右轴第一条曲线的列名和单位。
     pub fn y2_axis_title(&self, book: Option<&Book>) -> String {
+        self.y2_axis_title_in(book, &|_| None)
+    }
+
+    pub fn y2_axis_title_in<'a>(&self, book: Option<&'a Book>, others: crate::plotspec::BookLookup<'a, '_>) -> String {
         if !self.y2_title.trim().is_empty() {
             return self.y2_title.clone();
         }
-        book.and_then(|b| {
-            self.y_keys
-                .iter()
-                .find(|k| self.curves.get(*k).is_some_and(|c| c.right_axis))
-                .and_then(|k| b.column(k))
-        })
-        .map(|c| c.axis_label())
-        .unwrap_or_default()
+        self.y_keys
+            .iter()
+            .find(|k| self.curves.get(*k).is_some_and(|c| c.right_axis))
+            .and_then(|k| self.curve_axis_label(book, others, k))
+            .unwrap_or_default()
     }
 }

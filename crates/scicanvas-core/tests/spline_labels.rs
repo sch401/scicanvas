@@ -336,10 +336,10 @@ fn nearest_point_uses_segment_values_and_swapped_axes() {
         } else {
             pt
         });
-        let hit = scene::nearest_point(layer, view, p.book(1), at[0] + 1.0, at[1], 6.0).unwrap();
+        let hit = scene::nearest_point(layer, view, &|id| p.book(id), at[0] + 1.0, at[1], 6.0).unwrap();
         assert_eq!(hit.row, Some(1));
         assert_eq!(hit.y, if kind == PlotType::StackedBar { 3.0 } else { pt[1] });
-        assert!(scene::nearest_point(layer, view, None, at[0], at[1], 6.0).is_none());
+        assert!(scene::nearest_point(layer, view, &|_| None, at[0], at[1], 6.0).is_none());
     }
 }
 

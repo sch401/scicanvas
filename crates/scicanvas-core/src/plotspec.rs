@@ -3,6 +3,36 @@ use crate::model::{Book, Column, PlotType, Series};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
+/// 按编号查工作簿：图层里的曲线可以来自其他工作簿。
+pub type BookLookup<'a, 'b> = &'b dyn Fn(u64) -> Option<&'a Book>;
+
+/// 其他工作簿的列在曲线键里写成 `列标识@工作簿编号`；不带编号的是图层所绑工作簿的列。
+pub fn foreign_key(book_id: u64, col: &str) -> String {
+    format!("{col}@{book_id}")
+}
+
+/// 拆开曲线键：(列标识, 工作簿编号)。
+pub fn split_key(key: &str) -> (&str, Option<u64>) {
+    match key
+        .rsplit_once('@')
+        .and_then(|(col, id)| id.parse().ok().map(|id| (col, id)))
+    {
+        Some((col, id)) => (col, Some(id)),
+        None => (key, None),
+    }
+}
+
+/// 工作簿里某个 Y 列默认配的 X 列：它左侧最近的 X 列，没有时取第一个 X 列。
+pub fn default_x(book: &Book, y: &str) -> Option<String> {
+    let at = book.column_index(y)?;
+    book.columns[..at]
+        .iter()
+        .rev()
+        .chain(book.columns.iter())
+        .find(|c| c.role == crate::Role::X)
+        .map(|c| c.key.clone())
+}
+
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct PlotSpec {
@@ -142,7 +172,93 @@ impl PlotSpec {
         self.plot_type = kind;
         Ok(())
     }
+    /// 曲线键对应的工作簿和列；其他工作簿的列用 `others` 查找。
+    pub fn resolve<'a>(&self, main: &'a Book, others: BookLookup<'a, '_>, key: &str) -> Option<(&'a Book, &'a Column)> {
+        let (col, id) = split_key(key);
+        let book = match id {
+            Some(id) if id != main.id => others(id)?,
+            _ => main,
+        };
+        book.column(col).map(|c| (book, c))
+    }
+
+    /// 图层里引用到的其他工作簿编号（按首次出现顺序）。
+    pub fn foreign_books(&self) -> Vec<u64> {
+        let mut out = Vec::new();
+        for key in self
+            .y_keys
+            .iter()
+            .chain(self.x_by_y.values())
+            .chain(self.base_by_y.values())
+        {
+            if let (_, Some(id)) = split_key(key) {
+                if Some(id) != self.book_id && !out.contains(&id) {
+                    out.push(id);
+                }
+            }
+        }
+        out
+    }
+
+    /// 把另一个工作簿（或本表）的一列加为曲线，X 用它左侧最近的 X 列；已有时不重复添加。
+    /// 返回曲线键。
+    pub fn add_curve(&mut self, book: &Book, y: &str) -> Result<String, String> {
+        let col = book.column(y).ok_or_else(|| format!("找不到列 {y}"))?;
+        if matches!(col.role, crate::Role::XError | crate::Role::YError) {
+            return Err("误差列会自动关联数据，请选择数据列".into());
+        }
+        let local = self.book_id == Some(book.id);
+        let qualify = |k: &str| if local { k.to_string() } else { foreign_key(book.id, k) };
+        let key = qualify(y);
+        if self.y_keys.contains(&key) {
+            return Ok(key);
+        }
+        self.y_keys.push(key.clone());
+        let x = default_x(book, y).filter(|x| x != y);
+        if !local || x != self.x_key {
+            match x {
+                Some(x) => {
+                    self.x_by_y.insert(key.clone(), qualify(&x));
+                }
+                None if local => {
+                    self.x_by_y.remove(&key);
+                }
+                None => {}
+            }
+        }
+        Ok(key)
+    }
+
+    /// 从图层移除一条曲线及其专属映射；曲线样式由图层另行清理。
+    pub fn remove_curve(&mut self, key: &str) {
+        self.y_keys.retain(|k| k != key);
+        self.line_only.retain(|k| k != key);
+        self.x_by_y.remove(key);
+        self.base_by_y.remove(key);
+    }
+
+    /// 曲线在列表里显示的名称：其他工作簿的曲线带上工作簿名。
+    pub fn curve_label<'a>(&self, main: Option<&'a Book>, others: BookLookup<'a, '_>, key: &str) -> String {
+        let found = match main {
+            Some(main) => self.resolve(main, others, key),
+            None => {
+                let (col, id) = split_key(key);
+                id.and_then(others).and_then(|b| b.column(col).map(|c| (b, c)))
+            }
+        };
+        match found {
+            Some((b, c)) if Some(b.id) != self.book_id => format!("{}：{}", b.name, c.display_name()),
+            Some((_, c)) => c.display_name().to_string(),
+            None => key.to_string(),
+        }
+    }
+
     pub fn validate(&self, book: &Book) -> Result<(), String> {
+        self.validate_in(book, &|_| None)
+    }
+
+    /// 校验映射；其他工作簿的曲线在 `others` 里查找。
+    pub fn validate_in<'a>(&self, book: &'a Book, others: BookLookup<'a, '_>) -> Result<(), String> {
         if self.book_id != Some(book.id) {
             return Err("工作簿与作图描述不匹配".into());
         }
@@ -150,13 +266,13 @@ impl PlotSpec {
             return Err("请至少选择一列 Y 数据".into());
         }
         for key in self.y_keys.iter().chain(self.x_key.iter()).chain(self.x_by_y.values()) {
-            if book.column(key).is_none() {
+            if self.resolve(book, others, key).is_none() {
                 return Err(format!("找不到列 {key}"));
             }
         }
         if self.y_keys.iter().any(|key| {
-            book.column(key)
-                .is_some_and(|c| matches!(c.role, crate::Role::XError | crate::Role::YError))
+            self.resolve(book, others, key)
+                .is_some_and(|(_, c)| matches!(c.role, crate::Role::XError | crate::Role::YError))
         }) {
             return Err("误差列会自动关联数据，请从 Y 列列表中移除误差列".into());
         }
@@ -167,9 +283,9 @@ impl PlotSpec {
             for key in self.y_keys.iter().filter(|k| !self.line_only.contains(k)) {
                 let base = self.base_by_y.get(key).ok_or("请为浮动柱选择下端列")?;
                 if base == key
-                    || book
-                        .column(base)
-                        .is_none_or(|c| matches!(c.role, crate::Role::XError | crate::Role::YError))
+                    || self
+                        .resolve(book, others, base)
+                        .is_none_or(|(_, c)| matches!(c.role, crate::Role::XError | crate::Role::YError))
                 {
                     return Err("浮动柱下端应为另一列有效数据".into());
                 }
@@ -177,38 +293,58 @@ impl PlotSpec {
         }
         Ok(())
     }
-    /// 取出 X 列和每条曲线的有效数据点（X、Y 都是有限数值的行）。
+    /// 取出 X 列和每条曲线的有效数据点（X、Y 都是有限数值的行）；只看本工作簿的曲线。
     pub fn series<'a>(&self, book: &'a Book) -> (Option<&'a Column>, Vec<Series>) {
+        self.series_in(book, &|_| None)
+    }
+
+    /// 取出 X 列和每条曲线的有效数据点；其他工作簿的曲线在 `others` 里查找，
+    /// 用各自的 X 列（没有映射时用该表里它左侧最近的 X 列），行范围只作用于本表。
+    pub fn series_in<'a>(&self, book: &'a Book, others: BookLookup<'a, '_>) -> (Option<&'a Column>, Vec<Series>) {
         let xcol = self.x_key.as_deref().and_then(|k| book.column(k));
         use crate::ColumnView;
         let main_xv = xcol;
+        let mixed = self
+            .y_keys
+            .iter()
+            .any(|k| split_key(k).1.is_some_and(|id| id != book.id));
         let mut out = Vec::new();
         for key in &self.y_keys {
-            let Some(c) = book.column(key) else { continue };
+            let Some((cbook, c)) = self.resolve(book, others, key) else {
+                continue;
+            };
             if matches!(c.role, crate::Role::XError | crate::Role::YError) {
                 continue;
             }
+            let foreign = cbook.id != book.id;
             let yv = c;
             let base_values = if self.plot_type == PlotType::FloatingBar && !self.line_only.contains(key) {
                 let Some(base) = self
                     .base_by_y
                     .get(key)
                     .filter(|k| *k != key)
-                    .and_then(|k| book.column(k))
-                    .filter(|c| !matches!(c.role, crate::Role::XError | crate::Role::YError))
+                    .and_then(|k| self.resolve(book, others, k))
+                    .filter(|(b, c)| b.id == cbook.id && !matches!(c.role, crate::Role::XError | crate::Role::YError))
                 else {
                     continue;
                 };
-                Some(base)
+                Some(base.1)
             } else {
                 None
             };
-            let own_x = self.x_by_y.get(key).and_then(|k| book.column(k));
+            let own_x = match self.x_by_y.get(key) {
+                Some(k) => self
+                    .resolve(book, others, k)
+                    .filter(|(b, _)| b.id == cbook.id)
+                    .map(|(_, c)| c),
+                None if foreign => default_x(cbook, &c.key).and_then(|k| cbook.column(&k)),
+                None => None,
+            };
             let own_xv = own_x;
-            let xv = if own_x.is_some() { &own_xv } else { &main_xv };
+            let xv = if own_x.is_some() || foreign { &own_xv } else { &main_xv };
             let n = yv.len().max(xv.as_ref().map_or(0, |v| v.len()));
-            let (i0, i1) = match (self.rows, own_x) {
-                (Some((a, b)), None) => (a, (b + 1).min(n)),
+            let (i0, i1) = match (self.rows, own_x.is_some() || foreign) {
+                (Some((a, b)), false) => (a, (b + 1).min(n)),
                 _ => (0, n),
             };
             let mut pts = Vec::with_capacity(i1.saturating_sub(i0));
@@ -217,15 +353,16 @@ impl PlotSpec {
                     return None;
                 }
                 let find = |source: &str| {
-                    book.columns
+                    cbook
+                        .columns
                         .iter()
                         .enumerate()
-                        .find(|(i, col)| col.role == role && book.error_source(*i) == Some(source))
+                        .find(|(i, col)| col.role == role && cbook.error_source(*i) == Some(source))
                         .map(|(_, col)| col)
                 };
-                find(key).or_else(|| {
+                find(&c.key).or_else(|| {
                     if role == crate::Role::XError {
-                        own_x.or(xcol).and_then(|x| find(&x.key))
+                        own_x.or(if foreign { None } else { xcol }).and_then(|x| find(&x.key))
                     } else {
                         None
                     }
@@ -257,12 +394,16 @@ impl PlotSpec {
                 }
             }
             // 浮动柱表示下端到上端的范围，图例写出两列
-            let name = match base_values {
+            let mut name = match base_values {
                 Some(base) => format!("{} – {}", base.display_name(), c.display_name()),
                 None => c.display_name().to_string(),
             };
+            // 同一图层混合了多个工作簿时，图例带上工作簿名以便区分
+            if mixed {
+                name = format!("{}：{}", cbook.name, name);
+            }
             out.push(Series {
-                key: c.key.clone(),
+                key: key.clone(),
                 name,
                 points: pts,
                 errors,

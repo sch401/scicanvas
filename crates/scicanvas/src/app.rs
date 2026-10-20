@@ -40,6 +40,7 @@ enum ColAction {
     Clear,
     Delete,
     Plot(PlotType),
+    AddToGraph(u64),
 }
 
 pub struct SciApp {
@@ -2021,7 +2022,27 @@ impl SciApp {
 
         let mut act: Option<&'static str> = None;
         let resp = out.response;
+        // 右键时吸附到的曲线（菜单打开期间保持）
+        let curve_id = egui::Id::new(("graph-curve-menu", id));
+        if resp.secondary_clicked() {
+            let hit = out
+                .point
+                .as_ref()
+                .map(|p| (out.hover_layer.unwrap_or(0), p.key.clone(), p.series.clone()));
+            ui.data_mut(|d| d.insert_temp(curve_id, hit));
+        }
+        let menu_curve = ui
+            .data(|d| d.get_temp::<Option<(usize, String, String)>>(curve_id))
+            .flatten();
+        let mut remove: Option<(usize, String)> = None;
         resp.context_menu(|ui| {
+            if let Some((layer, key, name)) = &menu_curve {
+                if ui.button(format!("移除曲线 {name}")).clicked() {
+                    remove = Some((*layer, key.clone()));
+                    ui.close_menu();
+                }
+                ui.separator();
+            }
             for (cid, label) in [
                 ("graph.props", "绘图属性…"),
                 ("graph.copy", "复制图形"),
@@ -2048,10 +2069,52 @@ impl SciApp {
                 ui.close_menu();
             }
         });
+        if let Some((layer, key)) = remove {
+            self.remove_curve(id, layer, &key);
+        }
         if let Some(cid) = act {
             self.active = Some(id);
             self.run_command(cid);
         }
+    }
+
+    /// 把工作簿 `book_id` 里选中的列加到图形当前图层（一步撤销）。
+    pub(crate) fn add_to_graph(&mut self, book_id: u64, gid: u64) {
+        let keys = self.selected_keys(book_id);
+        let layer = self.layer_index(gid);
+        self.begin_edit("添加曲线");
+        match self.project.add_curves(gid, layer, book_id, &keys) {
+            Ok(n) => {
+                if n > 0 {
+                    self.history.changed();
+                }
+                self.status = if n > 0 {
+                    format!("已添加 {n} 条曲线")
+                } else {
+                    "这些列已在图层里".into()
+                };
+                self.show_item(gid);
+            }
+            Err(why) => self.status = why,
+        }
+        self.finish_edit();
+    }
+
+    /// 从图层移除一条曲线（一步撤销）。
+    pub(crate) fn remove_curve(&mut self, gid: u64, layer: usize, key: &str) {
+        self.begin_edit("移除曲线");
+        if let Some(l) = self
+            .project
+            .graph_mut(gid)
+            .and_then(|g| g.page.layers_mut().get_mut(layer))
+        {
+            if l.y_keys.iter().any(|k| k == key) {
+                l.remove_curve(key);
+                self.history.changed();
+                self.status = "已移除曲线".into();
+            }
+        }
+        self.finish_edit();
     }
 
     fn props_window(&mut self, ctx: &egui::Context) {
@@ -2092,6 +2155,22 @@ impl SciApp {
                 (b.id, b.name.clone(), spec)
             })
             .collect();
+        // 可加入图层的其他工作簿曲线：(列标识, 显示名, 默认 X 列)；以及带工作簿名的曲线显示名
+        use scicanvas_core::plotspec::{default_x, foreign_key, split_key};
+        let mut curve_options: HashMap<u64, Vec<(String, String, Option<String>)>> = HashMap::new();
+        let mut curve_names: HashMap<String, String> = HashMap::new();
+        for b in &self.project.books {
+            for c in &b.columns {
+                curve_names.insert(foreign_key(b.id, &c.key), format!("{}：{}", b.name, c.display_name()));
+                if matches!(c.role, Role::Y | Role::Z) {
+                    curve_options.entry(b.id).or_default().push((
+                        c.key.clone(),
+                        c.display_name().to_string(),
+                        default_x(b, &c.key),
+                    ));
+                }
+            }
+        }
         let mut props_layer = self.layer_index(gid);
         let title = format!("绘图属性 — {}", g0.name);
         let history_group = &mut self.history_group;
@@ -2373,6 +2452,51 @@ impl SciApp {
                         });
                         ui.end_row();
 
+                        // 其他工作簿的曲线：同一图层可以放不同工作簿的数据
+                        let foreign: Vec<String> = g
+                            .y_keys
+                            .iter()
+                            .filter(|k| split_key(k).1.is_some_and(|b| Some(b) != g.book_id))
+                            .cloned()
+                            .collect();
+                        if book_specs.len() > 1 || !foreign.is_empty() {
+                            ui.label("其他工作簿");
+                            ui.vertical(|ui| {
+                                for k in &foreign {
+                                    ui.horizontal(|ui| {
+                                        ui.label(curve_names.get(k).map_or(k.as_str(), String::as_str));
+                                        if ui.small_button("✕").on_hover_text("移除").clicked() {
+                                            g.remove_curve(k);
+                                        }
+                                    });
+                                }
+                                ui.menu_button("＋ 添加曲线", |ui| {
+                                    for (bid, name, _) in &book_specs {
+                                        if Some(*bid) == g.book_id {
+                                            continue;
+                                        }
+                                        let Some(options) = curve_options.get(bid) else {
+                                            continue;
+                                        };
+                                        ui.menu_button(name, |ui| {
+                                            for (key, label, x) in options {
+                                                let q = foreign_key(*bid, key);
+                                                let on = g.y_keys.contains(&q);
+                                                if ui.add_enabled(!on, egui::Button::new(label)).clicked() {
+                                                    g.y_keys.push(q.clone());
+                                                    if let Some(x) = x {
+                                                        g.x_by_y.insert(q, foreign_key(*bid, x));
+                                                    }
+                                                    ui.close_menu();
+                                                }
+                                            }
+                                        });
+                                    }
+                                });
+                            });
+                            ui.end_row();
+                        }
+
                         if g.plot_type == PlotType::FloatingBar {
                             ui.label("浮动柱下端");
                             crate::builder::floating_columns(ui, &mut g.spec, &cols);
@@ -2567,7 +2691,9 @@ impl SciApp {
                             let name_of = |k: &str| {
                                 cols.iter()
                                     .find(|(c, _)| c == k)
-                                    .map_or(k.to_string(), |(_, n)| n.clone())
+                                    .map(|(_, n)| n.clone())
+                                    .or_else(|| curve_names.get(k).cloned())
+                                    .unwrap_or_else(|| k.to_string())
                             };
                             egui::ComboBox::from_id_salt(("props-curve", gid))
                                 .selected_text(name_of(&key))
@@ -2924,6 +3050,32 @@ mod history_tests {
         assert_eq!(&app.project, before);
         app.run_command("edit.redo");
         assert_eq!(app.project, after);
+    }
+
+    #[test]
+    fn columns_from_another_workbook_join_a_graph_and_leave_it_in_one_undo_step() {
+        let mut app = app();
+        let b = app.project.new_book();
+        let book = app.project.book_mut(b).unwrap();
+        book.columns[0].data = (0..4).map(|i| i.to_string()).collect();
+        book.columns[1].data = (0..4).map(|i| (i * i).to_string()).collect();
+        let key = scicanvas_core::plotspec::foreign_key(b, "B");
+        app.selection.insert(b, vec!["A".into(), "B".into()]);
+        let before = app.project.clone();
+        app.add_to_graph(b, 2);
+        assert!(app.project.graph(2).unwrap().first_layer().y_keys.contains(&key));
+        assert_eq!(app.status, "已添加 1 条曲线");
+        roundtrip(&mut app, &before);
+        let before = app.project.clone();
+        app.remove_curve(2, 0, &key);
+        assert!(!app.project.graph(2).unwrap().first_layer().y_keys.contains(&key));
+        roundtrip(&mut app, &before);
+        // 已在图层里的列不再记一步
+        app.add_to_graph(b, 2);
+        let before = app.project.clone();
+        app.add_to_graph(b, 2);
+        assert_eq!(app.project, before);
+        assert_eq!(app.status, "这些列已在图层里");
     }
 
     #[test]

@@ -47,42 +47,63 @@ fn data_fingerprint(g: &Graph, project: &Project) -> u64 {
         }
     };
     for layer in g.page.layers() {
-        let Some(book) = layer.book_id.and_then(|b| project.book(b)) else {
+        let Some(main) = layer.book_id.and_then(|b| project.book(b)) else {
             mix(0);
             continue;
         };
-        mix(book.id);
-        let used = |k: &str| {
-            layer.x_key.as_deref() == Some(k)
-                || layer.y_keys.iter().any(|y| y == k)
-                || layer.x_by_y.values().any(|x| x == k)
-                || layer.base_by_y.values().any(|b| b == k)
-                || layer.labels.column.as_deref() == Some(k)
-        };
-        for col in &book.columns {
-            if !used(&col.key) && !matches!(col.role, Role::XError | Role::YError | Role::Label) {
-                continue;
-            }
-            text(&col.key, &mut mix);
-            text(&col.long_name, &mut mix);
-            text(&col.units, &mut mix);
-            mix(col.role as u64);
-            mix(col.format.utc_offset as u64);
-            mix(col.data.len() as u64);
-            if let Some(levels) = col.data.category_levels() {
-                for l in &levels {
-                    text(l, &mut mix);
+        // 本表和图层里曲线引用到的其他工作簿
+        let books = std::iter::once(main).chain(layer.foreign_books().into_iter().filter_map(|b| project.book(b)));
+        for book in books {
+            mix(book.id);
+            let local = book.id == main.id;
+            let used = |k: &str| {
+                let q = scicanvas_core::plotspec::foreign_key(book.id, k);
+                let is = |x: &str| x == q || (local && x == k);
+                (local && layer.x_key.as_deref() == Some(k))
+                    || layer.y_keys.iter().any(|y| is(y))
+                    || layer.x_by_y.values().any(|x| is(x))
+                    || layer.base_by_y.values().any(|b| is(b))
+                    || (local && layer.labels.column.as_deref() == Some(k))
+                    || (!local && default_x_of(layer, book, k))
+            };
+            for col in &book.columns {
+                if !used(&col.key) && !matches!(col.role, Role::XError | Role::YError | Role::Label) {
+                    continue;
                 }
-            }
-            for row in 0..col.data.len() {
-                match col.data.f64_at(row) {
-                    Some(v) => mix(v.to_bits()),
-                    None => text(&col.data.text_at(row), &mut mix),
+                text(&col.key, &mut mix);
+                text(&col.long_name, &mut mix);
+                text(&col.units, &mut mix);
+                mix(col.role as u64);
+                mix(col.format.utc_offset as u64);
+                mix(col.data.len() as u64);
+                if let Some(levels) = col.data.category_levels() {
+                    for l in &levels {
+                        text(l, &mut mix);
+                    }
+                }
+                for row in 0..col.data.len() {
+                    match col.data.f64_at(row) {
+                        Some(v) => mix(v.to_bits()),
+                        None => text(&col.data.text_at(row), &mut mix),
+                    }
                 }
             }
         }
     }
     h
+}
+
+/// 其他工作簿的曲线没有映射 X 列时用该表默认 X 列：`k` 是否为某条这样的曲线的 X。
+fn default_x_of(layer: &scicanvas_core::page::Layer, book: &scicanvas_core::Book, k: &str) -> bool {
+    layer
+        .y_keys
+        .iter()
+        .any(|y| match scicanvas_core::plotspec::split_key(y) {
+            (col, Some(id)) if id == book.id && !layer.x_by_y.contains_key(y) => {
+                scicanvas_core::plotspec::default_x(book, col).as_deref() == Some(k)
+            }
+            _ => false,
+        })
 }
 
 /// 取场景：与缓存的图形、视图、数据指纹都相同时复用，否则重新排版并更新缓存。
@@ -371,8 +392,14 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize) ->
         (Some(index), Some(p)) if dragging.is_none() => {
             let (x, y) = local(p);
             let layer = &g.page.layers()[index];
-            let book = layer.book_id.and_then(|b| project.book(b));
-            scene::nearest_point(layer, &sc.layers[index], book, x, y, 8.0 / f64::from(transform.scaling))
+            scene::nearest_point(
+                layer,
+                &sc.layers[index],
+                &|b| project.book(b),
+                x,
+                y,
+                8.0 / f64::from(transform.scaling),
+            )
         }
         _ => None,
     };

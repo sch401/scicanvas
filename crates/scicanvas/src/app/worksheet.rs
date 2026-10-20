@@ -452,6 +452,11 @@ impl SciApp {
             return;
         };
         let keys: Vec<String> = book.columns.iter().map(|c| c.key.clone()).collect();
+        let graphs: Vec<(u64, String)> = self.project.graphs.iter().map(|g| (g.id, g.name.clone())).collect();
+        let Some(book) = self.project.book_mut(id) else {
+            self.sheets.insert(id, st);
+            return;
+        };
         let sel_flags: Vec<bool> = keys.iter().map(|k| selected.contains(k)).collect();
         let ncols = book.columns.len();
         if ncols == 0 {
@@ -582,6 +587,13 @@ impl SciApp {
                                         ui.separator();
                                         for t in PlotType::ALL {
                                             pick(ui, t.label(), ColAction::Plot(t));
+                                        }
+                                        if !graphs.is_empty() {
+                                            ui.menu_button("添加到图形", |ui| {
+                                                for (gid, name) in &graphs {
+                                                    pick(ui, name, ColAction::AddToGraph(*gid));
+                                                }
+                                            });
                                         }
                                         ui.separator();
                                         ui.menu_button("移动列", |ui| {
@@ -1051,6 +1063,10 @@ impl SciApp {
                 sel.push(key);
             }
             self.active = Some(id);
+            if let ColAction::AddToGraph(gid) = act {
+                self.add_to_graph(id, gid);
+                return;
+            }
             let command = match act {
                 ColAction::Props => "col.props",
                 ColAction::SetDataKind(scicanvas_core::DataKind::Num) => "col.type.num",
@@ -1086,6 +1102,7 @@ impl SciApp {
                 ColAction::Plot(PlotType::VerticalDrop) => "plot.vertical_drop",
                 ColAction::Plot(PlotType::StepHorizontal) => "plot.step_horizontal",
                 ColAction::Plot(PlotType::StepVertical) => "plot.step_vertical",
+                ColAction::AddToGraph(_) => unreachable!(),
             };
             self.run_command(command);
         }
