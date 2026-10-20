@@ -145,6 +145,7 @@ impl Command {
 
 fn build() -> Vec<Command> {
     let mut commands = vec![
+        c("layer.contents", "图层内容", "props", "", "图形", "layer contents 添加 移除 排序 左右轴 曲线 数据源", need_any_graph, |a| a.open_layer_contents()),
         c("analysis.curves", "分析曲线…", "graph", "", "分析", "select curves 数据选择 跨表", need_graph, |a| a.open_analysis_curves()),
         // 文件
         c(

@@ -874,6 +874,59 @@ impl SciApp {
         self.status = "已恢复示例项目".into();
     }
 
+    pub(crate) fn open_layer_contents(&mut self) {
+        let Some(graph) = self.any_open_graph() else { return };
+        let index = self.layer_index(graph);
+        let layer = self.project.graph(graph).unwrap().page.layers()[index].clone();
+        let active = layer.y_keys.first().cloned();
+        self.dialog = Some(Dialog::LayerContents(Box::new(dialogs::LayerContents {
+            graph,
+            index,
+            before: layer.clone(),
+            draft: layer,
+            selected: Vec::new(),
+            active,
+            error: None,
+        })));
+    }
+
+    fn apply_layer_contents(&mut self, edit: &dialogs::LayerContents) -> Result<(), String> {
+        let layer = self
+            .project
+            .graph(edit.graph)
+            .and_then(|g| g.page.layers().get(edit.index))
+            .ok_or("找不到目标图层")?;
+        if layer != &edit.before {
+            return Err("图层已更新，请重新打开图层内容".into());
+        }
+        if !edit.draft.y_keys.is_empty() {
+            let book = edit
+                .draft
+                .book_id
+                .and_then(|id| self.project.book(id))
+                .ok_or("找不到来源表")?;
+            edit.draft.validate_in(book, &|id| self.project.book(id))?;
+        }
+        if layer == &edit.draft {
+            return Ok(());
+        }
+        self.finish_edit();
+        self.begin_edit("图层内容");
+        self.project.graph_mut(edit.graph).unwrap().page.layers_mut()[edit.index] = edit.draft.clone();
+        self.history.changed();
+        self.finish_edit();
+        if let Some(selected) = self.analysis_curves.get_mut(&(edit.graph, edit.index)) {
+            selected.retain(|reference| {
+                edit.draft.y_keys.iter().any(|key| {
+                    scicanvas_core::plotspec::DataRef::from_key(edit.draft.book_id, key).as_ref() == Some(reference)
+                })
+            });
+        }
+        self.show_item(edit.graph);
+        self.status = "图层内容已更新".into();
+        Ok(())
+    }
+
     pub(crate) fn open_props(&mut self) {
         if let Some(g) = self.any_open_graph() {
             self.props_for = Some(g);
@@ -1662,7 +1715,15 @@ impl SciApp {
 
     fn dialogs(&mut self, ctx: &egui::Context) {
         let Some(d) = self.dialog.as_mut() else { return };
-        match dialogs::show(ctx, d, &self.pal) {
+        match dialogs::show(ctx, d, &self.pal, &self.project) {
+            dialogs::Action::LayerContents(edit) => match self.apply_layer_contents(&edit) {
+                Ok(()) => self.dialog = None,
+                Err(error) => {
+                    if let Some(Dialog::LayerContents(contents)) = &mut self.dialog {
+                        contents.error = Some(error);
+                    }
+                }
+            },
             dialogs::Action::AnalysisCurves(graph, layer, curves) => {
                 self.analysis_curves.insert((graph, layer), curves);
                 self.dialog = None;
@@ -2101,6 +2162,7 @@ impl SciApp {
                 ui.separator();
             }
             for (cid, label) in [
+                ("layer.contents", "图层内容…"),
                 ("graph.props", "绘图属性…"),
                 ("graph.copy", "复制图形"),
                 ("graph.export", "导出 SVG…"),
@@ -3107,6 +3169,156 @@ mod history_tests {
         assert_eq!(&app.project, before);
         app.run_command("edit.redo");
         assert_eq!(app.project, after);
+    }
+
+    #[test]
+    fn layer_contents_real_controls_commit_one_target_layer_and_cancel_cleanly() {
+        let mut app = app();
+        let mut p = Project::default();
+        let a = p.new_book();
+        let b = p.new_book();
+        for id in [a, b] {
+            let book = p.book_mut(id).unwrap();
+            book.columns[0].data = (0..5).map(|i| i.to_string()).collect();
+            book.columns[1].data = (0..5).map(|i| (i * 2).to_string()).collect();
+        }
+        let (gid, _) = p.plot_from_selection(a, &[], PlotType::Line).unwrap();
+        let layer = p.graph(gid).unwrap().first_layer().clone();
+        p.graph_mut(gid).unwrap().page.add_layer(layer);
+        app.load_project(p, None);
+        app.active_layers.insert(gid, 1);
+        let before = app.project.clone();
+        app.run_command("layer.contents");
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        ctx.style_mut(|s| s.animation_time = 0.0);
+        let mut time = 0.0;
+        let mut frame = |app: &mut SciApp, events| {
+            time += 0.02;
+            ctx.run(
+                egui::RawInput {
+                    time: Some(time),
+                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1400.0, 1000.0))),
+                    events,
+                    ..Default::default()
+                },
+                |ctx| app.dialogs(ctx),
+            )
+        };
+        let positions = |out: &egui::FullOutput, label: &str| {
+            out.shapes
+                .iter()
+                .filter_map(|s| match &s.shape {
+                    egui::Shape::Text(t) if t.galley.job.text == label => Some(t.pos + egui::vec2(4.0, 4.0)),
+                    _ => None,
+                })
+                .collect::<Vec<_>>()
+        };
+        macro_rules! click {
+            ($pos:expr) => {{
+                let pos = $pos;
+                frame(&mut app, vec![egui::Event::PointerMoved(pos)]);
+                for pressed in [true, false] {
+                    frame(
+                        &mut app,
+                        vec![egui::Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        }],
+                    );
+                }
+            }};
+        }
+        frame(&mut app, vec![]);
+        frame(&mut app, vec![]);
+        let output = frame(&mut app, vec![]);
+        click!(*positions(&output, "B (Y)").last().expect("source column"));
+        let output = frame(&mut app, vec![]);
+        click!(positions(&output, "添加 →")[0]);
+        let key = scicanvas_core::plotspec::foreign_key(b, "B");
+        assert_eq!(app.project, before, "draft changes do not touch the project");
+        let output = frame(&mut app, vec![]);
+        assert!(!positions(&output, "Book2 / A").is_empty());
+        assert!(!positions(&output, "Book2 / B").is_empty());
+        let row = positions(&output, "Book2：B")[0];
+        let axis = positions(&output, "左 Y")
+            .into_iter()
+            .min_by(|a, b| (a.y - row.y).abs().total_cmp(&(b.y - row.y).abs()))
+            .unwrap();
+        click!(axis);
+        let output = frame(&mut app, vec![]);
+        click!(*positions(&output, "右 Y").last().unwrap());
+        let output = frame(&mut app, vec![]);
+        click!(positions(&output, "按名称排序")[0]);
+        let output = frame(&mut app, vec![]);
+        click!(positions(&output, "上移")[0]);
+        let Some(Dialog::LayerContents(edit)) = &app.dialog else {
+            panic!()
+        };
+        assert_eq!(edit.draft.y_keys[0], key);
+        assert!(edit.draft.curves[&key].right_axis);
+        assert_eq!(app.project, before);
+        let output = frame(&mut app, vec![]);
+        click!(positions(&output, "确定")[0]);
+        assert!(app.dialog.is_none());
+        assert_eq!(
+            app.project.graph(gid).unwrap().first_layer(),
+            before.graph(gid).unwrap().first_layer()
+        );
+        let layer = &app.project.graph(gid).unwrap().page.layers()[1];
+        assert_eq!(layer.y_keys, vec![key.clone(), "B".into()]);
+        assert!(layer.curves[&key].right_axis);
+        let saved = scicanvas_core::project_file::to_json(&app.project).unwrap();
+        assert_eq!(scicanvas_core::project_file::from_json(&saved).unwrap(), app.project);
+        roundtrip(&mut app, &before);
+        let committed = app.project.clone();
+        app.run_command("layer.contents");
+        frame(&mut app, vec![]);
+        let output = frame(&mut app, vec![]);
+        click!(positions(&output, "← 移除")[0]);
+        assert_eq!(app.project, committed);
+        let output = frame(&mut app, vec![]);
+        click!(positions(&output, "取消")[0]);
+        assert!(app.dialog.is_none());
+        assert_eq!(app.project, committed);
+        app.run_command("layer.contents");
+        frame(&mut app, vec![]);
+        let output = frame(&mut app, vec![]);
+        click!(positions(&output, "确定")[0]);
+        app.run_command("edit.undo");
+        assert_eq!(app.project, before, "confirming an unchanged draft adds no undo step");
+    }
+
+    #[test]
+    fn layer_contents_rejects_stale_drafts_and_supports_removing_all_curves() {
+        let mut app = app();
+        app.run_command("layer.contents");
+        let Some(Dialog::LayerContents(edit)) = &app.dialog else {
+            panic!()
+        };
+        let mut edit = edit.clone();
+        let gid = edit.graph;
+        app.project.graph_mut(gid).unwrap().page.layers_mut()[edit.index].grid = !edit.before.grid;
+        let changed = app.project.clone();
+        edit.draft.legend = !edit.before.legend;
+        assert!(app.apply_layer_contents(&edit).is_err());
+        assert_eq!(app.project, changed);
+        assert!(app.history.undo_label().is_none());
+        app.run_command("layer.contents");
+        let Some(Dialog::LayerContents(edit)) = &app.dialog else {
+            panic!()
+        };
+        let mut edit = edit.clone();
+        for key in edit.draft.y_keys.clone() {
+            edit.draft.remove_curve(&key);
+        }
+        app.apply_layer_contents(&edit).unwrap();
+        assert!(app.project.graph(gid).unwrap().page.layers()[edit.index]
+            .y_keys
+            .is_empty());
+        roundtrip(&mut app, &changed);
     }
 
     #[test]

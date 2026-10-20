@@ -27,7 +27,255 @@ pub struct ColumnEdit {
     pub recalc: Option<scicanvas_core::ops::RecalcMode>,
 }
 
+#[derive(Clone)]
+pub struct LayerContents {
+    pub graph: u64,
+    pub index: usize,
+    pub before: scicanvas_core::page::Layer,
+    pub draft: scicanvas_core::page::Layer,
+    pub selected: Vec<scicanvas_core::plotspec::DataRef>,
+    pub active: Option<String>,
+    pub error: Option<String>,
+}
+
+impl LayerContents {
+    fn add_selected(&mut self, project: &scicanvas_core::Project) {
+        let mut draft = self.draft.clone();
+        for book in &project.books {
+            let keys: Vec<_> = self
+                .selected
+                .iter()
+                .filter(|r| r.book == book.id)
+                .map(|r| r.col.clone())
+                .collect();
+            if keys.is_empty() {
+                continue;
+            }
+            let alive = draft.book_id.is_some_and(|id| project.book(id).is_some());
+            if let Err(error) = draft.add_book_curves(book, &keys, alive) {
+                self.error = Some(error);
+                return;
+            }
+        }
+        self.active = draft
+            .y_keys
+            .iter()
+            .find(|key| !self.draft.y_keys.contains(key))
+            .cloned()
+            .or_else(|| self.active.clone());
+        self.draft = draft;
+        self.selected.clear();
+        self.error = None;
+    }
+
+    fn source_name(project: &scicanvas_core::Project, reference: Option<&scicanvas_core::plotspec::DataRef>) -> String {
+        reference
+            .map(|r| {
+                format!(
+                    "{} / {}",
+                    project.book(r.book).map_or("已删除的表", |b| b.name.as_str()),
+                    r.col
+                )
+            })
+            .unwrap_or_else(|| "行号".into())
+    }
+
+    fn show(&mut self, ctx: &egui::Context, project: &scicanvas_core::Project, pal: &Palette) -> Action {
+        let mut action = Action::None;
+        window(ctx, "图层内容")
+            .resizable(true)
+            .default_width(960.0)
+            .min_width(760.0)
+            .show(ctx, |ui| {
+                ui.strong(format!(
+                    "{} · 图层 {}",
+                    project.name_of(self.graph).unwrap_or("图形"),
+                    self.index + 1
+                ));
+                ui.separator();
+                ui.columns(2, |panels| {
+                    let left = &mut panels[0];
+                    left.strong("可用数据");
+                    egui::ScrollArea::both()
+                        .id_salt("contents-data")
+                        .max_height(320.0)
+                        .min_scrolled_height(240.0)
+                        .auto_shrink([false, false])
+                        .show(left, |ui| {
+                            for book in &project.books {
+                                egui::CollapsingHeader::new(&book.name)
+                                    .id_salt(("contents-book", book.id))
+                                    .default_open(true)
+                                    .show(ui, |ui| {
+                                        for col in &book.columns {
+                                            let reference = scicanvas_core::plotspec::DataRef::new(book.id, &col.key);
+                                            let present = self.draft.y_keys.iter().any(|key| {
+                                                scicanvas_core::plotspec::DataRef::from_key(self.draft.book_id, key)
+                                                    .as_ref()
+                                                    == Some(&reference)
+                                            });
+                                            let mut selected = present || self.selected.contains(&reference);
+                                            let name = if col.display_name() == col.key {
+                                                format!("{} ({})", col.key, col.role.label())
+                                            } else {
+                                                format!("{} ({})  {}", col.key, col.role.label(), col.display_name())
+                                            };
+                                            let eligible =
+                                                matches!(col.role, scicanvas_core::Role::Y | scicanvas_core::Role::Z)
+                                                    && !present;
+                                            let response =
+                                                ui.add_enabled(eligible, egui::Checkbox::new(&mut selected, name));
+                                            if response.changed() {
+                                                self.selected.retain(|r| r != &reference);
+                                                if selected {
+                                                    self.selected.push(reference);
+                                                }
+                                            }
+                                            if present {
+                                                response.on_hover_text("已在当前图层");
+                                            }
+                                        }
+                                    });
+                            }
+                        });
+                    if left.add_enabled(!self.selected.is_empty(), plain("添加 →")).clicked() {
+                        self.add_selected(project);
+                    }
+
+                    let right = &mut panels[1];
+                    right.strong("当前图层曲线");
+                    let keys = self.draft.y_keys.clone();
+                    egui::ScrollArea::both()
+                        .id_salt("contents-curves")
+                        .max_height(320.0)
+                        .min_scrolled_height(240.0)
+                        .auto_shrink([false, false])
+                        .show(right, |ui| {
+                            egui::Grid::new("contents-grid")
+                                .striped(true)
+                                .spacing([12.0, 6.0])
+                                .show(ui, |ui| {
+                                    for label in ["曲线", "X 来源", "Y 来源", "Y 轴"] {
+                                        ui.strong(label);
+                                    }
+                                    ui.end_row();
+                                    for key in &keys {
+                                        let lookup = |id| project.book(id);
+                                        let name =
+                                            self.draft
+                                                .curve_label(self.draft.book_id.and_then(lookup), &lookup, key);
+                                        if ui.selectable_label(self.active.as_ref() == Some(key), name).clicked() {
+                                            self.active = Some(key.clone());
+                                        }
+                                        let source =
+                                            scicanvas_core::plotspec::DataRef::from_key(self.draft.book_id, key);
+                                        let mapping = self
+                                            .draft
+                                            .curve_mapping(key, source.as_ref().and_then(|r| project.book(r.book)));
+                                        ui.label(Self::source_name(
+                                            project,
+                                            mapping.as_ref().and_then(|m| m.x.as_ref()),
+                                        ));
+                                        ui.label(
+                                            source
+                                                .as_ref()
+                                                .map(|r| Self::source_name(project, Some(r)))
+                                                .unwrap_or_else(|| "未绑定".into()),
+                                        );
+                                        let before = self.draft.curves.get(key).is_some_and(|style| style.right_axis);
+                                        let mut right_axis = before;
+                                        egui::ComboBox::from_id_salt(("contents-axis", key))
+                                            .selected_text(if right_axis { "右 Y" } else { "左 Y" })
+                                            .show_ui(ui, |ui| {
+                                                ui.selectable_value(&mut right_axis, false, "左 Y");
+                                                ui.selectable_value(&mut right_axis, true, "右 Y");
+                                            });
+                                        if right_axis != before {
+                                            let style = self.draft.curves.entry(key.clone()).or_default();
+                                            style.right_axis = right_axis;
+                                            if style.is_default()
+                                                && !self
+                                                    .before
+                                                    .curves
+                                                    .get(key)
+                                                    .is_some_and(scicanvas_core::page::CurveStyle::is_default)
+                                            {
+                                                self.draft.curves.remove(key);
+                                            }
+                                        }
+                                        ui.end_row();
+                                    }
+                                });
+                        });
+                    right.horizontal_wrapped(|ui| {
+                        let at = self
+                            .active
+                            .as_ref()
+                            .and_then(|key| self.draft.y_keys.iter().position(|k| k == key));
+                        if ui.add_enabled(at.is_some(), plain("← 移除")).clicked() {
+                            if let Some(at) = at {
+                                self.draft.remove_curve(&keys[at]);
+                                self.active = self
+                                    .draft
+                                    .y_keys
+                                    .get(at.min(self.draft.y_keys.len().saturating_sub(1)))
+                                    .cloned();
+                            }
+                        }
+                        if ui.add_enabled(at.is_some_and(|i| i > 0), plain("上移")).clicked() {
+                            let i = at.unwrap();
+                            self.draft.spec.y_keys.swap(i, i - 1);
+                        }
+                        if ui
+                            .add_enabled(at.is_some_and(|i| i + 1 < keys.len()), plain("下移"))
+                            .clicked()
+                        {
+                            let i = at.unwrap();
+                            self.draft.spec.y_keys.swap(i, i + 1);
+                        }
+                        if ui.button("按名称排序").clicked() {
+                            let names: std::collections::BTreeMap<_, _> = keys
+                                .iter()
+                                .map(|key| {
+                                    (
+                                        key.clone(),
+                                        self.draft
+                                            .curve_label(
+                                                self.draft.book_id.and_then(|id| project.book(id)),
+                                                &|id| project.book(id),
+                                                key,
+                                            )
+                                            .to_lowercase(),
+                                    )
+                                })
+                                .collect();
+                            self.draft
+                                .spec
+                                .y_keys
+                                .sort_by_key(|key| names.get(key).cloned().unwrap_or_default());
+                        }
+                    });
+                });
+                if let Some(error) = &self.error {
+                    ui.colored_label(pal.ink, error);
+                }
+                ui.separator();
+                ui.horizontal(|ui| {
+                    center_buttons(ui, 2);
+                    if ui.add(primary(ui, "确定")).clicked() {
+                        action = Action::LayerContents(Box::new(self.clone()));
+                    }
+                    if ui.add(plain("取消")).clicked() {
+                        action = Action::Close;
+                    }
+                });
+            });
+        action
+    }
+}
+
 pub enum Dialog {
+    LayerContents(Box<LayerContents>),
     AnalysisCurves {
         graph: u64,
         layer: usize,
@@ -196,6 +444,7 @@ pub enum Dialog {
 
 /// 对话框里用户做出的选择，由 app.rs 执行。
 pub enum Action {
+    LayerContents(Box<LayerContents>),
     AnalysisCurves(u64, usize, Vec<scicanvas_core::plotspec::DataRef>),
     SaveNote(String, String),
     ResidualPlot(Vec<FitReport>),
@@ -308,10 +557,11 @@ fn buttons(ui: &mut egui::Ui, ok: &str) -> (bool, bool) {
     res
 }
 
-pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette) -> Action {
+pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &scicanvas_core::Project) -> Action {
     let mut action = Action::None;
     let esc = ctx.input(|i| i.key_pressed(egui::Key::Escape));
     match dialog {
+        Dialog::LayerContents(contents) => action = contents.show(ctx, project, pal),
         Dialog::AnalysisCurves { graph, layer, curves } => {
             window(ctx, "分析曲线").show(ctx, |ui| {
                 ui.horizontal(|ui| {

@@ -445,6 +445,72 @@ impl std::ops::DerefMut for Layer {
     }
 }
 impl Layer {
+    /// 工作表快捷入口和图层内容草稿共用的添加逻辑。
+    pub fn add_book_curves(&mut self, book: &Book, keys: &[String], main_alive: bool) -> Result<usize, String> {
+        let mut seen = std::collections::BTreeSet::new();
+        let keys: Vec<_> = keys
+            .iter()
+            .filter(|k| {
+                seen.insert(k.as_str())
+                    && book
+                        .column(k)
+                        .is_some_and(|c| matches!(c.role, crate::Role::Y | crate::Role::Z))
+            })
+            .collect();
+        if keys.is_empty() {
+            return Err("选中的列里没有 Y 列".into());
+        }
+        let floating = self.plot_type == crate::PlotType::FloatingBar;
+        if floating {
+            let present = |key: &str| {
+                self.y_keys.iter().any(|existing| {
+                    crate::plotspec::DataRef::from_key(self.book_id, existing)
+                        == Some(crate::plotspec::DataRef::new(book.id, key))
+                })
+            };
+            if keys.iter().all(|key| present(key)) {
+                return Ok(0);
+            }
+            if keys.len() % 2 != 0 {
+                return Err("浮动柱请按下端、上端的顺序选择成对的 Y 列".into());
+            }
+            for pair in keys.as_chunks::<2>().0 {
+                if let Some(upper) = self.y_keys.iter().find(|key| {
+                    crate::plotspec::DataRef::from_key(self.book_id, key)
+                        == Some(crate::plotspec::DataRef::new(book.id, pair[1]))
+                }) {
+                    if self
+                        .base_by_y
+                        .get(upper)
+                        .and_then(|key| crate::plotspec::DataRef::from_key(self.book_id, key))
+                        != Some(crate::plotspec::DataRef::new(book.id, pair[0]))
+                    {
+                        return Err("该上端列已关联其他下端列".into());
+                    }
+                }
+            }
+        }
+        if !main_alive {
+            self.spec.book_id = Some(book.id);
+            self.spec.y_keys.retain(|k| crate::plotspec::split_key(k).1.is_some());
+            self.spec.x_key = crate::plotspec::default_x(book, keys[0]);
+        }
+        if floating {
+            let before = self.y_keys.len();
+            for pair in keys.as_chunks::<2>().0 {
+                let upper = self.spec.add_curve(book, pair[1])?;
+                let lower = self.result_key(book.id, pair[0]);
+                self.spec.base_by_y.insert(upper, lower);
+            }
+            return Ok(self.y_keys.len() - before);
+        }
+        let before = self.y_keys.len();
+        for key in keys {
+            self.spec.add_curve(book, key)?;
+        }
+        Ok(self.y_keys.len() - before)
+    }
+
     /// 删除主表后，以仍存活的曲线为数据源，保留样式和各曲线映射。
     pub fn remove_source_book<'a>(&mut self, deleted: u64, books: crate::plotspec::BookLookup<'a, '_>) {
         if self.book_id != Some(deleted) {

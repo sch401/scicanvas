@@ -2,6 +2,38 @@
 use scicanvas_core::{plotspec, scene, svg, PlotType, Project, Role};
 
 #[test]
+fn shared_curve_addition_handles_empty_graphs_duplicates_and_floating_pairs() {
+    let mut p = Project::default();
+    let book = p.new_book();
+    let c = p.book_mut(book).unwrap().push_column(Role::Y);
+    let d = p.book_mut(book).unwrap().push_column(Role::Y);
+    let e = p.book_mut(book).unwrap().push_column(Role::Y);
+    let (gid, _) = p
+        .plot_from_selection(book, &["B".into(), c.clone()], PlotType::FloatingBar)
+        .unwrap();
+    assert_eq!(
+        p.add_curves(gid, 0, book, &[d.clone(), e.clone(), d.clone()]).unwrap(),
+        1
+    );
+    assert_eq!(p.add_curves(gid, 0, book, &[d.clone(), e.clone()]).unwrap(), 0);
+    let layer = p.graph(gid).unwrap().first_layer();
+    assert_eq!(layer.y_keys, vec![c.clone(), e.clone()]);
+    assert_eq!(layer.base_by_y[&e], d);
+    let before = p.clone();
+    assert!(p.add_curves(gid, 0, book, &["B".into(), e]).is_err());
+    assert_eq!(p, before, "an invalid interval does not change existing curves");
+    let mut empty = scicanvas_core::page::Layer::default();
+    assert_eq!(
+        empty
+            .add_book_curves(p.book(book).unwrap(), &["B".into(), "B".into()], false)
+            .unwrap(),
+        1
+    );
+    assert_eq!(empty.book_id, Some(book));
+    assert_eq!(empty.y_keys, vec!["B"]);
+}
+
+#[test]
 fn removing_primary_workbook_preserves_remaining_curves_and_analysis() {
     use scicanvas_core::ops::Source;
     let (mut p, a, b, gid) = project();

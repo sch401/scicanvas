@@ -246,7 +246,11 @@ pub static TABS: &[Tab] = &[
             },
             Group {
                 label: "设置",
-                items: &[Big("graph.props"), Smalls(&["layer.add", "layer.remove"])],
+                items: &[
+                    Big("graph.props"),
+                    Big("layer.contents"),
+                    Smalls(&["layer.add", "layer.remove"]),
+                ],
             },
             Group {
                 label: "导出",
