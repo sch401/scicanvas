@@ -28,6 +28,18 @@ const META_ROWS: [&str; 3] = ["长名称", "单位", "注释"];
 #[derive(Clone, Copy)]
 struct ProjectDrag(u64);
 
+#[derive(Clone, PartialEq)]
+enum BookPreviewEdit {
+    Properties(u64, dialogs::ColumnEdit),
+    Categories(u64, String, Vec<String>),
+    Sort(u64, Vec<(String, bool)>, Option<Vec<String>>),
+}
+
+struct BookPreview {
+    edit: BookPreviewEdit,
+    result: Result<scicanvas_core::Book, String>,
+}
+
 /// 列标题右键菜单里的操作。
 #[derive(Clone, Copy)]
 enum ColAction {
@@ -90,10 +102,12 @@ pub struct SciApp {
     /// 命令改了主题后，下一帧交给 egui。
     pub(crate) pending_theme: Option<egui::ThemePreference>,
     pub(crate) pending_window_reset: bool,
+    pending_repaint: bool,
     /// 功能区、文件页、命令面板的界面状态。
     pub(crate) ui: UiState,
     /// 当前打开的分析对话框。
     pub(crate) dialog: Option<Dialog>,
+    book_preview: Option<BookPreview>,
     pub(crate) quit: bool,
     /// 子窗口的位置、大小和最小化 / 最大化状态。
     pub(crate) geoms: HashMap<u64, Geom>,
@@ -145,6 +159,7 @@ impl SciApp {
     fn initial(pal: Palette) -> Self {
         let mut app = SciApp {
             analysis_curves: HashMap::new(),
+            book_preview: None,
             project: Project::default(),
             history: History::default(),
             history_group: None,
@@ -178,6 +193,7 @@ impl SciApp {
             theme_pref: egui::ThemePreference::System,
             pending_theme: None,
             pending_window_reset: false,
+            pending_repaint: false,
             ui: UiState::default(),
             dialog: None,
             quit: false,
@@ -191,6 +207,7 @@ impl SciApp {
     }
 
     fn load_project(&mut self, project: Project, path: Option<PathBuf>) {
+        self.book_preview = None;
         self.analysis_curves.clear();
         self.active_layers.clear();
         self.plot_draft = None;
@@ -616,6 +633,7 @@ impl SciApp {
     /// 执行一条命令（功能区、快捷键、命令面板都走这里）。不能执行时在状态栏说明原因。
     pub(crate) fn run_command(&mut self, id: &str) {
         let Some(c) = commands::find(id) else { return };
+        self.pending_repaint = true;
         self.finish_edit();
         match (c.when)(self) {
             Ok(()) => {
@@ -642,6 +660,8 @@ impl SciApp {
     }
 
     fn begin_edit(&mut self, label: &str) {
+        self.pending_repaint = true;
+        self.book_preview = None;
         self.history.begin(&self.project, label);
     }
 
@@ -700,6 +720,7 @@ impl SciApp {
     }
 
     fn restore_history(&mut self, project: Project) {
+        self.book_preview = None;
         self.project = project;
         self.analysis_curves.retain(|(graph, index), curves| {
             let Some(layer) = self.project.graph(*graph).and_then(|g| g.page.layers().get(*index)) else {
@@ -1717,7 +1738,15 @@ impl SciApp {
 
     fn dialogs(&mut self, ctx: &egui::Context) {
         let Some(d) = self.dialog.as_mut() else { return };
-        match dialogs::show(ctx, d, &self.pal, &self.project) {
+        let layer_before = match d {
+            Dialog::LayerContents(edit) => Some(edit.draft.clone()),
+            _ => None,
+        };
+        let action = dialogs::show(ctx, d, &self.pal, &self.project);
+        if !matches!(action, dialogs::Action::None) {
+            ctx.request_repaint();
+        }
+        match action {
             dialogs::Action::LayerContents(edit) => match self.apply_layer_contents(&edit) {
                 Ok(()) => self.dialog = None,
                 Err(error) => {
@@ -1775,10 +1804,10 @@ impl SciApp {
             }
             dialogs::Action::None => {}
             dialogs::Action::Close => self.dialog = None,
-            dialogs::Action::ColumnProps(edit) => {
+            dialogs::Action::ColumnProps(book, edit) => {
                 self.finish_edit();
                 self.begin_edit("列属性");
-                match self.apply_column_props(edit) {
+                match self.apply_column_props(book, edit) {
                     Ok(()) => {
                         self.dialog = None;
                         self.history.changed();
@@ -1993,6 +2022,22 @@ impl SciApp {
                 self.finish_edit();
             }
         }
+        if let Some(Dialog::LayerContents(edit)) = &mut self.dialog {
+            if layer_before.as_ref() != Some(&edit.draft) {
+                ctx.request_repaint();
+            }
+            if self
+                .project
+                .graph(edit.graph)
+                .and_then(|g| g.page.layers().get(edit.index))
+                != Some(&edit.before)
+            {
+                edit.error = Some("图层已更新，请重新打开图层内容".into());
+            }
+        }
+        if self.refresh_book_preview() {
+            ctx.request_repaint();
+        }
     }
 
     // ---------------------------------------------------------------- 输入
@@ -2095,11 +2140,128 @@ impl SciApp {
         });
     }
 
-    fn graph_ui(&mut self, ui: &mut egui::Ui, id: u64) {
-        let Some(g) = self.project.graph(id) else {
-            return;
+    fn refresh_book_preview(&mut self) -> bool {
+        let edit = match &self.dialog {
+            Some(Dialog::ColumnProps { book, edit, .. }) => BookPreviewEdit::Properties(*book, edit.clone()),
+            Some(Dialog::CategoryOrder { book, key, levels, .. }) => {
+                BookPreviewEdit::Categories(*book, key.clone(), levels.clone())
+            }
+            Some(Dialog::Sort {
+                book,
+                columns,
+                keys,
+                selected,
+                only_selected,
+                ..
+            }) => BookPreviewEdit::Sort(
+                *book,
+                keys.iter()
+                    .filter_map(|(i, asc)| i.map(|i| (columns[i].0.clone(), *asc)))
+                    .collect(),
+                (*only_selected && !selected.is_empty()).then(|| selected.clone()),
+            ),
+            _ => return self.book_preview.take().is_some(),
         };
-        let out = plot::show(ui, g, &self.project, self.layer_index(id));
+        if self.book_preview.as_ref().is_some_and(|p| p.edit == edit) {
+            return false;
+        }
+        let id = match &edit {
+            BookPreviewEdit::Properties(id, _)
+            | BookPreviewEdit::Categories(id, ..)
+            | BookPreviewEdit::Sort(id, ..) => *id,
+        };
+        let reusable = matches!((&self.book_preview, &edit),
+            (Some(BookPreview { edit: BookPreviewEdit::Properties(old_id, old), result: Ok(_) }),
+             BookPreviewEdit::Properties(id, new))
+            if old_id == id && old.kind == new.kind && old.role == new.role
+                && old.format.utc_offset == new.format.utc_offset);
+        // ponytail: type/role/category/sort changes copy one table; shared column storage can reduce this for very large tables.
+        // Names, units and display formats reuse the cached data, including during continuous typing.
+        let base = if reusable {
+            self.book_preview.take().unwrap().result
+        } else {
+            self.project.book(id).cloned().ok_or_else(|| "找不到工作簿".to_string())
+        };
+        let result = base.and_then(|mut book| {
+            match &edit {
+                BookPreviewEdit::Properties(_, edit) => edit.apply(&mut book)?,
+                BookPreviewEdit::Categories(_, key, levels) => book
+                    .columns
+                    .iter_mut()
+                    .find(|c| &c.key == key)
+                    .ok_or("找不到列")?
+                    .data
+                    .set_category_order(levels)?,
+                BookPreviewEdit::Sort(_, keys, within) => {
+                    let mut project = Project::default();
+                    project.books.push(book);
+                    project.sort_rows(id, keys, within.as_deref())?;
+                    book = project.books.remove(0);
+                }
+            }
+            Ok(book)
+        });
+        if let Some(Dialog::ColumnProps {
+            error, sample, edit, ..
+        }) = &mut self.dialog
+        {
+            *error = result.as_ref().err().cloned();
+            if let Ok(book) = &result {
+                *sample = book
+                    .column(&edit.key)
+                    .and_then(|c| (0..c.data.len()).find_map(|r| c.data.f64_at(r).filter(|v| v.is_finite())));
+            }
+        }
+        if let Some(Dialog::CategoryOrder { error, .. } | Dialog::Sort { error, .. }) = &mut self.dialog {
+            *error = result.as_ref().err().cloned();
+        }
+        self.book_preview = Some(BookPreview { edit, result });
+        true
+    }
+
+    fn preview_graph(&self, id: u64) -> Option<std::borrow::Cow<'_, scicanvas_core::Graph>> {
+        use std::borrow::Cow;
+        let graph = self.project.graph(id)?;
+        if let Some(Dialog::LayerContents(edit)) = &self.dialog {
+            if edit.graph == id && graph.page.layers().get(edit.index) == Some(&edit.before) {
+                let valid = edit.draft.y_keys.is_empty()
+                    || edit
+                        .draft
+                        .book_id
+                        .and_then(|id| self.project.book(id))
+                        .is_some_and(|book| edit.draft.validate_in(book, &|id| self.project.book(id)).is_ok());
+                if valid && edit.draft != edit.before {
+                    let mut graph = graph.clone();
+                    graph.page.layers_mut()[edit.index] = edit.draft.clone();
+                    return Some(Cow::Owned(graph));
+                }
+            }
+        }
+        Some(Cow::Borrowed(graph))
+    }
+
+    fn graph_ui(&mut self, ui: &mut egui::Ui, id: u64) {
+        // The plot call is read-only. Temporarily supply the preview table to the shared scene builder,
+        // then restore it before processing any commands, exports or history operations.
+        let mut preview = self.book_preview.take();
+        let preview_book = preview.as_mut().and_then(|p| p.result.as_mut().ok());
+        let at = preview_book
+            .as_ref()
+            .and_then(|b| self.project.books.iter().position(|source| source.id == b.id));
+        if let (Some(at), Some(book)) = (at, preview_book) {
+            std::mem::swap(&mut self.project.books[at], book);
+        }
+        let out = self
+            .preview_graph(id)
+            .map(|g| plot::show(ui, &g, &self.project, self.layer_index(id)));
+        if let Some(at) = at {
+            std::mem::swap(
+                &mut self.project.books[at],
+                preview.as_mut().unwrap().result.as_mut().unwrap(),
+            );
+        }
+        self.book_preview = preview;
+        let Some(out) = out else { return };
         if let Some(index) = out.selected_layer {
             self.select_layer(id, index);
         }
@@ -2926,6 +3088,7 @@ impl SciApp {
                 });
             });
         if self.project.graph(gid).unwrap() != &graph_before {
+            ctx.request_repaint();
             if !self.history.is_pending() {
                 let after = std::mem::replace(self.project.graph_mut(gid).unwrap(), graph_before);
                 self.begin_edit("绘图属性");
@@ -3073,6 +3236,7 @@ impl SciApp {
                 self.explorer_focus = false;
             }
             // 子窗口放在面板之间剩下的区域里（Origin 的 MDI 工作区）
+            self.refresh_book_preview();
             self.child_windows(ctx);
             egui::CentralPanel::default()
                 .frame(egui::Frame::none().fill(self.pal.workspace))
@@ -3096,6 +3260,9 @@ impl SciApp {
             self.run_command("plot.apply_spec");
         }
         self.finish_frame_edit(self.history_group);
+        if std::mem::take(&mut self.pending_repaint) {
+            ctx.request_repaint();
+        }
 
         if self.quit {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -3325,11 +3492,25 @@ mod history_tests {
         frame(&mut app, vec![]);
         frame(&mut app, vec![]);
         let output = frame(&mut app, vec![]);
+        for label in ["添加 →", "← 移除", "上移", "下移", "按名称排序", "确定", "取消"] {
+            let pos = positions(&output, label)[0];
+            let rect = output
+                .shapes
+                .iter()
+                .filter_map(|s| match &s.shape {
+                    egui::Shape::Rect(r) if r.rect.contains(pos) => Some(r.rect),
+                    _ => None,
+                })
+                .min_by(|a, b| a.area().total_cmp(&b.area()))
+                .unwrap();
+            assert_eq!(rect.size(), dialogs::BUTTON, "button {label}");
+        }
         click!(*positions(&output, "B (Y)").last().expect("source column"));
         let output = frame(&mut app, vec![]);
         click!(positions(&output, "添加 →")[0]);
         let key = scicanvas_core::plotspec::foreign_key(b, "B");
         assert_eq!(app.project, before, "draft changes do not touch the project");
+        assert!(app.preview_graph(gid).unwrap().page.layers()[1].y_keys.contains(&key));
         let output = frame(&mut app, vec![]);
         assert!(!positions(&output, "Book2 / A").is_empty());
         assert!(!positions(&output, "Book2 / B").is_empty());
@@ -3350,6 +3531,7 @@ mod history_tests {
         };
         assert_eq!(edit.draft.y_keys[0], key);
         assert!(edit.draft.curves[&key].right_axis);
+        assert_eq!(app.preview_graph(gid).unwrap().page.layers()[1], edit.draft);
         assert_eq!(app.project, before);
         let output = frame(&mut app, vec![]);
         click!(positions(&output, "确定")[0]);
@@ -3370,10 +3552,18 @@ mod history_tests {
         let output = frame(&mut app, vec![]);
         click!(positions(&output, "← 移除")[0]);
         assert_eq!(app.project, committed);
+        assert_ne!(
+            app.preview_graph(gid).unwrap().as_ref(),
+            app.project.graph(gid).unwrap()
+        );
         let output = frame(&mut app, vec![]);
         click!(positions(&output, "取消")[0]);
         assert!(app.dialog.is_none());
         assert_eq!(app.project, committed);
+        assert_eq!(
+            app.preview_graph(gid).unwrap().as_ref(),
+            app.project.graph(gid).unwrap()
+        );
         app.run_command("layer.contents");
         frame(&mut app, vec![]);
         let output = frame(&mut app, vec![]);
@@ -3410,6 +3600,205 @@ mod history_tests {
             .y_keys
             .is_empty());
         roundtrip(&mut app, &changed);
+    }
+
+    #[test]
+    fn layer_preview_repaints_the_actual_plot_and_cancel_restores_it() {
+        let mut app = app();
+        let gid = app.project.graphs[0].id;
+        let before = app.project.clone();
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        ctx.style_mut(|s| s.animation_time = 0.0);
+        let render = |app: &mut SciApp| {
+            let mut shapes = Vec::new();
+            for _ in 0..3 {
+                shapes = ctx
+                    .run(egui::RawInput::default(), |ctx| {
+                        egui::CentralPanel::default().show(ctx, |ui| app.graph_ui(ui, gid));
+                    })
+                    .shapes;
+            }
+            shapes
+        };
+        let original = render(&mut app);
+        app.run_command("layer.contents");
+        let Some(Dialog::LayerContents(edit)) = &mut app.dialog else {
+            panic!()
+        };
+        edit.draft.remove_curve(&edit.draft.y_keys[0].clone());
+        assert_ne!(
+            render(&mut app),
+            original,
+            "the plot, including its cached scene, previews the draft"
+        );
+        assert_eq!(app.project, before);
+        assert_eq!(
+            scicanvas_core::project_file::to_json(&app.project).unwrap(),
+            scicanvas_core::project_file::to_json(&before).unwrap()
+        );
+        press_dialog_button(&mut app, "取消");
+        assert_eq!(render(&mut app), original);
+        assert!(app.history.undo_label().is_none());
+    }
+
+    #[test]
+    fn column_preview_updates_sheet_and_plot_reuses_data_and_commits_to_original_book() {
+        use scicanvas_core::format::NumberFormat;
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["B".into()]);
+        let other = app.project.new_book();
+        app.project.book_mut(1).unwrap().columns[1].set(0, "12.3456".into());
+        let before = app.project.clone();
+        app.run_command("col.props");
+        let Some(Dialog::ColumnProps { edit, .. }) = &mut app.dialog else {
+            panic!()
+        };
+        edit.long_name = "Preview voltage".into();
+        edit.units = "preview_unit".into();
+        edit.format.number = NumberFormat::from_index(1, 2);
+        assert!(app.refresh_book_preview());
+        let allocation = |app: &SciApp| {
+            let scicanvas_core::ColumnData::Num { values, .. } = &app
+                .book_preview
+                .as_ref()
+                .unwrap()
+                .result
+                .as_ref()
+                .unwrap()
+                .column("B")
+                .unwrap()
+                .data
+            else {
+                panic!()
+            };
+            values.as_ptr()
+        };
+        let ptr = allocation(&app);
+        assert!(!app.refresh_book_preview());
+        let Some(Dialog::ColumnProps { edit, .. }) = &mut app.dialog else {
+            panic!()
+        };
+        edit.long_name.push_str(" live");
+        assert!(app.refresh_book_preview());
+        assert_eq!(allocation(&app), ptr, "typing and display formats reuse preview data");
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        let has_text = |out: &egui::FullOutput, text: &str| {
+            out.shapes
+                .iter()
+                .any(|s| matches!(&s.shape, egui::Shape::Text(t) if t.galley.job.text.contains(text)))
+        };
+        let mut sheet = egui::FullOutput::default();
+        let mut graph = egui::FullOutput::default();
+        let gid = app.project.graphs[0].id;
+        for _ in 0..3 {
+            sheet = ctx.run(egui::RawInput::default(), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| app.book_ui(ui, 1));
+            });
+            graph = ctx.run(egui::RawInput::default(), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| app.graph_ui(ui, gid));
+            });
+        }
+        assert!(has_text(&sheet, "Preview voltage live"));
+        assert!(has_text(&sheet, "12.35"));
+        assert!(has_text(&graph, "Preview voltage live"));
+        assert!(has_text(&graph, "preview_unit"));
+        assert_eq!(app.project, before, "read-only plotting restores the canonical table");
+        app.active = Some(other);
+        press_dialog_button(&mut app, "确定");
+        assert!(app.dialog.is_none());
+        assert!(app.book_preview.is_none());
+        assert_eq!(
+            app.project.book(1).unwrap().column("B").unwrap().long_name,
+            "Preview voltage live"
+        );
+        assert_eq!(app.project.book(other), before.book(other));
+        roundtrip(&mut app, &before);
+        app.active = Some(1);
+        app.run_command("col.props");
+        let committed = app.project.clone();
+        let Some(Dialog::ColumnProps { edit, .. }) = &mut app.dialog else {
+            panic!()
+        };
+        edit.long_name = "discard".into();
+        app.refresh_book_preview();
+        press_dialog_button(&mut app, "取消");
+        assert!(app.book_preview.is_none());
+        assert_eq!(app.project, committed);
+    }
+
+    #[test]
+    fn typed_column_category_and_sort_previews_validate_and_remain_undoable() {
+        use scicanvas_core::DataKind;
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["A".into()]);
+        app.project.book_mut(1).unwrap().columns[0].data = vec!["b".into(), "a".into(), "c".into()].into();
+        app.run_command("col.props");
+        let before = app.project.clone();
+        let Some(Dialog::ColumnProps { edit, .. }) = &mut app.dialog else {
+            panic!()
+        };
+        edit.kind = DataKind::Num;
+        app.refresh_book_preview();
+        assert!(app.book_preview.as_ref().unwrap().result.is_err());
+        assert_eq!(app.project, before);
+        let Some(Dialog::ColumnProps { edit, .. }) = &mut app.dialog else {
+            panic!()
+        };
+        edit.kind = DataKind::Category;
+        app.refresh_book_preview();
+        assert_eq!(
+            app.book_preview.as_ref().unwrap().result.as_ref().unwrap().columns[0]
+                .data
+                .kind(),
+            DataKind::Category
+        );
+        press_dialog_button(&mut app, "确定");
+        roundtrip(&mut app, &before);
+        let before = app.project.clone();
+        app.run_command("col.categories");
+        let Some(Dialog::CategoryOrder { levels, .. }) = &mut app.dialog else {
+            panic!()
+        };
+        levels.reverse();
+        let levels = levels.clone();
+        app.refresh_book_preview();
+        let book = app.book_preview.as_ref().unwrap().result.as_ref().unwrap();
+        assert_eq!(book.columns[0].data.category_levels().unwrap(), levels);
+        assert_eq!(
+            book.columns[0].data.text_at(0),
+            "b",
+            "reordering categories preserves cell labels"
+        );
+        assert_eq!(app.project, before);
+        press_dialog_button(&mut app, "确定");
+        roundtrip(&mut app, &before);
+        app.run_command("sort.custom");
+        app.refresh_book_preview();
+        let sorted = app.book_preview.as_ref().unwrap().result.as_ref().unwrap().clone();
+        let before = app.project.clone();
+        assert_ne!(&sorted, before.book(1).unwrap());
+        press_dialog_button(&mut app, "取消");
+        assert_eq!(app.project, before);
+        app.run_command("sort.custom");
+        let Some(Dialog::Sort { keys, .. }) = &mut app.dialog else {
+            panic!()
+        };
+        *keys = [(None, true); 3];
+        app.refresh_book_preview();
+        assert!(app.book_preview.as_ref().unwrap().result.is_err());
+        let Some(Dialog::Sort { keys, .. }) = &mut app.dialog else {
+            panic!()
+        };
+        keys[0] = (Some(0), true);
+        app.refresh_book_preview();
+        assert!(app.book_preview.as_ref().unwrap().result.is_ok());
+        press_dialog_button(&mut app, "排序");
+        assert_eq!(app.project.book(1), Some(&sorted));
+        roundtrip(&mut app, &before);
     }
 
     #[test]
@@ -4770,7 +5159,7 @@ mod history_tests {
         let mut edit = edit;
         edit.recalc = Some(RecalcMode::Manual);
         app.begin_edit("列属性");
-        app.apply_column_props(edit).unwrap();
+        app.apply_column_props(1, edit).unwrap();
         app.history.changed();
         app.finish_edit();
         let smoothed = |app: &SciApp| app.project.book(1).unwrap().column(&key).unwrap().values();
@@ -5882,7 +6271,7 @@ mod history_tests {
         };
         app.dialog = None;
         app.begin_edit("列属性");
-        app.apply_column_props(edit.clone()).unwrap();
+        app.apply_column_props(1, edit.clone()).unwrap();
         app.history.changed();
         app.finish_edit();
         let col = app.project.book(1).unwrap().column("B").unwrap();
@@ -5903,7 +6292,7 @@ mod history_tests {
         app.open_column_props();
         app.finish_edit();
         app.begin_edit("列属性");
-        let err = app.apply_column_props(edit).unwrap_err();
+        let err = app.apply_column_props(1, edit).unwrap_err();
         app.finish_edit();
         assert!(err.contains("无法转换"), "{err}");
         assert_eq!(app.project, before);

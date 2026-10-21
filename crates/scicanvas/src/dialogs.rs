@@ -27,6 +27,31 @@ pub struct ColumnEdit {
     pub recalc: Option<scicanvas_core::ops::RecalcMode>,
 }
 
+impl ColumnEdit {
+    pub fn apply(&self, book: &mut scicanvas_core::Book) -> Result<(), String> {
+        let col = book.column(&self.key).ok_or("找不到列")?;
+        if col.data.kind() != self.kind {
+            book.convert_columns(std::slice::from_ref(&self.key), self.kind)?;
+        }
+        if book.column(&self.key).is_some_and(|c| c.role != self.role) {
+            book.set_roles(std::slice::from_ref(&self.key), self.role);
+        }
+        let col = book.columns.iter_mut().find(|c| c.key == self.key).unwrap();
+        col.long_name.clone_from(&self.long_name);
+        col.units.clone_from(&self.units);
+        col.comment.clone_from(&self.comment);
+        if let (Some(op), Some(mode)) = (col.op.as_mut(), self.recalc) {
+            op.mode = mode;
+        }
+        let offset_changed = col.format.utc_offset != self.format.utc_offset;
+        col.format = self.format;
+        if offset_changed && col.data.kind() == scicanvas_core::DataKind::DateTime {
+            col.set_utc_offset(self.format.utc_offset);
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone)]
 pub struct LayerContents {
     pub graph: u64,
@@ -138,9 +163,11 @@ impl LayerContents {
                                     });
                             }
                         });
-                    if left.add_enabled(!self.selected.is_empty(), plain("添加 →")).clicked() {
-                        self.add_selected(project);
-                    }
+                    left.horizontal(|ui| {
+                        if ui.add_enabled(!self.selected.is_empty(), plain("添加 →")).clicked() {
+                            self.add_selected(project);
+                        }
+                    });
 
                     let right = &mut panels[1];
                     right.strong("当前图层曲线");
@@ -233,7 +260,7 @@ impl LayerContents {
                             let i = at.unwrap();
                             self.draft.spec.y_keys.swap(i, i + 1);
                         }
-                        if ui.button("按名称排序").clicked() {
+                        if ui.add(plain("按名称排序")).clicked() {
                             let names: std::collections::BTreeMap<_, _> = keys
                                 .iter()
                                 .map(|key| {
@@ -283,6 +310,7 @@ pub enum Dialog {
     },
     /// 列属性：编辑内容、第一行的数值（数值列或日期列的毫秒，用于格式预览）、转换失败等错误。
     ColumnProps {
+        book: u64,
         edit: ColumnEdit,
         sample: Option<f64>,
         error: Option<String>,
@@ -305,6 +333,7 @@ pub enum Dialog {
         book: u64,
         key: String,
         levels: Vec<String>,
+        error: Option<String>,
     },
     /// IFFT：工作簿、实部列、虚部列（可无）及显示名、频点数、是否双边谱、单边谱原信号点数是否为奇数。
     Ifft {
@@ -323,6 +352,7 @@ pub enum Dialog {
         keys: [(Option<usize>, bool); 3],
         selected: Vec<String>,
         only_selected: bool,
+        error: Option<String>,
     },
     /// Savitzky–Golay 平滑求导：窗口点数、多项式阶数、导数阶数。
     SgDiff {
@@ -450,7 +480,7 @@ pub enum Action {
     ResidualPlot(Vec<FitReport>),
     FitBands(Vec<FitReport>),
     NlFitBands(Vec<NlFitReport>),
-    ColumnProps(ColumnEdit),
+    ColumnProps(u64, ColumnEdit),
     None,
     Close,
     ConvertText(u64, String, usize, String),
@@ -603,7 +633,12 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                 });
             });
         }
-        Dialog::ColumnProps { edit, sample, error } => {
+        Dialog::ColumnProps {
+            book,
+            edit,
+            sample,
+            error,
+        } => {
             use scicanvas_core::format::{DateFormat, NumberFormat};
             use scicanvas_core::{DataKind, Role};
             let title = format!("列属性 — {}", edit.key);
@@ -740,7 +775,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                 );
                 let (ok, cancel) = buttons(ui, "确定");
                 if ok {
-                    action = Action::ColumnProps(edit.clone());
+                    action = Action::ColumnProps(*book, edit.clone());
                 } else if cancel || esc {
                     action = Action::Close;
                 }
@@ -838,7 +873,12 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                 }
             });
         }
-        Dialog::CategoryOrder { book, key, levels } => {
+        Dialog::CategoryOrder {
+            book,
+            key,
+            levels,
+            error,
+        } => {
             window(ctx, "类别顺序").show(ctx, |ui| {
                 let mut swap = None;
                 egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
@@ -865,8 +905,11 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                 if let Some((a, b)) = swap {
                     levels.swap(a, b);
                 }
-                if ui.button("按名称排序").clicked() {
+                if ui.add(plain("按名称排序")).clicked() {
                     levels.sort();
+                }
+                if let Some(error) = error {
+                    ui.colored_label(ui.visuals().error_fg_color, error.as_str());
                 }
                 let (ok, cancel) = buttons(ui, "确定");
                 if ok {
@@ -882,6 +925,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             keys,
             selected,
             only_selected,
+            error,
         } => {
             window(ctx, "排序").show(ctx, |ui| {
                 egui::Grid::new("sort-grid")
@@ -914,6 +958,9 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                         only_selected,
                         format!("只排选中列（{}），其余列不动", selected.join("、")),
                     );
+                }
+                if let Some(error) = error {
+                    ui.colored_label(ui.visuals().error_fg_color, error.as_str());
                 }
                 let (ok, cancel) = buttons(ui, "排序");
                 if ok {

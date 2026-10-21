@@ -132,6 +132,7 @@ impl SciApp {
         };
         let sample = (0..col.data.len()).find_map(|r| col.data.f64_at(r).filter(|v| v.is_finite()));
         self.dialog = Some(Dialog::ColumnProps {
+            book: id,
             edit: dialogs::ColumnEdit {
                 key,
                 long_name: col.long_name.clone(),
@@ -148,29 +149,8 @@ impl SciApp {
     }
 
     /// 应用列属性；类型转换失败时不改动任何内容，错误留在对话框里。
-    pub(super) fn apply_column_props(&mut self, edit: dialogs::ColumnEdit) -> Result<(), String> {
-        let id = self.active_book().ok_or("找不到工作簿")?;
-        let book = self.project.book_mut(id).ok_or("找不到工作簿")?;
-        let col = book.column(&edit.key).ok_or("找不到列")?;
-        if col.data.kind() != edit.kind {
-            book.convert_columns(std::slice::from_ref(&edit.key), edit.kind)?;
-        }
-        if book.column(&edit.key).is_some_and(|c| c.role != edit.role) {
-            book.set_roles(std::slice::from_ref(&edit.key), edit.role);
-        }
-        let col = book.columns.iter_mut().find(|c| c.key == edit.key).unwrap();
-        col.long_name = edit.long_name;
-        col.units = edit.units;
-        col.comment = edit.comment;
-        if let (Some(op), Some(mode)) = (col.op.as_mut(), edit.recalc) {
-            op.mode = mode;
-        }
-        // 时区改变：不带时区写的日期按新时区重新换算，显示的墙上时间不变
-        let offset_changed = col.format.utc_offset != edit.format.utc_offset;
-        col.format = edit.format;
-        if offset_changed && col.data.kind() == scicanvas_core::DataKind::DateTime {
-            col.set_utc_offset(edit.format.utc_offset);
-        }
+    pub(super) fn apply_column_props(&mut self, book: u64, edit: dialogs::ColumnEdit) -> Result<(), String> {
+        edit.apply(self.project.book_mut(book).ok_or("找不到工作簿")?)?;
         self.status = format!("已更新列 {} 的属性", edit.key);
         Ok(())
     }
@@ -214,7 +194,14 @@ impl SciApp {
             .and_then(|b| b.column(&key))
             .and_then(|c| c.data.category_levels());
         match levels {
-            Some(levels) => self.dialog = Some(Dialog::CategoryOrder { book: bid, key, levels }),
+            Some(levels) => {
+                self.dialog = Some(Dialog::CategoryOrder {
+                    book: bid,
+                    key,
+                    levels,
+                    error: None,
+                })
+            }
             None => self.status = format!("{key} 列不是分类列，可先“转换为分类列”"),
         }
     }
@@ -255,6 +242,7 @@ impl SciApp {
         if edits.is_empty() {
             return;
         }
+        self.pending_repaint = true;
         if !self.history.is_pending() {
             for (col, row, before, _) in edits {
                 *header_field(&mut self.project.book_mut(id).unwrap().columns[*col], *row) = before.clone();
@@ -300,6 +288,7 @@ impl SciApp {
             keys: [(Some(first), true), (None, true), (None, true)],
             selected: self.selected_keys(bid),
             only_selected: false,
+            error: None,
         });
     }
 
@@ -453,6 +442,11 @@ impl SciApp {
         };
         let keys: Vec<String> = book.columns.iter().map(|c| c.key.clone()).collect();
         let graphs: Vec<(u64, String)> = self.project.graphs.iter().map(|g| (g.id, g.name.clone())).collect();
+        let preview = self
+            .book_preview
+            .as_ref()
+            .and_then(|p| p.result.as_ref().ok())
+            .filter(|b| b.id == id);
         let Some(book) = self.project.book_mut(id) else {
             self.sheets.insert(id, st);
             return;
@@ -517,6 +511,7 @@ impl SciApp {
                                 ui.label("");
                             });
                             for (ci, col) in book.columns.iter().enumerate() {
+                                let col = preview.and_then(|b| b.column(&col.key)).unwrap_or(col);
                                 header.col(|ui| {
                                     let rect = ui.max_rect();
                                     // 带保存公式的列标 ƒ
@@ -628,6 +623,17 @@ impl SciApp {
                                                 [rect.right_top(), rect.right_bottom()],
                                                 egui::Stroke::new(1.0_f32, pal.window),
                                             );
+                                            if let Some(col) = preview.and_then(|b| b.column(&col.key)) {
+                                                let text = match ri {
+                                                    0 => &col.long_name,
+                                                    1 => &col.units,
+                                                    _ => &col.comment,
+                                                };
+                                                ui.centered_and_justified(|ui| {
+                                                    ui.label(text);
+                                                });
+                                                return;
+                                            }
                                             let field = header_field(col, ri);
                                             let before = field.clone();
                                             let response = ui.add(
@@ -765,7 +771,8 @@ impl SciApp {
                                         }
                                         painter.line_segment([rect.right_top(), rect.right_bottom()], grid);
                                         painter.line_segment([rect.left_bottom(), rect.right_bottom()], grid);
-                                        let shown = (r < col.data.len()).then(|| col.display_at(r));
+                                        let display = preview.and_then(|b| b.column(&col.key)).unwrap_or(col);
+                                        let shown = (r < display.data.len()).then(|| display.display_at(r));
                                         if let Some(s) = shown.filter(|s| !s.is_empty()) {
                                             ui.painter().with_clip_rect(rect.intersect(ui.clip_rect())).text(
                                                 rect.right_center() - egui::vec2(5.0, 0.0),
