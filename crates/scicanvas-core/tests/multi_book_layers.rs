@@ -97,6 +97,7 @@ fn an_emptied_layer_rebinds_to_the_new_book_without_stale_mappings() {
     layer.base_by_y.insert("stale".into(), "B".into());
     layer.row_by_y.insert("stale".into(), Some((1, 2)));
     layer.line_only.push("stale".into());
+    layer.labels.column = Some("C".into());
     layer.curves.insert(
         "B".into(),
         scicanvas_core::page::CurveStyle {
@@ -111,6 +112,10 @@ fn an_emptied_layer_rebinds_to_the_new_book_without_stale_mappings() {
     assert_eq!(layer.x_key.as_deref(), Some(x.as_str()));
     assert!(layer.x_by_y.is_empty() && layer.base_by_y.is_empty() && layer.row_by_y.is_empty());
     assert!(layer.line_only.is_empty() && layer.curves.is_empty() && layer.rows.is_none());
+    assert!(
+        layer.labels.column.is_none(),
+        "a label key from the previous book must not bind to the new book"
+    );
     assert_eq!(layer.x_axis_title(p.book(b)), "新表时间");
     assert_eq!(layer.curve_label(p.book(b), &|id| p.book(id), "B"), "电流");
     let (_, series) = layer.series(p.book(b).unwrap());
@@ -120,6 +125,53 @@ fn an_emptied_layer_rebinds_to_the_new_book_without_stale_mappings() {
     {
         use scicanvas_core::project_file;
         assert_eq!(project_file::from_json(&project_file::to_json(&p).unwrap()).unwrap(), p);
+    }
+}
+
+#[test]
+fn readding_the_same_book_preserves_layer_x_rows_and_labels() {
+    for plot_type in [PlotType::LineSymbol, PlotType::FloatingBar] {
+        for row_numbers in [true, false] {
+            let mut p = Project::sample();
+            let book = p.book_mut(1).unwrap();
+            let x = book.push_column(Role::X);
+            book.columns.iter_mut().find(|c| c.key == x).unwrap().data = (100..141).map(|i| i.to_string()).collect();
+            let layer = p.graph_mut(2).unwrap().first_layer_mut();
+            for key in layer.y_keys.clone() {
+                layer.remove_curve(&key);
+            }
+            layer.plot_type = plot_type;
+            let x = (!row_numbers).then_some(x);
+            layer.x_key = x.clone();
+            layer.rows = Some((1, 3));
+            layer.labels.column = Some("C".into());
+            let keys = if plot_type == PlotType::FloatingBar {
+                vec!["B".into(), "C".into()]
+            } else {
+                vec!["B".into()]
+            };
+            assert_eq!(p.add_curves(2, 0, 1, &keys).unwrap(), 1);
+            let layer = p.graph(2).unwrap().first_layer();
+            assert_eq!(layer.book_id, Some(1));
+            assert_eq!(layer.x_key, x);
+            assert_eq!(layer.rows, Some((1, 3)));
+            assert_eq!(layer.labels.column.as_deref(), Some("C"));
+            let (_, series) = layer.series(p.book(1).unwrap());
+            assert_eq!(series[0].rows, vec![1, 2, 3]);
+            assert_eq!(
+                series[0].points.iter().map(|point| point[0]).collect::<Vec<_>>(),
+                if row_numbers {
+                    vec![2.0, 3.0, 4.0]
+                } else {
+                    vec![101.0, 102.0, 103.0]
+                }
+            );
+            #[cfg(feature = "serde")]
+            {
+                use scicanvas_core::project_file;
+                assert_eq!(project_file::from_json(&project_file::to_json(&p).unwrap()).unwrap(), p);
+            }
+        }
     }
 }
 

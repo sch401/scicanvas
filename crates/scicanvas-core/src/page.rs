@@ -491,23 +491,33 @@ impl Layer {
             }
         }
         let empty = self.y_keys.is_empty();
-        if empty {
-            self.spec.x_by_y.clear();
-            self.spec.base_by_y.clear();
-            self.spec.row_by_y.clear();
-            self.spec.line_only.clear();
-            self.spec.rows = None;
-            self.curves.clear();
-        }
-        if !main_alive || empty {
+        let changed_book = self.book_id != Some(book.id);
+        let rebind = !main_alive || (empty && changed_book);
+        if rebind {
+            if empty {
+                self.spec.x_by_y.clear();
+                self.spec.base_by_y.clear();
+                self.spec.row_by_y.clear();
+                self.spec.line_only.clear();
+                self.spec.rows = None;
+                self.curves.clear();
+            }
+            if changed_book {
+                self.labels.column = None;
+            }
             self.spec.book_id = Some(book.id);
             self.spec.y_keys.retain(|k| crate::plotspec::split_key(k).1.is_some());
             self.spec.x_key = crate::plotspec::default_x(book, keys[0]);
         }
+        // 同表空图层沿用当前 X（包括行号），不自动套用列角色的默认 X。
+        let keep_layer_x = empty && !rebind;
         if floating {
             let before = self.y_keys.len();
             for pair in keys.as_chunks::<2>().0 {
                 let upper = self.spec.add_curve(book, pair[1])?;
+                if keep_layer_x {
+                    self.spec.x_by_y.remove(&upper);
+                }
                 let lower = self.result_key(book.id, pair[0]);
                 self.spec.base_by_y.insert(upper, lower);
             }
@@ -515,7 +525,10 @@ impl Layer {
         }
         let before = self.y_keys.len();
         for key in keys {
-            self.spec.add_curve(book, key)?;
+            let key = self.spec.add_curve(book, key)?;
+            if keep_layer_x {
+                self.spec.x_by_y.remove(&key);
+            }
         }
         Ok(self.y_keys.len() - before)
     }
