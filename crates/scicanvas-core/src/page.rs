@@ -490,7 +490,16 @@ impl Layer {
                 }
             }
         }
-        if !main_alive {
+        let empty = self.y_keys.is_empty();
+        if empty {
+            self.spec.x_by_y.clear();
+            self.spec.base_by_y.clear();
+            self.spec.row_by_y.clear();
+            self.spec.line_only.clear();
+            self.spec.rows = None;
+            self.curves.clear();
+        }
+        if !main_alive || empty {
             self.spec.book_id = Some(book.id);
             self.spec.y_keys.retain(|k| crate::plotspec::split_key(k).1.is_some());
             self.spec.x_key = crate::plotspec::default_x(book, keys[0]);

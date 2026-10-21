@@ -79,6 +79,51 @@ fn shared_curve_addition_handles_empty_graphs_duplicates_and_floating_pairs() {
 }
 
 #[test]
+fn an_emptied_layer_rebinds_to_the_new_book_without_stale_mappings() {
+    let (mut p, a, b, gid) = project();
+    let book = p.book_mut(b).unwrap();
+    book.columns[0].role = Role::Ignore;
+    let x = book.push_column(Role::X);
+    let column = book.columns.iter_mut().find(|c| c.key == x).unwrap();
+    column.long_name = "新表时间".into();
+    column.data = (20..25).map(|i| i.to_string()).collect();
+    let original = p.book(a).unwrap().clone();
+    let layer = p.graph_mut(gid).unwrap().first_layer_mut();
+    for key in layer.y_keys.clone() {
+        layer.remove_curve(&key);
+    }
+    layer.rows = Some((1, 2));
+    layer.x_by_y.insert("stale".into(), "A".into());
+    layer.base_by_y.insert("stale".into(), "B".into());
+    layer.row_by_y.insert("stale".into(), Some((1, 2)));
+    layer.line_only.push("stale".into());
+    layer.curves.insert(
+        "B".into(),
+        scicanvas_core::page::CurveStyle {
+            right_axis: true,
+            ..Default::default()
+        },
+    );
+    assert_eq!(p.add_curves(gid, 0, b, &["B".into()]).unwrap(), 1);
+    let layer = p.graph(gid).unwrap().first_layer();
+    assert_eq!(layer.book_id, Some(b));
+    assert_eq!(layer.y_keys, vec!["B"]);
+    assert_eq!(layer.x_key.as_deref(), Some(x.as_str()));
+    assert!(layer.x_by_y.is_empty() && layer.base_by_y.is_empty() && layer.row_by_y.is_empty());
+    assert!(layer.line_only.is_empty() && layer.curves.is_empty() && layer.rows.is_none());
+    assert_eq!(layer.x_axis_title(p.book(b)), "新表时间");
+    assert_eq!(layer.curve_label(p.book(b), &|id| p.book(id), "B"), "电流");
+    let (_, series) = layer.series(p.book(b).unwrap());
+    assert_eq!(series[0].points[0], [20.0, 110.0]);
+    assert_eq!(p.book(a).unwrap(), &original);
+    #[cfg(feature = "serde")]
+    {
+        use scicanvas_core::project_file;
+        assert_eq!(project_file::from_json(&project_file::to_json(&p).unwrap()).unwrap(), p);
+    }
+}
+
+#[test]
 fn removing_primary_workbook_preserves_remaining_curves_and_analysis() {
     use scicanvas_core::ops::Source;
     let (mut p, a, b, gid) = project();
