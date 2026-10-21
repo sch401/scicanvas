@@ -900,6 +900,7 @@ impl Project {
                     layer.y_keys.retain(|k| !keys.contains(k));
                     layer.line_only.retain(|k| !keys.contains(k));
                     layer.row_by_y.retain(|k, _| !keys.contains(k));
+                    layer.curves.retain(|k, _| !keys.contains(k));
                     layer.x_by_y.retain(|y, x| !keys.contains(y) && !keys.contains(x));
                     // 保留缺失下端的映射，避免删除后把浮动柱静默改成从零开始。
                     layer.base_by_y.retain(|y, _| !keys.contains(y));

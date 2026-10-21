@@ -2,6 +2,51 @@
 use scicanvas_core::{plotspec, scene, svg, PlotType, Project, Role};
 
 #[test]
+fn deleting_a_primary_column_drops_its_style_before_the_key_is_reused() {
+    use scicanvas_core::page::CurveStyle;
+    let mut p = Project::sample();
+    let book = p.new_book();
+    let foreign_c = p.book_mut(book).unwrap().push_column(Role::Y);
+    p.add_curves(2, 0, book, std::slice::from_ref(&foreign_c)).unwrap();
+    let foreign_key = plotspec::foreign_key(book, &foreign_c);
+    let style = CurveStyle {
+        right_axis: true,
+        color: Some([180, 25, 90]),
+        line_width: Some(3.0),
+        symbol_size: Some(7.0),
+        ..Default::default()
+    };
+    let layer = p.graph_mut(2).unwrap().first_layer_mut();
+    for key in ["B", "C", &foreign_key] {
+        layer.curves.insert(key.into(), style.clone());
+    }
+    p.delete_columns(1, &["C".into()]);
+    let layer = p.graph(2).unwrap().first_layer();
+    assert!(!layer.curves.contains_key("C"));
+    assert_eq!(layer.curves["B"], style);
+    assert_eq!(layer.curves[&foreign_key], style);
+    #[cfg(feature = "serde")]
+    {
+        use scicanvas_core::project_file;
+        assert_eq!(project_file::from_json(&project_file::to_json(&p).unwrap()).unwrap(), p);
+    }
+    let key = p.book_mut(1).unwrap().push_column(Role::Y);
+    assert_eq!(key, "C");
+    p.add_curves(2, 0, 1, &[key]).unwrap();
+    let layer = p.graph(2).unwrap().first_layer();
+    assert!(layer.y_keys.iter().any(|key| key == "C"));
+    assert!(
+        !layer.curves.contains_key("C"),
+        "the new column uses the default style and left axis"
+    );
+    #[cfg(feature = "serde")]
+    {
+        use scicanvas_core::project_file;
+        assert_eq!(project_file::from_json(&project_file::to_json(&p).unwrap()).unwrap(), p);
+    }
+}
+
+#[test]
 fn shared_curve_addition_handles_empty_graphs_duplicates_and_floating_pairs() {
     let mut p = Project::default();
     let book = p.new_book();
