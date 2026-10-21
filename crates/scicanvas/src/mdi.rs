@@ -235,6 +235,9 @@ pub fn window(
     add_body: impl FnOnce(&mut egui::Ui),
 ) -> WinResponse {
     let mut out = WinResponse::default();
+    if geom.state == WinState::Normal {
+        geom.rect = geom.rect.translate(vec2(0.0, (-geom.rect.top()).max(0.0)));
+    }
     let rect = match geom.state {
         WinState::Max => ws,
         WinState::Min => minimized_rect(ws, min_slot),
@@ -439,6 +442,9 @@ pub fn window(
                 }
             }
         });
+    if geom.state == WinState::Normal || out.state == Some(WinState::Normal) {
+        geom.rect = geom.rect.translate(vec2(0.0, (-geom.rect.top()).max(0.0)));
+    }
     out
 }
 
@@ -446,6 +452,9 @@ pub fn window(
 mod tests {
     use super::*;
     fn frame(ctx: &egui::Context, g: &mut Geom, events: Vec<egui::Event>) -> WinResponse {
+        frame_in_workspace(ctx, g, events, Rect::from_min_size(Pos2::ZERO, vec2(800.0, 600.0)))
+    }
+    fn frame_in_workspace(ctx: &egui::Context, g: &mut Geom, events: Vec<egui::Event>, ws: Rect) -> WinResponse {
         let mut response = WinResponse::default();
         let _ = ctx.run(
             egui::RawInput {
@@ -457,7 +466,7 @@ mod tests {
                 response = window(
                     ctx,
                     egui::Id::new("mdi-test"),
-                    Rect::from_min_size(Pos2::ZERO, vec2(800.0, 600.0)),
+                    ws,
                     g,
                     0,
                     "Window",
@@ -576,9 +585,57 @@ mod tests {
         frame(&ctx, &mut geom, vec![]);
         assert_eq!(geom.rect, moved);
         geom.rect = Rect::from_min_size(pos2(-420.0, -90.0), vec2(320.0, 220.0));
-        let outside = geom.rect;
         frame(&ctx, &mut geom, vec![]);
-        assert_eq!(geom.rect, outside);
+        assert_eq!(geom.rect.min, pos2(-420.0, 0.0));
+        assert_eq!(geom.rect.size(), vec2(320.0, 220.0));
+        for (via, end) in [
+            (pos2(80.0, 220.0), pos2(-200.0, 220.0)),
+            (pos2(400.0, 550.0), pos2(400.0, 900.0)),
+        ] {
+            geom = Geom::new(pos2(80.0, 70.0), vec2(320.0, 220.0));
+            let released = drag_title(&ctx, &mut geom, via, end);
+            assert!(released.snapped.is_none());
+            assert_eq!(geom.state, WinState::Normal);
+            if end.x < 0.0 {
+                assert!(geom.rect.right() < 0.0);
+            } else {
+                assert!(geom.rect.top() > 600.0);
+            }
+            let outside = geom.rect;
+            frame(&ctx, &mut geom, vec![]);
+            assert_eq!(geom.rect, outside);
+        }
+    }
+
+    #[test]
+    fn dragging_above_the_workspace_keeps_the_title_below_the_ribbon() {
+        let ctx = egui::Context::default();
+        let ws = Rect::from_min_size(pos2(40.0, 120.0), vec2(800.0, 500.0));
+        let mut geom = Geom::new(pos2(80.0, 70.0), vec2(320.0, 220.0));
+        for _ in 0..2 {
+            frame_in_workspace(&ctx, &mut geom, vec![], ws);
+        }
+        let start = ws.min + geom.rect.min.to_vec2() + vec2(160.0, TITLE_H / 2.0);
+        frame_in_workspace(&ctx, &mut geom, vec![egui::Event::PointerMoved(start)], ws);
+        frame_in_workspace(&ctx, &mut geom, vec![button(start, true)], ws);
+        frame_in_workspace(
+            &ctx,
+            &mut geom,
+            vec![egui::Event::PointerMoved(start + vec2(30.0, -20.0))],
+            ws,
+        );
+        let end = pos2(start.x + 30.0, ws.top() - 100.0);
+        frame_in_workspace(&ctx, &mut geom, vec![egui::Event::PointerMoved(end)], ws);
+        let released = frame_in_workspace(&ctx, &mut geom, vec![button(end, false)], ws);
+        frame_in_workspace(&ctx, &mut geom, vec![], ws);
+        assert!(released.snapped.is_none());
+        assert_eq!(geom.state, WinState::Normal);
+        assert_eq!(geom.rect.top(), 0.0);
+        assert_eq!(geom.rect.size(), vec2(320.0, 220.0));
+        assert_eq!(
+            ctx.memory(|m| m.area_rect(egui::Id::new("mdi-test"))).unwrap().top(),
+            ws.top()
+        );
     }
 
     #[test]

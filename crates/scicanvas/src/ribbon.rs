@@ -980,7 +980,7 @@ pub fn palette(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palett
     let mut close = false;
     egui::Window::new("命令面板")
         .id(egui::Id::new("scicanvas-palette"))
-        .constrain(false)
+        .constrain_to(crate::dialogs::floating_bounds(ctx))
         .resizable(false)
         .collapsible(false)
         .pivot(Align2::CENTER_TOP)

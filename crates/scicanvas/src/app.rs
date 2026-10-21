@@ -3104,7 +3104,7 @@ impl SciApp {
     fn help_window(&mut self, ctx: &egui::Context) {
         egui::Window::new("快速上手")
             .id(egui::Id::new("scicanvas-help"))
-            .constrain(false)
+            .constrain_to(dialogs::floating_bounds(ctx))
             .open(&mut self.show_help)
             .collapsible(false)
             .default_width(460.0)

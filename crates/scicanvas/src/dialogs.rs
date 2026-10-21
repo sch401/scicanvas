@@ -905,6 +905,13 @@ impl<'open> SettingsWindow<'open> {
     }
 }
 
+/// Keep floating titles below the ribbon while leaving the other three sides unrestricted.
+pub(crate) fn floating_bounds(ctx: &egui::Context) -> egui::Rect {
+    let mut bounds = egui::Rect::EVERYTHING;
+    bounds.min.y = ctx.available_rect().top();
+    bounds
+}
+
 /// Compact single-column settings; drag the title into a sidebar or use the panel context menu.
 pub(crate) fn window<'open>(ctx: &egui::Context, title: &str) -> SettingsWindow<'open> {
     let id = egui::Id::new(("scicanvas-dialog", title));
@@ -912,7 +919,7 @@ pub(crate) fn window<'open>(ctx: &egui::Context, title: &str) -> SettingsWindow<
         id,
         window: egui::Window::new(RichText::new(title).strong())
             .id(id)
-            .constrain(false)
+            .constrain_to(floating_bounds(ctx))
             .collapsible(true)
             .resizable(true)
             .pivot(Align2::LEFT_TOP)
@@ -2766,6 +2773,11 @@ mod docking_tests {
                 },
                 |ctx| {
                     begin_docks(ctx);
+                    egui::TopBottomPanel::top("test-ribbon")
+                        .exact_height(90.0)
+                        .show(ctx, |ui| {
+                            ui.label("Ribbon");
+                        });
                     egui::SidePanel::left("test-left").exact_width(360.0).show(ctx, |ui| {
                         ui.add_space(180.0);
                         place_docks(ui, DockSide::Left, ui.available_rect_before_wrap());
@@ -2818,6 +2830,37 @@ mod docking_tests {
         fn title_drag(&mut self, title: &str, end: egui::Pos2) {
             let r = self.rect(title);
             self.drag(egui::pos2(r.center().x, r.top() + 12.0), end);
+        }
+    }
+
+    #[test]
+    fn floating_titles_stop_at_the_ribbon_but_other_edges_remain_free() {
+        let mut host = Host::new();
+        host.settle();
+        host.title_drag("First", egui::pos2(700.0, -120.0));
+        let rect = host.rect("First");
+        assert_eq!(rect.top(), host.ctx.available_rect().top());
+        assert!(rect.is_finite());
+        let id = egui::Id::new(("scicanvas-dialog", "First"));
+        assert_eq!(docks(&host.ctx).panels.iter().find(|p| p.id == id).unwrap().side, None);
+        for end in [
+            egui::pos2(-180.0, 400.0),
+            egui::pos2(1380.0, 400.0),
+            egui::pos2(700.0, 1080.0),
+        ] {
+            dock_panel(&host.ctx, id, None, Some(egui::pos2(450.0, 150.0)));
+            host.settle();
+            host.title_drag("First", end);
+            let rect = host.rect("First");
+            if end.x < 0.0 {
+                assert!(rect.left() < 0.0);
+            } else if end.x > 1200.0 {
+                assert!(rect.right() > 1200.0);
+            } else {
+                assert!(rect.bottom() > 900.0);
+            }
+            assert!(rect.top() >= host.ctx.available_rect().top());
+            assert_eq!(docks(&host.ctx).panels.iter().find(|p| p.id == id).unwrap().side, None);
         }
     }
 
