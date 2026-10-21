@@ -108,9 +108,8 @@ impl LayerContents {
     fn show(&mut self, ctx: &egui::Context, project: &scicanvas_core::Project, pal: &Palette) -> Action {
         let mut action = Action::None;
         window(ctx, "图层内容")
-            .resizable(true)
-            .default_width(960.0)
-            .min_width(760.0)
+            .default_width(360.0)
+            .default_height(660.0)
             .show(ctx, |ui| {
                 ui.strong(format!(
                     "{} · 图层 {}",
@@ -118,176 +117,173 @@ impl LayerContents {
                     self.index + 1
                 ));
                 ui.separator();
-                ui.columns(2, |panels| {
-                    let left = &mut panels[0];
-                    left.strong("可用数据");
-                    egui::ScrollArea::both()
-                        .id_salt("contents-data")
-                        .max_height(320.0)
-                        .min_scrolled_height(240.0)
-                        .auto_shrink([false, false])
-                        .show(left, |ui| {
-                            for book in &project.books {
-                                egui::CollapsingHeader::new(&book.name)
-                                    .id_salt(("contents-book", book.id))
-                                    .default_open(true)
-                                    .show(ui, |ui| {
-                                        for col in &book.columns {
-                                            let reference = scicanvas_core::plotspec::DataRef::new(book.id, &col.key);
-                                            let present = self.draft.y_keys.iter().any(|key| {
-                                                scicanvas_core::plotspec::DataRef::from_key(self.draft.book_id, key)
-                                                    .as_ref()
-                                                    == Some(&reference)
-                                            });
-                                            let mut selected = present || self.selected.contains(&reference);
-                                            let name = if col.display_name() == col.key {
-                                                format!("{} ({})", col.key, col.role.label())
-                                            } else {
-                                                format!("{} ({})  {}", col.key, col.role.label(), col.display_name())
-                                            };
-                                            let eligible =
-                                                matches!(col.role, scicanvas_core::Role::Y | scicanvas_core::Role::Z)
-                                                    && !present;
-                                            let response =
-                                                ui.add_enabled(eligible, egui::Checkbox::new(&mut selected, name));
-                                            if response.changed() {
-                                                self.selected.retain(|r| r != &reference);
-                                                if selected {
-                                                    self.selected.push(reference);
-                                                }
-                                            }
-                                            if present {
-                                                response.on_hover_text("已在当前图层");
+                ui.strong("可用数据");
+                egui::ScrollArea::vertical()
+                    .id_salt("contents-data")
+                    .max_height(140.0)
+                    .show(ui, |ui| {
+                        for book in &project.books {
+                            egui::CollapsingHeader::new(&book.name)
+                                .id_salt(("contents-book", book.id))
+                                .default_open(true)
+                                .show(ui, |ui| {
+                                    for col in &book.columns {
+                                        let reference = scicanvas_core::plotspec::DataRef::new(book.id, &col.key);
+                                        let present = self.draft.y_keys.iter().any(|key| {
+                                            scicanvas_core::plotspec::DataRef::from_key(self.draft.book_id, key)
+                                                .as_ref()
+                                                == Some(&reference)
+                                        });
+                                        let mut selected = present || self.selected.contains(&reference);
+                                        let name = if col.display_name() == col.key {
+                                            format!("{} ({})", col.key, col.role.label())
+                                        } else {
+                                            format!("{} ({})  {}", col.key, col.role.label(), col.display_name())
+                                        };
+                                        let response = ui.add_enabled(
+                                            matches!(col.role, scicanvas_core::Role::Y | scicanvas_core::Role::Z)
+                                                && !present,
+                                            egui::Checkbox::new(&mut selected, name),
+                                        );
+                                        if response.changed() {
+                                            self.selected.retain(|r| r != &reference);
+                                            if selected {
+                                                self.selected.push(reference);
                                             }
                                         }
-                                    });
-                            }
-                        });
-                    left.horizontal(|ui| {
-                        if ui.add_enabled(!self.selected.is_empty(), plain("添加 →")).clicked() {
-                            self.add_selected(project);
+                                        if present {
+                                            response.on_hover_text("已在当前图层");
+                                        }
+                                    }
+                                });
                         }
                     });
-
-                    let right = &mut panels[1];
-                    right.strong("当前图层曲线");
-                    let keys = self.draft.y_keys.clone();
-                    egui::ScrollArea::both()
-                        .id_salt("contents-curves")
-                        .max_height(320.0)
-                        .min_scrolled_height(240.0)
-                        .auto_shrink([false, false])
-                        .show(right, |ui| {
-                            egui::Grid::new("contents-grid")
-                                .striped(true)
-                                .spacing([12.0, 6.0])
-                                .show(ui, |ui| {
-                                    for label in ["曲线", "X 来源", "Y 来源", "Y 轴"] {
-                                        ui.strong(label);
+                ui.horizontal_wrapped(|ui| {
+                    if ui.add_enabled(!self.selected.is_empty(), plain("添加 →")).clicked() {
+                        self.add_selected(project);
+                    }
+                });
+                ui.separator();
+                ui.strong("当前图层曲线");
+                let keys = self.draft.y_keys.clone();
+                egui::ScrollArea::vertical()
+                    .id_salt("contents-curves")
+                    .max_height(240.0)
+                    .show(ui, |ui| {
+                        for key in &keys {
+                            ui.push_id(key, |ui| {
+                                let name = self.draft.curve_label(
+                                    self.draft.book_id.and_then(|id| project.book(id)),
+                                    &|id| project.book(id),
+                                    key,
+                                );
+                                let before = self.draft.curves.get(key).is_some_and(|style| style.right_axis);
+                                let mut right_axis = before;
+                                ui.horizontal_wrapped(|ui| {
+                                    if ui.selectable_label(self.active.as_ref() == Some(key), name).clicked() {
+                                        self.active = Some(key.clone());
                                     }
-                                    ui.end_row();
-                                    for key in &keys {
-                                        let lookup = |id| project.book(id);
-                                        let name =
-                                            self.draft
-                                                .curve_label(self.draft.book_id.and_then(lookup), &lookup, key);
-                                        if ui.selectable_label(self.active.as_ref() == Some(key), name).clicked() {
-                                            self.active = Some(key.clone());
-                                        }
-                                        let source =
-                                            scicanvas_core::plotspec::DataRef::from_key(self.draft.book_id, key);
-                                        let mapping = self
-                                            .draft
-                                            .curve_mapping(key, source.as_ref().and_then(|r| project.book(r.book)));
+                                    egui::ComboBox::from_id_salt("contents-axis")
+                                        .width(72.0)
+                                        .selected_text(if right_axis { "右 Y" } else { "左 Y" })
+                                        .show_ui(ui, |ui| {
+                                            ui.selectable_value(&mut right_axis, false, "左 Y");
+                                            ui.selectable_value(&mut right_axis, true, "右 Y");
+                                        });
+                                });
+                                if right_axis != before {
+                                    let style = self.draft.curves.entry(key.clone()).or_default();
+                                    style.right_axis = right_axis;
+                                    if style.is_default()
+                                        && !self
+                                            .before
+                                            .curves
+                                            .get(key)
+                                            .is_some_and(scicanvas_core::page::CurveStyle::is_default)
+                                    {
+                                        self.draft.curves.remove(key);
+                                    }
+                                }
+                                let source = scicanvas_core::plotspec::DataRef::from_key(self.draft.book_id, key);
+                                let mapping = self
+                                    .draft
+                                    .curve_mapping(key, source.as_ref().and_then(|r| project.book(r.book)));
+                                egui::Grid::new("contents-source")
+                                    .num_columns(2)
+                                    .spacing([8.0, 2.0])
+                                    .show(ui, |ui| {
+                                        ui.label("X 来源");
                                         ui.label(Self::source_name(
                                             project,
                                             mapping.as_ref().and_then(|m| m.x.as_ref()),
                                         ));
+                                        ui.end_row();
+                                        ui.label("Y 来源");
                                         ui.label(
                                             source
                                                 .as_ref()
                                                 .map(|r| Self::source_name(project, Some(r)))
                                                 .unwrap_or_else(|| "未绑定".into()),
                                         );
-                                        let before = self.draft.curves.get(key).is_some_and(|style| style.right_axis);
-                                        let mut right_axis = before;
-                                        egui::ComboBox::from_id_salt(("contents-axis", key))
-                                            .selected_text(if right_axis { "右 Y" } else { "左 Y" })
-                                            .show_ui(ui, |ui| {
-                                                ui.selectable_value(&mut right_axis, false, "左 Y");
-                                                ui.selectable_value(&mut right_axis, true, "右 Y");
-                                            });
-                                        if right_axis != before {
-                                            let style = self.draft.curves.entry(key.clone()).or_default();
-                                            style.right_axis = right_axis;
-                                            if style.is_default()
-                                                && !self
-                                                    .before
-                                                    .curves
-                                                    .get(key)
-                                                    .is_some_and(scicanvas_core::page::CurveStyle::is_default)
-                                            {
-                                                self.draft.curves.remove(key);
-                                            }
-                                        }
                                         ui.end_row();
-                                    }
-                                });
-                        });
-                    right.horizontal_wrapped(|ui| {
-                        let at = self
-                            .active
-                            .as_ref()
-                            .and_then(|key| self.draft.y_keys.iter().position(|k| k == key));
-                        if ui.add_enabled(at.is_some(), plain("← 移除")).clicked() {
-                            if let Some(at) = at {
-                                self.draft.remove_curve(&keys[at]);
-                                self.active = self
-                                    .draft
-                                    .y_keys
-                                    .get(at.min(self.draft.y_keys.len().saturating_sub(1)))
-                                    .cloned();
-                            }
-                        }
-                        if ui.add_enabled(at.is_some_and(|i| i > 0), plain("上移")).clicked() {
-                            let i = at.unwrap();
-                            self.draft.spec.y_keys.swap(i, i - 1);
-                        }
-                        if ui
-                            .add_enabled(at.is_some_and(|i| i + 1 < keys.len()), plain("下移"))
-                            .clicked()
-                        {
-                            let i = at.unwrap();
-                            self.draft.spec.y_keys.swap(i, i + 1);
-                        }
-                        if ui.add(plain("按名称排序")).clicked() {
-                            let names: std::collections::BTreeMap<_, _> = keys
-                                .iter()
-                                .map(|key| {
-                                    (
-                                        key.clone(),
-                                        self.draft
-                                            .curve_label(
-                                                self.draft.book_id.and_then(|id| project.book(id)),
-                                                &|id| project.book(id),
-                                                key,
-                                            )
-                                            .to_lowercase(),
-                                    )
-                                })
-                                .collect();
-                            self.draft
-                                .spec
-                                .y_keys
-                                .sort_by_key(|key| names.get(key).cloned().unwrap_or_default());
+                                    });
+                                ui.separator();
+                            });
                         }
                     });
+                ui.horizontal_wrapped(|ui| {
+                    let at = self
+                        .active
+                        .as_ref()
+                        .and_then(|key| self.draft.y_keys.iter().position(|k| k == key));
+                    if ui.add_enabled(at.is_some(), plain("← 移除")).clicked() {
+                        if let Some(at) = at {
+                            self.draft.remove_curve(&keys[at]);
+                            self.active = self
+                                .draft
+                                .y_keys
+                                .get(at.min(self.draft.y_keys.len().saturating_sub(1)))
+                                .cloned();
+                        }
+                    }
+                    if ui.add_enabled(at.is_some_and(|i| i > 0), plain("上移")).clicked() {
+                        let i = at.unwrap();
+                        self.draft.spec.y_keys.swap(i, i - 1);
+                    }
+                    if ui
+                        .add_enabled(at.is_some_and(|i| i + 1 < keys.len()), plain("下移"))
+                        .clicked()
+                    {
+                        let i = at.unwrap();
+                        self.draft.spec.y_keys.swap(i, i + 1);
+                    }
+                    if ui.add(plain("按名称排序")).clicked() {
+                        let names: std::collections::BTreeMap<_, _> = keys
+                            .iter()
+                            .map(|key| {
+                                (
+                                    key.clone(),
+                                    self.draft
+                                        .curve_label(
+                                            self.draft.book_id.and_then(|id| project.book(id)),
+                                            &|id| project.book(id),
+                                            key,
+                                        )
+                                        .to_lowercase(),
+                                )
+                            })
+                            .collect();
+                        self.draft
+                            .spec
+                            .y_keys
+                            .sort_by_key(|key| names.get(key).cloned().unwrap_or_default());
+                    }
                 });
                 if let Some(error) = &self.error {
                     ui.colored_label(pal.ink, error);
                 }
                 ui.separator();
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     center_buttons(ui, 2);
                     if ui.add(primary(ui, "确定")).clicked() {
                         action = Action::LayerContents(Box::new(self.clone()));
@@ -540,17 +536,397 @@ fn ttest_rows(r: &TTest, names: &[String]) -> Vec<(String, String)> {
     rows
 }
 
-/// 对话框窗口：首次出现在屏幕中央，可以拖动标题栏移动（每种对话框各自记住位置）。
-pub(crate) fn window(ctx: &egui::Context, title: &str) -> egui::Window<'static> {
-    egui::Window::new(RichText::new(title).strong())
-        .id(egui::Id::new(("scicanvas-dialog", title)))
-        .constrain(false)
-        .collapsible(false)
-        .resizable(false)
-        .pivot(Align2::CENTER_CENTER)
-        .default_pos(ctx.screen_rect().center())
-        .min_width(380.0)
-        .frame(egui::Frame::window(&ctx.style()).inner_margin(egui::Margin::symmetric(18.0, 14.0)))
+/// Settings share one docking implementation and keep their existing widget IDs and drafts.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum DockSide {
+    Left,
+    Right,
+}
+
+#[derive(Clone)]
+struct DockPanel {
+    id: egui::Id,
+    side: Option<DockSide>,
+    visible: bool,
+    seen: bool,
+    rect: Option<egui::Rect>,
+    share: f32,
+    float_pos: Option<egui::Pos2>,
+    collapsed: bool,
+    chrome_height: Option<f32>,
+    header_height: Option<f32>,
+}
+
+#[derive(Clone, Default)]
+struct Docks {
+    panels: Vec<DockPanel>,
+    left: Option<egui::Rect>,
+    right: Option<egui::Rect>,
+}
+
+fn docks(ctx: &egui::Context) -> Docks {
+    ctx.data(|d| d.get_temp(egui::Id::new("settings-docks")))
+        .unwrap_or_default()
+}
+
+fn store_docks(ctx: &egui::Context, state: Docks) {
+    ctx.data_mut(|d| d.insert_temp(egui::Id::new("settings-docks"), state));
+}
+
+pub(crate) fn reset_docks(ctx: &egui::Context) {
+    ctx.data_mut(|d| d.remove::<Docks>(egui::Id::new("settings-docks")));
+}
+
+pub(crate) fn begin_docks(ctx: &egui::Context) {
+    let mut state = docks(ctx);
+    state.left = None;
+    state.right = None;
+    for panel in &mut state.panels {
+        panel.seen = false;
+        panel.rect = None;
+    }
+    store_docks(ctx, state);
+}
+
+pub(crate) fn end_docks(ctx: &egui::Context) {
+    let mut state = docks(ctx);
+    let mut changed = false;
+    for panel in &mut state.panels {
+        if panel.visible && !panel.seen {
+            panel.visible = false;
+            changed = true;
+        }
+    }
+    store_docks(ctx, state);
+    if changed {
+        ctx.request_repaint();
+    }
+}
+
+pub(crate) fn has_docks(ctx: &egui::Context, side: DockSide) -> bool {
+    docks(ctx).panels.iter().any(|p| p.visible && p.side == Some(side))
+}
+
+fn panel_header_height(ctx: &egui::Context) -> f32 {
+    let title = RichText::new("面板").strong();
+    let style = ctx.style();
+    ctx.fonts(|fonts| title.font_height(fonts, &style))
+        .max(style.spacing.interact_size.y)
+        + 8.0
+}
+
+/// Reserve sidebar space before drawing document windows; each expanded panel gets a scrollable row.
+pub(crate) fn place_docks(ui: &mut egui::Ui, side: DockSide, rect: egui::Rect) {
+    let ctx = ui.ctx().clone();
+    let mut state = docks(&ctx);
+    match side {
+        DockSide::Left => state.left = Some(rect),
+        DockSide::Right => state.right = Some(rect),
+    }
+    let indices: Vec<_> = state
+        .panels
+        .iter()
+        .enumerate()
+        .filter(|(_, p)| p.visible && p.side == Some(side))
+        .map(|(i, _)| i)
+        .collect();
+    let header = panel_header_height(&ctx);
+    let expanded: Vec<_> = indices
+        .iter()
+        .map(|&i| {
+            let id = state.panels[i].id.with("collapsing");
+            let open = egui::collapsing_header::CollapsingState::load_with_default_open(&ctx, id, true).is_open();
+            // Docked rows redistribute space immediately, without animated bodies overlapping their neighbours.
+            ctx.animate_bool_with_time(id, open, 0.0);
+            open
+        })
+        .collect();
+    let shares: f32 = indices
+        .iter()
+        .zip(&expanded)
+        .filter(|(_, open)| **open)
+        .map(|(&i, _)| state.panels[i].share)
+        .sum();
+    let headers: Vec<_> = indices
+        .iter()
+        .zip(&expanded)
+        .map(|(&i, open)| {
+            if *open {
+                state.panels[i].chrome_height.unwrap_or(header + 8.0) + 1.0
+            } else {
+                state.panels[i].header_height.unwrap_or(header)
+            }
+        })
+        .collect();
+    let free = (rect.height() - headers.iter().sum::<f32>() - 4.0 * indices.len().saturating_sub(1) as f32).max(0.0);
+    let mut y = rect.top();
+    for (at, &i) in indices.iter().enumerate() {
+        let h = headers[at]
+            + if expanded[at] {
+                free * state.panels[i].share / shares.max(0.01)
+            } else {
+                0.0
+            };
+        let panel_rect = egui::Rect::from_min_size(egui::pos2(rect.left(), y), egui::vec2(rect.width(), h));
+        state.panels[i].rect = Some(panel_rect);
+        y += h + 4.0;
+        if at + 1 < indices.len() && expanded[at] && expanded[at + 1] {
+            let divider = egui::Rect::from_min_size(egui::pos2(rect.left(), y - 4.0), egui::vec2(rect.width(), 4.0));
+            let response = ui
+                .interact(divider, state.panels[i].id.with("dock-divider"), egui::Sense::drag())
+                .on_hover_cursor(egui::CursorIcon::ResizeVertical);
+            ui.painter().hline(
+                divider.x_range(),
+                divider.center().y,
+                ui.visuals().widgets.noninteractive.bg_stroke,
+            );
+            if response.dragged() && !response.drag_started() {
+                let j = indices[at + 1];
+                let pair = state.panels[i].share + state.panels[j].share;
+                let delta = response.drag_delta().y * shares / free.max(1.0);
+                state.panels[i].share = (state.panels[i].share + delta).clamp(pair * 0.1, pair * 0.9);
+                state.panels[j].share = pair - state.panels[i].share;
+                ctx.request_repaint();
+            }
+        }
+    }
+    store_docks(&ctx, state);
+}
+
+fn dock_target(ctx: &egui::Context, state: &Docks, pos: egui::Pos2) -> Option<(DockSide, egui::Rect)> {
+    let rect = ctx.available_rect();
+    let left = state
+        .left
+        .unwrap_or_else(|| egui::Rect::from_min_max(rect.min, egui::pos2(rect.left() + 64.0, rect.bottom())));
+    let right = state
+        .right
+        .unwrap_or_else(|| egui::Rect::from_min_max(egui::pos2(rect.right() - 64.0, rect.top()), rect.max));
+    if left.contains(pos) {
+        Some((DockSide::Left, left))
+    } else if right.contains(pos) {
+        Some((DockSide::Right, right))
+    } else {
+        None
+    }
+}
+
+fn dock_panel(ctx: &egui::Context, id: egui::Id, side: Option<DockSide>, pos: Option<egui::Pos2>) {
+    let mut state = docks(ctx);
+    let Some(at) = state.panels.iter().position(|p| p.id == id) else {
+        return;
+    };
+    let mut panel = state.panels.remove(at);
+    panel.side = side;
+    panel.rect = None;
+    if side.is_none() {
+        panel.float_pos = pos;
+    }
+    let at = side
+        .and_then(|side| {
+            pos.and_then(|pos| {
+                state
+                    .panels
+                    .iter()
+                    .position(|p| p.visible && p.side == Some(side) && p.rect.is_some_and(|r| pos.y < r.center().y))
+            })
+        })
+        .unwrap_or(state.panels.len());
+    state.panels.insert(at, panel);
+    store_docks(ctx, state);
+    ctx.request_repaint();
+}
+
+pub(crate) struct SettingsWindow<'open> {
+    window: egui::Window<'open>,
+    id: egui::Id,
+}
+
+impl<'open> SettingsWindow<'open> {
+    pub(crate) fn id(mut self, id: egui::Id) -> Self {
+        self.id = id;
+        self.window = self.window.id(id);
+        self
+    }
+    pub(crate) fn open(mut self, open: &'open mut bool) -> Self {
+        self.window = self.window.open(open);
+        self
+    }
+    pub(crate) fn resizable(mut self, value: bool) -> Self {
+        self.window = self.window.resizable(value);
+        self
+    }
+    pub(crate) fn default_width(mut self, width: f32) -> Self {
+        self.window = self.window.default_width(width);
+        self
+    }
+    pub(crate) fn default_height(mut self, height: f32) -> Self {
+        self.window = self.window.default_height(height);
+        self
+    }
+    pub(crate) fn show<R>(
+        mut self,
+        ctx: &egui::Context,
+        contents: impl FnOnce(&mut egui::Ui) -> R,
+    ) -> Option<egui::InnerResponse<Option<R>>> {
+        let mut state = docks(ctx);
+        if !state.panels.iter().any(|p| p.id == self.id) {
+            state.panels.push(DockPanel {
+                id: self.id,
+                side: None,
+                visible: true,
+                seen: true,
+                rect: None,
+                share: 1.0,
+                float_pos: None,
+                collapsed: false,
+                chrome_height: None,
+                header_height: None,
+            });
+        }
+        let panel = state.panels.iter_mut().find(|p| p.id == self.id).unwrap();
+        panel.seen = true;
+        panel.visible = true;
+        let docked = panel.side;
+        let mut dock_size = None;
+        if let Some(rect) = panel.rect {
+            let size = (rect.size()
+                - egui::vec2(
+                    8.0,
+                    panel.chrome_height.unwrap_or_else(|| panel_header_height(ctx) + 8.0),
+                ))
+            .max(egui::vec2(1.0, 1.0));
+            dock_size = Some(size);
+            self.window = self.window.current_pos(rect.min).fixed_size(size);
+        } else if let Some(pos) = panel.float_pos.take() {
+            self.window = self.window.current_pos(pos);
+        }
+        store_docks(ctx, state);
+        let out = self.window.show(ctx, |ui| {
+            ui.spacing_mut().item_spacing = egui::vec2(6.0, 4.0);
+            ui.spacing_mut().slider_width = 100.0;
+            ui.spacing_mut().text_edit_width = 200.0;
+            if let Some(size) = dock_size {
+                ui.set_min_size(size);
+            }
+            contents(ui)
+        });
+        if let Some(out) = &out {
+            // The native title consumes clicks for collapsing. Give its middle portion a panel menu,
+            // while keeping the native collapse/close buttons and background dragging intact.
+            let mut title = out.response.clone();
+            title.id = self.id.with("dock-title-menu");
+            title.rect = egui::Rect::from_min_max(
+                out.response.rect.min + egui::vec2(32.0, 0.0),
+                egui::pos2(
+                    out.response.rect.right() - 32.0,
+                    out.response.rect.top() + panel_header_height(ctx),
+                ),
+            );
+            title.interact_rect = title.rect;
+            title.sense = egui::Sense::hover();
+            let title = title.interact(egui::Sense::click());
+            if title.double_clicked() {
+                let mut collapse = egui::collapsing_header::CollapsingState::load_with_default_open(
+                    ctx,
+                    self.id.with("collapsing"),
+                    true,
+                );
+                collapse.set_open(!collapse.is_open());
+                collapse.store(ctx);
+                ctx.request_repaint();
+            }
+            title.context_menu(|ui| {
+                for (label, side) in [
+                    ("吸附到左侧", Some(DockSide::Left)),
+                    ("吸附到右侧", Some(DockSide::Right)),
+                    ("浮动", None),
+                ] {
+                    if ui.button(label).clicked() {
+                        dock_panel(ctx, self.id, side, Some(out.response.rect.min));
+                        ui.close_menu();
+                    }
+                }
+            });
+            if out.response.dragged()
+                && !out.response.drag_started()
+                && docked.is_some()
+                && ctx.input(|input| input.pointer.delta().length_sq() > 0.0)
+            {
+                dock_panel(ctx, self.id, None, None);
+            }
+            if out.response.dragged() || out.response.drag_stopped() {
+                if let Some(pos) = ctx.pointer_interact_pos() {
+                    if let Some((side, rect)) = dock_target(ctx, &docks(ctx), pos) {
+                        let layer = egui::LayerId::new(egui::Order::Foreground, self.id.with("dock-guide"));
+                        let painter = ctx.layer_painter(layer);
+                        let color = ctx.style().visuals.selection.bg_fill;
+                        painter.rect_filled(rect, 0.0, color.gamma_multiply(0.25));
+                        painter.rect_stroke(rect, 0.0, egui::Stroke::new(2.0_f32, color));
+                        if out.response.drag_stopped() {
+                            dock_panel(ctx, self.id, Some(side), Some(pos));
+                        }
+                    }
+                }
+            }
+            // Collapsing changes the rows reserved by the sidebar on the next frame.
+            let mut state = docks(ctx);
+            if let Some(panel) = state.panels.iter_mut().find(|p| p.id == self.id) {
+                let collapsed = !egui::collapsing_header::CollapsingState::load_with_default_open(
+                    ctx,
+                    self.id.with("collapsing"),
+                    true,
+                )
+                .is_open();
+                if panel.collapsed != collapsed {
+                    panel.collapsed = collapsed;
+                    ctx.request_repaint();
+                }
+                if let Some(size) = dock_size.filter(|_| collapsed == out.inner.is_none()) {
+                    // Measure native window chrome, including font fallback and DPI rounding.
+                    let measured = if collapsed {
+                        out.response.rect.height()
+                    } else {
+                        out.response.rect.height() - size.y
+                    };
+                    let saved = if collapsed {
+                        &mut panel.header_height
+                    } else {
+                        &mut panel.chrome_height
+                    };
+                    if saved.is_none_or(|height| (height - measured).abs() > 0.5) {
+                        *saved = Some(measured);
+                        ctx.request_repaint();
+                    }
+                }
+            }
+            store_docks(ctx, state);
+        }
+        out
+    }
+}
+
+/// Compact single-column settings; drag the title into a sidebar or use the panel context menu.
+pub(crate) fn window<'open>(ctx: &egui::Context, title: &str) -> SettingsWindow<'open> {
+    let id = egui::Id::new(("scicanvas-dialog", title));
+    SettingsWindow {
+        id,
+        window: egui::Window::new(RichText::new(title).strong())
+            .id(id)
+            .constrain(false)
+            .collapsible(true)
+            .resizable(true)
+            .pivot(Align2::LEFT_TOP)
+            .default_pos(egui::pos2(
+                ctx.screen_rect().center().x - 190.0,
+                ctx.screen_rect().top() + 60.0,
+            ))
+            .default_width(360.0)
+            .min_width(280.0)
+            .default_height(ctx.screen_rect().height() * 0.75)
+            .max_height((ctx.screen_rect().height() - 100.0).max(100.0))
+            .vscroll(true)
+            .frame(egui::Frame::window(&ctx.style()).inner_margin(egui::Margin::same(4.0))),
+    }
 }
 
 /// 对话框按钮的统一尺寸。
@@ -580,7 +956,7 @@ fn buttons(ui: &mut egui::Ui, ok: &str) -> (bool, bool) {
     ui.add_space(10.0);
     ui.separator();
     ui.add_space(4.0);
-    ui.horizontal(|ui| {
+    ui.horizontal_wrapped(|ui| {
         center_buttons(ui, 2);
         res.0 = ui.add(primary(ui, ok)).clicked();
         res.1 = ui.add(plain("取消")).clicked();
@@ -595,7 +971,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
         Dialog::LayerContents(contents) => action = contents.show(ctx, project, pal),
         Dialog::AnalysisCurves { graph, layer, curves } => {
             window(ctx, "分析曲线").show(ctx, |ui| {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     if ui.button("全选").clicked() {
                         for (_, _, checked) in curves.iter_mut() {
                             *checked = true;
@@ -612,7 +988,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                         ui.checkbox(checked, name.as_str());
                     }
                 });
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     if ui
                         .add_enabled(curves.iter().any(|(_, _, checked)| *checked), plain("应用"))
                         .clicked()
@@ -657,7 +1033,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                             ("注释", &mut edit.comment),
                         ] {
                             ui.label(label);
-                            ui.add(egui::TextEdit::singleline(field).desired_width(260.0));
+                            ui.add(egui::TextEdit::singleline(field).desired_width(200.0));
                             ui.end_row();
                         }
                         ui.label("列属性");
@@ -690,7 +1066,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                         ui.end_row();
                         if let Some(mode) = &mut edit.recalc {
                             ui.label("重算方式");
-                            ui.horizontal(|ui| {
+                            ui.horizontal_wrapped(|ui| {
                                 for m in scicanvas_core::ops::RecalcMode::ALL {
                                     ui.radio_value(mode, m, m.label());
                                 }
@@ -700,7 +1076,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                         ui.label("显示格式");
                         match edit.kind {
                             DataKind::Num => {
-                                ui.horizontal(|ui| {
+                                ui.horizontal_wrapped(|ui| {
                                     let mut index = edit.format.number.index();
                                     let mut places = edit.format.number.places();
                                     egui::ComboBox::from_id_salt("column-number-format")
@@ -722,7 +1098,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                                 });
                             }
                             DataKind::DateTime => {
-                                ui.horizontal(|ui| {
+                                ui.horizontal_wrapped(|ui| {
                                     egui::ComboBox::from_id_salt("column-date-format")
                                         .selected_text(edit.format.date.label())
                                         .show_ui(ui, |ui| {
@@ -796,7 +1172,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                 ui.add_space(10.0);
                 ui.separator();
                 ui.add_space(4.0);
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     // 主按钮文字较长，按实际宽度居中
                     let gap = ui.spacing().item_spacing.x;
                     let wide = egui::vec2(132.0, BUTTON.y);
@@ -812,7 +1188,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
         }
         Dialog::Poly { order } => {
             window(ctx, "多项式拟合").show(ctx, |ui| {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label("阶数");
                     egui::ComboBox::from_id_salt("poly-order")
                         .selected_text(order.to_string())
@@ -890,7 +1266,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                             for (i, name) in levels.iter().enumerate() {
                                 ui.label(RichText::new(format!("{}", i + 1)).color(pal.weak));
                                 ui.label(name);
-                                ui.horizontal(|ui| {
+                                ui.horizontal_wrapped(|ui| {
                                     if ui.add_enabled(i > 0, egui::Button::new("↑").small()).clicked() {
                                         swap = Some((i, i - 1));
                                     }
@@ -929,7 +1305,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
         } => {
             window(ctx, "排序").show(ctx, |ui| {
                 egui::Grid::new("sort-grid")
-                    .num_columns(3)
+                    .num_columns(2)
                     .spacing([12.0, 8.0])
                     .show(ui, |ui| {
                         for (level, (col, asc)) in keys.iter_mut().enumerate() {
@@ -946,6 +1322,8 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                                         ui.selectable_value(col, Some(i), label);
                                     }
                                 });
+                            ui.end_row();
+                            ui.label("方向");
                             ui.horizontal(|ui| {
                                 ui.radio_value(asc, true, "升序");
                                 ui.radio_value(asc, false, "降序");
@@ -995,7 +1373,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                         ui.label(im.as_ref().map_or("无（按 0）", |c| c.1.as_str()));
                         ui.end_row();
                         ui.label("输入");
-                        ui.horizontal(|ui| {
+                        ui.horizontal_wrapped(|ui| {
                             ui.radio_value(two_sided, false, "单边谱");
                             ui.radio_value(two_sided, true, "双边谱");
                         });
@@ -1003,7 +1381,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                         if !*two_sided {
                             use scicanvas_core::fft::InverseInput;
                             ui.label("输出点数");
-                            ui.horizontal(|ui| {
+                            ui.horizontal_wrapped(|ui| {
                                 let even = InverseInput::OneSided { odd: false }.points(*rows);
                                 let oddn = InverseInput::OneSided { odd: true }.points(*rows);
                                 ui.radio_value(odd, false, even.to_string());
@@ -1036,7 +1414,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                     .spacing([12.0, 8.0])
                     .show(ui, |ui| {
                         ui.label("导数阶数");
-                        ui.horizontal(|ui| {
+                        ui.horizontal_wrapped(|ui| {
                             ui.radio_value(deriv, 1, "一阶");
                             ui.radio_value(deriv, 2, "二阶");
                         });
@@ -1074,7 +1452,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
         }
         Dialog::FitReport(reports) => {
             window(ctx, "拟合结果").show(ctx, |ui| {
-                egui::ScrollArea::vertical().max_height(480.0).show(ui, |ui| {
+                egui::ScrollArea::both().max_height(480.0).show(ui, |ui| {
                     for (ri, r) in reports.iter().enumerate() {
                         ui.label(RichText::new(format!("{} · {}", r.name, r.kind)).strong());
                         table_grid(ui, ("fit-grid", ri), &fit_param_rows(r, false), pal);
@@ -1115,7 +1493,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                 ui.add_space(10.0);
                 ui.separator();
                 ui.add_space(4.0);
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     center_buttons(ui, 5);
                     if ui
                         .add(plain("复制结果"))
@@ -1181,7 +1559,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                     .spacing([12.0, 8.0])
                     .show(ui, |ui| {
                         ui.label("方法");
-                        ui.horizontal(|ui| {
+                        ui.horizontal_wrapped(|ui| {
                             for m in InterpMethod::ALL {
                                 ui.radio_value(method, m, m.label());
                             }
@@ -1191,7 +1569,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                         ui.add(egui::DragValue::new(points).range(2..=100_000).speed(1.0));
                         ui.end_row();
                         ui.label("X 范围");
-                        ui.horizontal(|ui| {
+                        ui.horizontal_wrapped(|ui| {
                             ui.checkbox(custom, "自定义");
                             ui.add_enabled(*custom, egui::DragValue::new(from).speed(0.1));
                             ui.label("到");
@@ -1262,7 +1640,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                 ui.add_space(10.0);
                     ui.separator();
                     ui.add_space(4.0);
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                     center_buttons(ui, 3);
                     if ui
                         .add(plain("复制结果"))
@@ -1300,7 +1678,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
         }
         Dialog::Correlations(pairs) => {
             window(ctx, "相关系数").show(ctx, |ui| {
-                egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
+                egui::ScrollArea::both().max_height(420.0).show(ui, |ui| {
                     egui::Grid::new("corr-grid")
                         .striped(true)
                         .num_columns(9)
@@ -1333,7 +1711,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                 ui.add_space(10.0);
                     ui.separator();
                     ui.add_space(4.0);
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                     center_buttons(ui, 3);
                     if ui
                         .add(plain("复制结果"))
@@ -1362,7 +1740,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             constraints,
         } => {
             window(ctx, "非线性拟合").show(ctx, |ui| {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label("类别");
                     let mut category = model.category();
                     egui::ComboBox::from_id_salt("nlfit-category")
@@ -1398,29 +1776,17 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                     .color(pal.weak),
                 );
                 ui.add_space(4.0);
-                egui::Grid::new("nlfit-limits")
-                    .num_columns(4)
-                    .spacing([10.0, 4.0])
-                    .show(ui, |ui| {
-                        ui.label("");
-                        for head in ["固定", "下限", "上限"] {
-                            ui.label(RichText::new(head).color(pal.weak));
-                        }
-                        ui.end_row();
-                        for (name, (fix, fv, has_lo, lo, has_hi, hi)) in model.params().iter().zip(limits.iter_mut()) {
-                            ui.label(*name);
-                            let free = !*fix;
-                            for (on, v, enabled) in [(fix, fv, true), (has_lo, lo, free), (has_hi, hi, free)] {
-                                ui.add_enabled_ui(enabled, |ui| {
-                                    ui.horizontal(|ui| {
-                                        ui.checkbox(on, "");
-                                        ui.add_enabled(*on, egui::DragValue::new(v).speed(0.01));
-                                    });
-                                });
-                            }
+                for (name, (fix, fv, has_lo, lo, has_hi, hi)) in model.params().iter().zip(limits.iter_mut()) {
+                    ui.strong(*name);
+                    let free = !*fix;
+                    egui::Grid::new(("nlfit-limits", name)).num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
+                        for (label, on, value, enabled) in [("固定", fix, fv, true), ("下限", has_lo, lo, free), ("上限", has_hi, hi, free)] {
+                            ui.add_enabled_ui(enabled, |ui| { ui.checkbox(on, label); });
+                            ui.add_enabled(enabled && *on, egui::DragValue::new(value).speed(0.01));
                             ui.end_row();
                         }
                     });
+                }
                 ui.add_space(4.0);
                 ui.label(RichText::new("参数约束").color(pal.weak));
                 ui.add(
@@ -1450,7 +1816,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
         }
         Dialog::NlFitReport(reports) => {
             window(ctx, "非线性拟合结果").show(ctx, |ui| {
-                egui::ScrollArea::vertical().max_height(480.0).show(ui, |ui| {
+                egui::ScrollArea::both().max_height(480.0).show(ui, |ui| {
                     for (ri, r) in reports.iter().enumerate() {
                         let f = &r.fit;
                         ui.label(RichText::new(format!("{} · {}", r.name, f.model.name())).strong());
@@ -1477,7 +1843,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                 ui.add_space(10.0);
                 ui.separator();
                 ui.add_space(4.0);
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     center_buttons(ui, 4);
                     if ui
                         .add(plain("复制结果"))
@@ -1500,7 +1866,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
         }
         Dialog::FftFilter { kind, lo, hi, nyquist } => {
             window(ctx, "FFT 滤波").show(ctx, |ui| {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     for (i, name) in ["低通", "高通", "带通", "带阻"].into_iter().enumerate() {
                         ui.radio_value(kind, i as u8, name);
                     }
@@ -1547,7 +1913,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
         } => {
             window(ctx, "填充数据序列").show(ctx, |ui| {
                 ui.label(RichText::new(format!("目标列：{target}")).strong());
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     for (i, name) in ["等差序列", "均匀分布随机数", "正态分布随机数"].into_iter().enumerate()
                     {
                         ui.radio_value(kind, i as u8, name);
@@ -1595,7 +1961,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
         }
         Dialog::Table { title, rows, note } => {
             window(ctx, title).show(ctx, |ui| {
-                egui::ScrollArea::vertical().max_height(420.0).show(ui, |ui| {
+                egui::ScrollArea::both().max_height(420.0).show(ui, |ui| {
                     egui::Grid::new("result-table")
                         .striped(true)
                         .num_columns(rows.first().map_or(1, Vec::len))
@@ -1620,7 +1986,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                 ui.add_space(10.0);
                 ui.separator();
                 ui.add_space(4.0);
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     center_buttons(ui, 3);
                     if ui
                         .add(plain("复制结果"))
@@ -1648,7 +2014,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             error,
         } => {
             window(ctx, "设置列值").show(ctx, |ui| {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label(RichText::new(format!("{target} =")).strong());
                     let edit = ui.add(
                         egui::TextEdit::singleline(formula)
@@ -1710,7 +2076,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
         }
         Dialog::Baseline { als, log_lambda, p } => {
             window(ctx, "扣除基线").show(ctx, |ui| {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.radio_value(als, false, "两端连线");
                     ui.radio_value(als, true, "自动基线（ALS）");
                 });
@@ -1748,7 +2114,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
         }
         Dialog::Peaks { percent } => {
             window(ctx, "寻峰与峰积分").show(ctx, |ui| {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label("最小突出度");
                     ui.add(egui::DragValue::new(percent).range(0.1..=100.0).speed(0.2).suffix(" %"));
                     ui.label(RichText::new("（占 Y 范围）").color(pal.weak));
@@ -1770,7 +2136,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
         }
         Dialog::Fft { window: w } => {
             window(ctx, "FFT").show(ctx, |ui| {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label("窗函数");
                     for m in FftWindow::ALL {
                         ui.radio_value(w, m, m.label());
@@ -1802,7 +2168,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                 if b.is_none() {
                     *use_constant = true;
                 }
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label(RichText::new(a.as_str()).strong());
                     for o in ColumnOp::ALL {
                         ui.selectable_value(op, o, o.symbol());
@@ -1844,13 +2210,13 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                     .spacing([12.0, 8.0])
                     .show(ui, |ui| {
                         ui.label("区间数");
-                        ui.horizontal(|ui| {
+                        ui.horizontal_wrapped(|ui| {
                             ui.checkbox(auto, "自动（Sturges）");
                             ui.add_enabled(!*auto, egui::DragValue::new(bins).range(1..=10_000));
                         });
                         ui.end_row();
                         ui.label("统计范围");
-                        ui.horizontal(|ui| {
+                        ui.horizontal_wrapped(|ui| {
                             ui.checkbox(custom, "自定义");
                             ui.add_enabled(*custom, egui::DragValue::new(from).speed(0.1));
                             ui.label("到");
@@ -1887,7 +2253,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             window(ctx, "t 检验").show(ctx, |ui| {
                 const KINDS: [&str; 3] = ["单样本", "双样本（独立）", "配对"];
                 ui.label(format!("参与检验的列：{}", columns.join("、")));
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     for (i, label) in KINDS.iter().enumerate() {
                         ui.radio_value(kind, i, *label);
                     }
@@ -1907,7 +2273,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                             ui.end_row();
                         }
                         ui.label("置信水平");
-                        ui.horizontal(|ui| {
+                        ui.horizontal_wrapped(|ui| {
                             for l in [0.9, 0.95, 0.99] {
                                 ui.selectable_value(level, l, format!("{}%", fmt_num(l * 100.0)));
                             }
@@ -1972,7 +2338,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                 ui.add_space(10.0);
                 ui.separator();
                 ui.add_space(4.0);
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     center_buttons(ui, 3);
                     if ui
                         .add(plain("复制结果"))
@@ -1994,7 +2360,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
         }
         Dialog::Png { dpi, page_mm } => {
             window(ctx, "导出 PNG").show(ctx, |ui| {
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label("分辨率");
                     for preset in [150, 300, 600, 1200] {
                         ui.selectable_value(dpi, preset, format!("{preset} dpi"));
@@ -2364,5 +2730,209 @@ mod markdown_tests {
             md_pairs(["项目", "值"], &[("t".into(), "2".into())]),
             "| 项目 | 值 |\n| --- | --- |\n| t | 2 |\n"
         );
+    }
+}
+
+#[cfg(test)]
+mod docking_tests {
+    use super::*;
+
+    struct Host {
+        ctx: egui::Context,
+        time: f64,
+        second: bool,
+        size: egui::Vec2,
+    }
+    impl Host {
+        fn new() -> Self {
+            let ctx = egui::Context::default();
+            crate::fonts::setup(&ctx);
+            ctx.style_mut(|s| s.animation_time = 0.0);
+            Self {
+                ctx,
+                time: 0.0,
+                second: false,
+                size: egui::vec2(1200.0, 900.0),
+            }
+        }
+        fn frame(&mut self, events: Vec<egui::Event>) -> egui::FullOutput {
+            self.time += 0.04;
+            self.ctx.run(
+                egui::RawInput {
+                    time: Some(self.time),
+                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, self.size)),
+                    events,
+                    ..Default::default()
+                },
+                |ctx| {
+                    begin_docks(ctx);
+                    egui::SidePanel::left("test-left").exact_width(360.0).show(ctx, |ui| {
+                        ui.add_space(180.0);
+                        place_docks(ui, DockSide::Left, ui.available_rect_before_wrap());
+                    });
+                    if has_docks(ctx, DockSide::Right) {
+                        egui::SidePanel::right("test-right").exact_width(360.0).show(ctx, |ui| {
+                            place_docks(ui, DockSide::Right, ui.available_rect_before_wrap())
+                        });
+                    }
+                    egui::CentralPanel::default().show(ctx, |_| {});
+                    for title in if self.second {
+                        vec!["First", "Second"]
+                    } else {
+                        vec!["First"]
+                    } {
+                        window(ctx, title).show(ctx, |ui| {
+                            for i in 0..40 {
+                                ui.label(format!("Setting {i}"));
+                            }
+                        });
+                    }
+                    end_docks(ctx);
+                },
+            )
+        }
+        fn settle(&mut self) {
+            for _ in 0..6 {
+                self.frame(vec![]);
+            }
+        }
+        fn rect(&self, title: &str) -> egui::Rect {
+            self.ctx
+                .memory(|m| m.area_rect(egui::Id::new(("scicanvas-dialog", title))))
+                .unwrap()
+        }
+        fn drag(&mut self, start: egui::Pos2, end: egui::Pos2) {
+            let button = |pos, pressed| egui::Event::PointerButton {
+                pos,
+                pressed,
+                button: egui::PointerButton::Primary,
+                modifiers: egui::Modifiers::NONE,
+            };
+            self.frame(vec![egui::Event::PointerMoved(start)]);
+            self.frame(vec![button(start, true)]);
+            self.frame(vec![egui::Event::PointerMoved(start + egui::vec2(30.0, 0.0))]);
+            self.frame(vec![egui::Event::PointerMoved(end)]);
+            self.frame(vec![button(end, false)]);
+            self.settle();
+        }
+        fn title_drag(&mut self, title: &str, end: egui::Pos2) {
+            let r = self.rect(title);
+            self.drag(egui::pos2(r.center().x, r.top() + 12.0), end);
+        }
+    }
+
+    #[test]
+    fn actual_title_drags_dock_stack_reorder_resize_collapse_and_float() {
+        let mut host = Host::new();
+        host.settle();
+        host.title_drag("First", egui::pos2(160.0, 430.0));
+        assert!(has_docks(&host.ctx, DockSide::Left));
+        let first = host.rect("First");
+        assert!(
+            first.left() >= 0.0 && first.right() <= 360.0 && first.top() >= 180.0,
+            "{first:?}"
+        );
+        host.second = true;
+        host.settle();
+        host.title_drag("Second", egui::pos2(160.0, 800.0));
+        let first = host.rect("First");
+        let second = host.rect("Second");
+        assert!(first.bottom() <= second.top() + 1.0, "{first:?} {second:?}");
+        assert!(
+            second.right() <= 360.0 && second.bottom() <= 900.0,
+            "{second:?} header={} reserved={:?}",
+            panel_header_height(&host.ctx),
+            docks(&host.ctx).panels.iter().map(|p| p.rect).collect::<Vec<_>>()
+        );
+        let divider = egui::pos2(170.0, (first.bottom() + second.top()) * 0.5);
+        host.drag(divider, divider + egui::vec2(0.0, 60.0));
+        assert!(
+            host.rect("First").height() > first.height() + 20.0,
+            "first={:?} now={:?} layer={:?} response={:?} shares={:?}",
+            first,
+            host.rect("First"),
+            host.ctx.layer_id_at(divider),
+            host.ctx
+                .read_response(egui::Id::new(("scicanvas-dialog", "First")).with("dock-divider")),
+            docks(&host.ctx)
+                .panels
+                .iter()
+                .map(|p| (p.side, p.share))
+                .collect::<Vec<_>>()
+        );
+        host.title_drag("Second", egui::pos2(160.0, 210.0));
+        assert!(host.rect("Second").top() < host.rect("First").top());
+        host.ctx.style_mut(|style| style.animation_time = 0.2);
+        // Use the native collapse arrow; the other expanded panel takes the freed space.
+        let second = host.rect("Second");
+        let pos = second.min + egui::vec2(12.0, 12.0);
+        host.frame(vec![egui::Event::PointerMoved(pos)]);
+        for pressed in [true, false] {
+            host.frame(vec![egui::Event::PointerButton {
+                pos,
+                pressed,
+                button: egui::PointerButton::Primary,
+                modifiers: egui::Modifiers::NONE,
+            }]);
+        }
+        host.settle();
+        assert!(host.rect("Second").height() < 50.0);
+        assert!(host.rect("First").height() > 500.0);
+        host.title_drag("First", egui::pos2(780.0, 340.0));
+        let state = docks(&host.ctx);
+        assert_eq!(
+            state
+                .panels
+                .iter()
+                .find(|p| p.id == egui::Id::new(("scicanvas-dialog", "First")))
+                .unwrap()
+                .side,
+            None
+        );
+        host.title_drag("First", egui::pos2(1180.0, 400.0));
+        assert!(has_docks(&host.ctx, DockSide::Right));
+        let right = host.rect("First");
+        assert!(right.left() >= 840.0 && right.right() <= 1200.0, "{right:?}");
+        host.size = egui::vec2(1000.0, 650.0);
+        host.settle();
+        let right = host.rect("First");
+        assert!(right.right() <= 1000.0 && right.bottom() <= 650.0, "{right:?}");
+        // Panel context menu is an alternative to dragging.
+        let pos = egui::pos2(right.center().x, right.top() + 12.0);
+        host.frame(vec![egui::Event::PointerMoved(pos)]);
+        for pressed in [true, false] {
+            host.frame(vec![egui::Event::PointerButton {
+                pos,
+                pressed,
+                button: egui::PointerButton::Secondary,
+                modifiers: egui::Modifiers::NONE,
+            }]);
+        }
+        let output = host.frame(vec![]);
+        let pos = output
+            .shapes
+            .iter()
+            .find_map(|s| match &s.shape {
+                egui::Shape::Text(t) if t.galley.job.text == "浮动" => Some(t.pos + egui::vec2(4.0, 4.0)),
+                _ => None,
+            })
+            .expect("panel context menu");
+        host.frame(vec![egui::Event::PointerMoved(pos)]);
+        for pressed in [true, false] {
+            host.frame(vec![egui::Event::PointerButton {
+                pos,
+                pressed,
+                button: egui::PointerButton::Primary,
+                modifiers: egui::Modifiers::NONE,
+            }]);
+        }
+        host.settle();
+        assert!(!has_docks(&host.ctx, DockSide::Right));
+        host.second = false;
+        host.settle();
+        assert!(!has_docks(&host.ctx, DockSide::Left));
+        reset_docks(&host.ctx);
+        host.settle();
+        assert!(!has_docks(&host.ctx, DockSide::Right));
     }
 }

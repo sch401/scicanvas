@@ -2461,19 +2461,14 @@ impl SciApp {
 
         let mut open = true;
         let mut close = false;
-        egui::Window::new(title)
+        dialogs::window(ctx, &title)
             .id(egui::Id::new("scicanvas-props"))
-            .constrain(false)
             .open(&mut open)
-            .collapsible(false)
-            .resizable(false)
             .default_width(360.0)
-            // 内容较长：默认高到屏幕高度的 85%，再长时滚动
-            .default_height(ctx.screen_rect().height() * 0.85)
-            .vscroll(true)
+            .default_height(ctx.screen_rect().height() * 0.75)
             .show(ctx, |ui| {
                 let Some(graph) = project.graph_mut(gid) else { return };
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label("页面 mm");
                     edit_group(
                         &ui.add(
@@ -2493,7 +2488,7 @@ impl SciApp {
                         history_group,
                     );
                 });
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label("页边距 mm");
                     let page = &mut graph.page;
                     for (i, side) in ["左", "上", "右", "下"].into_iter().enumerate() {
@@ -2507,7 +2502,7 @@ impl SciApp {
                         );
                     }
                 });
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label("页面背景");
                     let mut rgb = graph.page.background.unwrap_or([255, 255, 255]);
                     let response = ui.color_edit_button_srgb(&mut rgb);
@@ -2519,7 +2514,7 @@ impl SciApp {
                         graph.page.background = None;
                     }
                 });
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     ui.label("排版列数");
                     let n = graph.page.layers().len();
                     edit_group(
@@ -2544,7 +2539,7 @@ impl SciApp {
                 let layer_count = graph.page.layers().len();
                 if layer_count > 1 {
                     let g = &mut graph.page.layers_mut()[props_layer];
-                    ui.horizontal(|ui| {
+                    ui.horizontal_wrapped(|ui| {
                         for (label, link, salt) in [
                             ("联动 X 轴", &mut g.link_x, "props-link-x"),
                             ("联动 Y 轴", &mut g.link_y, "props-link-y"),
@@ -2563,7 +2558,7 @@ impl SciApp {
                     });
                 }
                 let g = &mut graph.page.layers_mut()[props_layer];
-                ui.horizontal(|ui| {
+                ui.horizontal_wrapped(|ui| {
                     let mut custom = g.placement.is_some();
                     if ui.checkbox(&mut custom, "自定义图层位置").changed() {
                         g.placement = custom.then(scicanvas_core::page::LayerRect::default);
@@ -2573,7 +2568,7 @@ impl SciApp {
                 if let Some(rect) = &mut g.placement {
                     ui.label("位置和尺寸（页面比例，0–1）");
                     egui::Grid::new(("layer-rectangle", gid, props_layer))
-                        .num_columns(4)
+                        .num_columns(2)
                         .show(ui, |ui| {
                             let min_width = f64::MIN_POSITIVE.min(rect.width);
                             let min_height = f64::MIN_POSITIVE.min(rect.height);
@@ -2586,6 +2581,7 @@ impl SciApp {
                                 ),
                                 history_group,
                             );
+                            ui.end_row();
                             ui.label("Y");
                             edit_group(
                                 &ui.add(
@@ -2605,6 +2601,7 @@ impl SciApp {
                                 ),
                                 history_group,
                             );
+                            ui.end_row();
                             ui.label("高");
                             edit_group(
                                 &ui.add(
@@ -2624,7 +2621,7 @@ impl SciApp {
                     .unwrap_or_default();
                 egui::Grid::new(("props-grid", gid, props_layer))
                     .num_columns(2)
-                    .spacing([12.0, 8.0])
+                    .spacing([8.0, 4.0])
                     .show(ui, |ui| {
                         ui.label("数据工作簿");
                         let current = book_specs
@@ -2670,7 +2667,7 @@ impl SciApp {
 
                         if matches!(g.plot_type, PlotType::Line | PlotType::LineSymbol) {
                             ui.label("连接方式");
-                            ui.horizontal(|ui| {
+                            ui.horizontal_wrapped(|ui| {
                                 for c in scicanvas_core::page::Connect::ALL {
                                     ui.radio_value(&mut g.connect, c, c.label());
                                 }
@@ -2747,7 +2744,7 @@ impl SciApp {
                             ui.label("其他工作簿");
                             ui.vertical(|ui| {
                                 for k in &foreign {
-                                    ui.horizontal(|ui| {
+                                    ui.horizontal_wrapped(|ui| {
                                         ui.label(curve_names.get(k).map_or(k.as_str(), String::as_str));
                                         if ui.small_button("✕").on_hover_text("移除").clicked() {
                                             g.remove_curve(k);
@@ -2812,7 +2809,7 @@ impl SciApp {
                         ] {
                             use scicanvas_core::format::NumberFormat;
                             ui.label(label);
-                            ui.horizontal(|ui| {
+                            ui.horizontal_wrapped(|ui| {
                                 let mut kind = format.index();
                                 let mut places = format.places();
                                 egui::ComboBox::from_id_salt(salt)
@@ -2832,7 +2829,7 @@ impl SciApp {
                         }
 
                         ui.label("X 范围");
-                        ui.horizontal(|ui| {
+                        ui.horizontal_wrapped(|ui| {
                             ui.checkbox(&mut g.x_auto, "自动");
                             edit_group(
                                 &ui.add_enabled(!g.x_auto, egui::DragValue::new(&mut g.x_min).speed(0.1)),
@@ -2847,7 +2844,7 @@ impl SciApp {
                         });
                         ui.end_row();
                         ui.label("Y 范围");
-                        ui.horizontal(|ui| {
+                        ui.horizontal_wrapped(|ui| {
                             ui.checkbox(&mut g.y_auto, "自动");
                             edit_group(
                                 &ui.add_enabled(!g.y_auto, egui::DragValue::new(&mut g.y_min).speed(0.1)),
@@ -2880,7 +2877,7 @@ impl SciApp {
                             ui.end_row();
                         }
                         ui.label("显示");
-                        ui.horizontal(|ui| {
+                        ui.horizontal_wrapped(|ui| {
                             ui.checkbox(&mut g.grid, "网格线");
                             ui.checkbox(&mut g.legend, "图例");
                             ui.checkbox(&mut g.labels.visible, "数据标签");
@@ -2888,7 +2885,7 @@ impl SciApp {
                         });
                         ui.end_row();
                         ui.label("刻度方向");
-                        ui.horizontal(|ui| {
+                        ui.horizontal_wrapped(|ui| {
                             for dir in scicanvas_core::page::TickDir::ALL {
                                 ui.radio_value(&mut g.tick_dir, dir, dir.label());
                             }
@@ -3009,7 +3006,7 @@ impl SciApp {
                                     );
                                     ui.end_row();
                                     ui.label("颜色");
-                                    ui.horizontal(|ui| {
+                                    ui.horizontal_wrapped(|ui| {
                                         let mut own = style.color.is_some();
                                         ui.checkbox(&mut own, "自定");
                                         let mut rgb = style.color.unwrap_or([15, 77, 146]);
@@ -3041,7 +3038,7 @@ impl SciApp {
                                         ("符号大小", &mut style.symbol_size, g.symbol_size, 1.0..=20.0),
                                     ] {
                                         ui.label(name);
-                                        ui.horizontal(|ui| {
+                                        ui.horizontal_wrapped(|ui| {
                                             let mut own = value.is_some();
                                             ui.checkbox(&mut own, "自定");
                                             let mut v = value.unwrap_or(default);
@@ -3062,7 +3059,7 @@ impl SciApp {
                                 g.curves.insert(key, style);
                             }
                             if g.curves.values().any(|c| c.right_axis) {
-                                ui.horizontal(|ui| {
+                                ui.horizontal_wrapped(|ui| {
                                     ui.label("右轴标题");
                                     edit_group(
                                         &ui.add(
@@ -3180,8 +3177,10 @@ impl SciApp {
             self.run_command("win.reset");
         }
         if std::mem::take(&mut self.pending_window_reset) {
+            dialogs::reset_docks(ctx);
             ctx.memory_mut(|memory| memory.reset_areas());
         }
+        dialogs::begin_docks(ctx);
         crate::chrome::edges(ctx, &self.pal);
         self.dropped_files(ctx);
         if self.last_history_group.is_some()
@@ -3222,18 +3221,52 @@ impl SciApp {
                 self.show_item(id);
             }
         } else {
-            if self.show_explorer {
+            let left_docked = dialogs::has_docks(ctx, dialogs::DockSide::Left);
+            if self.show_explorer || left_docked {
+                let explorer = self.show_explorer;
                 egui::SidePanel::left("explorer")
                     .frame(
                         egui::Frame::side_top_panel(&style)
                             .fill(style.visuals.window_fill)
-                            .inner_margin(egui::Margin::symmetric(10.0, 6.0)),
+                            .inner_margin(egui::Margin::symmetric(6.0, 4.0)),
                     )
                     .resizable(true)
                     .default_width(190.0)
-                    .show(ctx, |ui| self.explorer(ui));
+                    .width_range(if left_docked { 320.0..=600.0 } else { 140.0..=600.0 })
+                    .show(ctx, |ui| {
+                        if explorer {
+                            if left_docked {
+                                egui::TopBottomPanel::top("explorer-tree")
+                                    .resizable(true)
+                                    .default_height(200.0)
+                                    .height_range(80.0..=(ui.available_height() * 0.65).max(80.0))
+                                    .show_inside(ui, |ui| {
+                                        egui::ScrollArea::vertical().show(ui, |ui| self.explorer(ui));
+                                    });
+                            } else {
+                                self.explorer(ui);
+                            }
+                        } else {
+                            self.explorer_focus = false;
+                        }
+                        let mut rect = ui.available_rect_before_wrap();
+                        if !left_docked {
+                            rect = ui.max_rect();
+                            rect.min.y += rect.height().min(200.0);
+                        }
+                        dialogs::place_docks(ui, dialogs::DockSide::Left, rect);
+                    });
             } else {
                 self.explorer_focus = false;
+            }
+            if dialogs::has_docks(ctx, dialogs::DockSide::Right) {
+                egui::SidePanel::right("settings-right")
+                    .resizable(true)
+                    .default_width(360.0)
+                    .width_range(320.0..=600.0)
+                    .show(ctx, |ui| {
+                        dialogs::place_docks(ui, dialogs::DockSide::Right, ui.available_rect_before_wrap())
+                    });
             }
             // 子窗口放在面板之间剩下的区域里（Origin 的 MDI 工作区）
             self.refresh_book_preview();
@@ -3259,6 +3292,7 @@ impl SciApp {
         if crate::builder::show(ctx, &self.project, &mut self.plot_draft) {
             self.run_command("plot.apply_spec");
         }
+        dialogs::end_docks(ctx);
         self.finish_frame_edit(self.history_group);
         if std::mem::take(&mut self.pending_repaint) {
             ctx.request_repaint();
@@ -3393,7 +3427,7 @@ mod history_tests {
         };
         frame(&mut app, vec![egui::Event::PointerMoved(start), button(start, true)]);
         frame(&mut app, vec![egui::Event::PointerMoved(start + egui::vec2(60.0, 0.0))]);
-        let end = egui::pos2(screen.right() - 10.0, start.y);
+        let end = egui::pos2(screen.right() + 150.0, start.y);
         frame(&mut app, vec![egui::Event::PointerMoved(end)]);
         frame(&mut app, vec![button(end, false)]);
         let moved = frame(&mut app, vec![]);
@@ -3427,6 +3461,99 @@ mod history_tests {
         assert_eq!(edit.draft, draft);
         assert_eq!(app.project, before);
         assert!(app.history.undo_label().is_none());
+    }
+
+    #[test]
+    fn docked_properties_and_layer_contents_share_sidebar_and_preserve_live_preview() {
+        let mut app = app();
+        let before = app.project.clone();
+        let gid = app.active.unwrap();
+        app.run_command("graph.props");
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        egui_extras::install_image_loaders(&ctx);
+        ctx.style_mut(|s| s.animation_time = 0.0);
+        let mut time = 0.0;
+        let mut frame = |app: &mut SciApp, events| {
+            time += 0.04;
+            ctx.run(
+                egui::RawInput {
+                    time: Some(time),
+                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1500.0, 1000.0))),
+                    events,
+                    ..Default::default()
+                },
+                |ctx| app.ui_frame(ctx),
+            )
+        };
+        macro_rules! settle {
+            () => {
+                for _ in 0..6 {
+                    frame(&mut app, vec![]);
+                }
+            };
+        }
+        macro_rules! dock_left {
+            ($id:expr, $y:expr) => {{
+                let rect = ctx.memory(|m| m.area_rect($id)).unwrap();
+                let start = egui::pos2(rect.center().x, rect.top() + 12.0);
+                let end = egui::pos2(150.0, $y);
+                let button = |pos, pressed| egui::Event::PointerButton {
+                    pos,
+                    pressed,
+                    button: egui::PointerButton::Primary,
+                    modifiers: egui::Modifiers::NONE,
+                };
+                frame(&mut app, vec![egui::Event::PointerMoved(start)]);
+                frame(&mut app, vec![button(start, true)]);
+                frame(
+                    &mut app,
+                    vec![egui::Event::PointerMoved(start + egui::vec2(30.0, 0.0))],
+                );
+                frame(&mut app, vec![egui::Event::PointerMoved(end)]);
+                frame(&mut app, vec![button(end, false)]);
+                settle!();
+            }};
+        }
+        settle!();
+        let props_id = egui::Id::new("scicanvas-props");
+        dock_left!(props_id, 700.0);
+        assert!(dialogs::has_docks(&ctx, dialogs::DockSide::Left));
+        let rect = ctx.memory(|m| m.area_rect(props_id)).unwrap();
+        assert!(
+            rect.right() <= app.ws.left() + 1.0,
+            "props {rect:?}, workspace {:?}",
+            app.ws
+        );
+        app.run_command("layer.contents");
+        let Some(Dialog::LayerContents(edit)) = &mut app.dialog else {
+            panic!()
+        };
+        edit.draft.legend = !edit.before.legend;
+        let draft = edit.draft.clone();
+        settle!();
+        let contents_id = egui::Id::new(("scicanvas-dialog", "图层内容"));
+        dock_left!(contents_id, 920.0);
+        let props = ctx.memory(|m| m.area_rect(props_id)).unwrap();
+        let contents = ctx.memory(|m| m.area_rect(contents_id)).unwrap();
+        assert!(props.bottom() <= contents.top() + 1.0, "{props:?} {contents:?}");
+        assert!(
+            contents.right() <= app.ws.left() + 1.0 && contents.bottom() <= 980.0,
+            "{contents:?} {:?}",
+            app.ws
+        );
+        assert_eq!(app.preview_graph(gid).unwrap().page.layers()[0], draft);
+        assert_eq!(app.project, before);
+        assert!(app.history.undo_label().is_none());
+        app.run_command("win.reset");
+        settle!();
+        assert!(!dialogs::has_docks(&ctx, dialogs::DockSide::Left));
+        assert_eq!(app.preview_graph(gid).unwrap().page.layers()[0], draft);
+        let Some(Dialog::LayerContents(edit)) = app.dialog.take() else {
+            panic!()
+        };
+        app.apply_layer_contents(&edit).unwrap();
+        roundtrip(&mut app, &before);
     }
 
     #[test]
@@ -4331,7 +4458,10 @@ mod history_tests {
                 |ctx| app.dialogs(ctx),
             )
         };
-        frame(app, vec![]);
+        // Narrow grids need several frames to settle their column widths and wrapped rows.
+        for _ in 0..5 {
+            frame(app, vec![]);
+        }
         let output = frame(app, vec![]);
         let pos = output
             .shapes
@@ -4502,44 +4632,7 @@ mod history_tests {
         assert!(re.1.contains("实部") && im.as_ref().unwrap().1.contains("虚部"));
         let m = *rows;
         let before = app.project.clone();
-        let ctx = egui::Context::default();
-        crate::fonts::setup(&ctx);
-        ctx.style_mut(|style| style.animation_time = 0.0);
-        let mut time = 0.0;
-        let mut frame = |app: &mut SciApp, events| {
-            time += 0.02;
-            ctx.run(
-                egui::RawInput {
-                    time: Some(time),
-                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1400.0, 1000.0))),
-                    events,
-                    ..Default::default()
-                },
-                |ctx| app.dialogs(ctx),
-            )
-        };
-        frame(&mut app, vec![]);
-        let output = frame(&mut app, vec![]);
-        let pos = output
-            .shapes
-            .iter()
-            .find_map(|s| match &s.shape {
-                egui::Shape::Text(t) if t.galley.job.text == "变换" => Some(t.pos + egui::vec2(5.0, 5.0)),
-                _ => None,
-            })
-            .expect("OK button");
-        frame(&mut app, vec![egui::Event::PointerMoved(pos)]);
-        for pressed in [true, false] {
-            frame(
-                &mut app,
-                vec![egui::Event::PointerButton {
-                    pos,
-                    button: egui::PointerButton::Primary,
-                    pressed,
-                    modifiers: egui::Modifiers::NONE,
-                }],
-            );
-        }
+        press_dialog_button(&mut app, "变换");
         let out = app.project.books.last().unwrap();
         assert!(out.name.contains("IFFT"), "{}", app.status);
         assert_eq!(out.columns[1].values().len(), 2 * (m - 1));
