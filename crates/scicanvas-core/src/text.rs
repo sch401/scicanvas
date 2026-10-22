@@ -1,6 +1,6 @@
 //! Shared plain scientific text metrics, font fallback and baseline placement.
 //! ponytail: Latin/CJK/scientific plain runs use advances and kerning; complex-script shaping belongs with the later rich-text implementation.
-//! Font sizes are CSS/page pixels per em; egui's height-based sizes are converted explicitly.
+//! Font sizes are CSS/page pixels per em, also used directly by egui.
 use ab_glyph::{Font, FontArc, FontVec};
 use std::sync::OnceLock;
 
@@ -33,9 +33,6 @@ impl Face {
     }
     pub fn data(&self) -> &[u8] {
         self.font.font_data()
-    }
-    pub fn height_factor(&self) -> f64 {
-        f64::from(self.font.height_unscaled() / self.font.units_per_em().unwrap())
     }
     fn metrics(&self, size: f64) -> (f64, f64) {
         let scale = size / f64::from(self.font.units_per_em().unwrap());

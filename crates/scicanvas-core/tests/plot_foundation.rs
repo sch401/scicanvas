@@ -297,7 +297,7 @@ fn real_text_metrics_keep_long_titles_legends_and_labels_within_their_page() {
     }
     assert_eq!(titles, 1);
     let output = svg::render_page(p.graph(2).unwrap(), &p);
-    assert!(output.contains("textLength=\"") && output.contains("lengthAdjust=\"spacingAndGlyphs\""));
+    assert!(!output.contains("textLength=") && !output.contains("lengthAdjust="));
     #[cfg(feature = "serde")]
     {
         let loaded =

@@ -151,10 +151,9 @@ fn prim(out: &mut String, p: &Prim) {
                 let yy = origin_y - layout.height / 2.0 + layout.ascent + run.line as f64 * layout.line_height;
                 let _ = write!(
                     out,
-                    r#"<text x="{xx:.4}" y="{yy:.4}" font-family="{}" font-size="{size}" font-weight="{}" textLength="{:.4}" lengthAdjust="spacingAndGlyphs" xml:space="preserve" fill="{}">{}</text>"#,
+                    r#"<text x="{xx:.4}" y="{yy:.4}" font-family="{}" font-size="{size}" font-weight="{}" xml:space="preserve" fill="{}">{}</text>"#,
                     esc(&face.family),
                     face.weight,
-                    run.width,
                     hex(*color),
                     esc(&run.text)
                 );

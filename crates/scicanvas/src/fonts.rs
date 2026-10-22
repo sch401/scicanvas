@@ -29,12 +29,9 @@ const CJK: &[&str] = &[
     "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
 ];
 
-/// Convert CSS/page em size to egui's font-height convention.
+/// egui already converts em size to the font's internal height convention.
 pub fn plot_font(size: f32, face: usize) -> FontId {
-    FontId::new(
-        size * scicanvas_core::text::fonts().faces()[face].height_factor() as f32,
-        FontFamily::Name(format!("plot-{face}").into()),
-    )
+    FontId::new(size, FontFamily::Name(format!("plot-{face}").into()))
 }
 
 fn load(paths: &[&str]) -> Option<Vec<u8>> {
