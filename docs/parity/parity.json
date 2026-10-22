@@ -897,7 +897,7 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "同层跨表曲线，绘图/分析/保存共用 DataRef 与 CurveMapping；v11 plots 独立保存来源和样式，属性控件保留 PlotSpec 编辑视图；跨表结果回写各自表并保留左右轴；A3 已完成基础 Mark/Path/Stat/Position/Orientation 拆分，14 种 PlotType 由内置配方组合驱动，页面组合迁入 scene/layout.rs；统一运行时 Plot/AxisSet 后续推进",
-  "verify": "跨表同名列、选择分析、源表隔离、右轴拟合/置信带/残差、删除主表保留其他曲线、v10 SVG 保持及 v11 往返回归；A3 的 14 种图型 SVG 黄金样例与 scicanvas-core 全部测试通过，全仓完整检查和 Windows CI 为交付验收项；Origin 目视与人工验收待做",
+  "verify": "跨表同名列、选择分析、源表隔离、右轴拟合/置信带/残差、删除主表保留其他曲线、v10 SVG 保持及 v11 往返回归；A3 的 14 种图型 SVG 黄金样例、全仓完整检查和 Windows CI 已通过；Origin 目视与人工验收待做",
   "id": "F082",
   "milestone": "M1 日常够用"
  },

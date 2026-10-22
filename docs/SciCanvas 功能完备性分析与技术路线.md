@@ -8,7 +8,7 @@
 
 A1-a/A1-b 已实现待验收。A2 的取数、管理、分析、左右轴和 v11 映射已经接入，统一运行时 Plot/AxisSet 仍为部分实现。A4 的当前公式范围已实现待验收。A5 已有逐列 Operation、自动/手动/不重算和 Note 报告，统一可编辑报告表与完整依赖图仍待推进。A6 已有 SVG、PNG/DPI 和位图剪贴板，真实字体测宽、富文本、PDF/TIFF/EMF 仍待做。
 
-**本次顺序**：路线与清单已同步，A3 基础渲染拆分已完成实现并通过核心库测试与 SVG 黄金回归；接下来运行全仓完整检查和 Windows CI，通过后更新 PR 并编译 Windows exe。之后完善 A2 统一轴对象，推进 A6 字体与出版导出，补剩余 P0 功能。
+**本次进度**：路线与清单已同步，A3 基础渲染拆分已完成；14 种现有图型、界面入口、SVG 黄金输出与 v11/旧项目兼容均保留。全仓完整检查和 Windows CI 已通过，PR #4 已更新，Windows x64 exe 与发布包已编译。下一步完善 A2 统一轴对象，推进 A6 字体与出版导出，补剩余 P0 功能。
 
 清单共 514 项：已完成 26、已实现待验收 85、部分实现 15、未开始 376、不做 12。P0 共 97 项：已完成 26、待验收 60、部分实现 0、未开始 11。计数按功能条目，A3 重构不增加图型数，也不将待验收条目自动改成已完成。
 
@@ -148,7 +148,7 @@ T1.1 已实现待验收：数值、文本、UTC 日期时间、分类字典及�
 | 列计算 | 121 个函数、保存公式、循环依赖检查、按依赖重算，逐列分析 Operation 与自动/手动/不重算 | 完整操作依赖图、统一可编辑报告表、录制/脚本 |
 | 拟合 | 线性/多项式/多元回归、24 个非线性模型、自动初值、固定参数/上下界/线性约束、残差和置信/预测带、Markdown Note | 权重、自定义函数、全局/多峰拟合、完整 NIST 验收 |
 | 统计与信号 | 列/行统计、频数、t 检验、相关、ANOVA/Tukey/Shapiro/Grubbs、跨表分析；FFT/IFFT、LOWESS/SG、基线与寻峰 | 更多统计检验、统计图、STFT/IIR/小波、多峰拟合 |
-| 绘图与导出 | 14 种图型、跨表多曲线、逐曲线样式/左右轴、图层轴联动、误差棒/标签、日期/分类轴、SVG/PNG/DPI、位图剪贴板 | A3 Mark/Stat/Position/Coord 基础拆分已实现并通过 SVG 黄金回归与核心库测试；统一 Plot/AxisSet、真实测宽/富文本、PDF/TIFF/EMF、图形模板及更多图型 |
+| 绘图与导出 | 14 种图型、跨表多曲线、逐曲线样式/左右轴、图层轴联动、误差棒/标签、日期/分类轴、SVG/PNG/DPI、位图剪贴板 | A3 Mark/Stat/Position/Coord 基础拆分、全仓检查和 Windows CI 已完成；统一 Plot/AxisSet、真实测宽/富文本、PDF/TIFF/EMF、图形模板及更多图型 |
 | 界面与工程 | 项目树多选/移动/重命名、Note、紧凑单列与吸附面板、实时预览、撤销重做、Windows CI、依赖许可与源码说明 | 项目搜索、恢复、最近文件、跨会话布局、安装包、不同 DPI/大数据人工验收 |
 
 **状态口径**：已实现待验收表示条目范围已接入，专项、参考或人工验收待完成；部分实现表示仍有明确功能缺口。底层结构重构与可用功能分别记录。121 为当前函数目录项数，24 为内置非线性模型数，239 为拟合函数参考目录基数，互不混用。
@@ -402,7 +402,7 @@ pub struct AxisLink { pub to: (LayerId, AxisId), pub kind: LinkKind /* Straight 
 
 ### A3 Mark / Stat / Coord 可组合渲染
 
-**本次实施（2026-10-22，基础拆分已完成）**：14 种现有 PlotType 已由 Mark、Path、Position、Orientation 预设组合驱动。场景图元拆为柱/面积、线/符号/垂线、误差棒/数据标签，Mean 与有效数据分段集中在 Stat，堆叠和分组位置集中在 Position，页面组合迁入 `scene/layout.rs`，Orientation 复用现有 Cartesian 坐标映射。原 PlotType、界面入口、SVG 图元顺序和 v11 项目格式保持不变。SVG 黄金样例与 scicanvas-core 全部测试通过；全仓完整检查及 Windows CI 随本次交付执行。以下更广的统计、坐标与 TOML 形式为后续设计目标。
+**本次实施（2026-10-22，基础拆分已完成）**：14 种现有 PlotType 已由 Mark、Path、Position、Orientation 预设组合驱动。场景图元拆为柱/面积、线/符号/垂线、误差棒/数据标签，Mean 与有效数据分段集中在 Stat，堆叠和分组位置集中在 Position，页面组合迁入 `scene/layout.rs`，Orientation 复用现有 Cartesian 坐标映射。原 PlotType、界面入口、SVG 图元顺序和 v11 项目格式保持不变。SVG 黄金样例、全仓完整检查与 Windows CI 均通过，PR #4 已更新并已编译 Windows x64 发布包。以下更广的统计、坐标与 TOML 形式为后续设计目标。
 
 **为什么**：拆分前 `scene.rs` 约 1900 行，`build_layer` 按 `PlotType` 分支。照这个写法加 235 种图会变成上万行的 match。
 
@@ -683,7 +683,7 @@ pub struct Report { pub title: String, pub sections: Vec<ReportSection> }  // Ta
 | --- | --- | --- | --- | --- |
 | T1.1 | A1-a：`ColumnData` 类型化列 + `ColumnView` + v9 迁移 | T0.1 | 2 | 已实现待验收：四种存储、ColumnView、v9 迁移/旧 SVG 回归已接入，人工与峰值内存待验收 |
 | T1.2 | A1-b：独立工作表的列属性对话框 + 数字格式（F032）；F049 多 Sheet 按用户要求不做 | T1.1 | 1 | 已实现待验收：列属性对话框（长名称、单位、注释、列角色、数据类型、显示格式，一步撤销）与数值/日期显示格式（F032）已接入；各表独立 Book |
-| T1.3 | A3：scene 拆分为 Mark/Stat/Position/Coord，14 种图迁移到预设，golden 不变 | T0.1 | 2 | 实现完成：14 种 PlotType 已由预设驱动，Mark/Stat/Position/Orientation 与页面组合已拆分；SVG 黄金与 scicanvas-core 测试通过，全仓检查和 Windows CI 列为交付验收项 |
+| T1.3 | A3：scene 拆分为 Mark/Stat/Position/Coord，14 种图迁移到预设，golden 不变 | T0.1 | 2 | 已完成：14 种 PlotType 已由预设驱动，Mark/Stat/Position/Orientation 与页面组合已拆分；SVG 黄金、全仓检查和 Windows CI 通过，PR #4 已更新，exe 已编译 |
 | T1.4 | A2：Layer → Vec\<Plot\> + AxisSet + v11 迁移；图层内容对话框（F083）；双 Y（F305） | T1.3 | 2 | 部分实现：v11 映射、同层跨表曲线/分析、图层内容、双 Y 和轴联动已接入；运行时 Vec<Plot>/AxisSet 待收口 |
 | T1.5 | A6-a：fontdb + rustybuzz 真实测宽，替换 `text_width`；内置回退字体 | T1.3 | 1 | 未开始：真实共享测宽与富文本待做；现有 PNG 栅格字体不等同共享场景测宽 |
 
