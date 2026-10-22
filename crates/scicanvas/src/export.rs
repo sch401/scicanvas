@@ -16,8 +16,11 @@ fn fonts() -> &'static fontdb::Database {
     static DB: OnceLock<fontdb::Database> = OnceLock::new();
     DB.get_or_init(|| {
         let mut db = fontdb::Database::new();
-        db.load_system_fonts();
-        db.set_sans_serif_family("Arial");
+        let shared = scicanvas_core::text::fonts();
+        for face in shared.faces() {
+            db.load_font_data(face.data().to_vec());
+        }
+        db.set_sans_serif_family(&shared.faces()[shared.primary(false)].family);
         db
     })
 }
@@ -100,6 +103,76 @@ mod tests {
             at += 12 + len;
         }
         None
+    }
+
+    #[test]
+    fn export_resolves_the_exact_shared_font_faces() {
+        for face in scicanvas_core::text::fonts().faces() {
+            let id = fonts()
+                .query(&fontdb::Query {
+                    families: &[fontdb::Family::Name(&face.family)],
+                    weight: fontdb::Weight(face.weight),
+                    ..Default::default()
+                })
+                .expect("shared font family is loaded");
+            fonts()
+                .with_face_data(id, |bytes, index| {
+                    assert_eq!(index, face.index);
+                    assert_eq!(bytes, face.data());
+                })
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn measured_title_bounds_match_raster_export_at_multiple_dpi() {
+        let mut p = Project::sample();
+        let g = p.graph_mut(2).unwrap();
+        g.page.width_mm = 89.0;
+        g.page.height_mm = 80.0;
+        g.first_layer_mut().title = "WWW iii μ ± 电压 mixed font measurement".into();
+        let sc = scicanvas_core::scene::layout_page(p.graph(2).unwrap(), &p, &[]);
+        let (x, y, text, size) = sc
+            .items
+            .iter()
+            .find_map(|item| match &item.prim {
+                scicanvas_core::scene::Prim::Text {
+                    x,
+                    y,
+                    text,
+                    size,
+                    bold: true,
+                    ..
+                } => Some((*x, *y, text, *size)),
+                _ => None,
+            })
+            .unwrap();
+        let metrics = scicanvas_core::text::layout(text, size, true);
+        let page = svg::render_page(p.graph(2).unwrap(), &p);
+        for dpi in [96, 300, 600] {
+            let pixmap = rasterize(&page, dpi).unwrap();
+            let scale = f64::from(dpi) / 96.0;
+            let top_end = ((y + metrics.height / 2.0 + 1.0) * scale).ceil() as u32;
+            let mut count = 0;
+            for yy in 0..top_end.min(pixmap.height()) {
+                for xx in 0..pixmap.width() {
+                    let color = pixmap.pixel(xx, yy).unwrap();
+                    if color.red() < 100 && color.green() < 100 && color.blue() < 100 && color.alpha() > 100 {
+                        assert!(
+                            f64::from(xx) >= (x - metrics.width / 2.0 - 1.0) * scale
+                                && f64::from(xx) <= (x + metrics.width / 2.0 + 1.0) * scale,
+                            "{dpi}: {xx},{yy}"
+                        );
+                        count += 1;
+                    }
+                }
+            }
+            assert!(count > 30, "the title is rendered: {dpi}");
+        }
+        if let Ok(path) = std::env::var("SCICANVAS_TEXT_PREVIEW") {
+            let transparent = page.replace("fill=\"#ffffff\"", "fill=\"none\"");
+            std::fs::write(path, png_bytes(&rasterize(&transparent, 150).unwrap(), 150).unwrap()).unwrap();
+        }
     }
 
     #[test]

@@ -2,8 +2,8 @@
 //!
 //! - 界面字体用微软雅黑（Microsoft YaHei UI），中英文统一；没有时找其他中文字体，
 //!   都没有时退回 egui 自带字体。也可以用环境变量 SCICANVAS_FONT 指定字体文件路径。
-//! - 图形里的文字用 Arial（SCI 期刊插图常用），找不到时用相近的 Liberation Sans / Helvetica，
-//!   再找不到就用界面字体。中文同样落到中文字体上。
+//! - 图形文字使用核心 text 模块选择的同一字体与 CSS/em 度量，导出复用相同字节。
+//!   英文优先 Arial，中文依次回退到系统 CJK 字体，内置 Ubuntu/Hack/Noto Emoji 补齐可用字符。
 
 use eframe::egui::{self, FontFamily, FontId};
 
@@ -29,31 +29,12 @@ const CJK: &[&str] = &[
     "/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf",
 ];
 
-const CJK_BOLD: &[&str] = &[r"C:\Windows\Fonts\msyhbd.ttc", r"C:\Windows\Fonts\msyhbd.ttf"];
-
-const ARIAL: &[&str] = &[
-    r"C:\Windows\Fonts\arial.ttf",
-    "/System/Library/Fonts/Supplemental/Arial.ttf",
-    "/Library/Fonts/Arial.ttf",
-    "/usr/share/fonts/truetype/msttcorefonts/Arial.ttf",
-    "/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf",
-    "/usr/share/fonts/liberation-sans/LiberationSans-Regular.ttf",
-    "/usr/share/fonts/truetype/liberation2/LiberationSans-Regular.ttf",
-];
-
-const ARIAL_BOLD: &[&str] = &[
-    r"C:\Windows\Fonts\arialbd.ttf",
-    "/System/Library/Fonts/Supplemental/Arial Bold.ttf",
-    "/Library/Fonts/Arial Bold.ttf",
-    "/usr/share/fonts/truetype/msttcorefonts/Arial_Bold.ttf",
-    "/usr/share/fonts/truetype/liberation/LiberationSans-Bold.ttf",
-    "/usr/share/fonts/liberation-sans/LiberationSans-Bold.ttf",
-    "/usr/share/fonts/truetype/liberation2/LiberationSans-Bold.ttf",
-];
-
-/// 图形文字的字体族。
-pub fn plot_font(size: f32, bold: bool) -> FontId {
-    FontId::new(size, FontFamily::Name(if bold { "plot-bold" } else { "plot" }.into()))
+/// Convert CSS/page em size to egui's font-height convention.
+pub fn plot_font(size: f32, face: usize) -> FontId {
+    FontId::new(
+        size * scicanvas_core::text::fonts().faces()[face].height_factor() as f32,
+        FontFamily::Name(format!("plot-{face}").into()),
+    )
 }
 
 fn load(paths: &[&str]) -> Option<Vec<u8>> {
@@ -76,15 +57,9 @@ fn ui_font() -> Option<egui::FontData> {
 
 pub fn setup(ctx: &egui::Context) {
     let mut fonts = egui::FontDefinitions::default();
-    let ui_fonts = fonts
-        .families
-        .get(&FontFamily::Proportional)
-        .cloned()
-        .unwrap_or_default();
 
     let env = std::env::var("SCICANVAS_FONT").ok();
     let cjk = env.as_deref().and_then(|p| std::fs::read(p).ok()).or_else(|| load(CJK));
-    let has_cjk = cjk.is_some();
     if let Some(bytes) = cjk {
         fonts
             .font_data
@@ -104,42 +79,12 @@ pub fn setup(ctx: &egui::Context) {
     } else {
         eprintln!("SciCanvas: 没有找到中文字体，中文会显示成方框。可以设置环境变量 SCICANVAS_FONT=字体文件路径");
     }
-    let has_cjk_bold = match load(CJK_BOLD) {
-        Some(bytes) => {
-            fonts
-                .font_data
-                .insert("cjk-bold".to_owned(), egui::FontData::from_owned(bytes));
-            true
-        }
-        None => false,
-    };
-
-    for (family, latin, cjk_name) in [
-        ("plot", load(ARIAL), if has_cjk { Some("cjk") } else { None }),
-        (
-            "plot-bold",
-            load(ARIAL_BOLD).or_else(|| load(ARIAL)),
-            if has_cjk_bold {
-                Some("cjk-bold")
-            } else if has_cjk {
-                Some("cjk")
-            } else {
-                None
-            },
-        ),
-    ] {
-        let mut list = Vec::new();
-        if let Some(bytes) = latin {
-            fonts
-                .font_data
-                .insert(family.to_owned(), egui::FontData::from_owned(bytes));
-            list.push(family.to_owned());
-        }
-        list.extend(ui_fonts.iter().cloned());
-        if let Some(c) = cjk_name {
-            list.push(c.to_owned());
-        }
-        fonts.families.insert(FontFamily::Name(family.into()), list);
+    for (i, face) in scicanvas_core::text::fonts().faces().iter().enumerate() {
+        let name = format!("plot-{i}");
+        let mut data = egui::FontData::from_owned(face.data().to_vec());
+        data.index = face.index;
+        fonts.font_data.insert(name.clone(), data);
+        fonts.families.insert(FontFamily::Name(name.clone().into()), vec![name]);
     }
     ctx.set_fonts(fonts);
 }

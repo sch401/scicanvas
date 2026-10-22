@@ -135,6 +135,8 @@ pub(super) fn labels(ctx: &Context<'_, '_, '_, '_>, plots: &[PreparedPlot], item
             if label.trim().is_empty() {
                 continue;
             }
+            let label_size = crate::text::fit_size(&label, f64::from(ctx.layer.labels.size), false, ctx.rect[2]);
+            let label_layout = crate::text::layout(&label, label_size, false);
             let positive = if crate::presets::recipe(style.kind).position == crate::position::Position::Interval {
                 value >= series.bases[i]
             } else {
@@ -156,7 +158,7 @@ pub(super) fn labels(ctx: &Context<'_, '_, '_, '_>, plots: &[PreparedPlot], item
             } else {
                 0.0
             };
-            let delta = f64::from(ctx.layer.labels.offset) + f64::from(ctx.layer.labels.size) / 2.0 + reach;
+            let delta = f64::from(ctx.layer.labels.offset) + label_layout.height / 2.0 + reach;
             let (xx, yy, anchor) = if ctx.horizontal {
                 (
                     ctx.px(x) + if positive { delta } else { -delta },
@@ -170,7 +172,7 @@ pub(super) fn labels(ctx: &Context<'_, '_, '_, '_>, plots: &[PreparedPlot], item
                     Anchor::Middle,
                 )
             };
-            let width = crate::scene::text_width(&label, f64::from(ctx.layer.labels.size)).min(ctx.rect[2]);
+            let width = label_layout.width.min(ctx.rect[2]);
             let xx = match anchor {
                 Anchor::Middle => xx.clamp(
                     ctx.rect[0] + width / 2.0,
@@ -179,7 +181,7 @@ pub(super) fn labels(ctx: &Context<'_, '_, '_, '_>, plots: &[PreparedPlot], item
                 Anchor::Start => xx.clamp(ctx.rect[0], ctx.rect[0] + ctx.rect[2] - width),
                 Anchor::End => xx.clamp(ctx.rect[0] + width, ctx.rect[0] + ctx.rect[2]),
             };
-            let half = (f64::from(ctx.layer.labels.size) / 2.0).min(ctx.rect[3] / 2.0);
+            let half = (label_layout.height / 2.0).min(ctx.rect[3] / 2.0);
             let yy = yy.clamp(ctx.rect[1] + half, ctx.rect[1] + ctx.rect[3] - half);
             ctx.push(
                 items,
@@ -187,7 +189,7 @@ pub(super) fn labels(ctx: &Context<'_, '_, '_, '_>, plots: &[PreparedPlot], item
                     x: xx,
                     y: yy,
                     text: label,
-                    size: f64::from(ctx.layer.labels.size),
+                    size: label_size,
                     anchor,
                     vertical: false,
                     bold: false,

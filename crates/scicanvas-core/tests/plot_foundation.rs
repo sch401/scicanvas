@@ -236,3 +236,73 @@ fn rebinding_a_blank_layer_uses_the_book_defaults_and_keeps_its_settings() {
     let next = floating.rebound(one_y.id, defaults.as_ref());
     assert_eq!((next.y_keys.len(), next.plot_type), (1, PlotType::LineSymbol));
 }
+
+#[test]
+fn real_text_metrics_keep_long_titles_legends_and_labels_within_their_page() {
+    let mut p = Project::sample();
+    let title = "Wide WWW and narrow iii — 长标题与科学符号 μ ± ∞ repeated repeatedly";
+    let g = p.graph_mut(2).unwrap();
+    g.page.width_mm = 89.0;
+    g.page.height_mm = 80.0;
+    let layer = g.first_layer_mut();
+    layer.title = title.into();
+    layer.x_title = "A very long horizontal scientific axis title 时间 (s)".into();
+    layer.y_title = "A very long vertical scientific axis title 电压 (mV)".into();
+    p.book_mut(1).unwrap().columns[1].long_name =
+        "A long legend label with WWW iii and 中文 that wraps into rows".into();
+    let sc = scene::layout_page(p.graph(2).unwrap(), &p, &[]);
+    let mut titles = 0;
+    for item in &sc.items {
+        if let scene::Prim::Text {
+            x,
+            y,
+            text,
+            size,
+            bold,
+            anchor,
+            vertical,
+            ..
+        } = &item.prim
+        {
+            let measured = scicanvas_core::text::layout(text, *size, *bold);
+            let offset = match anchor {
+                scene::Anchor::Start => 0.0,
+                scene::Anchor::Middle => measured.width / 2.0,
+                scene::Anchor::End => measured.width,
+            };
+            let bounds = if *vertical {
+                [
+                    *x - measured.height / 2.0,
+                    *y + offset - measured.width,
+                    *x + measured.height / 2.0,
+                    *y + offset,
+                ]
+            } else {
+                [
+                    *x - offset,
+                    *y - measured.height / 2.0,
+                    *x - offset + measured.width,
+                    *y + measured.height / 2.0,
+                ]
+            };
+            assert!(
+                bounds[0] >= -0.01 && bounds[1] >= -0.01 && bounds[2] <= sc.w + 0.01 && bounds[3] <= sc.h + 0.01,
+                "{text:?}: {bounds:?}"
+            );
+            if *bold {
+                assert!(text.contains('\n'));
+                titles += 1;
+            }
+        }
+    }
+    assert_eq!(titles, 1);
+    let output = svg::render_page(p.graph(2).unwrap(), &p);
+    assert!(output.contains("textLength=\"") && output.contains("lengthAdjust=\"spacingAndGlyphs\""));
+    #[cfg(feature = "serde")]
+    {
+        let loaded =
+            scicanvas_core::project_file::from_json(&scicanvas_core::project_file::to_json(&p).unwrap()).unwrap();
+        assert_eq!(loaded, p);
+        assert_eq!(svg::render_page(loaded.graph(2).unwrap(), &loaded), output);
+    }
+}

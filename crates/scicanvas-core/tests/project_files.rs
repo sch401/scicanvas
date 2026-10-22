@@ -5,8 +5,14 @@ use scicanvas_core::{project_file, svg, PlotType, Project};
 const V0: &str = include_str!("fixtures/legacy-v0.scproj");
 const V1: &str = include_str!("fixtures/legacy-v1.scproj");
 
+fn fixture_fonts() {
+    static INIT: std::sync::Once = std::sync::Once::new();
+    INIT.call_once(|| assert!(scicanvas_core::text::initialize(scicanvas_core::text::Fonts::bundled()).is_ok()));
+}
+
 #[test]
 fn display_formats_round_trip_and_leave_stored_values_alone() {
+    fixture_fonts();
     use scicanvas_core::format::{DateFormat, DisplayFormat, NumberFormat};
     let mut p = Project::sample();
     // 没设格式时不写入文件，旧项目保存后不变
@@ -40,6 +46,7 @@ fn display_formats_round_trip_and_leave_stored_values_alone() {
 
 #[test]
 fn pages_without_a_saved_size_keep_the_old_default_while_new_graphs_use_a4() {
+    fixture_fonts();
     // v0/v1 旧文件没有页面尺寸：读取后保持当时的 89 × 66.75 mm
     for p in [
         project_file::from_json(V0).unwrap(),
@@ -61,6 +68,7 @@ fn pages_without_a_saved_size_keep_the_old_default_while_new_graphs_use_a4() {
 
 #[test]
 fn old_versions_preserve_data_and_all_four_plot_layouts() {
+    fixture_fonts();
     let mut p = project_file::from_json(V0).unwrap();
     assert_eq!(p, project_file::from_json(V1).unwrap());
     assert_eq!(p.version, project_file::CURRENT_VERSION);
@@ -81,6 +89,7 @@ fn old_versions_preserve_data_and_all_four_plot_layouts() {
 #[test]
 #[ignore = "Explicit maintainer action; review the SVG diff before committing"]
 fn update_legacy_svg_fixtures() {
+    fixture_fonts();
     let mut p = project_file::from_json(V0).unwrap();
     let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures");
     for (kind, name) in [
@@ -97,6 +106,7 @@ fn update_legacy_svg_fixtures() {
 
 #[test]
 fn unsupported_or_damaged_files_fail_and_stale_allocator_recovers() {
+    fixture_fonts();
     assert!(project_file::from_json("[").is_err());
     assert!(project_file::from_json("[]").is_err());
     for version in [
@@ -128,6 +138,7 @@ fn unsupported_or_damaged_files_fail_and_stale_allocator_recovers() {
 
 #[test]
 fn atomic_save_replaces_existing_file_and_failure_preserves_it() {
+    fixture_fonts();
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../target/file-tests")
         .join(std::process::id().to_string());
@@ -153,6 +164,7 @@ fn atomic_save_replaces_existing_file_and_failure_preserves_it() {
 
 #[test]
 fn v2_layers_roundtrip_and_invalid_page_is_rejected() {
+    fixture_fonts();
     let mut p = project_file::from_json(V1).unwrap();
     let mut second = p.graphs[0].page.layers()[0].clone();
     second.title = "第二图层".into();

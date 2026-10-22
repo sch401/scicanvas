@@ -16,7 +16,7 @@ GPL/LGPL 未列入允许列表。新增直接依赖继续优先 MIT / Apache-2.0
 | 包与版本 | 例外许可 | 当前用途 |
 | --- | --- | --- |
 | clipboard-win 5.4.1、error-code 3.4.0 | BSL-1.0 | Windows 剪贴板 |
-| epaint_default_fonts 0.29.1 | OFL-1.1、LicenseRef-UFL-1.0 | egui 自带字体 |
+| epaint_default_fonts 0.29.1 | OFL-1.1、LicenseRef-UFL-1.0 | 界面及核心共享字体回退 |
 | resvg / usvg / usvg-parser / usvg-tree 0.37.0 | MPL-2.0 | egui SVG 图标 |
 | usvg-text-layout 0.37.0 | MPL-2.0 | PNG 导出 / 复制图形的文字排版 |
 
@@ -39,3 +39,9 @@ GPL/LGPL 未列入允许列表。新增直接依赖继续优先 MIT / Apache-2.0
 配置语义见 [cargo-deny 官方文档](https://embarkstudios.github.io/cargo-deny/checks/cfg.html)。
 
 类型化列新增 chrono 0.4.45，仅启用 std 做 UTC 日期解析/显示，许可 MIT OR Apache-2.0；数值 v9 编码复用 base64 0.21.7。第三方声明已重新生成。
+
+## A6 共享字体度量（2026-10-22）
+
+核心新增直接引用现有锁定包 ab_glyph 0.2.32、ttf-parser 0.25.1 与 epaint_default_fonts 0.29.1，复用屏幕已有字体解析/度量和内嵌字体，没有引入新的包版本。字体选择、CSS/em 字号、advance/kerning、行高和基线由核心 text 模块统一，egui 和 resvg 注册同一份字体字节。
+
+Arial 和系统中文字体只在运行时读取，不写入发布包。Ubuntu Light、Hack、Noto Emoji 的原始字体许可沿用现有 FONT_NOTICES 与完整原文。SVG 保留可编辑文本与测量宽度，尚未嵌入字体；移到其他电脑时字形取决于接收端可用字体。系统缺少中文字体时有占位回退，完整内嵌 CJK 与数学字体包后续实现。

@@ -3012,13 +3012,16 @@ dependencies = [
 name = "scicanvas-core"
 version = "0.1.0"
 dependencies = [
+ "ab_glyph",
  "base64",
  "chrono",
  "encoding_rs",
+ "epaint_default_fonts",
  "flate2",
  "roxmltree 0.20.0",
  "serde",
  "serde_json",
+ "ttf-parser 0.25.1",
  "zip",
 ]
 

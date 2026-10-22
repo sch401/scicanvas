@@ -520,21 +520,57 @@ pub fn paint(ui: &egui::Ui, rect: Rect, sc: &Scene) {
                 bold,
                 color,
             } => {
-                let galley = p.layout_no_wrap(text.clone(), plot_font(*size as f32 * scale, *bold), rgb(*color));
-                let gs = galley.size();
-                let c = at(*x, *y);
-                let k = match anchor {
+                let layout = scicanvas_core::text::layout(text, *size, *bold);
+                let factor = match anchor {
                     Anchor::Start => 0.0,
                     Anchor::Middle => 0.5,
                     Anchor::End => 1.0,
                 };
-                if *vertical {
-                    // 逆时针转 90°：文字沿 -y 方向排开，pos 是旋转前的左上角
-                    let pos = pos2(c.x - gs.y / 2.0, c.y + gs.x * k);
-                    p.add(egui::epaint::TextShape::new(pos, galley, rgb(*color)).with_angle(-FRAC_PI_2));
-                } else {
-                    let pos = pos2(c.x - gs.x * k, c.y - gs.y / 2.0);
-                    p.galley(pos, galley, rgb(*color));
+                let origin = at(*x, *y);
+                for run in &layout.runs {
+                    let raw =
+                        p.layout_no_wrap(run.text.clone(), plot_font(*size as f32 * scale, run.font), rgb(*color));
+                    let baseline = raw
+                        .rows
+                        .first()
+                        .and_then(|row| row.glyphs.first())
+                        .map_or(0.0, |g| g.pos.y);
+                    let target = run.width as f32 * scale;
+                    let mut galley = (*raw).clone();
+                    // egui rounds atlas glyph sizes to screen pixels. Keep page advances stable across zoom/DPI.
+                    let ratio = if galley.rect.width() > 0.0 {
+                        target / galley.rect.width()
+                    } else {
+                        1.0
+                    };
+                    let stretch = |rect: &mut egui::Rect| {
+                        rect.min.x *= ratio;
+                        rect.max.x *= ratio;
+                    };
+                    stretch(&mut galley.rect);
+                    stretch(&mut galley.mesh_bounds);
+                    for row in &mut galley.rows {
+                        stretch(&mut row.rect);
+                        stretch(&mut row.visuals.mesh_bounds);
+                        for vertex in &mut row.visuals.mesh.vertices {
+                            vertex.pos.x *= ratio;
+                        }
+                        for glyph in &mut row.glyphs {
+                            glyph.pos.x *= ratio;
+                            glyph.advance_width *= ratio;
+                        }
+                    }
+                    let dx = (run.x - layout.widths[run.line] * factor) as f32 * scale;
+                    let dy = (-layout.height / 2.0 + layout.ascent + run.line as f64 * layout.line_height) as f32
+                        * scale
+                        - baseline;
+                    let pos = if *vertical {
+                        origin + vec2(dy, -dx)
+                    } else {
+                        origin + vec2(dx, dy)
+                    };
+                    let shape = egui::epaint::TextShape::new(pos, std::sync::Arc::new(galley), rgb(*color));
+                    p.add(if *vertical { shape.with_angle(-FRAC_PI_2) } else { shape });
                 }
             }
         }
@@ -581,6 +617,66 @@ mod tests {
     fn point(rect: Rect, sc: &Scene, index: usize) -> Pos2 {
         let [x, y, w, h] = sc.layers[index].plot;
         page_transform(rect, [sc.w, sc.h]) * pos2((x + w / 2.0) as f32, (y + h / 2.0) as f32)
+    }
+
+    #[test]
+    fn text_run_advances_are_shared_at_different_zoom_and_dpi() {
+        let mut p = Project::sample();
+        p.graphs[0].first_layer_mut().title = "WWW iii μ ± 中文".into();
+        let sc = scene::layout_page(&p.graphs[0], &p, &[]);
+        let expected: Vec<_> = sc
+            .items
+            .iter()
+            .flat_map(|item| {
+                if let Prim::Text { text, size, bold, .. } = &item.prim {
+                    scicanvas_core::text::layout(text, *size, *bold)
+                        .runs
+                        .into_iter()
+                        .map(|run| (run.font, run.text, run.width, *size))
+                        .collect::<Vec<_>>()
+                } else {
+                    Vec::new()
+                }
+            })
+            .collect();
+        for (scale, dpi) in [(0.5_f32, 1.0_f32), (1.0, 1.5), (2.0, 2.0)] {
+            let ctx = egui::Context::default();
+            crate::fonts::setup(&ctx);
+            ctx.set_pixels_per_point(dpi);
+            let rect = Rect::from_min_size(Pos2::ZERO, vec2(sc.w as f32, sc.h as f32) * scale);
+            let out = ctx.run(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(2400.0, 1800.0))),
+                    ..Default::default()
+                },
+                |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| paint(ui, rect, &sc));
+                },
+            );
+            let mut checked = 0;
+            for clipped in out.shapes {
+                if let Shape::Text(shape) = clipped.shape {
+                    let id = &shape.galley.job.sections[0].format.font_id;
+                    if let egui::FontFamily::Name(name) = &id.family {
+                        if let Some(i) = name.strip_prefix("plot-").and_then(|s| s.parse::<usize>().ok()) {
+                            let em_size =
+                                id.size / scale / scicanvas_core::text::fonts().faces()[i].height_factor() as f32;
+                            let (_, _, width, _) = expected
+                                .iter()
+                                .find(|(face, text, _, size)| {
+                                    *face == i
+                                        && text == &shape.galley.job.text
+                                        && (*size as f32 - em_size).abs() < 1e-3
+                                })
+                                .expect("screen uses a shared page run");
+                            assert!((shape.galley.rect.width() - *width as f32 * scale).abs() < 1e-3);
+                            checked += 1;
+                        }
+                    }
+                }
+            }
+            assert_eq!(checked, expected.len());
+        }
     }
 
     #[test]
@@ -792,7 +888,9 @@ mod tests {
             // 页面版面按页宽整体放大 k 倍，再按窗口缩放 scale 倍
             let k = p.graphs[0].page.scale() as f32;
             assert!((stroke / scale - scene::AXIS_WIDTH as f32 * k).abs() < 1e-4);
-            assert!((font / scale - scene::TICK_FONT as f32 * k).abs() < 1e-4);
+            let fonts = scicanvas_core::text::fonts();
+            let height_factor = fonts.faces()[fonts.primary(false)].height_factor() as f32;
+            assert!((font / scale / height_factor - scene::TICK_FONT as f32 * k).abs() < 1e-4);
             let transform = page_transform(rect, [sc.w, sc.h]);
             let page_point = pos2(sc.px(10.0) as f32, sc.py(0.0) as f32);
             let recovered = transform.inverse() * (transform * page_point);

@@ -131,23 +131,35 @@ fn prim(out: &mut String, p: &Prim) {
             bold,
             color,
         } => {
-            let a = match anchor {
-                Anchor::Start => "start",
-                Anchor::Middle => "middle",
-                Anchor::End => "end",
+            let layout = crate::text::layout(text, *size, *bold);
+            let factor = match anchor {
+                Anchor::Start => 0.0,
+                Anchor::Middle => 0.5,
+                Anchor::End => 1.0,
             };
-            let pos = if *vertical {
-                format!(r#"transform="translate({x:.2},{y:.2}) rotate(-90)""#)
+            let _ = write!(out, r#"<g aria-label="{}""#, esc(text));
+            let (origin_x, origin_y) = if *vertical {
+                let _ = write!(out, r#" transform="translate({x:.2},{y:.2}) rotate(-90)""#);
+                (0.0, 0.0)
             } else {
-                format!(r#"x="{x:.2}" y="{y:.2}""#)
+                (*x, *y)
             };
-            let weight = if *bold { r#" font-weight="700""# } else { "" };
-            let _ = write!(
-                out,
-                r#"<text {pos} text-anchor="{a}" dominant-baseline="central" font-size="{size}"{weight} fill="{}">{}</text>"#,
-                hex(*color),
-                esc(text)
-            );
+            out.push('>');
+            for run in &layout.runs {
+                let face = &crate::text::fonts().faces()[run.font];
+                let xx = origin_x + run.x - layout.widths[run.line] * factor;
+                let yy = origin_y - layout.height / 2.0 + layout.ascent + run.line as f64 * layout.line_height;
+                let _ = write!(
+                    out,
+                    r#"<text x="{xx:.4}" y="{yy:.4}" font-family="{}" font-size="{size}" font-weight="{}" textLength="{:.4}" lengthAdjust="spacingAndGlyphs" xml:space="preserve" fill="{}">{}</text>"#,
+                    esc(&face.family),
+                    face.weight,
+                    run.width,
+                    hex(*color),
+                    esc(&run.text)
+                );
+            }
+            out.push_str("</g>");
         }
     }
 }

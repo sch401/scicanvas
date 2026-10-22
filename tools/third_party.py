@@ -60,7 +60,7 @@ def outputs():
         "MPL 对应版本完整源码及 SHA-256 见 [MPL 源码说明](MPL_SOURCE.md)。egui 内嵌字体另保留原始字体许可和字体 name 表声明，包含 Hack 的 Bitstream Vera 声明。", "",
         "Windows 系统字体通过用户电脑读取，本发行包不附加微软雅黑/Arial 字体文件；系统 DLL 同样不随包复制。Rust 标准库版权材料在发行包的 licenses/rust-runtime 中，按实际构建工具链附带。", "",
         "## 包清单", "", "| 包 / 版本 | 声明许可 | 原始声明文件 |", "| --- | --- | --- |"]
-    font_lines = ["# egui 内嵌字体原始声明", "", "以下内容直接读取 epaint_default_fonts 包中四个字体的 name 表，保留版权、商标和许可文字；另附 fonts/*.txt 的原始完整声明。系统字体不在此清单中。", ""]
+    font_lines = ["# SciCanvas / egui 内嵌字体原始声明", "", "以下内容直接读取 epaint_default_fonts 包中四个字体的 name 表，保留版权、商标和许可文字；另附 fonts/*.txt 的原始完整声明。系统字体不在此清单中。", ""]
     for p in packages:
         name, version = p["name"], p["version"]
         key = f"{name}-{version}"

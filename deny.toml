@@ -16,7 +16,7 @@ ignore = [
 [licenses]
 allow = ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Zlib", "Unicode-3.0"]
 confidence-threshold = 0.93
-# Existing GUI dependencies only. New packages still use the permissive allowlist.
+# Existing GUI/shared-font dependencies only. New packages still use the permissive allowlist.
 exceptions = [
     { name = "clipboard-win", version = "=5.4.1", allow = ["BSL-1.0"] },
     { name = "error-code", version = "=3.4.0", allow = ["BSL-1.0"] },

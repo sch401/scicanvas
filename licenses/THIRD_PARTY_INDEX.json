@@ -1,7 +1,7 @@
 {
   "target": "x86_64-pc-windows-msvc",
   "scope": "normal,build; all workspace features",
-  "cargo_lock_sha256": "e852bc2ad2ab6b027b08c13641b9f231cab101a1a4952620af8e990a7edb4849",
+  "cargo_lock_sha256": "e1ba98182338d8cf225fa642b371f448e8edc91223556d034e04b37ece6a5405",
   "packages": [
     {
       "name": "ab_glyph",

@@ -6,6 +6,8 @@ use scicanvas_core::{
 use std::{fs, path::PathBuf};
 
 fn cases() -> Vec<(String, String)> {
+    static INIT: std::sync::Once = std::sync::Once::new();
+    INIT.call_once(|| assert!(scicanvas_core::text::initialize(scicanvas_core::text::Fonts::bundled()).is_ok()));
     let mut project = Project::default();
     let mut book = presets::example();
     // Include negative values and a missing row, not just the positive gallery example.

@@ -254,11 +254,9 @@ impl Scene {
     }
 }
 
-/// 粗略估计文字宽度（像素）：中日韩字符按一个字号宽，其余按 0.56 个字号。
+/// Width in fixed page/CSS pixels, measured from the same fonts as screen/SVG/PNG.
 pub fn text_width(s: &str, px: f64) -> f64 {
-    s.chars()
-        .map(|c| if (c as u32) >= 0x2E80 { px } else { px * 0.56 })
-        .sum()
+    crate::text::layout(s, px, false).width
 }
 
 /// 符号的多边形顶点；圆形返回 None（由调用方画圆）。
@@ -473,15 +471,32 @@ fn obstacles(items: &[Item]) -> Vec<Obstacle> {
                 text,
                 size,
                 anchor,
+                vertical,
+                bold,
                 ..
             } => {
-                let w = text_width(text, *size);
-                let l = match anchor {
-                    Anchor::Start => *x,
-                    Anchor::Middle => x - w / 2.0,
-                    Anchor::End => x - w,
+                let measured = crate::text::layout(text, *size, *bold);
+                let shift = match anchor {
+                    Anchor::Start => 0.0,
+                    Anchor::Middle => measured.width / 2.0,
+                    Anchor::End => measured.width,
                 };
-                out.push(Obstacle::Box([l, y - size / 2.0, l + w, y + size / 2.0]));
+                let bounds = if *vertical {
+                    [
+                        *x - measured.height / 2.0,
+                        *y + shift - measured.width,
+                        *x + measured.height / 2.0,
+                        *y + shift,
+                    ]
+                } else {
+                    [
+                        *x - shift,
+                        *y - measured.height / 2.0,
+                        *x - shift + measured.width,
+                        *y + measured.height / 2.0,
+                    ]
+                };
+                out.push(Obstacle::Box(bounds));
             }
         }
     }
@@ -754,19 +769,35 @@ fn build_layer_full<'a>(
         .iter()
         .map(|t| text_width(&y_label.text(*t), TICK_FONT))
         .fold(8.0, f64::max);
-    let has_title = !g.title.trim().is_empty();
+    let tick_height = crate::text::layout("0", TICK_FONT, false).height;
+    let axis_height = crate::text::layout("Ag", LABEL_FONT, false).height;
+    let tick_half_width = xa
+        .ticks
+        .iter()
+        .map(|t| text_width(&x_label.text(*t), TICK_FONT) / 2.0)
+        .fold(0.0, f64::max);
+    let x_title = g.x_axis_title_in(book, others);
+    let y_title = g.y_axis_title_in(book, others);
+    let y2_title = g.y2_axis_title_in(book, others);
     // 刻度在框外的长度：朝内时刻度标签直接贴近坐标轴
     let (fout, fin) = g.tick_dir.factors();
     let out = MAJOR_TICK * fout;
-    let left = (out + TICK_GAP + ylab_w + 5.0 + LABEL_FONT + 4.0).round().max(min[0]);
+    let left = (out + TICK_GAP + ylab_w + 5.0 + axis_height + 4.0)
+        .round()
+        .max(min[0])
+        .max(tick_half_width + 4.0);
     let right = if ya2.is_some() {
-        (out + TICK_GAP + ylab2_w + 5.0 + LABEL_FONT + 4.0).round()
+        (out + TICK_GAP + ylab2_w + 5.0 + axis_height + 4.0).round()
     } else {
         14.0
     }
-    .max(min[2]);
-    let top = (if has_title { 12.0 + TITLE_FONT + 6.0 } else { 10.0f64 }).max(min[1]);
-    let bottom = (out + TICK_GAP + TICK_FONT + 5.0 + LABEL_FONT + 5.0)
+    .max(min[2])
+    .max(tick_half_width + 4.0);
+    let title = crate::text::fonts().wrap(&g.title, TITLE_FONT, true, (w - (left - right).abs() - 12.0).max(20.0));
+    let title_height = crate::text::layout(&title, TITLE_FONT, true).height;
+    let has_title = !title.trim().is_empty();
+    let top = (if has_title { 6.0 + title_height + 8.0 } else { 10.0f64 }).max(min[1]);
+    let bottom = (out + TICK_GAP + tick_height + 5.0 + axis_height + 5.0)
         .round()
         .max(min[3]);
     let pw = (w - left - right).max(20.0);
@@ -901,16 +932,22 @@ fn build_layer_full<'a>(
             ticks.push([x, top + len * fin, x, top - len * fout]);
         }
     };
+    let mut previous_right = f64::NEG_INFINITY;
     for t in &xa.ticks {
         let x = px(*t);
         if !inside_x(x) {
             continue;
         }
         x_tick(&mut ticks, x, MAJOR_TICK);
+        let half = text_width(&x_label.text(*t), TICK_FONT) / 2.0;
+        if x - half < previous_right + 4.0 {
+            continue;
+        }
+        previous_right = x + half;
         push(
             text(
                 x,
-                top + ph + out + TICK_GAP + TICK_FONT / 2.0,
+                top + ph + out + TICK_GAP + tick_height / 2.0,
                 x_label.text(*t),
                 TICK_FONT,
                 Anchor::Middle,
@@ -961,9 +998,9 @@ fn build_layer_full<'a>(
     push(
         text(
             left + pw / 2.0,
-            top + ph + out + TICK_GAP + TICK_FONT + 5.0 + LABEL_FONT / 2.0,
-            g.x_axis_title_in(book, others),
-            LABEL_FONT,
+            top + ph + out + TICK_GAP + tick_height + 5.0 + axis_height / 2.0,
+            x_title.clone(),
+            crate::text::fit_size(&x_title, LABEL_FONT, false, pw),
             Anchor::Middle,
         ),
         false,
@@ -1010,8 +1047,8 @@ fn build_layer_full<'a>(
             Prim::Text {
                 x: left + pw + out + TICK_GAP + ylab2_w + 5.0 + LABEL_FONT / 2.0,
                 y: top + ph / 2.0,
-                text: g.y2_axis_title_in(book, others),
-                size: LABEL_FONT,
+                text: y2_title.clone(),
+                size: crate::text::fit_size(&y2_title, LABEL_FONT, false, ph),
                 anchor: Anchor::Middle,
                 vertical: true,
                 bold: false,
@@ -1024,8 +1061,8 @@ fn build_layer_full<'a>(
         Prim::Text {
             x: left - out - TICK_GAP - ylab_w - 5.0 - LABEL_FONT / 2.0,
             y: top + ph / 2.0,
-            text: g.y_axis_title_in(book, others),
-            size: LABEL_FONT,
+            text: y_title.clone(),
+            size: crate::text::fit_size(&y_title, LABEL_FONT, false, ph),
             anchor: Anchor::Middle,
             vertical: true,
             bold: false,
@@ -1037,8 +1074,8 @@ fn build_layer_full<'a>(
         push(
             Prim::Text {
                 x: left + pw / 2.0,
-                y: 6.0 + TITLE_FONT / 2.0,
-                text: g.title.clone(),
+                y: 6.0 + title_height / 2.0,
+                text: title,
                 size: TITLE_FONT,
                 anchor: Anchor::Middle,
                 vertical: false,
@@ -1051,16 +1088,17 @@ fn build_layer_full<'a>(
 
     // 图例：坐标框内，白底无边框
     if g.legend && !plots.is_empty() {
-        let lh = LEGEND_FONT + 4.0;
         let sw = 18.0;
-        let lw = plots
+        let names: Vec<_> = plots
             .iter()
-            .map(|p| &p.series)
-            .map(|s| text_width(&s.name, LEGEND_FONT))
-            .fold(0.0, f64::max)
-            + sw
-            + 16.0;
-        let lhh = plots.len() as f64 * lh + 4.0;
+            .map(|p| crate::text::fonts().wrap(&p.series.name, LEGEND_FONT, false, (pw - sw - 16.0).max(20.0)))
+            .collect();
+        let layouts: Vec<_> = names
+            .iter()
+            .map(|name| crate::text::layout(name, LEGEND_FONT, false))
+            .collect();
+        let lw = layouts.iter().map(|l| l.width).fold(0.0, f64::max) + sw + 16.0;
+        let lhh = layouts.iter().map(|l| l.height + 4.0).sum::<f64>() + 4.0;
         // 自动放在四个角里数据最少的一个，尽量不遮挡曲线
         let pad_x = MAJOR_TICK + 6.0;
         let pad_y = MAJOR_TICK + 4.0;
@@ -1093,9 +1131,12 @@ fn build_layer_full<'a>(
             fill: Some((PAPER, 1.0)),
             stroke: None,
         });
-        for (i, (s, st)) in plots.iter().map(|p| (&p.series, &p.style)).enumerate() {
+        let mut row_y = ly + 2.0;
+        for (i, st) in plots.iter().map(|p| &p.style).enumerate() {
             let color = st.color.rgb();
-            let cy = ly + 2.0 + lh * i as f64 + lh / 2.0;
+            let row_height = layouts[i].height + 4.0;
+            let cy = row_y + row_height / 2.0;
+            row_y += row_height;
             let x0 = lx + 4.0;
             if st.kind.is_bar() || st.kind == PlotType::Area {
                 push(Prim::Rect {
@@ -1130,7 +1171,7 @@ fn build_layer_full<'a>(
                     });
                 }
             }
-            push(text(x0 + sw + 4.0, cy, s.name.clone(), LEGEND_FONT, Anchor::Start));
+            push(text(x0 + sw + 4.0, cy, names[i].clone(), LEGEND_FONT, Anchor::Start));
         }
     }
 

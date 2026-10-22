@@ -31,6 +31,7 @@ pub mod spline;
 mod stat;
 pub mod stats;
 pub mod svg;
+pub mod text;
 pub mod ticks;
 #[cfg(feature = "xlsx")]
 pub mod xls;
