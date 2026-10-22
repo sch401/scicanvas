@@ -459,12 +459,11 @@ impl Project {
                 let bid = g.book_id.ok_or("这个图形没有关联数据")?;
                 self.book(bid).ok_or("这个图形没有关联数据")?;
                 let items: Vec<Item> = g
-                    .y_keys
-                    .iter()
-                    .filter_map(|k| {
-                        let source = crate::plotspec::DataRef::from_key(g.book_id, k)?;
-                        let source_book = self.book(source.book)?;
-                        let curve = g.curve_mapping(k, Some(source_book))?;
+                    .plots_in(&|id| self.book(id))
+                    .into_iter()
+                    .filter_map(|plot| {
+                        let curve = plot.mapping;
+                        let source_book = self.book(curve.y.book)?;
                         if curve.line_only
                             || source_book
                                 .column(&curve.y.col)

@@ -5,7 +5,7 @@
 //! 无边框图例自动避开数据；按 96 单位 = 1 英寸，常用页宽 89 mm 时文字为 6–7 pt。
 
 use crate::coord::{Cartesian, Coord};
-use crate::model::{series_styles, Book, Graph, PlotType, Symbol};
+use crate::model::{Book, Graph, PlotType, Symbol};
 use crate::page::Layer;
 use crate::plotspec::BookLookup;
 use crate::ticks::{axis, Axis, TickLabel};
@@ -104,8 +104,7 @@ pub struct Scene {
     pub h: f64,
     /// 坐标框 [左, 上, 宽, 高]。
     pub plot: [f64; 4],
-    pub xa: Axis,
-    pub ya: Axis,
+    pub axes: crate::coord::AxisSet,
     pub items: Vec<Item>,
     pub layer_plots: Vec<[f64; 4]>,
     pub layers: Vec<LayerView>,
@@ -133,43 +132,49 @@ pub fn nearest_point<'a>(
     y: f64,
     radius: f64,
 ) -> Option<PointHit> {
-    let (_, series) = layer.series_in(books(layer.book_id?)?, books);
+    let (_, plots) = layer.prepared_plots_in(books(layer.book_id?)?, books);
     let horizontal = layer.plot_type == PlotType::HorizontalBar;
     let identity = layer.transform == crate::plotspec::Transform::Identity;
-    let map = Cartesian {
-        x: &view.xa,
-        y: &view.ya,
-        rect: view.plot,
-    };
-    let right_axis = view.ya2.clone().unwrap_or_else(|| view.ya.clone());
-    let map_right = Cartesian {
-        x: &view.xa,
-        y: &right_axis,
-        rect: view.plot,
-    };
+    let categories: Vec<_> = plots
+        .iter()
+        .filter(|p| !p.series.line_only)
+        .flat_map(|p| p.series.points.iter().map(|point| point[usize::from(horizontal)]))
+        .collect();
+    let spacing = min_spacing(&categories);
     let mut best: Option<(f64, PointHit)> = None;
-    for s in series.iter().filter(|s| !s.line_only) {
-        let right = view.ya2.is_some() && layer.curves.get(&s.key).is_some_and(|c| c.right_axis);
-        let map = if right { &map_right } else { &map };
-        for (i, p) in s.points.iter().enumerate() {
-            let at = map.project(if horizontal { [p[1], p[0]] } else { *p });
+    for plot in plots.iter().filter(|p| !p.series.line_only) {
+        let s = &plot.series;
+        let map = view.axes.cartesian(view.plot, plot.style.y_axis);
+        let offset = if plot.style.kind.is_bar() {
+            crate::presets::recipe(plot.style.kind)
+                .position
+                .offset(spacing, plot.style.bar_index, plot.style.bar_count)
+        } else {
+            0.0
+        };
+        for (i, point) in s.points.iter().enumerate() {
+            let mut positioned = *point;
+            positioned[usize::from(horizontal)] += offset;
+            let at = map.project(positioned);
             if !at.iter().all(|v| v.is_finite()) || !view.contains(at[0], at[1]) {
                 continue;
             }
             let d = (at[0] - x).hypot(at[1] - y);
             if d <= radius && best.as_ref().is_none_or(|(b, _)| d < *b) {
-                let value = if layer.plot_type.is_stacked() {
-                    p[1] - s.bases.get(i).copied().unwrap_or(0.0)
+                let value = if horizontal {
+                    point[0]
+                } else if layer.plot_type.is_stacked() {
+                    point[1] - s.bases[i]
                 } else {
-                    p[1]
+                    point[1]
                 };
                 best = Some((
                     d,
                     PointHit {
                         series: s.name.clone(),
-                        key: s.key.clone(),
-                        row: identity.then(|| s.rows.get(i).copied()).flatten(),
-                        x: p[0],
+                        key: plot.plot.key.clone(),
+                        row: identity.then_some(s.rows[i]),
+                        x: point[usize::from(horizontal)],
                         y: value,
                         at,
                     },
@@ -185,10 +190,7 @@ pub fn nearest_point<'a>(
 pub struct LayerView {
     pub bounds: [f64; 4],
     pub plot: [f64; 4],
-    pub xa: Axis,
-    pub ya: Axis,
-    /// 右侧 Y 轴（有曲线放在右轴时）。
-    pub ya2: Option<Axis>,
+    pub axes: crate::coord::AxisSet,
 }
 impl LayerView {
     pub fn contains(&self, x: f64, y: f64) -> bool {
@@ -197,8 +199,8 @@ impl LayerView {
     }
     pub fn data_at(&self, x: f64, y: f64) -> (f64, f64) {
         let [x, y] = Cartesian {
-            x: &self.xa,
-            y: &self.ya,
+            x: &self.axes.x,
+            y: &self.axes.left_y,
             rect: self.plot,
         }
         .unproject([x, y]);
@@ -206,8 +208,8 @@ impl LayerView {
     }
     pub fn view(&self) -> View {
         View {
-            x: (self.xa.lo, self.xa.hi),
-            y: (self.ya.lo, self.ya.hi),
+            x: (self.axes.x.lo, self.axes.x.hi),
+            y: (self.axes.left_y.lo, self.axes.left_y.hi),
         }
     }
 }
@@ -221,11 +223,11 @@ impl Scene {
         })
     }
     pub fn px(&self, v: f64) -> f64 {
-        self.coord().project([v, self.ya.lo])[0]
+        self.coord().project([v, self.axes.left_y.lo])[0]
     }
 
     pub fn py(&self, v: f64) -> f64 {
-        self.coord().project([self.xa.lo, v])[1]
+        self.coord().project([self.axes.x.lo, v])[1]
     }
 
     /// 像素坐标换算回数据坐标。
@@ -235,18 +237,14 @@ impl Scene {
     }
 
     fn coord(&self) -> Cartesian<'_> {
-        Cartesian {
-            x: &self.xa,
-            y: &self.ya,
-            rect: self.plot,
-        }
+        self.axes.cartesian(self.plot, crate::coord::YAxis::Left)
     }
 
     /// 当前坐标范围，作为缩放平移的起点。
     pub fn view(&self) -> View {
         View {
-            x: (self.xa.lo, self.xa.hi),
-            y: (self.ya.lo, self.ya.hi),
+            x: (self.axes.x.lo, self.axes.x.hi),
+            y: (self.axes.left_y.lo, self.axes.left_y.hi),
         }
     }
 
@@ -556,99 +554,61 @@ fn build_layer_full<'a>(
 ) -> Scene {
     let recipe = crate::presets::recipe(g.plot_type);
     let horizontal = recipe.orientation == crate::coord::Orientation::Horizontal;
-    let (x_col, mut series) = match book {
-        Some(b) => g.series_in(b, others),
+    let (x_col, mut plots) = match book {
+        Some(b) => g.prepared_plots_in(b, others),
         None => (None, Vec::new()),
     };
     let x_date = !horizontal && !g.x_log && x_col.is_some_and(|c| c.data.kind() == crate::DataKind::DateTime);
     let categories = x_col.and_then(|c| c.data.category_levels());
-    recipe.orientation.apply(&mut series);
-    crate::stat::prepare(g, &mut series);
-    // 样式：默认按图层递增，再用逐曲线设置覆盖（图型、颜色、符号、线宽、符号大小、右侧 Y 轴）
-    let mut styles = series_styles(&series, g.plot_type);
-    if g.color_map != crate::colormap::ColorMap::Origin {
-        let n = series.iter().filter(|s| !s.line_only).count();
-        for style in &mut styles {
-            if let crate::SeriesColor::Palette(i) = style.color {
-                style.color = crate::SeriesColor::Rgb(g.color_map.sample(i as f64 / n.saturating_sub(1).max(1) as f64));
-            }
+    for plot in &mut plots {
+        if plot.style.kind.is_spline() && !plot.series.line_only {
+            plot.paths = crate::stat::spline_paths(&plot.series);
         }
     }
-    for (s, st) in series.iter().zip(&mut styles) {
-        st.line_width = g.line_width;
-        st.symbol_size = g.symbol_size;
-        let Some(c) = g.curves.get(&s.key).filter(|_| !s.line_only) else {
-            continue;
-        };
-        if let Some(kind) = c.kind.filter(|_| !g.plot_type.is_stacked() && !horizontal) {
-            st.kind = kind;
-        }
-        if let Some([r, gg, b]) = c.color {
-            st.color = crate::SeriesColor::Rgb((r, gg, b));
-        }
-        if let Some(sym) = c.symbol {
-            st.symbol = sym;
-        }
-        if let Some(w) = c.line_width {
-            st.line_width = w;
-        }
-        if let Some(z) = c.symbol_size {
-            st.symbol_size = z;
-        }
-        st.right = c.right_axis && !horizontal;
-    }
-    // 图型覆盖后重新给柱子分组
-    if g.curves.values().any(|c| c.kind.is_some()) {
-        let bars: Vec<usize> = (0..series.len())
-            .filter(|&i| styles[i].kind.is_bar() && !series[i].line_only)
-            .collect();
-        for (n, &i) in bars.iter().enumerate() {
-            styles[i].bar_index = n;
-            styles[i].bar_count = bars.len();
-        }
-    }
-    let mut all_x: Vec<f64> = series.iter().flat_map(|s| s.points.iter().map(|p| p[0])).collect();
+    let mut all_x: Vec<f64> = plots
+        .iter()
+        .map(|p| &p.series)
+        .flat_map(|s| s.points.iter().map(|p| p[0]))
+        .collect();
     // 右侧 Y 轴的曲线单独定范围
-    let mut all_y: Vec<f64> = series
+    let mut all_y: Vec<f64> = plots
         .iter()
-        .zip(&styles)
-        .filter(|(_, st)| !st.right)
+        .map(|p| (&p.series, &p.style))
+        .filter(|(_, st)| st.y_axis == crate::coord::YAxis::Left)
         .flat_map(|(s, _)| s.points.iter().map(|p| p[1]))
         .collect();
-    let mut all_y2: Vec<f64> = series
+    let mut all_y2: Vec<f64> = plots
         .iter()
-        .zip(&styles)
-        .filter(|(_, st)| st.right)
+        .map(|p| (&p.series, &p.style))
+        .filter(|(_, st)| st.y_axis == crate::coord::YAxis::Right)
         .flat_map(|(s, _)| s.points.iter().map(|p| p[1]))
         .collect();
-    let splines: Vec<_> = series
-        .iter()
-        .zip(&styles)
-        .map(|(s, st)| {
-            if crate::presets::recipe(st.kind).path == crate::mark::Path::Natural && !s.line_only {
-                crate::stat::spline_paths(s)
-            } else {
-                Vec::new()
-            }
-        })
-        .collect();
-    for (paths, st) in splines.iter().zip(&styles) {
-        let target = if st.right { &mut all_y2 } else { &mut all_y };
+    for (paths, st) in plots.iter().map(|p| (&p.paths, &p.style)) {
+        let target = if st.y_axis == crate::coord::YAxis::Right {
+            &mut all_y2
+        } else {
+            &mut all_y
+        };
         target.extend(paths.iter().flatten().map(|p| p[1]).filter(|v| !g.y_log || *v > 0.0));
     }
     if g.plot_type.is_bar() && recipe.position != crate::position::Position::Dodge && !horizontal {
         all_y.extend(
-            series
+            plots
                 .iter()
+                .map(|p| &p.series)
                 .filter(|s| !s.line_only)
                 .flat_map(|s| s.bases.iter().copied())
                 .filter(|v| !g.y_log || *v > 0.0),
         );
     }
     if g.error_bars.visible {
-        for (s, st) in series.iter().zip(&styles) {
+        for (s, st) in plots.iter().map(|p| (&p.series, &p.style)) {
             for (point, errors) in s.points.iter().zip(&s.errors) {
-                let ys = if st.right { &mut all_y2 } else { &mut all_y };
+                let ys = if st.y_axis == crate::coord::YAxis::Right {
+                    &mut all_y2
+                } else {
+                    &mut all_y
+                };
                 for (dim, values, log) in [(0, &mut all_x, g.x_log), (1, ys, g.y_log)] {
                     if let Some(error) = errors[dim] {
                         values.extend(
@@ -661,10 +621,11 @@ fn build_layer_full<'a>(
             }
         }
     }
-    let is_bar = g.plot_type.is_bar() || styles.iter().any(|st| st.kind.is_bar());
+    let is_bar = g.plot_type.is_bar() || plots.iter().map(|p| &p.style).any(|st| st.kind.is_bar());
     // 柱宽只按数据曲线的 X 间距算（拟合曲线是 200 个密集点）
-    let data_x: Vec<f64> = series
+    let data_x: Vec<f64> = plots
         .iter()
+        .map(|p| &p.series)
         .filter(|s| !s.line_only)
         .flat_map(|s| s.points.iter().map(|p| p[usize::from(horizontal)]))
         .collect();
@@ -701,10 +662,10 @@ fn build_layer_full<'a>(
             let (mut xa, mut ya) = (xa, ya);
             // 带符号的曲线：数据点正好落在自动范围的端点时，这一端向外留 4% 边距，
             // 免得符号压在坐标轴上；刻度保持不变，手动范围和对数轴不动
-            let marks: Vec<[f64; 2]> = series
+            let marks: Vec<[f64; 2]> = plots
                 .iter()
-                .zip(&styles)
-                .filter(|(s, st)| !s.line_only && st.kind.has_symbol() && !st.right)
+                .map(|p| (&p.series, &p.style))
+                .filter(|(s, st)| !s.line_only && st.kind.has_symbol() && st.y_axis == crate::coord::YAxis::Left)
                 .flat_map(|(s, _)| s.points.iter().copied())
                 .collect();
             if !marks.is_empty() {
@@ -770,10 +731,10 @@ fn build_layer_full<'a>(
     // 右侧 Y 轴：自动范围；带符号的点落在端点时同样留 4%
     let ya2 = (!all_y2.is_empty()).then(|| {
         let mut a = axis(&all_y2, true, 0.0, 0.0, g.y_log, false);
-        let marks: Vec<f64> = series
+        let marks: Vec<f64> = plots
             .iter()
-            .zip(&styles)
-            .filter(|(s, st)| !s.line_only && st.kind.has_symbol() && st.right)
+            .map(|p| (&p.series, &p.style))
+            .filter(|(s, st)| !s.line_only && st.kind.has_symbol() && st.y_axis == crate::coord::YAxis::Right)
             .flat_map(|(s, _)| s.points.iter().map(|p| p[1]))
             .collect();
         pad_ends(&mut a, marks.into_iter());
@@ -810,20 +771,19 @@ fn build_layer_full<'a>(
         .max(min[3]);
     let pw = (w - left - right).max(20.0);
     let ph = (h - top - bottom).max(20.0);
-    let coord = Cartesian {
-        x: &xa,
-        y: &ya,
-        rect: [left, top, pw, ph],
+    let axes = crate::coord::AxisSet {
+        x: xa,
+        left_y: ya,
+        right_y: ya2,
     };
+    let xa = &axes.x;
+    let ya = &axes.left_y;
+    let ya2 = &axes.right_y;
+    let coord = axes.cartesian([left, top, pw, ph], crate::coord::YAxis::Left);
     let px = |v: f64| coord.project([v, ya.lo])[0];
     let py = |v: f64| coord.project([xa.lo, v])[1];
     // 右侧 Y 轴的映射；曲线按自己的轴选用
-    let ya2_or = ya2.clone().unwrap_or_else(|| ya.clone());
-    let coord2 = Cartesian {
-        x: &xa,
-        y: &ya2_or,
-        rect: [left, top, pw, ph],
-    };
+    let coord2 = axes.cartesian([left, top, pw, ph], crate::coord::YAxis::Right);
     let py2 = |v: f64| coord2.project([xa.lo, v])[1];
     let inside_x = |x: f64| x >= left - 0.5 && x <= left + pw + 0.5;
     let inside_y = |y: f64| y >= top - 0.5 && y <= top + ph + 0.5;
@@ -905,14 +865,12 @@ fn build_layer_full<'a>(
             layer: g,
             book,
             others,
-            xa: &xa,
-            ya: &ya,
-            ya2: &ya2_or,
+            axes: &axes,
             rect: [left, top, pw, ph],
             horizontal,
             dx,
         };
-        crate::mark::draw(&context, &series, &styles, &splines, &mut items);
+        crate::mark::draw(&context, &plots, &mut items);
     }
     let mut push = |prim: Prim, clip: bool| {
         items.push(Item {
@@ -1092,16 +1050,17 @@ fn build_layer_full<'a>(
     }
 
     // 图例：坐标框内，白底无边框
-    if g.legend && !series.is_empty() {
+    if g.legend && !plots.is_empty() {
         let lh = LEGEND_FONT + 4.0;
         let sw = 18.0;
-        let lw = series
+        let lw = plots
             .iter()
+            .map(|p| &p.series)
             .map(|s| text_width(&s.name, LEGEND_FONT))
             .fold(0.0, f64::max)
             + sw
             + 16.0;
-        let lhh = series.len() as f64 * lh + 4.0;
+        let lhh = plots.len() as f64 * lh + 4.0;
         // 自动放在四个角里数据最少的一个，尽量不遮挡曲线
         let pad_x = MAJOR_TICK + 6.0;
         let pad_y = MAJOR_TICK + 4.0;
@@ -1134,7 +1093,7 @@ fn build_layer_full<'a>(
             fill: Some((PAPER, 1.0)),
             stroke: None,
         });
-        for (i, (s, st)) in series.iter().zip(&styles).enumerate() {
+        for (i, (s, st)) in plots.iter().map(|p| (&p.series, &p.style)).enumerate() {
             let color = st.color.rgb();
             let cy = ly + 2.0 + lh * i as f64 + lh / 2.0;
             let x0 = lx + 4.0;
@@ -1182,12 +1141,9 @@ fn build_layer_full<'a>(
         layers: vec![LayerView {
             bounds: [0.0, 0.0, w, h],
             plot: [left, top, pw, ph],
-            xa: xa.clone(),
-            ya: ya.clone(),
-            ya2: ya2.clone(),
+            axes: axes.clone(),
         }],
-        xa,
-        ya,
+        axes,
         items,
         layer_plots: vec![[left, top, pw, ph]],
     }

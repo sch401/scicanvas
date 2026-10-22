@@ -12,14 +12,14 @@ pub(super) fn draw(
     let recipe = crate::presets::recipe(style.kind);
     let color = style.color.rgb();
     if recipe.marks.contains(&Kind::Drop) {
-        let axis = ctx.y_axis(style.right);
+        let axis = ctx.y_axis(style.y_axis);
         let base = ctx.py(
             if axis.log {
                 axis.lo
             } else {
                 0.0f64.clamp(axis.lo, axis.hi)
             },
-            style.right,
+            style.y_axis,
         );
         ctx.push(
             items,
@@ -27,7 +27,7 @@ pub(super) fn draw(
                 segs: series
                     .points
                     .iter()
-                    .map(|point| [ctx.px(point[0]), base, ctx.px(point[0]), ctx.py(point[1], style.right)])
+                    .map(|point| [ctx.px(point[0]), base, ctx.px(point[0]), ctx.py(point[1], style.y_axis)])
                     .collect(),
                 color,
                 width: f64::from(style.line_width),
@@ -46,7 +46,7 @@ pub(super) fn draw(
                         Prim::Polyline {
                             pts: run
                                 .iter()
-                                .map(|point| [ctx.px(point[0]), ctx.py(point[1], style.right)])
+                                .map(|point| [ctx.px(point[0]), ctx.py(point[1], style.y_axis)])
                                 .collect(),
                             color,
                             width: f64::from(style.line_width),
@@ -63,15 +63,15 @@ pub(super) fn draw(
         {
             let run = &series.points[range];
             let points = if matches!(recipe.path, Path::StepHorizontal | Path::StepVertical) {
-                let mut points = vec![[ctx.px(run[0][0]), ctx.py(run[0][1], style.right)]];
+                let mut points = vec![[ctx.px(run[0][0]), ctx.py(run[0][1], style.y_axis)]];
                 for pair in run.windows(2) {
                     let bend = if recipe.path == Path::StepHorizontal {
                         [pair[1][0], pair[0][1]]
                     } else {
                         [pair[0][0], pair[1][1]]
                     };
-                    points.push([ctx.px(bend[0]), ctx.py(bend[1], style.right)]);
-                    points.push([ctx.px(pair[1][0]), ctx.py(pair[1][1], style.right)]);
+                    points.push([ctx.px(bend[0]), ctx.py(bend[1], style.y_axis)]);
+                    points.push([ctx.px(pair[1][0]), ctx.py(pair[1][1], style.y_axis)]);
                 }
                 points
             } else {
@@ -83,7 +83,7 @@ pub(super) fn draw(
                 decimate_line(
                     curve
                         .iter()
-                        .map(|point| [ctx.px(point[0]), ctx.py(point[1], style.right)])
+                        .map(|point| [ctx.px(point[0]), ctx.py(point[1], style.y_axis)])
                         .collect(),
                     ctx.rect[2],
                 )
@@ -104,7 +104,7 @@ pub(super) fn draw(
             series
                 .points
                 .iter()
-                .map(|point| [ctx.px(point[0]), ctx.py(point[1], style.right)])
+                .map(|point| [ctx.px(point[0]), ctx.py(point[1], style.y_axis)])
                 .filter(|point| ctx.inside_x(point[0]) && ctx.inside_y(point[1]))
                 .collect(),
             ctx.rect[2],

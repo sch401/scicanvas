@@ -50,7 +50,7 @@ fn signed_stacks_keep_missing_rows_aligned_and_expand_the_axis() {
     assert_eq!(s[1].points, [[1.0, 7.0], [2.0, 7.0], [3.0, -7.0], [4.0, 0.0]]);
     assert_eq!(s[2].bases, [0.0; 4]);
     let sc = scene::layout_page(p.graph(id).unwrap(), &p, &[]);
-    assert!(sc.ya.lo <= -7.0 && sc.ya.hi >= 7.0);
+    assert!(sc.axes.left_y.lo <= -7.0 && sc.axes.left_y.hi >= 7.0);
     let rects = rectangles(&sc);
     assert_eq!(rects.len(), 11);
     assert_eq!(rects[0][0], rects[3][0]);
@@ -81,7 +81,7 @@ fn percentages_normalize_each_sign_and_handle_zero_and_extreme_scales() {
     assert!((s[0].points[3][1] - 25.0).abs() < 1e-10);
     assert_eq!(s[1].points[4][1], 100.0);
     let sc = scene::layout_page(p.graph(id).unwrap(), &p, &[]);
-    assert_eq!((sc.ya.lo, sc.ya.hi), (-100.0, 100.0));
+    assert_eq!((sc.axes.left_y.lo, sc.axes.left_y.hi), (-100.0, 100.0));
     assert!(svg::render_page(p.graph(id).unwrap(), &p).contains("百分比 (%)"));
 }
 
@@ -103,7 +103,7 @@ fn floating_columns_pair_by_key_and_skip_incomplete_ranges() {
     assert_eq!(s[0].points, [[1.0, 20.0], [3.0, 35.0]]);
     assert_eq!(s[0].bases, [10.0, 40.0]);
     let sc = scene::layout_page(p.graph(id).unwrap(), &p, &[]);
-    assert!(sc.ya.lo > 0.0 && sc.ya.lo <= 10.0 && sc.ya.hi >= 70.0);
+    assert!(sc.axes.left_y.lo > 0.0 && sc.axes.left_y.lo <= 10.0 && sc.axes.left_y.hi >= 70.0);
     assert_eq!(rectangles(&sc).len(), 6);
     let before = series(&p, id);
     p.book_mut(1).unwrap().insert_column(2, Role::Y);

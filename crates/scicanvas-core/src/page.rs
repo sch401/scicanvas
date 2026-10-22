@@ -444,7 +444,108 @@ impl std::ops::DerefMut for Layer {
         &mut self.spec
     }
 }
+/// Prepared data, effective style and path stay together throughout rendering.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PreparedPlot {
+    pub plot: crate::plotspec::Plot,
+    pub series: crate::Series,
+    pub style: crate::SeriesStyle,
+    pub paths: Vec<Vec<[f64; 2]>>,
+}
+
 impl Layer {
+    pub fn plot_in(&self, key: &str, books: crate::plotspec::BookLookup<'_, '_>) -> Option<crate::plotspec::Plot> {
+        let mut plot = self.spec.plot_in(key, books)?;
+        plot.style = self.curves.get(key).cloned();
+        Some(plot)
+    }
+    pub fn plots_in(&self, books: crate::plotspec::BookLookup<'_, '_>) -> Vec<crate::plotspec::Plot> {
+        self.y_keys.iter().filter_map(|key| self.plot_in(key, books)).collect()
+    }
+
+    pub fn prepared_plots_in<'a>(
+        &self,
+        book: &'a Book,
+        others: crate::plotspec::BookLookup<'a, '_>,
+    ) -> (Option<&'a crate::Column>, Vec<PreparedPlot>) {
+        let g = self;
+        let plots = self.plots_in(&|id| if id == book.id { Some(book) } else { others(id) });
+        let (xcol, mut series) = self.spec.series_from_plots(book, others, &plots);
+        let recipe = crate::presets::recipe(self.plot_type);
+        let horizontal = recipe.orientation == crate::coord::Orientation::Horizontal;
+        recipe.orientation.apply(&mut series);
+        crate::stat::prepare(self, &mut series);
+        // 样式：默认按图层递增，再用逐曲线设置覆盖（图型、颜色、符号、线宽、符号大小、右侧 Y 轴）
+        let mut styles = crate::model::series_styles(&series, g.plot_type);
+        if g.color_map != crate::colormap::ColorMap::Origin {
+            let n = series.iter().filter(|s| !s.line_only).count();
+            for style in &mut styles {
+                if let crate::SeriesColor::Palette(i) = style.color {
+                    style.color =
+                        crate::SeriesColor::Rgb(g.color_map.sample(i as f64 / n.saturating_sub(1).max(1) as f64));
+                }
+            }
+        }
+        let mut descriptions = plots.into_iter();
+        let mut prepared: Vec<PreparedPlot> = series
+            .into_iter()
+            .zip(styles)
+            .map(|(series, mut style)| {
+                let plot = descriptions
+                    .find(|p| p.key == series.key)
+                    .expect("sampled curve has a description");
+                style.line_width = self.line_width;
+                style.symbol_size = self.symbol_size;
+                if let Some(c) = &plot.style {
+                    // Derived lines retain their line/color rules, but must follow their assigned Y axis.
+                    style.y_axis = if c.right_axis && !horizontal {
+                        crate::coord::YAxis::Right
+                    } else {
+                        crate::coord::YAxis::Left
+                    };
+                    if !series.line_only {
+                        if let Some(kind) = c.kind.filter(|_| !self.plot_type.is_stacked() && !horizontal) {
+                            style.kind = kind;
+                        }
+                        if let Some([r, g, b]) = c.color {
+                            style.color = crate::SeriesColor::Rgb((r, g, b));
+                        }
+                        if let Some(symbol) = c.symbol {
+                            style.symbol = symbol;
+                        }
+                        if let Some(width) = c.line_width {
+                            style.line_width = width;
+                        }
+                        if let Some(size) = c.symbol_size {
+                            style.symbol_size = size;
+                        }
+                    }
+                }
+                PreparedPlot {
+                    plot,
+                    series,
+                    style,
+                    paths: Vec::new(),
+                }
+            })
+            .collect();
+        if self.curves.values().any(|c| c.kind.is_some()) {
+            let count = prepared
+                .iter()
+                .filter(|p| p.style.kind.is_bar() && !p.series.line_only)
+                .count();
+            for (index, p) in prepared
+                .iter_mut()
+                .filter(|p| p.style.kind.is_bar() && !p.series.line_only)
+                .enumerate()
+            {
+                p.style.bar_index = index;
+                p.style.bar_count = count;
+            }
+        }
+        (xcol, prepared)
+    }
+
     /// 工作表快捷入口和图层内容草稿共用的添加逻辑。
     pub fn add_book_curves(&mut self, book: &Book, keys: &[String], main_alive: bool) -> Result<usize, String> {
         let mut seen = std::collections::BTreeSet::new();

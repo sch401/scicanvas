@@ -46,8 +46,8 @@ fn horizontal_groups_signed_values_titles_and_physical_coordinates() {
     let (p, id) = project(PlotType::HorizontalBar, &["1", "2"], &[&["10", "-5"], &["20", "5"]]);
     let g = p.graph(id).unwrap();
     let sc = scene::layout_page(g, &p, &[]);
-    assert!(sc.xa.lo <= -5.0 && sc.xa.hi >= 20.0);
-    assert!(sc.ya.lo <= 0.65 && sc.ya.hi >= 2.35);
+    assert!(sc.axes.x.lo <= -5.0 && sc.axes.x.hi >= 20.0);
+    assert!(sc.axes.left_y.lo <= 0.65 && sc.axes.left_y.hi >= 2.35);
     assert_eq!(g.first_layer().x_axis_title(p.book(1)), "测量值 (mV)");
     assert_eq!(g.first_layer().y_axis_title(p.book(1)), "位置 (s)");
     let rects: Vec<_> = sc
@@ -135,7 +135,7 @@ fn area_mesh_has_the_correct_positive_negative_and_crossing_integrals() {
     ] {
         let (p, id) = project(PlotType::Area, &["0", "1", "2"], &[values]);
         let sc = scene::layout_page(p.graph(id).unwrap(), &p, &[]);
-        assert!(sc.ya.lo <= 0.0 && sc.ya.hi >= 0.0);
+        assert!(sc.axes.left_y.lo <= 0.0 && sc.axes.left_y.hi >= 0.0);
         let area: f64 = triangles(&sc)
             .iter()
             .flat_map(|pts| pts.as_chunks::<3>().0)
@@ -235,7 +235,10 @@ fn manual_log_views_use_physical_axes_and_have_finite_geometry() {
             y: (1.0, 100.0),
         };
         let sc = scene::layout_page(p.graph(id).unwrap(), &p, &[Some(view)]);
-        assert_eq!((sc.xa.lo, sc.xa.hi, sc.ya.lo, sc.ya.hi), (1.0, 100.0, 1.0, 100.0));
+        assert_eq!(
+            (sc.axes.x.lo, sc.axes.x.hi, sc.axes.left_y.lo, sc.axes.left_y.hi),
+            (1.0, 100.0, 1.0, 100.0)
+        );
         let output = svg::render_page(p.graph(id).unwrap(), &p);
         assert!(!output.contains("NaN") && !output.contains("inf"));
         for pts in triangles(&sc) {

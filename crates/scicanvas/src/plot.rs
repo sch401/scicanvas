@@ -596,8 +596,8 @@ mod tests {
         let s = &series[0];
         let view = &sc.layers[1];
         let map = scicanvas_core::coord::Cartesian {
-            x: &view.xa,
-            y: &view.ya,
+            x: &view.axes.x,
+            y: &view.axes.left_y,
             rect: view.plot,
         };
         use scicanvas_core::coord::Coord;

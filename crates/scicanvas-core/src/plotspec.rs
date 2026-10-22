@@ -62,6 +62,16 @@ impl CurveMapping {
     }
 }
 
+/// One resolved curve description shared by rendering, analysis and persistence.
+/// The editable PlotSpec is converted at the operation boundary, so there is no second mutable copy.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Plot {
+    pub key: String,
+    pub mapping: CurveMapping,
+    pub style: Option<crate::page::CurveStyle>,
+    pub x_override: bool,
+}
+
 /// 其他工作簿的列在曲线键里写成 `列标识@工作簿编号`；不带编号的是图层所绑工作簿的列。
 pub fn foreign_key(book_id: u64, col: &str) -> String {
     format!("{col}@{book_id}")
@@ -140,6 +150,19 @@ pub enum Transform {
     Mean,
 }
 impl PlotSpec {
+    pub fn plot_in(&self, key: &str, books: BookLookup<'_, '_>) -> Option<Plot> {
+        let source = DataRef::from_key(self.book_id, key)?;
+        Some(Plot {
+            key: key.to_string(),
+            mapping: self.curve_mapping(key, books(source.book))?,
+            style: None,
+            x_override: self.x_by_y.contains_key(key),
+        })
+    }
+    pub fn plots_in(&self, books: BookLookup<'_, '_>) -> Vec<Plot> {
+        self.y_keys.iter().filter_map(|key| self.plot_in(key, books)).collect()
+    }
+
     pub fn curve_mapping(&self, key: &str, book: Option<&Book>) -> Option<CurveMapping> {
         let y = DataRef::from_key(self.book_id, key)?;
         let local = self.book_id == Some(y.book);
@@ -400,15 +423,31 @@ impl PlotSpec {
     /// 取出 X 列和每条曲线的有效数据点；其他工作簿的曲线在 `others` 里查找，
     /// 用各自的 X 列（没有映射时用该表里它左侧最近的 X 列），行范围只作用于本表。
     pub fn series_in<'a>(&self, book: &'a Book, others: BookLookup<'a, '_>) -> (Option<&'a Column>, Vec<Series>) {
+        let plots = self.plots_in(&|id| if id == book.id { Some(book) } else { others(id) });
+        self.series_from_plots(book, others, &plots)
+    }
+
+    pub(crate) fn series_from_plots<'a>(
+        &self,
+        book: &'a Book,
+        others: BookLookup<'a, '_>,
+        plots: &[Plot],
+    ) -> (Option<&'a Column>, Vec<Series>) {
         let xcol = self.x_key.as_deref().and_then(|k| book.column(k));
         use crate::ColumnView;
-        let mixed = self
-            .y_keys
-            .iter()
-            .any(|k| split_key(k).1.is_some_and(|id| id != book.id));
+        let mixed = plots.iter().any(|p| p.mapping.y.book != book.id);
         let mut out = Vec::new();
-        for key in &self.y_keys {
-            let Some((cbook, c)) = self.resolve(book, others, key) else {
+        for plot in plots {
+            let key = &plot.key;
+            let mapping = &plot.mapping;
+            let Some(cbook) = (if mapping.y.book == book.id {
+                Some(book)
+            } else {
+                others(mapping.y.book)
+            }) else {
+                continue;
+            };
+            let Some(c) = cbook.column(&mapping.y.col) else {
                 continue;
             };
             if matches!(c.role, crate::Role::XError | crate::Role::YError) {
@@ -416,21 +455,20 @@ impl PlotSpec {
             }
             let foreign = cbook.id != book.id;
             let yv = c;
-            let base_values = if self.plot_type == PlotType::FloatingBar && !self.line_only.contains(key) {
-                let Some(base) = self
-                    .base_by_y
-                    .get(key)
-                    .filter(|k| *k != key)
-                    .and_then(|k| self.resolve(book, others, k))
-                    .filter(|(b, c)| b.id == cbook.id && !matches!(c.role, crate::Role::XError | crate::Role::YError))
+            let base_values = if self.plot_type == PlotType::FloatingBar && !mapping.line_only {
+                let Some(base) = mapping
+                    .base
+                    .as_ref()
+                    .filter(|base| base.book == cbook.id && base.col != mapping.y.col)
+                    .and_then(|base| cbook.column(&base.col))
+                    .filter(|c| !matches!(c.role, crate::Role::XError | crate::Role::YError))
                 else {
                     continue;
                 };
-                Some(base.1)
+                Some(base)
             } else {
                 None
             };
-            let mapping = self.curve_mapping(key, Some(cbook)).unwrap();
             let own_x = mapping
                 .x
                 .as_ref()
@@ -443,7 +481,7 @@ impl PlotSpec {
             };
             let mut pts = Vec::with_capacity(i1.saturating_sub(i0));
             let error_values = [crate::Role::XError, crate::Role::YError].map(|role| {
-                if self.line_only.contains(key) || c.derived_from.is_some() {
+                if mapping.line_only || c.derived_from.is_some() {
                     return None;
                 }
                 let find = |source: &str| {
@@ -503,7 +541,7 @@ impl PlotSpec {
                 errors,
                 rows,
                 bases,
-                line_only: self.line_only.contains(key),
+                line_only: mapping.line_only,
                 source: c
                     .derived_from
                     .as_ref()

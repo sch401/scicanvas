@@ -233,15 +233,12 @@ pub fn to_json(project: &Project) -> Result<String, String> {
                 continue;
             }
             let plots: Vec<StoredCurve> = layer
-                .y_keys
-                .iter()
-                .filter_map(|key| {
-                    let reference = crate::plotspec::DataRef::from_key(layer.book_id, key)?;
-                    Some(StoredCurve {
-                        mapping: layer.curve_mapping(key, project.book(reference.book))?,
-                        style: layer.curves.get(key).cloned(),
-                        x_override: layer.x_by_y.contains_key(key),
-                    })
+                .plots_in(&|id| project.book(id))
+                .into_iter()
+                .map(|plot| StoredCurve {
+                    mapping: plot.mapping,
+                    style: plot.style,
+                    x_override: plot.x_override,
                 })
                 .collect();
             wire["plots"] = serde_json::to_value(plots).map_err(|e| e.to_string())?;

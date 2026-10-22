@@ -636,7 +636,7 @@ pub struct SeriesStyle {
     pub line_width: f32,
     pub symbol_size: f32,
     /// 画在右侧 Y 轴上。
-    pub right: bool,
+    pub y_axis: crate::coord::YAxis,
 }
 
 /// 颜色和符号只在数据曲线之间递增，结果曲线不占顺序。
@@ -660,7 +660,7 @@ pub fn series_styles(series: &[Series], plot_type: PlotType) -> Vec<SeriesStyle>
                     bar_count,
                     line_width: 1.0,
                     symbol_size: 4.5,
-                    right: false,
+                    y_axis: crate::coord::YAxis::Left,
                 }
             } else {
                 let i = data_index;
@@ -674,7 +674,7 @@ pub fn series_styles(series: &[Series], plot_type: PlotType) -> Vec<SeriesStyle>
                     bar_count,
                     line_width: 1.0,
                     symbol_size: 4.5,
-                    right: false,
+                    y_axis: crate::coord::YAxis::Left,
                 }
             }
         })

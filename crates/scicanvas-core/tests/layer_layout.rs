@@ -184,16 +184,16 @@ fn grid_gaps_separate_panels_and_linked_axes_follow_their_target() {
     p.graphs[0].page.validate().unwrap();
     let sc = layout(&p, &[]);
     assert_eq!(
-        (sc.layers[1].xa.lo, sc.layers[1].xa.hi),
-        (sc.layers[0].xa.lo, sc.layers[0].xa.hi)
+        (sc.layers[1].axes.x.lo, sc.layers[1].axes.x.hi),
+        (sc.layers[0].axes.x.lo, sc.layers[0].axes.x.hi)
     );
-    assert_eq!(sc.layers[1].xa.ticks, sc.layers[0].xa.ticks);
+    assert_eq!(sc.layers[1].axes.x.ticks, sc.layers[0].axes.x.ticks);
     let zoom = scene::View {
         x: (2.0, 6.0),
-        y: (sc.layers[0].ya.lo, sc.layers[0].ya.hi),
+        y: (sc.layers[0].axes.left_y.lo, sc.layers[0].axes.left_y.hi),
     };
     let sc = layout(&p, &[Some(zoom), None]);
-    assert_eq!((sc.layers[1].xa.lo, sc.layers[1].xa.hi), (2.0, 6.0));
+    assert_eq!((sc.layers[1].axes.x.lo, sc.layers[1].axes.x.hi), (2.0, 6.0));
     // 联动到自身或不存在的图层：拒绝
     p.graphs[0].page.layers_mut()[1].link_x = Some(1);
     assert!(p.graphs[0].page.validate().is_err());

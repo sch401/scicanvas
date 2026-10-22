@@ -476,8 +476,8 @@ fn curves_from_another_workbook_use_their_own_x_and_rows() {
     let [x0, y0, w, h] = lv.plot;
     let at = |x: f64, y: f64| {
         (
-            x0 + (x - lv.xa.lo) / (lv.xa.hi - lv.xa.lo) * w,
-            y0 + h - (y - lv.ya.lo) / (lv.ya.hi - lv.ya.lo) * h,
+            x0 + (x - lv.axes.x.lo) / (lv.axes.x.hi - lv.axes.x.lo) * w,
+            y0 + h - (y - lv.axes.left_y.lo) / (lv.axes.left_y.hi - lv.axes.left_y.lo) * h,
         )
     };
     let (px, py) = at(12.0, 112.0);
@@ -555,4 +555,145 @@ fn mixed_layers_round_trip_through_the_project_file() {
     p.add_curves(gid, 0, b, &["B".into()]).unwrap();
     let text = scicanvas_core::project_file::to_json(&p).unwrap();
     assert_eq!(scicanvas_core::project_file::from_json(&text).unwrap(), p);
+}
+
+#[test]
+fn runtime_plots_share_sources_order_and_history_with_analysis_and_files() {
+    use scicanvas_core::{coord::YAxis, history::History, ops::Source, page::CurveStyle};
+    let (mut p, a, b, gid) = project();
+    p.add_curves(gid, 0, b, &["B".into(), "C".into()]).unwrap();
+    let foreign = plotspec::foreign_key(b, "B");
+    let layer = p.graph_mut(gid).unwrap().first_layer_mut();
+    layer.curves.insert(
+        "B".into(),
+        CurveStyle {
+            kind: Some(PlotType::Bar),
+            ..Default::default()
+        },
+    );
+    layer.curves.insert(
+        foreign.clone(),
+        CurveStyle {
+            kind: Some(PlotType::SplineSymbol),
+            right_axis: true,
+            ..Default::default()
+        },
+    );
+    layer.row_by_y.insert(foreign.clone(), Some((1, 3)));
+    let layer = p.graph(gid).unwrap().first_layer();
+    let descriptors = layer.plots_in(&|id| p.book(id));
+    let (_, prepared) = layer.prepared_plots_in(p.book(a).unwrap(), &|id| p.book(id));
+    assert_eq!(
+        prepared.iter().map(|p| &p.plot).collect::<Vec<_>>(),
+        descriptors.iter().collect::<Vec<_>>()
+    );
+    assert_eq!(prepared[1].style.y_axis, YAxis::Right);
+    assert_eq!(prepared[1].style.kind, PlotType::SplineSymbol);
+    assert_eq!(prepared[1].series.rows, [1, 2, 3]);
+    let selected = p
+        .resolve(&Source::Curves {
+            graph_id: gid,
+            index: 0,
+            curves: vec![plotspec::DataRef::new(b, "B")],
+        })
+        .unwrap();
+    assert_eq!(selected.items.len(), 1);
+    assert_eq!(selected.items[0].book_id, b);
+    assert_eq!(selected.items[0].x.as_deref(), Some("A"));
+    assert_eq!(selected.items[0].rows, Some((1, 3)));
+    let before = p.clone();
+    let mut history = History::default();
+    history.begin(&p, "reorder and remove curves");
+    let layer = p.graph_mut(gid).unwrap().first_layer_mut();
+    layer.y_keys.reverse();
+    layer.remove_curve("B");
+    history.changed();
+    history.commit(&p);
+    let changed = p.clone();
+    p = history.undo(&p).unwrap();
+    assert_eq!(p, before);
+    assert_eq!(
+        p.graph(gid).unwrap().first_layer().plots_in(&|id| p.book(id)),
+        descriptors
+    );
+    p = history.redo(&p).unwrap();
+    assert_eq!(p, changed);
+    #[cfg(feature = "serde")]
+    {
+        let text = scicanvas_core::project_file::to_json(&p).unwrap();
+        let wire: serde_json::Value = serde_json::from_str(&text).unwrap();
+        assert_eq!(wire["version"], 11);
+        assert!(wire["graphs"][0]["page"]["layers"][0].get("axes").is_none());
+        let reopened = scicanvas_core::project_file::from_json(&text).unwrap();
+        assert_eq!(reopened, p);
+        assert_eq!(
+            scene::layout_page(reopened.graph(gid).unwrap(), &reopened, &[]),
+            scene::layout_page(p.graph(gid).unwrap(), &p, &[])
+        );
+    }
+}
+
+#[test]
+fn derived_lines_use_the_source_right_axis_in_the_actual_scene() {
+    use scicanvas_core::{
+        coord::{Coord, YAxis},
+        page::CurveStyle,
+    };
+    let mut p = Project::sample();
+    let book = p.book_mut(1).unwrap();
+    for (key, values) in [
+        ("A", ["1", "2", "3"]),
+        ("B", ["1", "1", "3"]),
+        ("C", ["1000", "2000", "3000"]),
+    ] {
+        book.columns.iter_mut().find(|c| c.key == key).unwrap().data = values.map(str::to_owned).to_vec().into();
+    }
+    let d = book.push_column(Role::Y);
+    book.columns.iter_mut().find(|c| c.key == d).unwrap().data =
+        ["1000", "2000", "3000"].map(str::to_owned).to_vec().into();
+    book.columns.iter_mut().find(|c| c.key == d).unwrap().derived_from = Some("C".into());
+    let layer = p.graph_mut(2).unwrap().first_layer_mut();
+    layer.plot_type = PlotType::Scatter;
+    layer.curves.insert(
+        "C".into(),
+        CurveStyle {
+            right_axis: true,
+            ..Default::default()
+        },
+    );
+    layer.add_analysis_result(1, "C", &d, Some("A"));
+    let layer = p.graph(2).unwrap().first_layer();
+    let (_, prepared) = layer.prepared_plots_in(p.book(1).unwrap(), &|id| p.book(id));
+    let result = prepared.iter().find(|plot| plot.plot.key == d).unwrap();
+    assert_eq!(result.style.y_axis, YAxis::Right);
+    assert_eq!(result.style.kind, PlotType::Line);
+    let sc = scene::layout_page(p.graph(2).unwrap(), &p, &[]);
+    assert!(sc.axes.left_y.hi < 10.0);
+    assert!(sc.axes.right_y.as_ref().unwrap().hi >= 3000.0);
+    let view = &sc.layers[0];
+    let map = view.axes.cartesian(view.plot, YAxis::Right);
+    let expected = map.project([2.0, 2000.0]);
+    let line = sc
+        .items
+        .iter()
+        .find_map(|item| match &item.prim {
+            scene::Prim::Polyline { pts, color, .. } if item.clip.is_some() && *color == result.style.color.rgb() => {
+                Some(pts)
+            }
+            _ => None,
+        })
+        .unwrap();
+    assert!((line[1][0] - expected[0]).abs() < 1e-9 && (line[1][1] - expected[1]).abs() < 1e-9);
+    let hit = scene::nearest_point(layer, view, &|id| p.book(id), expected[0], expected[1], 1.0).unwrap();
+    assert_eq!(hit.key, "C");
+    assert_eq!(hit.y, 2000.0);
+    #[cfg(feature = "serde")]
+    {
+        let saved = scicanvas_core::project_file::to_json(&p).unwrap();
+        let restored = scicanvas_core::project_file::from_json(&saved).unwrap();
+        assert_eq!(restored, p);
+        assert_eq!(scene::layout_page(restored.graph(2).unwrap(), &restored, &[]), sc);
+    }
+    let original = map.unproject(expected);
+    assert!((original[0] - 2.0).abs() < 1e-9 && (original[1] - 2000.0).abs() < 1e-9);
 }

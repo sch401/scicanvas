@@ -185,13 +185,23 @@ fn symbols_at_auto_axis_ends_get_a_margin_but_lines_do_not() {
     // 示例数据 X 为 0–4、Y 的最小值和最大值正好落在整刻度上
     let (project, graph) = example_graph(PlotType::Scatter);
     let sc = scene::layout_page(&graph, &project, &[]);
-    assert!(sc.xa.lo < 0.0 && sc.xa.hi > 4.0, "{:?}", (sc.xa.lo, sc.xa.hi));
-    assert_eq!((sc.xa.ticks.first(), sc.xa.ticks.last()), (Some(&0.0), Some(&4.0)));
-    assert!(sc.ya.lo < *sc.ya.ticks.first().unwrap() && sc.ya.hi > *sc.ya.ticks.last().unwrap());
+    assert!(
+        sc.axes.x.lo < 0.0 && sc.axes.x.hi > 4.0,
+        "{:?}",
+        (sc.axes.x.lo, sc.axes.x.hi)
+    );
+    assert_eq!(
+        (sc.axes.x.ticks.first(), sc.axes.x.ticks.last()),
+        (Some(&0.0), Some(&4.0))
+    );
+    assert!(
+        sc.axes.left_y.lo < *sc.axes.left_y.ticks.first().unwrap()
+            && sc.axes.left_y.hi > *sc.axes.left_y.ticks.last().unwrap()
+    );
     // 纯折线保持到整刻度为止
     let (project, graph) = example_graph(PlotType::Line);
     let sc = scene::layout_page(&graph, &project, &[]);
-    assert_eq!((sc.xa.lo, sc.xa.hi), (0.0, 4.0));
+    assert_eq!((sc.axes.x.lo, sc.axes.x.hi), (0.0, 4.0));
 }
 
 #[test]

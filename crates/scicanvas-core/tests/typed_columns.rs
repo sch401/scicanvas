@@ -338,7 +338,7 @@ fn date_axes_align_to_local_midnight_and_save_the_zone() {
     let first = chrono::DateTime::parse_from_rfc3339("2026-10-17T16:00:00Z")
         .unwrap()
         .timestamp_millis() as f64;
-    assert_eq!(sc.xa.ticks.first(), Some(&first));
+    assert_eq!(sc.axes.x.ticks.first(), Some(&first));
     let texts: Vec<String> = sc
         .items
         .iter()

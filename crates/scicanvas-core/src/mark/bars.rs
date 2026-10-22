@@ -13,9 +13,9 @@ pub(super) fn draw(
         let color = style.color.rgb();
         for (point, base) in series.points.iter().zip(&series.bases) {
             let (category, value, category_axis, value_axis) = if ctx.horizontal {
-                (point[1], point[0], ctx.ya, ctx.xa)
+                (point[1], point[0], &ctx.axes.left_y, &ctx.axes.x)
             } else {
-                (point[0], point[1], ctx.xa, ctx.y_axis(style.right))
+                (point[0], point[1], &ctx.axes.x, ctx.y_axis(style.y_axis))
             };
             let (start, end) = position.span(category, ctx.dx, style.bar_index, style.bar_count);
             let category = |value: f64| {
@@ -33,13 +33,13 @@ pub(super) fn draw(
             };
             let (a, b) = if ctx.horizontal {
                 (
-                    [ctx.px(base), ctx.py(category(start), style.right)],
-                    [ctx.px(value), ctx.py(category(end), style.right)],
+                    [ctx.px(base), ctx.py(category(start), style.y_axis)],
+                    [ctx.px(value), ctx.py(category(end), style.y_axis)],
                 )
             } else {
                 (
-                    [ctx.px(category(start)), ctx.py(base, style.right)],
-                    [ctx.px(category(end)), ctx.py(value, style.right)],
+                    [ctx.px(category(start)), ctx.py(base, style.y_axis)],
+                    [ctx.px(category(end)), ctx.py(value, style.y_axis)],
                 )
             };
             ctx.push(
@@ -58,19 +58,19 @@ pub(super) fn draw(
         return true;
     }
     if super::contains(style.kind, Kind::Area) {
-        let axis = ctx.y_axis(style.right);
+        let axis = ctx.y_axis(style.y_axis);
         let base = ctx.py(
             if axis.log {
                 axis.lo
             } else {
                 0.0f64.clamp(axis.lo, axis.hi)
             },
-            style.right,
+            style.y_axis,
         );
         for run in crate::stat::data_runs(series) {
             let points: Vec<_> = run
                 .iter()
-                .map(|point| [ctx.px(point[0]), ctx.py(point[1], style.right)])
+                .map(|point| [ctx.px(point[0]), ctx.py(point[1], style.y_axis)])
                 .collect();
             let triangles = area_triangles(&points, base);
             if !triangles.is_empty() {

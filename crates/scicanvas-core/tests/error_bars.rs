@@ -117,8 +117,8 @@ fn autoscale_svg_and_all_basic_chart_types_share_error_segments() {
         p.graph_mut(gid).unwrap().first_layer_mut().plot_type = kind;
         let g = p.graph(gid).unwrap();
         let sc = scene::layout_page(g, &p, &[]);
-        assert!(sc.xa.lo <= 0.8 && sc.xa.hi >= 3.4);
-        assert!(sc.ya.lo <= 8.0 && sc.ya.hi >= 34.0);
+        assert!(sc.axes.x.lo <= 0.8 && sc.axes.x.hi >= 3.4);
+        assert!(sc.axes.left_y.lo <= 8.0 && sc.axes.left_y.hi >= 34.0);
         let groups = errors(&sc);
         assert_eq!(groups.len(), if kind == PlotType::VerticalDrop { 2 } else { 1 });
         let group = groups.last().unwrap();

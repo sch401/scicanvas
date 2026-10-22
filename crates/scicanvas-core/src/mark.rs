@@ -1,6 +1,6 @@
 //! Plot marks compose data series into the shared scene primitives.
-use crate::coord::{Cartesian, Coord};
-use crate::model::{Book, PlotType, Series, SeriesStyle};
+use crate::coord::{AxisSet, Coord, YAxis};
+use crate::model::{Book, PlotType, SeriesStyle};
 use crate::page::Layer;
 use crate::plotspec::BookLookup;
 use crate::scene::{Item, Prim};
@@ -31,9 +31,7 @@ pub(crate) struct Context<'g, 'book, 'lookup, 'axis> {
     pub layer: &'g Layer,
     pub book: Option<&'book Book>,
     pub others: BookLookup<'book, 'lookup>,
-    pub xa: &'axis Axis,
-    pub ya: &'axis Axis,
-    pub ya2: &'axis Axis,
+    pub axes: &'axis AxisSet,
     pub rect: [f64; 4],
     pub horizontal: bool,
     pub dx: f64,
@@ -41,29 +39,15 @@ pub(crate) struct Context<'g, 'book, 'lookup, 'axis> {
 
 impl Context<'_, '_, '_, '_> {
     pub fn px(&self, x: f64) -> f64 {
-        let coord = Cartesian {
-            x: self.xa,
-            y: self.ya,
-            rect: self.rect,
-        };
-        coord.project([x, self.ya.lo])[0]
+        self.axes
+            .cartesian(self.rect, YAxis::Left)
+            .project([x, self.axes.left_y.lo])[0]
     }
-
-    pub fn py(&self, y: f64, right: bool) -> f64 {
-        let coord = Cartesian {
-            x: self.xa,
-            y: if right { self.ya2 } else { self.ya },
-            rect: self.rect,
-        };
-        coord.project([self.xa.lo, y])[1]
+    pub fn py(&self, y: f64, axis: YAxis) -> f64 {
+        self.axes.cartesian(self.rect, axis).project([self.axes.x.lo, y])[1]
     }
-
-    pub fn y_axis(&self, right: bool) -> &Axis {
-        if right {
-            self.ya2
-        } else {
-            self.ya
-        }
+    pub fn y_axis(&self, axis: YAxis) -> &Axis {
+        self.axes.y(axis)
     }
 
     pub fn inside_x(&self, x: f64) -> bool {
@@ -92,15 +76,10 @@ impl Context<'_, '_, '_, '_> {
     }
 }
 
-pub(crate) fn draw(
-    ctx: &Context<'_, '_, '_, '_>,
-    series: &[Series],
-    styles: &[SeriesStyle],
-    splines: &[Vec<Vec<[f64; 2]>>],
-    items: &mut Vec<Item>,
-) {
+pub(crate) fn draw(ctx: &Context<'_, '_, '_, '_>, plots: &[crate::page::PreparedPlot], items: &mut Vec<Item>) {
     let mut symbols = Vec::new();
-    for ((series, style), paths) in series.iter().zip(styles).zip(splines) {
+    for plot in plots {
+        let (series, style, paths) = (&plot.series, &plot.style, &plot.paths);
         if bars::draw(ctx, series, style, items) {
             continue;
         }
@@ -109,13 +88,13 @@ pub(crate) fn draw(
         }
     }
     if ctx.layer.error_bars.visible {
-        annotations::errors(ctx, series, styles, items);
+        annotations::errors(ctx, plots, items);
     }
     for symbol in symbols {
         ctx.push(items, symbol, false);
     }
     if ctx.layer.labels.visible {
-        annotations::labels(ctx, series, styles, items);
+        annotations::labels(ctx, plots, items);
     }
 }
 

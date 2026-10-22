@@ -71,7 +71,7 @@ fn spline_autoscale_symbols_gaps_duplicates_and_fit_are_independent() {
     let (mut p, id) = project(PlotType::SplineSymbol);
     p.fit_poly(&Source::Graph(id), 1).unwrap();
     let sc = scene::layout_page(p.graph(id).unwrap(), &p, &[]);
-    assert!(sc.ya.hi >= 1.15);
+    assert!(sc.axes.left_y.hi >= 1.15);
     assert!(sc
         .items
         .iter()
@@ -120,7 +120,7 @@ fn drop_lines_use_zero_or_log_boundary_and_svg_shares_segments() {
             })
             .unwrap();
         assert_eq!(segs.len(), if log { 2 } else { 4 });
-        let base = sc.py(if log { sc.ya.lo } else { 0.0 });
+        let base = sc.py(if log { sc.axes.left_y.lo } else { 0.0 });
         let output = svg::render_page(p.graph(id).unwrap(), &p);
         for [x, y, x2, y2] in segs {
             near(*y, base);
@@ -312,8 +312,7 @@ fn bspline_and_bezier_connections_smooth_data_lines_only() {
 
 #[test]
 fn nearest_point_uses_segment_values_and_swapped_axes() {
-    use scicanvas_core::coord::{Cartesian, Coord};
-    for kind in [PlotType::StackedBar, PlotType::HorizontalBar] {
+    for kind in [PlotType::Bar, PlotType::StackedBar, PlotType::HorizontalBar] {
         let (mut p, id) = project(kind);
         let b = p.book_mut(1).unwrap();
         let mut c = Column::new("C", Role::Y);
@@ -323,22 +322,31 @@ fn nearest_point_uses_segment_values_and_swapped_axes() {
         let sc = scene::layout_page(p.graph(id).unwrap(), &p, &[]);
         let view = &sc.layers[0];
         let layer = p.graph(id).unwrap().first_layer();
-        let map = Cartesian {
-            x: &view.xa,
-            y: &view.ya,
-            rect: view.plot,
-        };
-        // 第二条曲线（C）第 2 行：堆叠后终点为 1 + 3，自身值为 3
-        let (_, series) = layer.series(p.book(1).unwrap());
-        let pt = series[1].points[1];
-        let at = map.project(if kind == PlotType::HorizontalBar {
-            [pt[1], pt[0]]
+        // Pick the endpoint at the center of the actual second rendered C bar.
+        let bars: Vec<_> = sc
+            .items
+            .iter()
+            .filter_map(|item| match item.prim {
+                Prim::Rect {
+                    x,
+                    y,
+                    w,
+                    h,
+                    fill: Some((color, _)),
+                    ..
+                } if item.clip.is_some() && color == scicanvas_core::model::PALETTE[1] => Some([x, y, w, h]),
+                _ => None,
+            })
+            .collect();
+        let [x, y, w, h] = bars[1];
+        let at = if kind == PlotType::HorizontalBar {
+            [x + w, y + h / 2.0]
         } else {
-            pt
-        });
+            [x + w / 2.0, y]
+        };
         let hit = scene::nearest_point(layer, view, &|id| p.book(id), at[0] + 1.0, at[1], 6.0).unwrap();
         assert_eq!(hit.row, Some(1));
-        assert_eq!(hit.y, if kind == PlotType::StackedBar { 3.0 } else { pt[1] });
+        assert_eq!(hit.y, 3.0);
         assert!(scene::nearest_point(layer, view, &|_| None, at[0], at[1], 6.0).is_none());
     }
 }
@@ -396,7 +404,7 @@ fn category_x_columns_get_a_category_axis_in_custom_order() {
     assert_eq!(data.text_at(2), "高");
     let sc = scene::layout_page(p.graph(id).unwrap(), &p, &[]);
     assert_eq!(
-        (sc.xa.lo, sc.xa.hi, sc.xa.ticks.clone()),
+        (sc.axes.x.lo, sc.axes.x.hi, sc.axes.x.ticks.clone()),
         (0.5, 3.5, vec![1.0, 2.0, 3.0])
     );
     let texts: Vec<String> = sc
@@ -475,7 +483,7 @@ fn curve_styles_override_type_color_width_and_use_a_right_axis() {
     assert!((width - 2.5 * k).abs() < 1e-9);
     assert!(sc.items.iter().any(|it| matches!(it.prim, Prim::Symbols { .. })));
     // 左轴只按 B（0–1）定范围，C（100–400）在右轴：画在坐标框内
-    assert!(sc.ya.hi <= 1.5, "{:?}", sc.ya);
+    assert!(sc.axes.left_y.hi <= 1.5, "{:?}", sc.axes.left_y);
     let [l0, t0, w0, h0] = sc.plot;
     assert!(pts
         .iter()

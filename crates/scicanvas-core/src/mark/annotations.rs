@@ -1,15 +1,10 @@
 use super::Context;
-use crate::model::{Series, SeriesStyle};
+use crate::page::PreparedPlot;
 use crate::scene::{Anchor, Prim};
 
-pub(super) fn errors(
-    ctx: &Context<'_, '_, '_, '_>,
-    series: &[Series],
-    styles: &[SeriesStyle],
-    items: &mut Vec<crate::scene::Item>,
-) {
-    for (series, style) in series.iter().zip(styles) {
-        let axis = ctx.y_axis(style.right);
+pub(super) fn errors(ctx: &Context<'_, '_, '_, '_>, plots: &[PreparedPlot], items: &mut Vec<crate::scene::Item>) {
+    for (series, style) in plots.iter().map(|p| (&p.series, &p.style)) {
+        let axis = ctx.y_axis(style.y_axis);
         let mut segs = Vec::new();
         let offset = ctx.offset(style);
         let cap = f64::from(ctx.layer.error_bars.cap) / 2.0;
@@ -21,16 +16,16 @@ pub(super) fn errors(
             };
             if let Some(error) = errors[0] {
                 let ends = [x - error, x + error];
-                let yy = ctx.py(y, style.right);
-                if (!axis.log || y > 0.0) && ends[1] >= ctx.xa.lo && ends[0] <= ctx.xa.hi {
+                let yy = ctx.py(y, style.y_axis);
+                if (!axis.log || y > 0.0) && ends[1] >= ctx.axes.x.lo && ends[0] <= ctx.axes.x.hi {
                     segs.push([
-                        ctx.px(ends[0].clamp(ctx.xa.lo, ctx.xa.hi)),
+                        ctx.px(ends[0].clamp(ctx.axes.x.lo, ctx.axes.x.hi)),
                         yy,
-                        ctx.px(ends[1].clamp(ctx.xa.lo, ctx.xa.hi)),
+                        ctx.px(ends[1].clamp(ctx.axes.x.lo, ctx.axes.x.hi)),
                         yy,
                     ]);
                     for end in ends {
-                        if (ctx.xa.lo..=ctx.xa.hi).contains(&end) {
+                        if (ctx.axes.x.lo..=ctx.axes.x.hi).contains(&end) {
                             let xx = ctx.px(end);
                             segs.push([xx, yy - cap, xx, yy + cap]);
                         }
@@ -40,16 +35,16 @@ pub(super) fn errors(
             if let Some(error) = errors[1] {
                 let ends = [y - error, y + error];
                 let xx = ctx.px(x);
-                if (ctx.xa.lo..=ctx.xa.hi).contains(&x) && ends[1] >= axis.lo && ends[0] <= axis.hi {
+                if (ctx.axes.x.lo..=ctx.axes.x.hi).contains(&x) && ends[1] >= axis.lo && ends[0] <= axis.hi {
                     segs.push([
                         xx,
-                        ctx.py(ends[0].clamp(axis.lo, axis.hi), style.right),
+                        ctx.py(ends[0].clamp(axis.lo, axis.hi), style.y_axis),
                         xx,
-                        ctx.py(ends[1].clamp(axis.lo, axis.hi), style.right),
+                        ctx.py(ends[1].clamp(axis.lo, axis.hi), style.y_axis),
                     ]);
                     for end in ends {
                         if (axis.lo..=axis.hi).contains(&end) {
-                            let yy = ctx.py(end, style.right);
+                            let yy = ctx.py(end, style.y_axis);
                             segs.push([xx - cap, yy, xx + cap, yy]);
                         }
                     }
@@ -71,14 +66,13 @@ pub(super) fn errors(
     }
 }
 
-pub(super) fn labels(
-    ctx: &Context<'_, '_, '_, '_>,
-    series: &[Series],
-    styles: &[SeriesStyle],
-    items: &mut Vec<crate::scene::Item>,
-) {
+pub(super) fn labels(ctx: &Context<'_, '_, '_, '_>, plots: &[PreparedPlot], items: &mut Vec<crate::scene::Item>) {
     use crate::page::LabelSource;
-    for (series, style) in series.iter().zip(styles).filter(|(series, _)| !series.line_only) {
+    for (series, style) in plots
+        .iter()
+        .map(|p| (&p.series, &p.style))
+        .filter(|(series, _)| !series.line_only)
+    {
         let offset = ctx.offset(style);
         for (i, point) in series.points.iter().enumerate() {
             let (x, y) = if ctx.horizontal {
@@ -86,7 +80,7 @@ pub(super) fn labels(
             } else {
                 (point[0] + offset, point[1])
             };
-            if !ctx.inside_x(ctx.px(x)) || !ctx.inside_y(ctx.py(y, style.right)) {
+            if !ctx.inside_x(ctx.px(x)) || !ctx.inside_y(ctx.py(y, style.y_axis)) {
                 continue;
             }
             let value = if ctx.horizontal {
@@ -151,7 +145,7 @@ pub(super) fn labels(
                     let delta = if ctx.horizontal {
                         ctx.px(if positive { x + error } else { x - error }) - ctx.px(x)
                     } else {
-                        ctx.py(if positive { y + error } else { y - error }, style.right) - ctx.py(y, style.right)
+                        ctx.py(if positive { y + error } else { y - error }, style.y_axis) - ctx.py(y, style.y_axis)
                     };
                     if delta.is_finite() {
                         delta.abs()
@@ -166,13 +160,13 @@ pub(super) fn labels(
             let (xx, yy, anchor) = if ctx.horizontal {
                 (
                     ctx.px(x) + if positive { delta } else { -delta },
-                    ctx.py(y, style.right),
+                    ctx.py(y, style.y_axis),
                     if positive { Anchor::Start } else { Anchor::End },
                 )
             } else {
                 (
                     ctx.px(x),
-                    ctx.py(y, style.right) + if positive { -delta } else { delta },
+                    ctx.py(y, style.y_axis) + if positive { -delta } else { delta },
                     Anchor::Middle,
                 )
             };

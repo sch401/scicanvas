@@ -204,10 +204,9 @@ impl LayerContents {
                                         self.draft.curves.remove(key);
                                     }
                                 }
-                                let source = scicanvas_core::plotspec::DataRef::from_key(self.draft.book_id, key);
-                                let mapping = self
-                                    .draft
-                                    .curve_mapping(key, source.as_ref().and_then(|r| project.book(r.book)));
+                                let plot = self.draft.plot_in(key, &|id| project.book(id));
+                                let mapping = plot.as_ref().map(|p| &p.mapping);
+                                let source = mapping.map(|m| &m.y);
                                 egui::Grid::new("contents-source")
                                     .num_columns(2)
                                     .spacing([8.0, 2.0])
