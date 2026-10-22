@@ -55,6 +55,7 @@ fn data_fingerprint(g: &Graph, project: &Project) -> u64 {
         let books = std::iter::once(main).chain(layer.foreign_books().into_iter().filter_map(|b| project.book(b)));
         for book in books {
             mix(book.id);
+            text(&book.name, &mut mix);
             let local = book.id == main.id;
             let used = |k: &str| {
                 let q = scicanvas_core::plotspec::foreign_key(book.id, k);
@@ -66,7 +67,7 @@ fn data_fingerprint(g: &Graph, project: &Project) -> u64 {
                     || (local && layer.labels.column.as_deref() == Some(k))
                     || (!local && default_x_of(layer, book, k))
             };
-            for col in &book.columns {
+            for (index, col) in book.columns.iter().enumerate() {
                 if !used(&col.key) && !matches!(col.role, Role::XError | Role::YError | Role::Label) {
                     continue;
                 }
@@ -74,6 +75,8 @@ fn data_fingerprint(g: &Graph, project: &Project) -> u64 {
                 text(&col.long_name, &mut mix);
                 text(&col.units, &mut mix);
                 mix(col.role as u64);
+                mix(col.data.kind() as u64);
+                text(book.error_source(index).unwrap_or(""), &mut mix);
                 mix(col.format.utc_offset as u64);
                 mix(col.data.len() as u64);
                 if let Some(levels) = col.data.category_levels() {
@@ -81,9 +84,15 @@ fn data_fingerprint(g: &Graph, project: &Project) -> u64 {
                         text(l, &mut mix);
                     }
                 }
+                let label_text = col.role == Role::Label || (local && layer.labels.column.as_deref() == Some(&col.key));
                 for row in 0..col.data.len() {
                     match col.data.f64_at(row) {
-                        Some(v) => mix(v.to_bits()),
+                        Some(v) => {
+                            mix(v.to_bits());
+                            if label_text {
+                                text(&col.data.text_at(row), &mut mix);
+                            }
+                        }
                         None => text(&col.data.text_at(row), &mut mix),
                     }
                 }
@@ -593,6 +602,78 @@ mod tests {
     fn point(rect: Rect, sc: &Scene, index: usize) -> Pos2 {
         let [x, y, w, h] = sc.layers[index].plot;
         page_transform(rect, [sc.w, sc.h]) * pos2((x + w / 2.0) as f32, (y + h / 2.0) as f32)
+    }
+
+    #[test]
+    fn cached_plot_tracks_workbook_names_error_links_label_spelling_and_column_types() {
+        use scicanvas_core::{Column, DataKind, Role};
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        let mut p = Project::sample();
+        let graph = p.graphs[0].id;
+        let mut other = p.books[0].clone();
+        other.id = 42;
+        other.name = "Other".into();
+        p.books.push(other);
+        p.add_curves(graph, 0, 42, &["B".into()]).unwrap();
+        let mut label = Column::new("D", Role::Label);
+        label.data = vec!["1.0".to_string()].into();
+        p.books[0].columns.push(label);
+        let mut error = Column::new("E", Role::YError);
+        error.data = vec!["0.5".to_string()].into();
+        error.error_for = Some("B".into());
+        p.books[0].columns.push(error);
+        let layer = p.graphs[0].first_layer_mut();
+        layer.labels.visible = true;
+        layer.labels.source = scicanvas_core::page::LabelSource::Column;
+        layer.labels.column = Some("D".into());
+        let render = |p: &Project| {
+            let mut sc = None;
+            let _ = ctx.run(egui::RawInput::default(), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    sc = Some(cached_layout(
+                        ui,
+                        egui::Id::new("cache-regression"),
+                        &p.graphs[0],
+                        p,
+                        vec![],
+                    ));
+                });
+            });
+            sc.unwrap()
+        };
+        let mut before = render(&p);
+        assert!(
+            std::sync::Arc::ptr_eq(&before, &render(&p)),
+            "unchanged plots reuse the cache"
+        );
+        let verify = |p: &Project, before: &Scene| {
+            let expected = scene::layout_page(&p.graphs[0], p, &[]);
+            assert_ne!(before, &expected, "the edit affects the actual rendered scene");
+            let actual = render(p);
+            assert_eq!(*actual, expected, "screen cache matches a fresh/export layout");
+            actual
+        };
+        p.books[1].name = "Renamed".into();
+        before = verify(&p, &before);
+        p.books[0].columns[4].error_for = Some("C".into());
+        before = verify(&p, &before);
+        p.books[0].columns[3].data.set_text(0, "1.00".into());
+        verify(&p, &before);
+        // An unused Z column changes automatic error association without becoming plotted data.
+        p.books[0].columns[4].error_for = None;
+        let error = p.books[0].columns.pop().unwrap();
+        p.books[0].columns.insert(3, error);
+        before = render(&p);
+        p.books[0].columns.insert(3, Column::new("F", Role::Z));
+        verify(&p, &before);
+        p.books[0].columns[0].data = vec!["0".to_string(), "86400000".into()].into();
+        before = render(&p);
+        p.books[0].columns[0].data =
+            scicanvas_core::ColumnData::from(vec!["1970-01-01".to_string(), "1970-01-02".into()])
+                .converted(DataKind::DateTime)
+                .unwrap();
+        verify(&p, &before);
     }
 
     #[test]

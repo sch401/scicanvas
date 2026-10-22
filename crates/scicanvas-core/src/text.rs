@@ -222,7 +222,7 @@ impl Fonts {
             }
             let mut next = line.clone();
             next.push(c);
-            if !line.is_empty() && self.layout(&next, size, bold).width > max_width {
+            while !line.is_empty() && self.layout(&next, size, bold).width > max_width {
                 if let Some((split, _)) = line.char_indices().rev().find(|(_, c)| c.is_whitespace()) {
                     out.push_str(line[..split].trim_end());
                     out.push('\n');
@@ -232,6 +232,8 @@ impl Fonts {
                     out.push('\n');
                     line.clear();
                 }
+                next = line.clone();
+                next.push(c);
             }
             if !line.is_empty() || !c.is_whitespace() {
                 line.push(c);
@@ -266,6 +268,18 @@ pub fn fit_size(text: &str, size: f64, bold: bool, width: f64) -> f64 {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn wrapping_rechecks_a_wide_glyph_after_a_word_break() {
+        let fonts = Fonts::bundled();
+        let width = fonts.layout("i WW", 10.0, false).width + 0.1;
+        assert!(fonts.layout("WWW", 10.0, false).width > width);
+        let wrapped = fonts.wrap("i WWW", 10.0, false, width);
+        for line in wrapped.lines() {
+            assert!(fonts.layout(line, 10.0, false).width <= width, "overflow: {wrapped:?}");
+        }
+        assert_eq!(wrapped.replace([' ', '\n'], ""), "iWWW");
+    }
+
     #[test]
     fn actual_advances_kerning_lines_and_fallback() {
         let f = Fonts::bundled();
