@@ -9,6 +9,7 @@ use crate::model::{series_styles, Book, Graph, PlotType, Symbol};
 use crate::page::Layer;
 use crate::plotspec::BookLookup;
 use crate::ticks::{axis, Axis, TickLabel};
+mod layout;
 
 pub type Rgb = (u8, u8, u8);
 
@@ -310,205 +311,22 @@ fn text(x: f64, y: f64, s: impl Into<String>, size: f64, anchor: Anchor) -> Prim
 
 /// 排版整张图。`book` 为 None 时是一张提示“没有关联数据”的空图。
 pub fn build(g: &Graph, book: Option<&Book>, w: f64, h: f64, view: Option<View>) -> Scene {
-    compose(g, |id| book.filter(|b| b.id == id), w, h, &[view])
+    layout::compose(g, |id| book.filter(|b| b.id == id), w, h, &[view])
 }
 
 /// 页面各图层独立解析工作簿；屏幕与整页导出使用同一入口。
 pub fn build_page(g: &Graph, project: &crate::Project, w: f64, h: f64, view: Option<View>) -> Scene {
-    compose(g, |id| project.book(id), w, h, &[view])
+    layout::compose(g, |id| project.book(id), w, h, &[view])
 }
 
 pub fn build_page_views(g: &Graph, project: &crate::Project, w: f64, h: f64, views: &[Option<View>]) -> Scene {
-    compose(g, |id| project.book(id), w, h, views)
+    layout::compose(g, |id| project.book(id), w, h, views)
 }
 
 /// 屏幕、图库与出版导出共用的页面排版；窗口大小只影响显示缩放。
 pub fn layout_page(g: &Graph, project: &crate::Project, views: &[Option<View>]) -> Scene {
     let [w, h] = g.page.logical_size();
     build_page_views(g, project, w, h, views)
-}
-
-fn compose<'a>(g: &Graph, book: impl Fn(u64) -> Option<&'a Book>, w: f64, h: f64, views: &[Option<View>]) -> Scene {
-    let others: BookLookup<'a, '_> = &book;
-    // 网格区域：整页扣除页边距（按当前画布与逻辑页面的比例换算）
-    let [lw0, lh0] = g.page.logical_size();
-    let [ox, oy, gw, gh] = g.page.content_rect();
-    let (sx, sy) = (w / lw0, h / lh0);
-    // 用整页减去边距，边距为 0 时与整页完全相同
-    let (ox, oy) = (ox * sx, oy * sy);
-    let (gw, gh) = (w - (lw0 - gw) * sx, h - (lh0 - gh) * sy);
-    let paper: Rgb = g.page.background.map_or(PAPER, |[r, gg, b]| (r, gg, b));
-    let grid_count = g
-        .page
-        .layers()
-        .iter()
-        .filter(|layer| layer.placement.is_none())
-        .count()
-        .max(1);
-    let cols = g.page.columns.min(grid_count).max(1);
-    let rows = grid_count.div_ceil(cols);
-    // 网格间距（逻辑单位），不超过可用宽高
-    let (gap_x, gap_y) = (
-        (g.page.gap_mm[0] * 96.0 / 25.4 * sx).min(gw * 0.5 / cols.max(2) as f64),
-        (g.page.gap_mm[1] * 96.0 / 25.4 * sy).min(gh * 0.5 / rows.max(2) as f64),
-    );
-    let (cw, ch) = (
-        (gw - gap_x * (cols - 1) as f64) / cols as f64,
-        (gh - gap_y * (rows - 1) as f64) / rows as f64,
-    );
-    // 坐标轴联动：先按各自设置求出目标图层的范围，再把联动图层的视图设成目标范围
-    let mut linked: Vec<Option<View>> = (0..g.page.layers().len())
-        .map(|i| views.get(i).copied().flatten())
-        .collect();
-    if g.page.layers().iter().any(|l| l.link_x.is_some() || l.link_y.is_some()) {
-        let own: Vec<View> = g
-            .page
-            .layers()
-            .iter()
-            .enumerate()
-            .map(|(i, layer)| {
-                build_layer(layer, layer.book_id.and_then(&book), others, 400.0, 300.0, linked[i]).layers[0].view()
-            })
-            .collect();
-        for (i, layer) in g.page.layers().iter().enumerate() {
-            if layer.link_x.is_none() && layer.link_y.is_none() {
-                continue;
-            }
-            let pick = |link: Option<usize>, axis: fn(&View) -> (f64, f64)| {
-                link.and_then(|j| own.get(j)).map_or(axis(&own[i]), axis)
-            };
-            linked[i] = Some(View {
-                x: pick(layer.link_x, |v| v.x),
-                y: pick(layer.link_y, |v| v.y),
-            });
-        }
-    }
-    let views = &linked[..];
-    // 各图层先按 89 mm 一栏的参考尺寸排版，再把坐标、字号、线宽和符号同乘 k：
-    // A4 等宽页面上的文字、点和线与单栏图成比例，版面相同只是整体放大。
-    let k = g.page.scale();
-    // 网格面板：先各自排版取自然边距，同一行取最大的上下边距、同一列取最大的左右边距，
-    // 再按统一边距排版，使各面板的坐标框对齐（标题、刻度文字宽度不同也一样）。插图不参与。
-    let mut cells = Vec::new();
-    let mut aligned = vec![[0.0; 4]; g.page.layers().len()];
-    if grid_count > 1 {
-        let mut natural = Vec::new();
-        for (i, layer) in g.page.layers().iter().enumerate() {
-            if layer.placement.is_none() {
-                let (rw, rh) = (cw / k, ch / k);
-                let sc = build_layer(
-                    layer,
-                    layer.book_id.and_then(&book),
-                    others,
-                    rw,
-                    rh,
-                    views.get(i).copied().flatten(),
-                );
-                let [l, t, pw, ph] = sc.plot;
-                let index = cells.len();
-                cells.push((i, index / cols, index % cols));
-                natural.push([l, t, rw - l - pw, rh - t - ph]);
-            }
-        }
-        for &(i, row, col) in &cells {
-            let same = |f: &dyn Fn(usize, usize) -> bool, k: usize| {
-                cells
-                    .iter()
-                    .zip(&natural)
-                    .filter(|((_, r, c), _)| f(*r, *c))
-                    .map(|(_, m)| m[k])
-                    .fold(0.0, f64::max)
-            };
-            aligned[i] = [
-                same(&|_, c| c == col, 0),
-                same(&|r, _| r == row, 1),
-                same(&|_, c| c == col, 2),
-                same(&|r, _| r == row, 3),
-            ];
-        }
-    }
-    let mut grid_index = 0;
-    let mut scenes = g.page.layers().iter().enumerate().map(|(i, layer)| {
-        let [dx, dy, lw, lh] = match layer.placement {
-            Some(rect) => [rect.x * w, rect.y * h, rect.width * w, rect.height * h],
-            None => {
-                let index = grid_index;
-                grid_index += 1;
-                [
-                    ox + (index % cols) as f64 * (cw + gap_x),
-                    oy + (index / cols) as f64 * (ch + gap_y),
-                    cw,
-                    ch,
-                ]
-            }
-        };
-        let mut sc = build_layer_min(
-            layer,
-            layer.book_id.and_then(&book),
-            others,
-            lw / k,
-            lh / k,
-            views.get(i).copied().flatten(),
-            aligned[i],
-        );
-        for item in &mut sc.items {
-            scale_prim(&mut item.prim, k);
-            translate(&mut item.prim, dx, dy);
-            if let Some(rect) = &mut item.clip {
-                *rect = rect.map(|v| v * k);
-                rect[0] += dx;
-                rect[1] += dy;
-            }
-        }
-        sc.plot = sc.plot.map(|v| v * k);
-        sc.plot[0] += dx;
-        sc.plot[1] += dy;
-        sc.layers[0].plot = sc.plot;
-        sc.layers[0].bounds = [dx, dy, lw, lh];
-        sc
-    });
-    let mut page = scenes
-        .next()
-        .unwrap_or_else(|| build_layer(&Layer::default(), None, &|_| None, w, h, None));
-    page.w = w;
-    page.h = h;
-    if g.page.layers().len() > 1
-        || g.page.layers().iter().any(|l| l.transparent || l.placement.is_some())
-        || g.page.background.is_some()
-        || g.page.margin_mm != [0.0; 4]
-    {
-        page.items.insert(
-            0,
-            Item {
-                prim: Prim::Rect {
-                    x: 0.0,
-                    y: 0.0,
-                    w,
-                    h,
-                    fill: Some((PAPER, 1.0)),
-                    stroke: None,
-                },
-                clip: None,
-            },
-        );
-    }
-    page.layer_plots = vec![page.plot];
-    for sc in scenes {
-        page.layer_plots.push(sc.plot);
-        page.layers.extend(sc.layers);
-        page.items.extend(sc.items);
-    }
-    // 页面背景：页面、图层底色和图例底色都用同一颜色
-    if paper != PAPER {
-        for item in &mut page.items {
-            if let Prim::Rect { fill: Some((c, _)), .. } = &mut item.prim {
-                if *c == PAPER {
-                    *c = paper;
-                }
-            }
-        }
-    }
-    page
 }
 
 /// 端点上有数据点时把线性轴的这一端外扩 4%（刻度不变）。
@@ -581,111 +399,6 @@ fn translate(prim: &mut Prim, dx: f64, dy: f64) {
             }
         }
     }
-}
-
-fn area_triangles(points: &[[f64; 2]], base: f64) -> Vec<[f64; 2]> {
-    let mut out = Vec::new();
-    for pair in points.windows(2) {
-        let (a, b) = (pair[0], pair[1]);
-        if a[0] == b[0] || (a[1] == base && b[1] == base) {
-            continue;
-        }
-        if (a[1] < base && b[1] > base) || (a[1] > base && b[1] < base) {
-            let cross = [a[0] + (b[0] - a[0]) * ((base - a[1]) / (b[1] - a[1])), base];
-            out.extend([a, cross, [a[0], base], b, [b[0], base], cross]);
-        } else {
-            out.extend([a, b, [b[0], base], a, [b[0], base], [a[0], base]]);
-        }
-    }
-    out
-}
-
-/// 按原始行连续的段：缺失值、无效值或对数轴筛掉的行把曲线断开。所有连线图型共用。
-fn row_runs(s: &crate::Series) -> Vec<std::ops::Range<usize>> {
-    let mut out = Vec::new();
-    let mut start = 0;
-    while start < s.points.len() {
-        let mut end = start + 1;
-        while end < s.points.len() && s.rows[end] == s.rows[end - 1] + 1 {
-            end += 1;
-        }
-        out.push(start..end);
-        start = end;
-    }
-    out
-}
-
-/// 大数据折线抽点：点数超过坐标框宽度的 4 倍时，按页面上的每个像素列保留首点、最低点、最高点和末点
-/// （保持顺序），曲线外形与逐点绘制相同。
-fn decimate_line(pts: Vec<[f64; 2]>, width: f64) -> Vec<[f64; 2]> {
-    if (pts.len() as f64) <= 4.0 * width.max(1.0) {
-        return pts;
-    }
-    let mut out = Vec::with_capacity((4.0 * width) as usize + 8);
-    let mut start = 0;
-    while start < pts.len() {
-        let column = pts[start][0].floor();
-        let mut end = start + 1;
-        while end < pts.len() && pts[end][0].floor() == column {
-            end += 1;
-        }
-        let group = &pts[start..end];
-        let (mut lo, mut hi) = (0, 0);
-        for (i, p) in group.iter().enumerate() {
-            if p[1] < group[lo][1] {
-                lo = i;
-            }
-            if p[1] > group[hi][1] {
-                hi = i;
-            }
-        }
-        let mut keep = vec![0, lo, hi, group.len() - 1];
-        keep.sort_unstable();
-        keep.dedup();
-        out.extend(keep.into_iter().map(|i| group[i]));
-        start = end;
-    }
-    out
-}
-
-/// 大数据符号去重：点数超过坐标框宽度的 4 倍时，同一个 0.5 单位格子里只画一个符号。
-fn decimate_symbols(pts: Vec<[f64; 2]>, width: f64) -> Vec<[f64; 2]> {
-    if (pts.len() as f64) <= 4.0 * width.max(1.0) {
-        return pts;
-    }
-    let mut seen = std::collections::HashSet::with_capacity(pts.len().min(1 << 20));
-    pts.into_iter()
-        .filter(|p| seen.insert(((p[0] * 2.0).round() as i64, (p[1] * 2.0).round() as i64)))
-        .collect()
-}
-
-/// 面积和样条用的分段：每段按 X 排序。
-fn data_runs(s: &crate::Series) -> Vec<Vec<[f64; 2]>> {
-    row_runs(s)
-        .into_iter()
-        .map(|range| {
-            let mut run = s.points[range].to_vec();
-            run.sort_by(|a, b| a[0].total_cmp(&b[0]));
-            run
-        })
-        .collect()
-}
-
-fn spline_paths(s: &crate::Series) -> Vec<Vec<[f64; 2]>> {
-    let mut out = Vec::new();
-    for run in data_runs(s) {
-        let mut start = 0;
-        while start < run.len() {
-            let mut end = start + 1;
-            while end < run.len() && run[end][0] > run[end - 1][0] {
-                end += 1;
-            }
-            // ponytail: 每区间固定 16 段采样；大数据绘图后续改为按页面误差自适应采样。
-            out.push(crate::spline::natural(&run[start..end], 16).unwrap_or_else(|_| run[start..end].to_vec()));
-            start = end;
-        }
-    }
-    out
 }
 
 /// 图例要避开的数据几何（页面像素坐标）。
@@ -841,53 +554,16 @@ fn build_layer_full<'a>(
     min: [f64; 4],
     legend_outside: bool,
 ) -> Scene {
-    let horizontal = g.plot_type == PlotType::HorizontalBar;
-    // 数据（对数轴去掉非正值）
+    let recipe = crate::presets::recipe(g.plot_type);
+    let horizontal = recipe.orientation == crate::coord::Orientation::Horizontal;
     let (x_col, mut series) = match book {
         Some(b) => g.series_in(b, others),
         None => (None, Vec::new()),
     };
-    // 日期时间列做 X：用日期刻度（值为 UTC 毫秒）；分类列做 X：分类轴（水平条形图在 Y 轴）
     let x_date = !horizontal && !g.x_log && x_col.is_some_and(|c| c.data.kind() == crate::DataKind::DateTime);
     let categories = x_col.and_then(|c| c.data.category_levels());
-    if horizontal {
-        for s in &mut series {
-            for p in &mut s.points {
-                p.swap(0, 1);
-            }
-            for e in &mut s.errors {
-                e.swap(0, 1);
-            }
-        }
-    }
-    for s in &mut series {
-        // 均值变换后的点没有原始行，按顺序编号，连线不在组之间断开
-        if (g.plot_type == PlotType::Area || g.plot_type.is_spline() || g.plot_type.has_line())
-            && g.transform == crate::plotspec::Transform::Mean
-            && !s.line_only
-        {
-            s.rows = (0..s.points.len()).collect();
-        }
-        let keep: Vec<_> = s
-            .points
-            .iter()
-            .zip(&s.bases)
-            .map(|(p, base)| {
-                p[1].is_finite()
-                    && base.is_finite()
-                    && (!g.x_log || p[0] > 0.0)
-                    && (!g.y_log || p[1] > 0.0 || (g.plot_type.is_bar() && !s.line_only && *base > 0.0))
-            })
-            .collect();
-        let mut flags = keep.iter();
-        s.points.retain(|_| *flags.next().unwrap());
-        let mut flags = keep.iter();
-        s.errors.retain(|_| *flags.next().unwrap());
-        let mut flags = keep.iter();
-        s.bases.retain(|_| *flags.next().unwrap());
-        let mut flags = keep.iter();
-        s.rows.retain(|_| *flags.next().unwrap());
-    }
+    recipe.orientation.apply(&mut series);
+    crate::stat::prepare(g, &mut series);
     // 样式：默认按图层递增，再用逐曲线设置覆盖（图型、颜色、符号、线宽、符号大小、右侧 Y 轴）
     let mut styles = series_styles(&series, g.plot_type);
     if g.color_map != crate::colormap::ColorMap::Origin {
@@ -949,8 +625,8 @@ fn build_layer_full<'a>(
         .iter()
         .zip(&styles)
         .map(|(s, st)| {
-            if st.kind.is_spline() && !s.line_only {
-                spline_paths(s)
+            if crate::presets::recipe(st.kind).path == crate::mark::Path::Natural && !s.line_only {
+                crate::stat::spline_paths(s)
             } else {
                 Vec::new()
             }
@@ -960,7 +636,7 @@ fn build_layer_full<'a>(
         let target = if st.right { &mut all_y2 } else { &mut all_y };
         target.extend(paths.iter().flatten().map(|p| p[1]).filter(|v| !g.y_log || *v > 0.0));
     }
-    if g.plot_type.is_bar() && g.plot_type != PlotType::Bar && !horizontal {
+    if g.plot_type.is_bar() && recipe.position != crate::position::Position::Dodge && !horizontal {
         all_y.extend(
             series
                 .iter()
@@ -1149,13 +825,95 @@ fn build_layer_full<'a>(
         rect: [left, top, pw, ph],
     };
     let py2 = |v: f64| coord2.project([xa.lo, v])[1];
-    let py_left: &dyn Fn(f64) -> f64 = &py;
-    let py_right: &dyn Fn(f64) -> f64 = &py2;
     let inside_x = |x: f64| x >= left - 0.5 && x <= left + pw + 0.5;
     let inside_y = |y: f64| y >= top - 0.5 && y <= top + ph + 0.5;
 
     let mut items: Vec<Item> = Vec::new();
-    // 返回推入后的图元数，用来记下本图层数据图元的范围（图例按它避让）
+    let data_start;
+    {
+        // 记录本图层数据图元范围，供图例避让。
+        let mut push = |prim: Prim, clip: bool| {
+            items.push(Item {
+                prim,
+                clip: clip.then_some([left, top, pw, ph]),
+            });
+            items.len()
+        };
+        let mut start = push(
+            Prim::Rect {
+                x: 0.0,
+                y: 0.0,
+                w,
+                h,
+                fill: (!g.transparent).then_some((PAPER, 1.0)),
+                stroke: None,
+            },
+            false,
+        );
+
+        // 网格（默认关闭）
+        if g.grid {
+            let mut segs = Vec::new();
+            for t in &ya.ticks {
+                let y = py(*t);
+                if y > top + 0.5 && y < top + ph - 0.5 {
+                    segs.push([left, y, left + pw, y]);
+                }
+            }
+            for t in &xa.ticks {
+                let x = px(*t);
+                if x > left + 0.5 && x < left + pw - 0.5 {
+                    segs.push([x, top, x, top + ph]);
+                }
+            }
+            start = push(
+                Prim::Segments {
+                    segs,
+                    color: GRID,
+                    width: 1.0,
+                    dashed: true,
+                },
+                true,
+            );
+        }
+        data_start = start;
+
+        // 曲线：线和柱子裁剪到坐标框内；符号只画范围内的点、不裁剪，落在坐标轴上的点保持完整。
+        if all_x.is_empty() {
+            let msg = if book.is_some() {
+                "没有可绘制的数值数据"
+            } else {
+                "没有关联数据"
+            };
+            push(
+                Prim::Text {
+                    x: left + pw / 2.0,
+                    y: top + ph / 2.0,
+                    text: msg.into(),
+                    size: 13.0,
+                    anchor: Anchor::Middle,
+                    vertical: false,
+                    bold: false,
+                    color: MUTED,
+                },
+                false,
+            );
+        }
+    }
+    {
+        let context = crate::mark::Context {
+            layer: g,
+            book,
+            others,
+            xa: &xa,
+            ya: &ya,
+            ya2: &ya2_or,
+            rect: [left, top, pw, ph],
+            horizontal,
+            dx,
+        };
+        crate::mark::draw(&context, &series, &styles, &splines, &mut items);
+    }
     let mut push = |prim: Prim, clip: bool| {
         items.push(Item {
             prim,
@@ -1163,396 +921,6 @@ fn build_layer_full<'a>(
         });
         items.len()
     };
-    let mut data_start = push(
-        Prim::Rect {
-            x: 0.0,
-            y: 0.0,
-            w,
-            h,
-            fill: (!g.transparent).then_some((PAPER, 1.0)),
-            stroke: None,
-        },
-        false,
-    );
-
-    // 网格（默认关闭）
-    if g.grid {
-        let mut segs = Vec::new();
-        for t in &ya.ticks {
-            let y = py(*t);
-            if y > top + 0.5 && y < top + ph - 0.5 {
-                segs.push([left, y, left + pw, y]);
-            }
-        }
-        for t in &xa.ticks {
-            let x = px(*t);
-            if x > left + 0.5 && x < left + pw - 0.5 {
-                segs.push([x, top, x, top + ph]);
-            }
-        }
-        data_start = push(
-            Prim::Segments {
-                segs,
-                color: GRID,
-                width: 1.0,
-                dashed: true,
-            },
-            true,
-        );
-    }
-
-    // 曲线：线和柱子裁剪到坐标框内；符号只画范围内的点、不裁剪，落在坐标轴上的点保持完整
-    if all_x.is_empty() {
-        let msg = if book.is_some() {
-            "没有可绘制的数值数据"
-        } else {
-            "没有关联数据"
-        };
-        push(
-            Prim::Text {
-                x: left + pw / 2.0,
-                y: top + ph / 2.0,
-                text: msg.into(),
-                size: 13.0,
-                anchor: Anchor::Middle,
-                vertical: false,
-                bold: false,
-                color: MUTED,
-            },
-            false,
-        );
-    }
-    let mut symbols: Vec<Prim> = Vec::new();
-    for ((s, st), paths) in series.iter().zip(&styles).zip(&splines) {
-        let (ya, py) = if st.right { (&ya2_or, py_right) } else { (&ya, py_left) };
-        let color = st.color.rgb();
-        if st.kind.is_bar() {
-            let gw = dx * 0.7;
-            let count = if st.kind.is_stacked() { 1 } else { st.bar_count.max(1) };
-            let index = if st.kind.is_stacked() { 0 } else { st.bar_index };
-            let bw = gw / count as f64;
-            for (p, base) in s.points.iter().zip(&s.bases) {
-                let (category, value, ca, va) = if horizontal {
-                    (p[1], p[0], ya, &xa)
-                } else {
-                    (p[0], p[1], &xa, ya)
-                };
-                let start = category - gw / 2.0 + index as f64 * bw;
-                let end = category - gw / 2.0 + (index as f64 + 1.0) * bw;
-                let category = |v: f64| if ca.log { v.max(ca.lo) } else { v };
-                let base = base.clamp(va.lo, va.hi);
-                let value = if va.log { value.max(va.lo) } else { value };
-                let (a, b) = if horizontal {
-                    ([px(base), py(category(start))], [px(value), py(category(end))])
-                } else {
-                    ([px(category(start)), py(base)], [px(category(end)), py(value)])
-                };
-                push(
-                    Prim::Rect {
-                        x: a[0].min(b[0]),
-                        y: a[1].min(b[1]),
-                        w: (b[0] - a[0]).abs(),
-                        h: (a[1] - b[1]).abs(),
-                        fill: Some((color, 1.0)),
-                        stroke: Some((INK, 0.5)),
-                    },
-                    true,
-                );
-            }
-            continue;
-        }
-        if st.kind == PlotType::Area {
-            let base = py(if ya.log { ya.lo } else { 0.0f64.clamp(ya.lo, ya.hi) });
-            for run in data_runs(s) {
-                let pts: Vec<_> = run.iter().map(|p| [px(p[0]), py(p[1])]).collect();
-                let triangles = area_triangles(&pts, base);
-                if !triangles.is_empty() {
-                    push(
-                        Prim::Triangles {
-                            pts: triangles,
-                            color,
-                            opacity: f64::from(g.area_opacity),
-                        },
-                        true,
-                    );
-                }
-                if pts.len() > 1 {
-                    push(
-                        Prim::Polyline {
-                            pts,
-                            color,
-                            width: f64::from(st.line_width),
-                        },
-                        true,
-                    );
-                }
-            }
-            continue;
-        }
-        if st.kind == PlotType::VerticalDrop {
-            let base = py(if ya.log { ya.lo } else { 0.0f64.clamp(ya.lo, ya.hi) });
-            push(
-                Prim::Segments {
-                    segs: s.points.iter().map(|p| [px(p[0]), base, px(p[0]), py(p[1])]).collect(),
-                    color,
-                    width: f64::from(st.line_width),
-                    dashed: false,
-                },
-                true,
-            );
-        }
-        if st.kind.is_spline() {
-            for path in paths {
-                for run in path.split(|p| (g.x_log && p[0] <= 0.0) || (g.y_log && p[1] <= 0.0)) {
-                    if run.len() > 1 {
-                        push(
-                            Prim::Polyline {
-                                pts: run.iter().map(|p| [px(p[0]), py(p[1])]).collect(),
-                                color,
-                                width: f64::from(st.line_width),
-                            },
-                            true,
-                        );
-                    }
-                }
-            }
-        } else if st.kind.has_line() {
-            // 与面积、样条一致：遇到缺失行断开，不跨过缺失值连线
-            for range in row_runs(s).into_iter().filter(|r| r.len() > 1) {
-                let run = &s.points[range];
-                let pts = if matches!(st.kind, PlotType::StepHorizontal | PlotType::StepVertical) {
-                    let mut pts = vec![[px(run[0][0]), py(run[0][1])]];
-                    for pair in run.windows(2) {
-                        let bend = if st.kind == PlotType::StepHorizontal {
-                            [pair[1][0], pair[0][1]]
-                        } else {
-                            [pair[0][0], pair[1][1]]
-                        };
-                        pts.push([px(bend[0]), py(bend[1])]);
-                        pts.push([px(pair[1][0]), py(pair[1][1])]);
-                    }
-                    pts
-                } else {
-                    // B 样条、Bezier 在数据坐标里算曲线（落在控制点凸包内，不改坐标范围）
-                    let curve = match g.connect {
-                        crate::page::Connect::BSpline if !s.line_only => crate::spline::bspline(run, 16),
-                        crate::page::Connect::Bezier if !s.line_only => crate::spline::bezier(run, 16),
-                        _ => run.to_vec(),
-                    };
-                    decimate_line(curve.iter().map(|p| [px(p[0]), py(p[1])]).collect(), pw)
-                };
-                push(
-                    Prim::Polyline {
-                        pts,
-                        color,
-                        width: f64::from(st.line_width),
-                    },
-                    true,
-                );
-            }
-        }
-        if st.kind.has_symbol() {
-            let pts: Vec<[f64; 2]> = decimate_symbols(
-                s.points
-                    .iter()
-                    .map(|p| [px(p[0]), py(p[1])])
-                    .filter(|p| inside_x(p[0]) && inside_y(p[1]))
-                    .collect(),
-                pw,
-            );
-            symbols.push(Prim::Symbols {
-                sym: st.symbol,
-                pts,
-                r: f64::from(st.symbol_size) / 2.0,
-                color,
-            });
-        }
-    }
-    if g.error_bars.visible {
-        for (s, st) in series.iter().zip(&styles) {
-            let (ya, py) = if st.right { (&ya2_or, py_right) } else { (&ya, py_left) };
-            let mut segs = Vec::new();
-            let offset = if st.kind.is_bar() && !st.kind.is_stacked() {
-                dx * 0.7 * ((st.bar_index as f64 + 0.5) / st.bar_count.max(1) as f64 - 0.5)
-            } else {
-                0.0
-            };
-            let cap = f64::from(g.error_bars.cap) / 2.0;
-            for (p, errors) in s.points.iter().zip(&s.errors) {
-                let (x, y) = if horizontal {
-                    (p[0], p[1] + offset)
-                } else {
-                    (p[0] + offset, p[1])
-                };
-                if let Some(e) = errors[0] {
-                    let ends = [x - e, x + e];
-                    let yy = py(y);
-                    if (!ya.log || y > 0.0) && ends[1] >= xa.lo && ends[0] <= xa.hi {
-                        segs.push([px(ends[0].clamp(xa.lo, xa.hi)), yy, px(ends[1].clamp(xa.lo, xa.hi)), yy]);
-                        for end in ends {
-                            if (xa.lo..=xa.hi).contains(&end) {
-                                let xx = px(end);
-                                segs.push([xx, yy - cap, xx, yy + cap]);
-                            }
-                        }
-                    }
-                }
-                if let Some(e) = errors[1] {
-                    let ends = [y - e, y + e];
-                    let xx = px(x);
-                    if (xa.lo..=xa.hi).contains(&x) && ends[1] >= ya.lo && ends[0] <= ya.hi {
-                        segs.push([xx, py(ends[0].clamp(ya.lo, ya.hi)), xx, py(ends[1].clamp(ya.lo, ya.hi))]);
-                        for end in ends {
-                            if (ya.lo..=ya.hi).contains(&end) {
-                                let yy = py(end);
-                                segs.push([xx - cap, yy, xx + cap, yy]);
-                            }
-                        }
-                    }
-                }
-            }
-            if !segs.is_empty() {
-                push(
-                    Prim::Segments {
-                        segs,
-                        color: st.color.rgb(),
-                        width: f64::from(g.error_bars.width),
-                        dashed: false,
-                    },
-                    true,
-                );
-            }
-        }
-    }
-    for s in symbols {
-        push(s, false);
-    }
-
-    if g.labels.visible {
-        use crate::page::LabelSource;
-        for (s, st) in series.iter().zip(&styles).filter(|(s, _)| !s.line_only) {
-            let py = if st.right { py_right } else { py_left };
-            let offset = if st.kind.is_bar() && !st.kind.is_stacked() {
-                dx * 0.7 * ((st.bar_index as f64 + 0.5) / st.bar_count.max(1) as f64 - 0.5)
-            } else {
-                0.0
-            };
-            for (i, p) in s.points.iter().enumerate() {
-                let (x, y) = if horizontal {
-                    (p[0], p[1] + offset)
-                } else {
-                    (p[0] + offset, p[1])
-                };
-                if !inside_x(px(x)) || !inside_y(py(y)) {
-                    continue;
-                }
-                let value = if horizontal {
-                    p[0]
-                } else if st.kind.is_stacked() {
-                    p[1] - s.bases[i]
-                } else {
-                    p[1]
-                };
-                let value_text = format!(
-                    "{}{}",
-                    crate::fmt_num(value),
-                    if st.kind == PlotType::PercentStackedBar {
-                        "%"
-                    } else {
-                        ""
-                    }
-                );
-                let label = match g.labels.source {
-                    LabelSource::Value => value_text,
-                    LabelSource::XY => format!(
-                        "({}, {})",
-                        crate::fmt_num(if horizontal { p[1] } else { p[0] }),
-                        value_text
-                    ),
-                    LabelSource::Row if g.transform == crate::plotspec::Transform::Identity => {
-                        (s.rows[i] + 1).to_string()
-                    }
-                    LabelSource::Column if g.transform == crate::plotspec::Transform::Identity => {
-                        // 曲线所在的工作簿：其他工作簿的曲线用该表的标签列
-                        let own = book.and_then(|b| g.resolve(b, others, &s.key)).map(|(b, _)| b);
-                        let local = own.is_none_or(|b| Some(b.id) == g.book_id);
-                        g.labels
-                            .column
-                            .as_deref()
-                            .filter(|_| local)
-                            .and_then(|k| book.and_then(|b| b.column(k)))
-                            // 没有指定列时用工作表里的标签列
-                            .or_else(|| {
-                                own.or(book)
-                                    .and_then(|b| b.columns.iter().find(|c| c.role == crate::Role::Label))
-                            })
-                            .and_then(|c| c.data.get(s.rows[i]))
-                            .map(std::borrow::Cow::into_owned)
-                            .unwrap_or_default()
-                    }
-                    _ => String::new(),
-                };
-                let label = label.replace(['\r', '\n'], " ");
-                if label.trim().is_empty() {
-                    continue;
-                }
-                let positive = if st.kind == PlotType::FloatingBar {
-                    value >= s.bases[i]
-                } else {
-                    value >= 0.0
-                };
-                // 有误差棒时，标签放到误差棒端点以外，不压在误差棒和端帽上
-                let reach = if g.error_bars.visible {
-                    s.errors[i][usize::from(!horizontal)].map_or(0.0, |e| {
-                        let d = if horizontal {
-                            px(if positive { x + e } else { x - e }) - px(x)
-                        } else {
-                            py(if positive { y + e } else { y - e }) - py(y)
-                        };
-                        if d.is_finite() {
-                            d.abs()
-                        } else {
-                            0.0
-                        }
-                    })
-                } else {
-                    0.0
-                };
-                let delta = f64::from(g.labels.offset) + f64::from(g.labels.size) / 2.0 + reach;
-                let (xx, yy, anchor) = if horizontal {
-                    (
-                        px(x) + if positive { delta } else { -delta },
-                        py(y),
-                        if positive { Anchor::Start } else { Anchor::End },
-                    )
-                } else {
-                    (px(x), py(y) + if positive { -delta } else { delta }, Anchor::Middle)
-                };
-                let width = text_width(&label, f64::from(g.labels.size)).min(pw);
-                let xx = match anchor {
-                    Anchor::Middle => xx.clamp(left + width / 2.0, (left + pw - width / 2.0).max(left + width / 2.0)),
-                    Anchor::Start => xx.clamp(left, left + pw - width),
-                    Anchor::End => xx.clamp(left + width, left + pw),
-                };
-                let half = (f64::from(g.labels.size) / 2.0).min(ph / 2.0);
-                let yy = yy.clamp(top + half, top + ph - half);
-                push(
-                    Prim::Text {
-                        x: xx,
-                        y: yy,
-                        text: label,
-                        size: f64::from(g.labels.size),
-                        anchor,
-                        vertical: false,
-                        bold: false,
-                        color: st.color.rgb(),
-                    },
-                    true,
-                );
-            }
-        }
-    }
-
     // 坐标轴：默认只画左轴和下轴（Nature 风格，不闭合）；四边框时闭合
     let mut axis_pts = vec![[left, top], [left, top + ph], [left + pw, top + ph]];
     if g.frame {
@@ -1828,6 +1196,7 @@ fn build_layer_full<'a>(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::mark::path::{decimate_line, decimate_symbols};
     use crate::model::Project;
 
     #[test]

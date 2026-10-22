@@ -28,3 +28,24 @@ impl Coord for Cartesian<'_> {
         ]
     }
 }
+
+/// Orientation changes data coordinates before scales and drawing; inverse picking uses the same choice.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Orientation {
+    Vertical,
+    Horizontal,
+}
+impl Orientation {
+    pub(crate) fn apply(self, series: &mut [crate::Series]) {
+        if self == Self::Horizontal {
+            for s in series {
+                for p in &mut s.points {
+                    p.swap(0, 1);
+                }
+                for errors in &mut s.errors {
+                    errors.swap(0, 1);
+                }
+            }
+        }
+    }
+}

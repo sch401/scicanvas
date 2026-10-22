@@ -510,81 +510,9 @@ impl PlotSpec {
                     .map(|source| DataRef::new(cbook.id, source).key(self.book_id)),
             });
         }
-        if self.transform == Transform::Mean {
-            for s in &mut out {
-                if s.line_only {
-                    continue;
-                }
-                let mut indices: Vec<_> = (0..s.points.len()).collect();
-                indices.sort_by(|a, b| s.points[*a][0].total_cmp(&s.points[*b][0]));
-                let mut grouped = Vec::new();
-                let mut bases = Vec::new();
-                let mut i = 0;
-                while i < s.points.len() {
-                    let x = s.points[indices[i]][0];
-                    let mut end = i + 1;
-                    while end < s.points.len() && s.points[indices[end]][0] == x {
-                        end += 1;
-                    }
-                    let mean = indices[i..end].iter().map(|j| s.points[*j][1]).sum::<f64>() / (end - i) as f64;
-                    grouped.push([x, mean]);
-                    bases.push(indices[i..end].iter().map(|j| s.bases[*j]).sum::<f64>() / (end - i) as f64);
-                    i = end;
-                }
-                s.points = grouped;
-                s.bases = bases;
-                s.rows = vec![0; s.points.len()];
-                // 原始行的测量误差不代表分组均值的标准误。
-                s.errors = vec![[None; 2]; s.points.len()];
-            }
-        }
-        if self.plot_type.is_stacked() {
-            stack_bars(&mut out, self.plot_type == PlotType::PercentStackedBar);
-        }
-        (xcol, out)
-    }
-}
+        crate::stat::apply(&mut out, self.transform);
+        crate::presets::recipe(self.plot_type).position.apply(&mut out);
 
-fn stack_bars(series: &mut [Series], percent: bool) {
-    use std::collections::BTreeMap;
-    let key = |row: usize, x: f64| (row, if x == 0.0 { 0 } else { x.to_bits() });
-    let mut totals: BTreeMap<_, [f64; 2]> = BTreeMap::new();
-    let mut scales: BTreeMap<_, [f64; 2]> = BTreeMap::new();
-    if percent {
-        for s in series.iter().filter(|s| !s.line_only) {
-            for (p, row) in s.points.iter().zip(&s.rows) {
-                let scale = &mut scales.entry(key(*row, p[0])).or_default()[usize::from(p[1] < 0.0)];
-                *scale = scale.max(p[1].abs());
-            }
-        }
-        for s in series.iter().filter(|s| !s.line_only) {
-            for (p, row) in s.points.iter().zip(&s.rows) {
-                let key = key(*row, p[0]);
-                let sign = usize::from(p[1] < 0.0);
-                let scale = scales[&key][sign];
-                totals.entry(key).or_default()[sign] += if scale > 0.0 { p[1].abs() / scale } else { 0.0 };
-            }
-        }
-    }
-    let mut sums: BTreeMap<_, [f64; 2]> = BTreeMap::new();
-    for s in series.iter_mut().filter(|s| !s.line_only) {
-        for (((p, base), row), errors) in s.points.iter_mut().zip(&mut s.bases).zip(&s.rows).zip(&mut s.errors) {
-            let key = key(*row, p[0]);
-            let sign = usize::from(p[1] < 0.0);
-            if percent {
-                let total = totals[&key][sign];
-                let (scale, factor) = if total > 0.0 {
-                    (scales[&key][sign], 100.0 / total)
-                } else {
-                    (1.0, 0.0)
-                };
-                p[1] = p[1] / scale * factor;
-                errors[1] = errors[1].map(|e| e / scale * factor).filter(|e| e.is_finite());
-            }
-            let sum = &mut sums.entry(key).or_default()[sign];
-            *base = *sum;
-            *sum += p[1];
-            p[1] = *sum;
-        }
+        (xcol, out)
     }
 }

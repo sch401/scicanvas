@@ -516,37 +516,19 @@ impl PlotType {
     }
 
     pub fn has_line(self) -> bool {
-        matches!(
-            self,
-            PlotType::Line
-                | PlotType::LineSymbol
-                | PlotType::StepHorizontal
-                | PlotType::StepVertical
-                | PlotType::Area
-                | PlotType::Spline
-                | PlotType::SplineSymbol
-        )
+        crate::presets::recipe(self).has_line()
     }
-
     pub fn is_bar(self) -> bool {
-        matches!(
-            self,
-            Self::Bar | Self::StackedBar | Self::PercentStackedBar | Self::FloatingBar | Self::HorizontalBar
-        )
+        crate::presets::recipe(self).is_bar()
     }
-
     pub fn is_stacked(self) -> bool {
-        matches!(self, Self::StackedBar | Self::PercentStackedBar)
+        crate::presets::recipe(self).position.is_stacked()
     }
-
     pub fn has_symbol(self) -> bool {
-        matches!(
-            self,
-            PlotType::Scatter | PlotType::LineSymbol | PlotType::SplineSymbol | PlotType::VerticalDrop
-        )
+        crate::presets::recipe(self).has_symbol()
     }
     pub fn is_spline(self) -> bool {
-        matches!(self, Self::Spline | Self::SplineSymbol)
+        crate::presets::recipe(self).path == crate::mark::Path::Natural
     }
 }
 
