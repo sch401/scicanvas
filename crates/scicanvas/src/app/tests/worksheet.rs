@@ -391,13 +391,8 @@ fn actual_header_and_property_text_edits_form_one_transaction_each() {
         let output = editor_frame(&mut app, &ctx, vec![], props);
         assert!(!app.history.is_pending());
         let text = if props { "原图" } else { "时间" };
-        let at = output
-            .shapes
-            .iter()
-            .find_map(|s| match &s.shape {
-                egui::Shape::Text(t) if t.galley.job.text == text => Some(t.pos + t.galley.rect.center().to_vec2()),
-                _ => None,
-            })
+        let at = crate::test_ui::text_rect(&output, text)
+            .map(|rect| rect.center())
             .unwrap_or_else(|| {
                 panic!(
                     "未找到 {text}，当前文字：{:?}",
@@ -580,29 +575,19 @@ fn non_numeric_cell_requires_confirmation_and_can_cancel_or_undo_conversion() {
         );
         assert!(matches!(app.dialog, Some(Dialog::ConvertText { .. })));
         assert_eq!(app.project, before);
-        let frame = |app: &mut SciApp, events| {
-            ctx.run(
-                egui::RawInput {
-                    events,
-                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1000.0, 900.0))),
-                    ..Default::default()
-                },
-                |ctx| app.dialogs(ctx),
-            )
-        };
-        frame(&mut app, vec![]);
-        let out = frame(&mut app, vec![]);
+        let mut harness = crate::test_ui::Harness::new(
+            ctx.clone(),
+            Some(egui::vec2(1000.0, 900.0)),
+            |app: &mut SciApp, ctx: &egui::Context| app.dialogs(ctx),
+        );
+        harness.frame(&mut app, vec![]);
+        let out = harness.frame(&mut app, vec![]);
         let label = if confirm { "转换为文本并写入" } else { "取消" };
-        let at = out
-            .shapes
-            .iter()
-            .find_map(|s| match &s.shape {
-                egui::Shape::Text(t) if t.galley.job.text == label => Some(t.pos + egui::vec2(4.0, 4.0)),
-                _ => None,
-            })
+        let at = crate::test_ui::find_text(&out, label)
+            .map(|pos| pos + egui::vec2(4.0, 4.0))
             .unwrap();
         for pressed in [true, false] {
-            frame(
+            harness.frame(
                 &mut app,
                 vec![
                     egui::Event::PointerMoved(at),

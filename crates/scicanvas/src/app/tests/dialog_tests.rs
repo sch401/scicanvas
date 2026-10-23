@@ -167,32 +167,20 @@ fn sg_derivative_dialog_writes_second_derivative_column_and_undoes() {
     let ctx = egui::Context::default();
     crate::fonts::setup(&ctx);
     ctx.style_mut(|style| style.animation_time = 0.0);
-    let mut time = 0.0;
-    let mut frame = |app: &mut SciApp, events| {
-        time += 0.02;
-        ctx.run(
-            egui::RawInput {
-                time: Some(time),
-                screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1400.0, 1000.0))),
-                events,
-                ..Default::default()
-            },
-            |ctx| app.dialogs(ctx),
-        )
-    };
-    frame(&mut app, vec![]);
-    let output = frame(&mut app, vec![]);
-    let pos = output
-        .shapes
-        .iter()
-        .find_map(|s| match &s.shape {
-            egui::Shape::Text(t) if t.galley.job.text == "求导" => Some(t.pos + egui::vec2(5.0, 5.0)),
-            _ => None,
-        })
+    let mut harness = crate::test_ui::Harness::new(
+        ctx.clone(),
+        Some(egui::vec2(1400.0, 1000.0)),
+        |app: &mut SciApp, ctx: &egui::Context| app.dialogs(ctx),
+    )
+    .with_step(0.02);
+    harness.frame(&mut app, vec![]);
+    let output = harness.frame(&mut app, vec![]);
+    let pos = crate::test_ui::find_text(&output, "求导")
+        .map(|pos| pos + egui::vec2(5.0, 5.0))
         .expect("OK button");
-    frame(&mut app, vec![egui::Event::PointerMoved(pos)]);
+    harness.frame(&mut app, vec![egui::Event::PointerMoved(pos)]);
     for pressed in [true, false] {
-        frame(
+        harness.frame(
             &mut app,
             vec![egui::Event::PointerButton {
                 pos,
@@ -222,33 +210,21 @@ fn fit_report_residual_plot_button_creates_scatter_and_undoes() {
     let ctx = egui::Context::default();
     crate::fonts::setup(&ctx);
     ctx.style_mut(|style| style.animation_time = 0.0);
-    let mut time = 0.0;
-    let mut frame = |app: &mut SciApp, events| {
-        time += 0.02;
-        ctx.run(
-            egui::RawInput {
-                time: Some(time),
-                screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1400.0, 1000.0))),
-                events,
-                ..Default::default()
-            },
-            |ctx| app.dialogs(ctx),
-        )
-    };
-    frame(&mut app, vec![]);
-    frame(&mut app, vec![]);
-    let output = frame(&mut app, vec![]);
-    let pos = output
-        .shapes
-        .iter()
-        .find_map(|s| match &s.shape {
-            egui::Shape::Text(t) if t.galley.job.text == "残差图" => Some(t.pos + egui::vec2(5.0, 5.0)),
-            _ => None,
-        })
+    let mut harness = crate::test_ui::Harness::new(
+        ctx.clone(),
+        Some(egui::vec2(1400.0, 1000.0)),
+        |app: &mut SciApp, ctx: &egui::Context| app.dialogs(ctx),
+    )
+    .with_step(0.02);
+    harness.frame(&mut app, vec![]);
+    harness.frame(&mut app, vec![]);
+    let output = harness.frame(&mut app, vec![]);
+    let pos = crate::test_ui::find_text(&output, "残差图")
+        .map(|pos| pos + egui::vec2(5.0, 5.0))
         .expect("residual plot button");
-    frame(&mut app, vec![egui::Event::PointerMoved(pos)]);
+    harness.frame(&mut app, vec![egui::Event::PointerMoved(pos)]);
     for pressed in [true, false] {
-        frame(
+        harness.frame(
             &mut app,
             vec![egui::Event::PointerButton {
                 pos,
@@ -285,33 +261,21 @@ fn fit_report_save_note_button_persists_report_and_undoes() {
         let ctx = egui::Context::default();
         crate::fonts::setup(&ctx);
         ctx.style_mut(|style| style.animation_time = 0.0);
-        let mut time = 0.0;
-        let mut frame = |app: &mut SciApp, events| {
-            time += 0.02;
-            ctx.run(
-                egui::RawInput {
-                    time: Some(time),
-                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1400.0, 1000.0))),
-                    events,
-                    ..Default::default()
-                },
-                |ctx| app.dialogs(ctx),
-            )
-        };
-        frame(&mut app, vec![]);
-        frame(&mut app, vec![]);
-        let output = frame(&mut app, vec![]);
-        let pos = output
-            .shapes
-            .iter()
-            .find_map(|s| match &s.shape {
-                egui::Shape::Text(t) if t.galley.job.text == "保存为 Note" => Some(t.pos + egui::vec2(5.0, 5.0)),
-                _ => None,
-            })
+        let mut harness = crate::test_ui::Harness::new(
+            ctx.clone(),
+            Some(egui::vec2(1400.0, 1000.0)),
+            |app: &mut SciApp, ctx: &egui::Context| app.dialogs(ctx),
+        )
+        .with_step(0.02);
+        harness.frame(&mut app, vec![]);
+        harness.frame(&mut app, vec![]);
+        let output = harness.frame(&mut app, vec![]);
+        let pos = crate::test_ui::find_text(&output, "保存为 Note")
+            .map(|pos| pos + egui::vec2(5.0, 5.0))
             .expect("save report button");
-        frame(&mut app, vec![egui::Event::PointerMoved(pos)]);
+        harness.frame(&mut app, vec![egui::Event::PointerMoved(pos)]);
         for pressed in [true, false] {
-            frame(
+            harness.frame(
                 &mut app,
                 vec![egui::Event::PointerButton {
                     pos,

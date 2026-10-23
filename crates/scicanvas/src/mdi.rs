@@ -456,41 +456,30 @@ mod tests {
     }
     fn frame_in_workspace(ctx: &egui::Context, g: &mut Geom, events: Vec<egui::Event>, ws: Rect) -> WinResponse {
         let mut response = WinResponse::default();
-        let _ = ctx.run(
-            egui::RawInput {
-                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1000.0, 700.0))),
-                events,
-                ..Default::default()
-            },
-            |ctx| {
-                response = window(
-                    ctx,
-                    egui::Id::new("mdi-test"),
-                    ws,
-                    g,
-                    0,
-                    "Window",
-                    "book",
-                    true,
-                    &crate::theme::palette(egui::Theme::Light),
-                    |ui| {
-                        ui.label("body");
-                    },
-                );
-            },
-        );
+        let mut harness = crate::test_ui::Harness::new(ctx.clone(), Some(vec2(1000.0, 700.0)), ());
+        harness.run(events, |ctx| {
+            response = window(
+                ctx,
+                egui::Id::new("mdi-test"),
+                ws,
+                g,
+                0,
+                "Window",
+                "book",
+                true,
+                &crate::theme::palette(egui::Theme::Light),
+                |ui| {
+                    ui.label("body");
+                },
+            );
+        });
         if let Some(state) = response.state {
             g.state = state;
         }
         response
     }
     fn button(pos: Pos2, pressed: bool) -> egui::Event {
-        egui::Event::PointerButton {
-            pos,
-            button: egui::PointerButton::Primary,
-            pressed,
-            modifiers: egui::Modifiers::NONE,
-        }
+        crate::test_ui::button(pos, pressed)
     }
     fn click(ctx: &egui::Context, g: &mut Geom, pos: Pos2) -> WinResponse {
         frame(ctx, g, vec![egui::Event::PointerMoved(pos), button(pos, true)]);

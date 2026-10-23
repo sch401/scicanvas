@@ -16,6 +16,8 @@ mod mdi;
 mod plot;
 mod ribbon;
 mod sheet;
+#[cfg(test)]
+mod test_ui;
 mod theme;
 
 use eframe::egui;

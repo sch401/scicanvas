@@ -10,7 +10,7 @@ fn explorer_slow_second_click_renames_folders_books_and_graphs_with_history() {
         let mut ui = ExplorerUi::new();
         let at = ui.at(&mut app, &name);
         ui.click(&mut app, at);
-        ui.time += 0.7;
+        ui.harness.time += 0.7;
         ui.click(&mut app, at);
         assert_eq!(app.explorer_rename.map(|r| r.0), Some(id));
         ui.frame(&mut app, vec![]);
@@ -142,18 +142,18 @@ fn explorer_shift_ranges_follow_sort_order_and_skip_collapsed_contents() {
     let table_pos = ui.at(&mut app, "Z-Table");
     ui.click(&mut app, table_pos);
     assert_eq!(app.explorer_visible, vec![1, 2, note]);
-    ui.modifiers.shift = true;
+    ui.harness.modifiers.shift = true;
     let note_pos = ui.at(&mut app, "M-Note1");
     ui.click(&mut app, note_pos);
     assert_eq!(app.explorer_selection, vec![1, 2, note]);
     let graph_pos = ui.at(&mut app, "A-Graph");
     ui.click(&mut app, graph_pos);
     assert_eq!(app.explorer_selection, vec![1, 2]);
-    ui.modifiers.ctrl = true;
+    ui.harness.modifiers.ctrl = true;
     ui.click(&mut app, note_pos);
     assert_eq!(app.explorer_selection, vec![1, 2, note]);
     assert!(app.explorer_rename.is_none());
-    ui.modifiers = egui::Modifiers::NONE;
+    ui.harness.modifiers = egui::Modifiers::NONE;
     app.explorer_sort = workspace::ExplorerSort::Name;
     ui.frame(&mut app, vec![]);
     assert_eq!(app.explorer_visible, vec![2, note, 1]);
@@ -171,7 +171,7 @@ fn explorer_shift_ranges_follow_sort_order_and_skip_collapsed_contents() {
     let name = app.project.name_of(folder).unwrap().to_owned();
     let folder_pos = ui.at(&mut app, &name);
     ui.click(&mut app, folder_pos);
-    ui.modifiers.shift = true;
+    ui.harness.modifiers.shift = true;
     let note_pos = ui.at(&mut app, "M-Note1");
     ui.click(&mut app, note_pos);
     assert_eq!(app.explorer_selection, vec![folder, 2, note]);
@@ -188,14 +188,14 @@ fn explorer_ctrl_click_toggles_selection_without_rename_or_data_changes() {
     ui.click(&mut app, book);
     assert_eq!(app.explorer_selection, vec![1]);
     let graph = ui.at(&mut app, "Graph1");
-    ui.modifiers.ctrl = true;
+    ui.harness.modifiers.ctrl = true;
     ui.click(&mut app, graph);
     assert_eq!(app.explorer_selection, vec![1, 2]);
     let name = app.project.name_of(folder).unwrap().to_owned();
     let folder_pos = ui.at(&mut app, &name);
     ui.click(&mut app, folder_pos);
     assert_eq!(app.explorer_selection, vec![1, 2, folder]);
-    ui.time += 0.7;
+    ui.harness.time += 0.7;
     ui.click(&mut app, folder_pos);
     assert_eq!(app.explorer_selection, vec![1, 2]);
     assert!(app.explorer_rename.is_none());
@@ -204,7 +204,7 @@ fn explorer_ctrl_click_toggles_selection_without_rename_or_data_changes() {
     ui.click(&mut app, book);
     assert!(app.explorer_selection.is_empty());
     assert_eq!(app.explorer_target, None);
-    ui.modifiers = egui::Modifiers::NONE;
+    ui.harness.modifiers = egui::Modifiers::NONE;
     ui.click(&mut app, graph);
     assert_eq!(app.explorer_selection, vec![2]);
     assert_eq!(app.project, before);
@@ -223,12 +223,12 @@ fn explorer_multi_drag_keeps_folder_contents_and_undoes_in_one_step() {
     let mut ui = ExplorerUi::new();
     let source = ui.at(&mut app, "来源");
     ui.click(&mut app, source);
-    ui.modifiers.ctrl = true;
+    ui.harness.modifiers.ctrl = true;
     let book = ui.at(&mut app, "Book1");
     ui.click(&mut app, book);
     let graph = ui.at(&mut app, "Graph1");
     ui.click(&mut app, graph);
-    ui.modifiers = egui::Modifiers::NONE;
+    ui.harness.modifiers = egui::Modifiers::NONE;
     ui.drag(&mut app, "Graph1", "目标");
     assert_eq!(app.project.folder(parent).unwrap().parent, Some(destination));
     assert_eq!(app.project.folder_of(1), Some(parent));
@@ -373,32 +373,19 @@ fn explorer_new_folder_button_and_tree_render_real_project_data() {
     crate::fonts::setup(&ctx);
     let mut app = app();
     app.explorer_target = None;
-    let frame = |app: &mut SciApp, events| {
-        ctx.run(
-            egui::RawInput {
-                events,
-                ..Default::default()
-            },
-            |ctx| {
-                egui::CentralPanel::default().show(ctx, |ui| app.explorer(ui));
-            },
-        )
-    };
+    let mut harness = crate::test_ui::Harness::new(ctx.clone(), None, |app: &mut SciApp, ctx: &egui::Context| {
+        egui::CentralPanel::default().show(ctx, |ui| app.explorer(ui));
+    });
     let before = app.project.clone();
     // “＋ 新建”菜单 → “文件夹”
     for label in ["＋ 新建", "文件夹"] {
-        frame(&mut app, vec![]);
-        let output = frame(&mut app, vec![]);
-        let at = output
-            .shapes
-            .iter()
-            .find_map(|s| match &s.shape {
-                egui::Shape::Text(t) if t.galley.job.text == label => Some(t.pos + t.galley.rect.center().to_vec2()),
-                _ => None,
-            })
+        harness.frame(&mut app, vec![]);
+        let output = harness.frame(&mut app, vec![]);
+        let at = crate::test_ui::text_rect(&output, label)
+            .map(|rect| rect.center())
             .unwrap_or_else(|| panic!("missing {label}"));
         for pressed in [true, false] {
-            frame(
+            harness.frame(
                 &mut app,
                 vec![
                     egui::Event::PointerMoved(at),
@@ -414,7 +401,7 @@ fn explorer_new_folder_button_and_tree_render_real_project_data() {
     }
     assert_eq!(app.project.folders.len(), 1);
     roundtrip(&mut app, &before);
-    let output = frame(&mut app, vec![]);
+    let output = harness.frame(&mut app, vec![]);
     assert!(output
         .shapes
         .iter()

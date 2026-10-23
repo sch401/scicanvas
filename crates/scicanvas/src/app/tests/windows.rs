@@ -8,23 +8,12 @@ fn ws() -> egui::Rect {
 }
 
 fn frame(ctx: &egui::Context, app: &mut SciApp, events: Vec<egui::Event>) {
-    let _ = ctx.run(
-        egui::RawInput {
-            screen_rect: Some(ws()),
-            events,
-            ..Default::default()
-        },
-        |ctx| app.child_windows(ctx),
-    );
+    let mut harness = crate::test_ui::Harness::new(ctx.clone(), Some(SCREEN), ());
+    harness.run(events, |ctx| app.child_windows(ctx));
 }
 
 fn button(pos: egui::Pos2, pressed: bool) -> egui::Event {
-    egui::Event::PointerButton {
-        pos,
-        button: egui::PointerButton::Primary,
-        pressed,
-        modifiers: egui::Modifiers::NONE,
-    }
+    crate::test_ui::button(pos, pressed)
 }
 
 fn click(ctx: &egui::Context, app: &mut SciApp, pos: egui::Pos2) {

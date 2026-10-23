@@ -3088,7 +3088,7 @@ mod docking_tests {
 
     struct Host {
         ctx: egui::Context,
-        time: f64,
+        harness: crate::test_ui::Harness,
         second: bool,
         size: egui::Vec2,
     }
@@ -3098,52 +3098,42 @@ mod docking_tests {
             crate::fonts::setup(&ctx);
             ctx.style_mut(|s| s.animation_time = 0.0);
             Self {
+                harness: crate::test_ui::Harness::new(ctx.clone(), Some(egui::vec2(1200.0, 900.0)), ()).with_step(0.04),
                 ctx,
-                time: 0.0,
                 second: false,
                 size: egui::vec2(1200.0, 900.0),
             }
         }
+        fn draw(ctx: &egui::Context, second: bool) {
+            begin_docks(ctx);
+            egui::TopBottomPanel::top("test-ribbon")
+                .exact_height(90.0)
+                .show(ctx, |ui| {
+                    ui.label("Ribbon");
+                });
+            egui::SidePanel::left("test-left").exact_width(360.0).show(ctx, |ui| {
+                ui.add_space(180.0);
+                place_docks(ui, DockSide::Left, ui.available_rect_before_wrap());
+            });
+            if has_docks(ctx, DockSide::Right) {
+                egui::SidePanel::right("test-right").exact_width(360.0).show(ctx, |ui| {
+                    place_docks(ui, DockSide::Right, ui.available_rect_before_wrap())
+                });
+            }
+            egui::CentralPanel::default().show(ctx, |_| {});
+            for title in if second { vec!["First", "Second"] } else { vec!["First"] } {
+                window(ctx, title).show(ctx, |ui| {
+                    for i in 0..40 {
+                        ui.label(format!("Setting {i}"));
+                    }
+                });
+            }
+            end_docks(ctx);
+        }
         fn frame(&mut self, events: Vec<egui::Event>) -> egui::FullOutput {
-            self.time += 0.04;
-            self.ctx.run(
-                egui::RawInput {
-                    time: Some(self.time),
-                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, self.size)),
-                    events,
-                    ..Default::default()
-                },
-                |ctx| {
-                    begin_docks(ctx);
-                    egui::TopBottomPanel::top("test-ribbon")
-                        .exact_height(90.0)
-                        .show(ctx, |ui| {
-                            ui.label("Ribbon");
-                        });
-                    egui::SidePanel::left("test-left").exact_width(360.0).show(ctx, |ui| {
-                        ui.add_space(180.0);
-                        place_docks(ui, DockSide::Left, ui.available_rect_before_wrap());
-                    });
-                    if has_docks(ctx, DockSide::Right) {
-                        egui::SidePanel::right("test-right").exact_width(360.0).show(ctx, |ui| {
-                            place_docks(ui, DockSide::Right, ui.available_rect_before_wrap())
-                        });
-                    }
-                    egui::CentralPanel::default().show(ctx, |_| {});
-                    for title in if self.second {
-                        vec!["First", "Second"]
-                    } else {
-                        vec!["First"]
-                    } {
-                        window(ctx, title).show(ctx, |ui| {
-                            for i in 0..40 {
-                                ui.label(format!("Setting {i}"));
-                            }
-                        });
-                    }
-                    end_docks(ctx);
-                },
-            )
+            self.harness.size = Some(self.size);
+            let second = self.second;
+            self.harness.run(events, |ctx| Self::draw(ctx, second)).0
         }
         fn settle(&mut self) {
             for _ in 0..6 {
@@ -3156,17 +3146,10 @@ mod docking_tests {
                 .unwrap()
         }
         fn drag(&mut self, start: egui::Pos2, end: egui::Pos2) {
-            let button = |pos, pressed| egui::Event::PointerButton {
-                pos,
-                pressed,
-                button: egui::PointerButton::Primary,
-                modifiers: egui::Modifiers::NONE,
-            };
-            self.frame(vec![egui::Event::PointerMoved(start)]);
-            self.frame(vec![button(start, true)]);
-            self.frame(vec![egui::Event::PointerMoved(start + egui::vec2(30.0, 0.0))]);
-            self.frame(vec![egui::Event::PointerMoved(end)]);
-            self.frame(vec![button(end, false)]);
+            self.harness.size = Some(self.size);
+            let second = self.second;
+            self.harness
+                .drag(start, start + egui::vec2(30.0, 0.0), end, |ctx| Self::draw(ctx, second));
             self.settle();
         }
         fn title_drag(&mut self, title: &str, end: egui::Pos2) {

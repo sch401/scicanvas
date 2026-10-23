@@ -224,18 +224,13 @@ fn live_settings_keep_edits_through_minimize_close_and_undo() {
         } else {
             app.run_command(command);
         }
-        let frame = |app: &mut SciApp, events| {
-            ctx.run(
-                egui::RawInput {
-                    screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(1400.0, 1000.0))),
-                    events,
-                    ..Default::default()
-                },
-                |ctx| app.ui_frame(ctx),
-            )
-        };
+        let mut harness = crate::test_ui::Harness::new(
+            ctx.clone(),
+            Some(vec2(1400.0, 1000.0)),
+            SciApp::ui_frame as fn(&mut SciApp, &egui::Context),
+        );
         for _ in 0..5 {
-            frame(&mut app, vec![]);
+            harness.frame(&mut app, vec![]);
         }
         let before = app.project.clone();
         match &mut app.dialog {
@@ -245,10 +240,10 @@ fn live_settings_keep_edits_through_minimize_close_and_undo() {
             Some(Dialog::AnalysisCurves { curves, .. }) => curves[0].2 = false,
             _ if command == "graph.props" => app.run_command("graph.grid"),
             _ => {
-                frame(&mut app, vec![egui::Event::Text("Live text".into())]);
+                harness.frame(&mut app, vec![egui::Event::Text("Live text".into())]);
             }
         }
-        let output = frame(&mut app, vec![]);
+        let output = harness.frame(&mut app, vec![]);
         for forbidden in ["确定", "取消", "关闭", "应用"] {
             assert!(
                 !output
@@ -262,13 +257,13 @@ fn live_settings_keep_edits_through_minimize_close_and_undo() {
             assert_ne!(app.project, before, "{command} writes before closing");
             let changed = app.project.clone();
             app.run_command("edit.undo");
-            frame(&mut app, vec![]);
+            harness.frame(&mut app, vec![]);
             assert_eq!(
                 app.project, before,
                 "{command}: open controls must not reapply an undone setting"
             );
             app.run_command("edit.redo");
-            frame(&mut app, vec![]);
+            harness.frame(&mut app, vec![]);
             assert_eq!(app.project, changed);
         }
         if command == "analysis.curves" {
@@ -277,29 +272,19 @@ fn live_settings_keep_edits_through_minimize_close_and_undo() {
         let saved = scicanvas_core::project_file::to_scv(&app.project).unwrap();
         assert_eq!(scicanvas_core::project_file::from_scv(&saved).unwrap(), app.project);
         let changed = app.project.clone();
-        let click = |app: &mut SciApp, point| {
-            frame(app, vec![egui::Event::PointerMoved(point)]);
-            for pressed in [true, false] {
-                frame(
-                    app,
-                    vec![egui::Event::PointerButton {
-                        pos: point,
-                        button: egui::PointerButton::Primary,
-                        pressed,
-                        modifiers: egui::Modifiers::NONE,
-                    }],
-                );
-            }
-            for _ in 0..3 {
-                frame(app, vec![]);
-            }
-        };
+        let click =
+            |harness: &mut crate::test_ui::Harness<fn(&mut SciApp, &egui::Context)>, app: &mut SciApp, point| {
+                harness.click(app, point);
+                for _ in 0..3 {
+                    harness.frame(app, vec![]);
+                }
+            };
         let point = ctx
             .read_response(id.with("minimize"))
             .unwrap_or_else(|| panic!("{command}: missing title control"))
             .rect
             .center();
-        click(&mut app, point);
+        click(&mut harness, &mut app, point);
         assert!(
             !egui::collapsing_header::CollapsingState::load_with_default_open(&ctx, id.with("collapsing"), true)
                 .is_open(),
@@ -311,13 +296,13 @@ fn live_settings_keep_edits_through_minimize_close_and_undo() {
             .unwrap_or_else(|| panic!("{command}: missing title control"))
             .rect
             .center();
-        click(&mut app, point);
+        click(&mut harness, &mut app, point);
         assert!(
             egui::collapsing_header::CollapsingState::load_with_default_open(&ctx, id.with("collapsing"), true)
                 .is_open()
         );
         let rect = ctx.memory(|m| m.area_rect(id)).unwrap();
-        let output = frame(&mut app, vec![]);
+        let output = harness.frame(&mut app, vec![]);
         let close = output
             .shapes
             .iter()
@@ -334,7 +319,7 @@ fn live_settings_keep_edits_through_minimize_close_and_undo() {
                 _ => None,
             })
             .expect("title-bar X");
-        click(&mut app, close);
+        click(&mut harness, &mut app, close);
         assert_eq!(app.project, changed, "{command} keeps changes after X");
         assert!(
             app.dialog.is_none() && app.props_for.is_none() && app.object_editor.is_none(),
@@ -348,26 +333,24 @@ fn live_panels_follow_external_changes_without_reverting_them() {
     let ctx = egui::Context::default();
     crate::fonts::setup(&ctx);
     let mut app = SciApp::initial(theme::palette(egui::Theme::Light));
-    let frame = |app: &mut SciApp| {
-        let _ = ctx.run(egui::RawInput::default(), |ctx| app.ui_frame(ctx));
-    };
+    let mut harness = crate::test_ui::Harness::new(ctx.clone(), None, SciApp::ui_frame);
     app.active = Some(1);
     app.selection.insert(1, vec!["B".into()]);
     app.run_command("col.props");
-    frame(&mut app);
+    harness.frame(&mut app, vec![]);
     app.run_command("col.setX");
     let changed = app.project.clone();
-    frame(&mut app);
-    frame(&mut app);
+    harness.frame(&mut app, vec![]);
+    harness.frame(&mut app, vec![]);
     assert_eq!(app.project, changed);
     assert!(matches!(&app.dialog, Some(Dialog::ColumnProps { edit, .. }) if edit.role == scicanvas_core::Role::X));
     app.active = Some(2);
     app.run_command("layer.contents");
-    frame(&mut app);
+    harness.frame(&mut app, vec![]);
     app.run_command("graph.grid");
     let changed = app.project.clone();
-    frame(&mut app);
-    frame(&mut app);
+    harness.frame(&mut app, vec![]);
+    harness.frame(&mut app, vec![]);
     assert_eq!(app.project, changed);
     assert!(
         matches!(&app.dialog, Some(Dialog::LayerContents(edit)) if edit.draft == *app.project.graph(2).unwrap().first_layer())

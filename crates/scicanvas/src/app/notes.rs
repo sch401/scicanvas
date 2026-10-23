@@ -99,35 +99,23 @@ mod tests {
         let before = app.project.clone();
         let ctx = egui::Context::default();
         crate::fonts::setup(&ctx);
-        let mut time = 0.0;
-        let mut frame = |app: &mut SciApp, events| {
-            time += 0.02;
-            ctx.run(
-                egui::RawInput {
-                    time: Some(time),
-                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0))),
-                    events,
-                    ..Default::default()
-                },
-                |ctx| {
-                    app.history_group = None;
-                    egui::CentralPanel::default().show(ctx, |ui| app.note_ui(ui, id));
-                    app.finish_frame_edit(app.history_group);
-                },
-            )
-        };
-        frame(&mut app, vec![]);
-        let output = frame(&mut app, vec![]);
-        let pos = output
-            .shapes
-            .iter()
-            .find_map(|s| match &s.shape {
-                egui::Shape::Text(t) if t.galley.job.text == "原始结果" => Some(t.pos + egui::vec2(4.0, 4.0)),
-                _ => None,
-            })
+        let mut harness = crate::test_ui::Harness::new(
+            ctx.clone(),
+            Some(egui::vec2(800.0, 600.0)),
+            |app: &mut SciApp, ctx: &egui::Context| {
+                app.history_group = None;
+                egui::CentralPanel::default().show(ctx, |ui| app.note_ui(ui, id));
+                app.finish_frame_edit(app.history_group);
+            },
+        )
+        .with_step(0.02);
+        harness.frame(&mut app, vec![]);
+        let output = harness.frame(&mut app, vec![]);
+        let pos = crate::test_ui::find_text(&output, "原始结果")
+            .map(|pos| pos + egui::vec2(4.0, 4.0))
             .unwrap();
         for pressed in [true, false] {
-            frame(
+            harness.frame(
                 &mut app,
                 vec![
                     egui::Event::PointerMoved(pos),
@@ -140,7 +128,7 @@ mod tests {
                 ],
             );
         }
-        frame(
+        harness.frame(
             &mut app,
             vec![egui::Event::Key {
                 key: egui::Key::A,
@@ -154,7 +142,7 @@ mod tests {
                 },
             }],
         );
-        frame(&mut app, vec![egui::Event::Text("斜率 = 2\nR² = 0.99".into())]);
+        harness.frame(&mut app, vec![egui::Event::Text("斜率 = 2\nR² = 0.99".into())]);
         assert_eq!(app.project.note(id).unwrap().text, "斜率 = 2\nR² = 0.99");
         let after = app.project.clone();
         app.run_command("edit.undo");
@@ -179,21 +167,14 @@ mod tests {
         assert!(!app.note_editing.contains(&id));
         let ctx = egui::Context::default();
         crate::fonts::setup(&ctx);
-        let mut time = 0.0;
-        let mut frame = |app: &mut SciApp, events| {
-            time += 0.02;
-            ctx.run(
-                egui::RawInput {
-                    time: Some(time),
-                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0))),
-                    events,
-                    ..Default::default()
-                },
-                |ctx| {
-                    egui::CentralPanel::default().show(ctx, |ui| app.note_ui(ui, id));
-                },
-            )
-        };
+        let mut harness = crate::test_ui::Harness::new(
+            ctx.clone(),
+            Some(egui::vec2(800.0, 600.0)),
+            |app: &mut SciApp, ctx: &egui::Context| {
+                egui::CentralPanel::default().show(ctx, |ui| app.note_ui(ui, id));
+            },
+        )
+        .with_step(0.02);
         let texts = |output: &egui::FullOutput| -> Vec<(String, egui::Pos2)> {
             output
                 .shapes
@@ -204,8 +185,8 @@ mod tests {
                 })
                 .collect()
         };
-        frame(&mut app, vec![]);
-        let shown = texts(&frame(&mut app, vec![]));
+        harness.frame(&mut app, vec![]);
+        let shown = texts(&harness.frame(&mut app, vec![]));
         let has = |t: &str| shown.iter().any(|(s, _)| s == t);
         // 预览：标题和单元格分别显示，不出现 Markdown 原文
         assert!(has("电压 A") && has("参数") && has("B0") && has("1.5"), "{shown:?}");
@@ -215,7 +196,7 @@ mod tests {
         );
         let pos = shown.iter().find(|(s, _)| s == "编辑").unwrap().1;
         for pressed in [true, false] {
-            frame(
+            harness.frame(
                 &mut app,
                 vec![
                     egui::Event::PointerMoved(pos),
@@ -229,7 +210,7 @@ mod tests {
             );
         }
         assert!(app.note_editing.contains(&id));
-        let shown = texts(&frame(&mut app, vec![]));
+        let shown = texts(&harness.frame(&mut app, vec![]));
         assert!(shown.iter().any(|(s, _)| s.contains("| 参数 | 值 |")), "{shown:?}");
     }
 
@@ -241,23 +222,16 @@ mod tests {
         let id = app.active.unwrap();
         let ctx = egui::Context::default();
         crate::fonts::setup(&ctx);
-        let mut time = 0.0;
-        let mut frame = |app: &mut SciApp, events| {
-            time += 0.02;
-            ctx.run(
-                egui::RawInput {
-                    time: Some(time),
-                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0))),
-                    events,
-                    ..Default::default()
-                },
-                |ctx| {
-                    egui::CentralPanel::default().show(ctx, |ui| app.note_ui(ui, id));
-                },
-            )
-        };
-        frame(&mut app, vec![]);
-        let output = frame(&mut app, vec![]);
+        let mut harness = crate::test_ui::Harness::new(
+            ctx.clone(),
+            Some(egui::vec2(800.0, 600.0)),
+            |app: &mut SciApp, ctx: &egui::Context| {
+                egui::CentralPanel::default().show(ctx, |ui| app.note_ui(ui, id));
+            },
+        )
+        .with_step(0.02);
+        harness.frame(&mut app, vec![]);
+        let output = harness.frame(&mut app, vec![]);
         let at = |label: &str| {
             output
                 .shapes
@@ -277,18 +251,21 @@ mod tests {
             pressed,
             modifiers: egui::Modifiers::NONE,
         };
-        frame(&mut app, vec![egui::Event::PointerMoved(start), press(start, true)]);
+        harness.frame(&mut app, vec![egui::Event::PointerMoved(start), press(start, true)]);
         for k in 1..=10 {
             let p = start + (end - start) * (k as f32 / 10.0);
-            frame(&mut app, vec![egui::Event::PointerMoved(p)]);
+            harness.frame(&mut app, vec![egui::Event::PointerMoved(p)]);
         }
-        frame(&mut app, vec![press(end, false)]);
-        let copied = frame(&mut app, vec![egui::Event::Copy]).platform_output.copied_text;
+        harness.frame(&mut app, vec![press(end, false)]);
+        let copied = harness
+            .frame(&mut app, vec![egui::Event::Copy])
+            .platform_output
+            .copied_text;
         for part in ["电压 A", "y = 1 + 2·x", "参数", "B0", "1.5"] {
             assert!(copied.contains(part), "{copied:?}");
         }
         // 预览只读：键入文字不改内容
-        frame(&mut app, vec![egui::Event::Text("改".into())]);
+        harness.frame(&mut app, vec![egui::Event::Text("改".into())]);
         assert_eq!(app.project.note(id).unwrap().text, text);
     }
 
@@ -300,23 +277,16 @@ mod tests {
         let id = app.active.unwrap();
         let ctx = egui::Context::default();
         crate::fonts::setup(&ctx);
-        let mut time = 0.0;
-        let mut frame = |app: &mut SciApp, events| {
-            time += 0.02;
-            ctx.run(
-                egui::RawInput {
-                    time: Some(time),
-                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(800.0, 600.0))),
-                    events,
-                    ..Default::default()
-                },
-                |ctx| {
-                    egui::CentralPanel::default().show(ctx, |ui| app.note_ui(ui, id));
-                },
-            )
-        };
-        frame(&mut app, vec![]);
-        let output = frame(&mut app, vec![]);
+        let mut harness = crate::test_ui::Harness::new(
+            ctx.clone(),
+            Some(egui::vec2(800.0, 600.0)),
+            |app: &mut SciApp, ctx: &egui::Context| {
+                egui::CentralPanel::default().show(ctx, |ui| app.note_ui(ui, id));
+            },
+        )
+        .with_step(0.02);
+        harness.frame(&mut app, vec![]);
+        let output = harness.frame(&mut app, vec![]);
         // 点在“0618”中间：egui 自带的双击选词只会选中小数点后的一段
         let pos = output
             .shapes
@@ -334,18 +304,21 @@ mod tests {
             pressed,
             modifiers: egui::Modifiers::NONE,
         };
-        frame(&mut app, vec![egui::Event::PointerMoved(pos)]);
+        harness.frame(&mut app, vec![egui::Event::PointerMoved(pos)]);
         for _ in 0..2 {
-            frame(&mut app, vec![press(true)]);
-            frame(&mut app, vec![press(false)]);
+            harness.frame(&mut app, vec![press(true)]);
+            harness.frame(&mut app, vec![press(false)]);
         }
         for _ in 0..3 {
-            frame(&mut app, vec![]);
+            harness.frame(&mut app, vec![]);
         }
-        let copied = frame(&mut app, vec![egui::Event::Copy]).platform_output.copied_text;
+        let copied = harness
+            .frame(&mut app, vec![egui::Event::Copy])
+            .platform_output
+            .copied_text;
         assert_eq!(copied, "-0.061816028");
         // 只读：键入文字不改内容
-        frame(&mut app, vec![egui::Event::Text("9".into())]);
+        harness.frame(&mut app, vec![egui::Event::Text("9".into())]);
         assert_eq!(app.project.note(id).unwrap().text, text);
     }
 }

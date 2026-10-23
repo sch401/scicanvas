@@ -44,18 +44,15 @@ fn million_row_first_frame() {
     let ctx = egui::Context::default();
     crate::fonts::setup(&ctx);
     egui_extras::install_image_loaders(&ctx);
-    let input = || egui::RawInput {
-        screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1600.0, 900.0))),
-        ..Default::default()
-    };
-    let frame = |app: &mut SciApp| {
-        let t = Instant::now();
-        let out = ctx.run(input(), |ctx| app.ui_frame(ctx));
-        let meshes = ctx.tessellate(out.shapes, out.pixels_per_point);
-        (t.elapsed(), meshes.len())
-    };
-    let (first, meshes) = frame(&mut app);
-    let (second, _) = frame(&mut app);
+    let mut harness = crate::test_ui::Harness::new(ctx.clone(), Some(egui::vec2(1600.0, 900.0)), SciApp::ui_frame);
+    let t = Instant::now();
+    let out = harness.frame(&mut app, vec![]);
+    let meshes = ctx.tessellate(out.shapes, out.pixels_per_point).len();
+    let first = t.elapsed();
+    let t = Instant::now();
+    let out = harness.frame(&mut app, vec![]);
+    let _ = ctx.tessellate(out.shapes, out.pixels_per_point);
+    let second = t.elapsed();
     println!(
         "PERF import_ms={:.1} plot_ms={:.1} first_frame_ms={:.1} second_frame_ms={:.1} meshes={meshes}",
         import.as_secs_f64() * 1000.0,

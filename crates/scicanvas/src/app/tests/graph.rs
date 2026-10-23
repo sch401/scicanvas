@@ -112,23 +112,17 @@ fn floating_dialog_moves_beyond_screen_edge_and_reset_preserves_live_changes() {
     ctx.style_mut(|s| s.animation_time = 0.0);
     let screen = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1400.0, 1000.0));
     let id = egui::Id::new(("scicanvas-dialog", "图层内容"));
-    let mut time = 0.0;
-    let mut frame = |app: &mut SciApp, events| {
-        time += 0.02;
-        let _ = ctx.run(
-            egui::RawInput {
-                time: Some(time),
-                screen_rect: Some(screen),
-                events,
-                ..Default::default()
-            },
-            |ctx| app.ui_frame(ctx),
-        );
-        ctx.memory(|memory| memory.area_rect(id)).unwrap()
-    };
-    frame(&mut app, vec![]);
-    frame(&mut app, vec![]);
-    let rect = frame(&mut app, vec![]);
+    let mut harness = crate::test_ui::Harness::new(
+        ctx.clone(),
+        Some(screen.size()),
+        |app: &mut SciApp, ctx: &egui::Context| app.ui_frame(ctx),
+    )
+    .with_step(0.02);
+
+    harness.frame(&mut app, vec![]);
+    harness.frame(&mut app, vec![]);
+    harness.frame(&mut app, vec![]);
+    let rect = ctx.memory(|m| m.area_rect(id)).unwrap();
     let start = egui::pos2(rect.center().x, rect.top() + 12.0);
     let button = |pos, pressed| egui::Event::PointerButton {
         pos,
@@ -136,18 +130,20 @@ fn floating_dialog_moves_beyond_screen_edge_and_reset_preserves_live_changes() {
         pressed,
         modifiers: egui::Modifiers::NONE,
     };
-    frame(&mut app, vec![egui::Event::PointerMoved(start), button(start, true)]);
-    frame(&mut app, vec![egui::Event::PointerMoved(start + egui::vec2(60.0, 0.0))]);
+    harness.frame(&mut app, vec![egui::Event::PointerMoved(start), button(start, true)]);
+    harness.frame(&mut app, vec![egui::Event::PointerMoved(start + egui::vec2(60.0, 0.0))]);
     let end = egui::pos2(screen.right() + 150.0, start.y);
-    frame(&mut app, vec![egui::Event::PointerMoved(end)]);
-    frame(&mut app, vec![button(end, false)]);
-    let moved = frame(&mut app, vec![]);
+    harness.frame(&mut app, vec![egui::Event::PointerMoved(end)]);
+    harness.frame(&mut app, vec![button(end, false)]);
+    harness.frame(&mut app, vec![]);
+    let moved = ctx.memory(|m| m.area_rect(id)).unwrap();
     assert!(moved.right() > screen.right() + 100.0, "{moved:?}");
-    assert_eq!(frame(&mut app, vec![]).min, moved.min);
+    harness.frame(&mut app, vec![]);
+    assert_eq!(ctx.memory(|m| m.area_rect(id)).unwrap().min, moved.min);
     app.geoms.get_mut(&1).unwrap().rect =
         egui::Rect::from_min_size(egui::pos2(3000.0, 3000.0), egui::vec2(400.0, 300.0));
     app.ui.open_palette();
-    frame(
+    harness.frame(
         &mut app,
         vec![egui::Event::Key {
             key: egui::Key::R,
@@ -162,8 +158,9 @@ fn floating_dialog_moves_beyond_screen_edge_and_reset_preserves_live_changes() {
             },
         }],
     );
-    frame(&mut app, vec![]);
-    let reset = frame(&mut app, vec![]);
+    harness.frame(&mut app, vec![]);
+    harness.frame(&mut app, vec![]);
+    let reset = ctx.memory(|m| m.area_rect(id)).unwrap();
     assert!(reset.left() >= screen.left() && reset.right() <= screen.right());
     assert!(app.geoms[&1].rect.left() < app.ws.width());
     let Some(Dialog::LayerContents(edit)) = &app.dialog else {
@@ -185,23 +182,16 @@ fn docked_properties_and_layer_contents_share_sidebar_and_preserve_live_preview(
     crate::fonts::setup(&ctx);
     egui_extras::install_image_loaders(&ctx);
     ctx.style_mut(|s| s.animation_time = 0.0);
-    let mut time = 0.0;
-    let mut frame = |app: &mut SciApp, events| {
-        time += 0.04;
-        ctx.run(
-            egui::RawInput {
-                time: Some(time),
-                screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1500.0, 1000.0))),
-                events,
-                ..Default::default()
-            },
-            |ctx| app.ui_frame(ctx),
-        )
-    };
+    let mut harness = crate::test_ui::Harness::new(
+        ctx.clone(),
+        Some(egui::vec2(1500.0, 1000.0)),
+        |app: &mut SciApp, ctx: &egui::Context| app.ui_frame(ctx),
+    )
+    .with_step(0.04);
     macro_rules! settle {
         () => {
             for _ in 0..6 {
-                frame(&mut app, vec![]);
+                harness.frame(&mut app, vec![]);
             }
         };
     }
@@ -210,17 +200,7 @@ fn docked_properties_and_layer_contents_share_sidebar_and_preserve_live_preview(
             let rect = ctx.memory(|m| m.area_rect($id)).unwrap();
             let start = egui::pos2(rect.center().x, rect.top() + 12.0);
             let end = egui::pos2(150.0, $y);
-            let button = |pos, pressed| egui::Event::PointerButton {
-                pos,
-                pressed,
-                button: egui::PointerButton::Primary,
-                modifiers: egui::Modifiers::NONE,
-            };
-            frame(&mut app, vec![egui::Event::PointerMoved(start)]);
-            frame(&mut app, vec![button(start, true)]);
-            frame(&mut app, vec![egui::Event::PointerMoved(start + egui::vec2(30.0, 0.0))]);
-            frame(&mut app, vec![egui::Event::PointerMoved(end)]);
-            frame(&mut app, vec![button(end, false)]);
+            harness.drag(start, start + egui::vec2(30.0, 0.0), end, |ctx| app.ui_frame(ctx));
             settle!();
         }};
     }
@@ -286,48 +266,22 @@ fn layer_contents_real_controls_apply_live_and_header_close_keeps_changes() {
     let ctx = egui::Context::default();
     crate::fonts::setup(&ctx);
     ctx.style_mut(|s| s.animation_time = 0.0);
-    let mut time = 0.0;
-    let mut frame = |app: &mut SciApp, events| {
-        time += 0.02;
-        ctx.run(
-            egui::RawInput {
-                time: Some(time),
-                screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1400.0, 1000.0))),
-                events,
-                ..Default::default()
-            },
-            |ctx| app.dialogs(ctx),
-        )
-    };
+    let mut harness = crate::test_ui::Harness::new(
+        ctx.clone(),
+        Some(egui::vec2(1400.0, 1000.0)),
+        |app: &mut SciApp, ctx: &egui::Context| app.dialogs(ctx),
+    )
+    .with_step(0.02);
     let positions = |out: &egui::FullOutput, label: &str| {
-        out.shapes
-            .iter()
-            .filter_map(|s| match &s.shape {
-                egui::Shape::Text(t) if t.galley.job.text == label => Some(t.pos + egui::vec2(4.0, 4.0)),
-                _ => None,
-            })
+        crate::test_ui::text_positions(out, label)
+            .into_iter()
+            .map(|pos| pos + egui::vec2(4.0, 4.0))
             .collect::<Vec<_>>()
     };
-    macro_rules! click {
-        ($pos:expr) => {{
-            let pos = $pos;
-            frame(&mut app, vec![egui::Event::PointerMoved(pos)]);
-            for pressed in [true, false] {
-                frame(
-                    &mut app,
-                    vec![egui::Event::PointerButton {
-                        pos,
-                        button: egui::PointerButton::Primary,
-                        pressed,
-                        modifiers: egui::Modifiers::NONE,
-                    }],
-                );
-            }
-        }};
-    }
-    frame(&mut app, vec![]);
-    frame(&mut app, vec![]);
-    let output = frame(&mut app, vec![]);
+
+    harness.frame(&mut app, vec![]);
+    harness.frame(&mut app, vec![]);
+    let output = harness.frame(&mut app, vec![]);
     for label in ["添加 →", "← 移除", "上移", "下移", "按名称排序"] {
         let pos = positions(&output, label)[0];
         let rect = output
@@ -341,13 +295,13 @@ fn layer_contents_real_controls_apply_live_and_header_close_keeps_changes() {
             .unwrap();
         assert_eq!(rect.size(), dialogs::BUTTON, "button {label}");
     }
-    click!(*positions(&output, "B (Y)").last().expect("source column"));
-    let output = frame(&mut app, vec![]);
-    click!(positions(&output, "添加 →")[0]);
+    harness.click(&mut app, *positions(&output, "B (Y)").last().expect("source column"));
+    let output = harness.frame(&mut app, vec![]);
+    harness.click(&mut app, positions(&output, "添加 →")[0]);
     let key = scicanvas_core::plotspec::foreign_key(b, "B");
     assert_ne!(app.project, before, "controls update the project immediately");
     assert!(app.preview_graph(gid).unwrap().page.layers()[1].y_keys.contains(&key));
-    let output = frame(&mut app, vec![]);
+    let output = harness.frame(&mut app, vec![]);
     assert!(!positions(&output, "Book2 / A").is_empty());
     assert!(!positions(&output, "Book2 / B").is_empty());
     let row = positions(&output, "Book2：B")[0];
@@ -355,13 +309,13 @@ fn layer_contents_real_controls_apply_live_and_header_close_keeps_changes() {
         .into_iter()
         .min_by(|a, b| (a.y - row.y).abs().total_cmp(&(b.y - row.y).abs()))
         .unwrap();
-    click!(axis);
-    let output = frame(&mut app, vec![]);
-    click!(*positions(&output, "右 Y").last().unwrap());
-    let output = frame(&mut app, vec![]);
-    click!(positions(&output, "按名称排序")[0]);
-    let output = frame(&mut app, vec![]);
-    click!(positions(&output, "上移")[0]);
+    harness.click(&mut app, axis);
+    let output = harness.frame(&mut app, vec![]);
+    harness.click(&mut app, *positions(&output, "右 Y").last().unwrap());
+    let output = harness.frame(&mut app, vec![]);
+    harness.click(&mut app, positions(&output, "按名称排序")[0]);
+    let output = harness.frame(&mut app, vec![]);
+    harness.click(&mut app, positions(&output, "上移")[0]);
     let Some(Dialog::LayerContents(edit)) = &app.dialog else {
         panic!()
     };
@@ -371,7 +325,7 @@ fn layer_contents_real_controls_apply_live_and_header_close_keeps_changes() {
     assert_ne!(app.project, before);
     let id = egui::Id::new(("scicanvas-dialog", "图层内容"));
     let rect = ctx.memory(|m| m.area_rect(id)).unwrap();
-    click!(egui::pos2(rect.right() - 16.0, rect.top() + 15.0));
+    harness.click(&mut app, egui::pos2(rect.right() - 16.0, rect.top() + 15.0));
     assert!(app.dialog.is_none());
     assert_eq!(
         app.project.graph(gid).unwrap().first_layer(),
@@ -396,16 +350,16 @@ fn layer_contents_real_controls_apply_live_and_header_close_keeps_changes() {
 
     let committed = app.project.clone();
     app.run_command("layer.contents");
-    frame(&mut app, vec![]);
-    let output = frame(&mut app, vec![]);
-    click!(positions(&output, "← 移除")[0]);
+    harness.frame(&mut app, vec![]);
+    let output = harness.frame(&mut app, vec![]);
+    harness.click(&mut app, positions(&output, "← 移除")[0]);
     assert_ne!(app.project, committed);
     assert_eq!(
         app.preview_graph(gid).unwrap().as_ref(),
         app.project.graph(gid).unwrap()
     );
     let rect = ctx.memory(|m| m.area_rect(id)).unwrap();
-    click!(egui::pos2(rect.right() - 16.0, rect.top() + 15.0));
+    harness.click(&mut app, egui::pos2(rect.right() - 16.0, rect.top() + 15.0));
     assert!(app.dialog.is_none());
     roundtrip(&mut app, &committed);
     app.run_command("edit.undo");
@@ -416,10 +370,10 @@ fn layer_contents_real_controls_apply_live_and_header_close_keeps_changes() {
     );
     let previous_undo = app.history.undo_label().map(str::to_owned);
     app.run_command("layer.contents");
-    frame(&mut app, vec![]);
-    frame(&mut app, vec![]);
+    harness.frame(&mut app, vec![]);
+    harness.frame(&mut app, vec![]);
     let rect = ctx.memory(|m| m.area_rect(id)).unwrap();
-    click!(egui::pos2(rect.right() - 16.0, rect.top() + 15.0));
+    harness.click(&mut app, egui::pos2(rect.right() - 16.0, rect.top() + 15.0));
     assert_eq!(
         app.history.undo_label(),
         previous_undo.as_deref(),
@@ -519,35 +473,23 @@ fn graph_analysis_curve_dialog_selects_foreign_source_and_history_is_atomic() {
     let ctx = egui::Context::default();
     crate::fonts::setup(&ctx);
     ctx.style_mut(|style| style.animation_time = 0.0);
-    let mut time = 0.0;
-    let mut frame = |app: &mut SciApp, events| {
-        time += 0.02;
-        ctx.run(
-            egui::RawInput {
-                time: Some(time),
-                screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1000.0, 700.0))),
-                events,
-                ..Default::default()
-            },
-            |ctx| app.dialogs(ctx),
-        )
-    };
+    let mut harness = crate::test_ui::Harness::new(
+        ctx.clone(),
+        Some(egui::vec2(1000.0, 700.0)),
+        |app: &mut SciApp, ctx: &egui::Context| app.dialogs(ctx),
+    )
+    .with_step(0.02);
     let at = |output: &egui::FullOutput, label: &str| {
-        output
-            .shapes
-            .iter()
-            .find_map(|s| match &s.shape {
-                egui::Shape::Text(t) if t.galley.job.text == label => Some(t.pos + egui::vec2(4.0, 4.0)),
-                _ => None,
-            })
+        crate::test_ui::find_text(output, label)
+            .map(|pos| pos + egui::vec2(4.0, 4.0))
             .unwrap_or_else(|| panic!("missing {label}"))
     };
-    frame(&mut app, vec![]);
-    frame(&mut app, vec![]);
-    let output = frame(&mut app, vec![]);
+    harness.frame(&mut app, vec![]);
+    harness.frame(&mut app, vec![]);
+    let output = harness.frame(&mut app, vec![]);
     let pos = at(&output, "Book1：B");
     for pressed in [true, false] {
-        frame(
+        harness.frame(
             &mut app,
             vec![
                 egui::Event::PointerMoved(pos),
@@ -560,13 +502,13 @@ fn graph_analysis_curve_dialog_selects_foreign_source_and_history_is_atomic() {
             ],
         );
     }
-    let _ = frame(&mut app, vec![]);
+    let _ = harness.frame(&mut app, vec![]);
     let rect = ctx
         .memory(|m| m.area_rect(egui::Id::new(("scicanvas-dialog", "分析曲线"))))
         .unwrap();
     let pos = egui::pos2(rect.right() - 16.0, rect.top() + 15.0);
     for pressed in [true, false] {
-        frame(
+        harness.frame(
             &mut app,
             vec![
                 egui::Event::PointerMoved(pos),
@@ -662,6 +604,20 @@ fn embedded_plot_examples_preserve_current_project_and_undo_as_one_step() {
     }
 }
 
+// 同一帧可能重复排版，命令收集保留在绘制回调外，与原测试一致。
+fn ribbon_frame(
+    harness: &mut crate::test_ui::Harness,
+    app: &SciApp,
+    state: &mut UiState,
+    events: Vec<egui::Event>,
+) -> (egui::FullOutput, Option<&'static str>) {
+    let mut clicked = None;
+    let output = harness
+        .run(events, |ctx| ribbon::show(ctx, app, state, &app.pal, &mut clicked))
+        .0;
+    (output, clicked)
+}
+
 #[test]
 fn ribbon_hover_example_button_is_clickable_even_without_plot_data() {
     for empty in [false, true] {
@@ -674,47 +630,36 @@ fn ribbon_hover_example_button_is_clickable_even_without_plot_data() {
         ctx.style_mut(|s| s.interaction.tooltip_delay = 0.0);
         let mut state = UiState::default();
         state.tab = "plot";
-        let mut time = 0.0;
-        let mut frame = |events| {
-            time += 0.02;
-            let mut clicked = None;
-            let output = ctx.run(
-                egui::RawInput {
-                    time: Some(time),
-                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1800.0, 600.0))),
-                    events,
-                    ..Default::default()
-                },
-                |ctx| ribbon::show(ctx, &app, &mut state, &app.pal, &mut clicked),
-            );
-            (output, clicked)
-        };
+        let mut harness =
+            crate::test_ui::Harness::new(ctx.clone(), Some(egui::vec2(1800.0, 600.0)), ()).with_step(0.02);
+
         let at = |out: &egui::FullOutput, label: &str| {
-            out.shapes
-                .iter()
-                .find_map(|s| match &s.shape {
-                    egui::Shape::Text(t) if t.galley.job.text == label => Some(t.pos + egui::vec2(5.0, 5.0)),
-                    _ => None,
-                })
+            crate::test_ui::find_text(out, label)
+                .map(|pos| pos + egui::vec2(5.0, 5.0))
                 .unwrap_or_else(|| panic!("missing label {label}"))
         };
-        frame(vec![]);
-        let tile = at(&frame(vec![]).0, "折线图");
-        frame(vec![egui::Event::PointerMoved(tile)]);
-        frame(vec![]);
-        let output = frame(vec![]).0;
+        ribbon_frame(&mut harness, &app, &mut state, vec![]);
+        let tile = at(&ribbon_frame(&mut harness, &app, &mut state, vec![]).0, "折线图");
+        ribbon_frame(&mut harness, &app, &mut state, vec![egui::Event::PointerMoved(tile)]);
+        ribbon_frame(&mut harness, &app, &mut state, vec![]);
+        let output = ribbon_frame(&mut harness, &app, &mut state, vec![]).0;
         let button = at(&output, "打开示例");
-        let hovered = frame(vec![egui::Event::PointerMoved(button)]).0;
+        let hovered = ribbon_frame(&mut harness, &app, &mut state, vec![egui::Event::PointerMoved(button)]).0;
         let button = at(&hovered, "打开示例");
-        frame(vec![egui::Event::PointerMoved(button)]);
+        ribbon_frame(&mut harness, &app, &mut state, vec![egui::Event::PointerMoved(button)]);
         let mut command = None;
         for pressed in [true, false] {
-            let (_, clicked) = frame(vec![egui::Event::PointerButton {
-                pos: button,
-                button: egui::PointerButton::Primary,
-                pressed,
-                modifiers: egui::Modifiers::NONE,
-            }]);
+            let (_, clicked) = ribbon_frame(
+                &mut harness,
+                &app,
+                &mut state,
+                vec![egui::Event::PointerButton {
+                    pos: button,
+                    button: egui::PointerButton::Primary,
+                    pressed,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+            );
             command = command.or(clicked);
         }
         assert_eq!(command, Some("example.line"));
@@ -943,15 +888,8 @@ fn data_label_command_and_actual_checkbox_are_undoable() {
     app.props_for = Some(2);
     editor_frame(&mut app, &ctx, vec![], true);
     let output = editor_frame(&mut app, &ctx, vec![], true);
-    let at = output
-        .shapes
-        .iter()
-        .find_map(|s| match &s.shape {
-            egui::Shape::Text(t) if t.galley.job.text == "数据标签" => {
-                Some(t.pos + t.galley.rect.center().to_vec2())
-            }
-            _ => None,
-        })
+    let at = crate::test_ui::text_rect(&output, "数据标签")
+        .map(|rect| rect.center())
         .unwrap();
     let before = app.project.clone();
     for pressed in [true, false] {
@@ -993,15 +931,8 @@ fn error_role_commands_and_visibility_control_are_undoable() {
     app.props_for = Some(2);
     editor_frame(&mut app, &ctx, vec![], true);
     let output = editor_frame(&mut app, &ctx, vec![], true);
-    let at = output
-        .shapes
-        .iter()
-        .find_map(|s| match &s.shape {
-            egui::Shape::Text(t) if t.galley.job.text == "显示 X / Y 误差" => {
-                Some(t.pos + t.galley.rect.center().to_vec2())
-            }
-            _ => None,
-        })
+    let at = crate::test_ui::text_rect(&output, "显示 X / Y 误差")
+        .map(|rect| rect.center())
         .unwrap();
     let before = app.project.clone();
     let before_svg = scicanvas_core::svg::render_page(app.project.graph(2).unwrap(), &app.project);
@@ -1042,13 +973,8 @@ fn scientific_title_toolbar_is_live_saved_and_undoable() {
     editor_frame(&mut app, &ctx, vec![], true);
     let output = editor_frame(&mut app, &ctx, vec![], true);
     let at_text = |output: &egui::FullOutput, text: &str| {
-        output
-            .shapes
-            .iter()
-            .find_map(|s| match &s.shape {
-                egui::Shape::Text(t) if t.galley.job.text == text => Some(t.pos + t.galley.rect.center().to_vec2()),
-                _ => None,
-            })
+        crate::test_ui::text_rect(output, text)
+            .map(|rect| rect.center())
             .unwrap_or_else(|| panic!("missing text: {text}"))
     };
     let click = |app: &mut SciApp, pos| {
@@ -1129,13 +1055,8 @@ fn layer_placement_control_is_undoable() {
     let before = app.project.clone();
     editor_frame(&mut app, &ctx, vec![], true);
     let output = editor_frame(&mut app, &ctx, vec![], true);
-    let at = output
-        .shapes
-        .iter()
-        .find_map(|s| match &s.shape {
-            egui::Shape::Text(t) if t.galley.job.text == "自定义图层位置" => Some(t.pos + egui::vec2(4.0, 4.0)),
-            _ => None,
-        })
+    let at = crate::test_ui::find_text(&output, "自定义图层位置")
+        .map(|pos| pos + egui::vec2(4.0, 4.0))
         .unwrap();
     for pressed in [true, false] {
         editor_frame(

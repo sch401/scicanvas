@@ -85,39 +85,42 @@ fn continuous_edit_is_one_step_and_noop_preserves_redo() {
     assert!(app.history.undo_label().is_none());
 }
 
+// 滑块测试的事务边界保持在实际绘制之前和之后。
+fn slider_frame(
+    harness: &mut crate::test_ui::Harness<impl FnMut(&mut SciApp, &egui::Context) -> egui::Rect>,
+    app: &mut SciApp,
+    events: Vec<egui::Event>,
+) -> egui::Rect {
+    app.begin_edit("线宽");
+    let before = app.project.graphs[0].first_layer().line_width;
+    app.history_group = None;
+    let rect = harness.frame_value(app, events);
+    if app.project.graphs[0].first_layer().line_width != before {
+        app.history.changed();
+    }
+    app.finish_frame_edit(app.history_group);
+    rect
+}
+
 #[test]
 fn separate_slider_drags_are_separate_undo_steps() {
     let ctx = egui::Context::default();
     let mut app = app();
     let initial = app.project.clone();
-    let mut rect = egui::Rect::NOTHING;
-    let mut frame = |app: &mut SciApp, events: Vec<egui::Event>| {
-        app.begin_edit("线宽");
-        let before = app.project.graphs[0].first_layer().line_width;
-        app.history_group = None;
-        let _ = ctx.run(
-            egui::RawInput {
-                events,
-                ..Default::default()
-            },
-            |ctx| {
-                egui::CentralPanel::default().show(ctx, |ui| {
-                    let response = ui.add(
-                        egui::Slider::new(&mut app.project.graphs[0].first_layer_mut().line_width, 0.5..=6.0)
-                            .show_value(false),
-                    );
-                    rect = response.rect;
-                    edit_group(&response, &mut app.history_group);
-                });
-            },
-        );
-        if app.project.graphs[0].first_layer().line_width != before {
-            app.history.changed();
-        }
-        app.finish_frame_edit(app.history_group);
-        rect
-    };
-    let r = frame(&mut app, vec![]);
+    let mut harness = crate::test_ui::Harness::new(ctx.clone(), None, |app: &mut SciApp, ctx: &egui::Context| {
+        egui::CentralPanel::default()
+            .show(ctx, |ui| {
+                let response = ui.add(
+                    egui::Slider::new(&mut app.project.graphs[0].first_layer_mut().line_width, 0.5..=6.0)
+                        .show_value(false),
+                );
+                edit_group(&response, &mut app.history_group);
+                response.rect
+            })
+            .inner
+    });
+
+    let r = slider_frame(&mut harness, &mut app, vec![]);
     let mut states = vec![initial];
     for (start, end) in [(0.2, 0.5), (0.6, 0.9)] {
         let at = |f: f32| egui::pos2(r.left() + r.width() * f, r.center().y);
@@ -127,13 +130,14 @@ fn separate_slider_drags_are_separate_undo_steps() {
             pressed,
             modifiers: egui::Modifiers::NONE,
         };
-        frame(
+        slider_frame(
+            &mut harness,
             &mut app,
             vec![egui::Event::PointerMoved(at(start)), button(at(start), true)],
         );
-        frame(&mut app, vec![egui::Event::PointerMoved(at(end))]);
-        frame(&mut app, vec![button(at(end), false)]);
-        frame(&mut app, vec![]);
+        slider_frame(&mut harness, &mut app, vec![egui::Event::PointerMoved(at(end))]);
+        slider_frame(&mut harness, &mut app, vec![button(at(end), false)]);
+        slider_frame(&mut harness, &mut app, vec![]);
         states.push(app.project.clone());
     }
     assert_ne!(states[0], states[1]);

@@ -786,27 +786,18 @@ mod tests {
     }
 
     fn frame(ctx: &egui::Context, p: &Project, events: Vec<egui::Event>) -> PlotOutput {
-        let mut output = None;
-        let input = egui::RawInput {
-            screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1000.0, 700.0))),
-            events,
-            ..Default::default()
-        };
-        let _ = ctx.run(input, |ctx| {
-            egui::CentralPanel::default().show(ctx, |ui| {
-                output = Some(show(ui, &p.graphs[0], p, 0, ObjectUi::default()));
-            });
-        });
-        output.unwrap()
+        let mut harness = crate::test_ui::Harness::new(ctx.clone(), Some(vec2(1000.0, 700.0)), ());
+        harness
+            .run(events, |ctx| {
+                egui::CentralPanel::default()
+                    .show(ctx, |ui| show(ui, &p.graphs[0], p, 0, ObjectUi::default()))
+                    .inner
+            })
+            .1
     }
 
     fn button(pos: Pos2, pressed: bool) -> egui::Event {
-        egui::Event::PointerButton {
-            pos,
-            button: egui::PointerButton::Primary,
-            pressed,
-            modifiers: egui::Modifiers::NONE,
-        }
+        crate::test_ui::button(pos, pressed)
     }
 
     fn point(rect: Rect, sc: &Scene, index: usize) -> Pos2 {
