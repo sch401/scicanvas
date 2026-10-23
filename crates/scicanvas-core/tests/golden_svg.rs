@@ -52,6 +52,10 @@ fn cases() -> Vec<(String, String)> {
     graph.page.layers_mut()[1].placement = None;
     graph.page.columns = 2;
     cases.push(("two-panels".into(), svg::render_page(&graph, &project)));
+    graph.first_layer_mut().legend_position = Some([0.7, 0.7]);
+    let id = graph.page.add_text([0.15, 0.06]).unwrap();
+    graph.page.text_mut(id).unwrap().text = "Note_{1} α\n\\b{Result} R^{2}".into();
+    cases.push(("annotation-legend".into(), svg::render_page(&graph, &project)));
     cases
 }
 

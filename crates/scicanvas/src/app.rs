@@ -16,7 +16,7 @@ use scicanvas_core::ops::Source;
 use scicanvas_core::{csv, fmt_num, round_sig, svg, PlotType, Project, Role};
 
 use crate::commands;
-use crate::dialogs::{self, Dialog};
+use crate::dialogs::{self, edit_group, Dialog, PlotObjectEditor as ObjectEditor};
 use crate::mdi::{self, Geom, WinState};
 use crate::plot;
 use crate::ribbon::{self, Ctx, UiState};
@@ -83,6 +83,9 @@ pub struct SciApp {
     explorer_focus: bool,
     /// 正在编辑属性的图形。
     pub(crate) props_for: Option<u64>,
+    adding_text: Option<u64>,
+    object_editor: Option<ObjectEditor>,
+    plot_epoch: u64,
     active_layers: HashMap<u64, usize>,
     pub(crate) plot_draft: Option<scicanvas_core::plotspec::PlotSpec>,
     pub(crate) status: String,
@@ -139,14 +142,6 @@ fn header_field(column: &mut scicanvas_core::Column, row: usize) -> &mut String 
     }
 }
 
-/// 同一文字框焦点周期或一次鼠标拖动共享一个历史记录。
-fn edit_group(response: &egui::Response, group: &mut Option<egui::Id>) {
-    let text_focus = response.has_focus() && egui::TextEdit::load_state(&response.ctx, response.id).is_some();
-    if text_focus || response.is_pointer_button_down_on() || response.dragged() || response.drag_stopped() {
-        *group = Some(response.id);
-    }
-}
-
 impl SciApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         crate::fonts::setup(&cc.egui_ctx);
@@ -164,6 +159,9 @@ impl SciApp {
             history: History::default(),
             history_group: None,
             last_history_group: None,
+            adding_text: None,
+            object_editor: None,
+            plot_epoch: 0,
             open: HashMap::new(),
             selection: HashMap::new(),
             active: None,
@@ -210,6 +208,9 @@ impl SciApp {
         self.book_preview = None;
         self.analysis_curves.clear();
         self.active_layers.clear();
+        self.adding_text = None;
+        self.object_editor = None;
+        self.plot_epoch = self.plot_epoch.wrapping_add(1);
         self.plot_draft = None;
         self.history = History::default();
         self.history_group = None;
@@ -740,6 +741,11 @@ impl SciApp {
     }
 
     fn restore_history(&mut self, project: Project) {
+        self.adding_text = None;
+        self.plot_epoch = self.plot_epoch.wrapping_add(1);
+        self.object_editor = self.object_editor.filter(|edit| {
+            matches!(edit.target, plot::ObjectTarget::Text(id) if project.graph(edit.graph).is_some_and(|g| g.page.text(id).is_some()))
+        });
         self.book_preview = None;
         self.project = project;
         self.analysis_curves.retain(|(graph, index), curves| {
@@ -978,10 +984,15 @@ impl SciApp {
 
     pub(crate) fn add_layer(&mut self) {
         let Some(id) = self.active_graph_id() else { return };
+        self.plot_epoch = self.plot_epoch.wrapping_add(1);
+        self.object_editor = self
+            .object_editor
+            .filter(|e| e.graph != id || matches!(e.target, plot::ObjectTarget::Text(_)));
         let index = self.layer_index(id);
         let graph = self.project.graph_mut(id).unwrap();
         let mut layer = graph.page.layers()[index].clone();
         layer.placement = None;
+        layer.legend_position = None;
         graph.page.add_layer(layer);
         let n = graph.page.layers().len();
         graph.page.columns = (n as f64).sqrt().ceil() as usize;
@@ -1031,6 +1042,10 @@ impl SciApp {
         let graph = self.project.graph_mut(id).unwrap();
         match graph.page.remove_layer(index) {
             Ok(_) => {
+                self.plot_epoch = self.plot_epoch.wrapping_add(1);
+                self.object_editor = self
+                    .object_editor
+                    .filter(|e| e.graph != id || matches!(e.target, plot::ObjectTarget::Text(_)));
                 self.analysis_curves.retain(|(graph_id, _), _| *graph_id != id);
                 self.active_layers.insert(id, index.min(graph.page.layers().len() - 1));
                 self.status = "已删除图层".into();
@@ -2260,6 +2275,121 @@ impl SciApp {
         Some(Cow::Borrowed(graph))
     }
 
+    pub(crate) fn start_text_annotation(&mut self) {
+        if let Some(id) = self.target_graph() {
+            self.finish_edit();
+            self.show_item(id);
+            self.explorer_focus = false;
+            self.adding_text = Some(id);
+            self.object_editor = None;
+            self.status = "单击页面放置文字，Esc 取消".into();
+        }
+    }
+
+    pub(crate) fn manage_annotations(&mut self) {
+        if let Some(graph) = self.target_graph() {
+            if let Some(text) = self.project.graph(graph).and_then(|g| g.page.annotations.last()) {
+                self.object_editor = Some(ObjectEditor {
+                    graph,
+                    target: plot::ObjectTarget::Text(text.id),
+                    focus: true,
+                });
+            } else {
+                self.status = "当前图形没有文字标注".into();
+            }
+        }
+    }
+
+    pub(crate) fn auto_legend(&mut self) {
+        if let Some(graph) = self.target_graph() {
+            self.apply_object_action(graph, plot::ObjectAction::AutoLegend(self.layer_index(graph)));
+        }
+    }
+
+    fn apply_object_action(&mut self, graph: u64, action: plot::ObjectAction) {
+        use plot::{ObjectAction as A, ObjectTarget as T};
+        if self.project.graph(graph).is_none() {
+            return;
+        }
+        match action {
+            A::CancelAdd => {
+                self.adding_text = None;
+                return;
+            }
+            A::Edit(target) => {
+                self.finish_edit();
+                self.object_editor = Some(ObjectEditor {
+                    graph,
+                    target,
+                    focus: true,
+                });
+                return;
+            }
+            _ => {}
+        }
+        self.begin_edit(match action {
+            A::Move(..) => "移动图形对象",
+            A::AddText(..) => "添加文字",
+            A::Delete(..) => "删除图形对象",
+            _ => "图例自动避让",
+        });
+        let page = &mut self.project.graph_mut(graph).unwrap().page;
+        let mut changed = false;
+        match action {
+            A::AddText(position) => match page.add_text(position) {
+                Ok(id) => {
+                    changed = true;
+                    self.adding_text = None;
+                    self.object_editor = Some(ObjectEditor {
+                        graph,
+                        target: T::Text(id),
+                        focus: true,
+                    });
+                }
+                Err(e) => self.status = e,
+            },
+            A::Move(T::Text(id), position) => {
+                if let Some(text) = page.text_mut(id) {
+                    changed = text.position != position;
+                    text.position = position;
+                }
+            }
+            A::Move(T::Legend(index), position) => {
+                if let Some(layer) = page.layers_mut().get_mut(index) {
+                    changed = layer.legend_position != Some(position);
+                    layer.legend_position = Some(position);
+                }
+            }
+            A::Delete(T::Text(id)) => {
+                let n = page.annotations.len();
+                page.annotations.retain(|t| t.id != id);
+                changed = n != page.annotations.len();
+            }
+            A::Delete(T::Legend(index)) => {
+                if let Some(layer) = page.layers_mut().get_mut(index) {
+                    changed = layer.legend;
+                    layer.legend = false;
+                }
+            }
+            A::AutoLegend(index) => {
+                if let Some(layer) = page.layers_mut().get_mut(index) {
+                    changed = !layer.legend || layer.legend_position.is_some();
+                    layer.legend = true;
+                    layer.legend_position = None;
+                }
+            }
+            _ => {}
+        }
+        if matches!(action, A::Delete(target) if self.object_editor.is_some_and(|e| e.graph == graph && e.target == target))
+        {
+            self.object_editor = None;
+        }
+        if changed {
+            self.history.changed();
+            self.pending_repaint = true;
+        }
+    }
+
     fn graph_ui(&mut self, ui: &mut egui::Ui, id: u64) {
         // The plot call is read-only. Temporarily supply the preview table to the shared scene builder,
         // then restore it before processing any commands, exports or history operations.
@@ -2271,9 +2401,19 @@ impl SciApp {
         if let (Some(at), Some(book)) = (at, preview_book) {
             std::mem::swap(&mut self.project.books[at], book);
         }
-        let out = self
-            .preview_graph(id)
-            .map(|g| plot::show(ui, &g, &self.project, self.layer_index(id)));
+        let out = self.preview_graph(id).map(|g| {
+            plot::show(
+                ui,
+                &g,
+                &self.project,
+                self.layer_index(id),
+                plot::ObjectUi {
+                    adding: self.adding_text == Some(id),
+                    epoch: self.plot_epoch,
+                    keyboard: self.active == Some(id) && !self.explorer_focus,
+                },
+            )
+        });
         if let Some(at) = at {
             std::mem::swap(
                 &mut self.project.books[at],
@@ -2282,6 +2422,15 @@ impl SciApp {
         }
         self.book_preview = preview;
         let Some(out) = out else { return };
+        if let Some(action) = out.action {
+            self.apply_object_action(id, action);
+        }
+        if out.object_dragging {
+            self.history_group = Some(egui::Id::new(("object-drag", id)));
+        }
+        if out.response.contains_pointer() && ui.input(|i| i.pointer.any_pressed()) {
+            self.explorer_focus = false;
+        }
         if let Some(index) = out.selected_layer {
             self.select_layer(id, index);
         }
@@ -2326,7 +2475,9 @@ impl SciApp {
         let resp = out.response;
         // 右键时吸附到的曲线（菜单打开期间保持）
         let curve_id = egui::Id::new(("graph-curve-menu", id));
+        let object_id = curve_id.with("object");
         if resp.secondary_clicked() {
+            ui.data_mut(|d| d.insert_temp(object_id, out.object));
             let hit = out
                 .point
                 .as_ref()
@@ -2337,7 +2488,28 @@ impl SciApp {
             .data(|d| d.get_temp::<Option<(usize, String, String)>>(curve_id))
             .flatten();
         let mut remove: Option<(usize, String)> = None;
+        let menu_object = ui
+            .data(|d| d.get_temp::<Option<plot::ObjectTarget>>(object_id))
+            .flatten();
+        let mut object_action = None;
         resp.context_menu(|ui| {
+            if let Some(target) = menu_object {
+                if ui.button("编辑文字/图例…").clicked() {
+                    object_action = Some(plot::ObjectAction::Edit(target));
+                    ui.close_menu();
+                }
+                if ui.button("删除对象").clicked() {
+                    object_action = Some(plot::ObjectAction::Delete(target));
+                    ui.close_menu();
+                }
+                if let plot::ObjectTarget::Legend(index) = target {
+                    if ui.button("恢复自动避让").clicked() {
+                        object_action = Some(plot::ObjectAction::AutoLegend(index));
+                        ui.close_menu();
+                    }
+                }
+                ui.separator();
+            }
             if let Some((layer, key, name)) = &menu_curve {
                 if ui.button(format!("移除曲线 {name}")).clicked() {
                     remove = Some((*layer, key.clone()));
@@ -2348,6 +2520,9 @@ impl SciApp {
             for (cid, label) in [
                 ("layer.contents", "图层内容…"),
                 ("graph.props", "绘图属性…"),
+                ("graph.text.add", "添加文字标注"),
+                ("graph.text.manage", "管理文字标注…"),
+                ("graph.legend.auto", "图例自动避让"),
                 ("graph.copy", "复制图形"),
                 ("graph.export", "导出 SVG…"),
                 ("graph.export_pdf", "导出 PDF…"),
@@ -2373,6 +2548,9 @@ impl SciApp {
                 ui.close_menu();
             }
         });
+        if let Some(action) = object_action {
+            self.apply_object_action(id, action);
+        }
         if let Some((layer, key)) = remove {
             self.remove_curve(id, layer, &key);
         }
@@ -2419,6 +2597,40 @@ impl SciApp {
             }
         }
         self.finish_edit();
+    }
+
+    fn object_window(&mut self, ctx: &egui::Context) {
+        use plot::ObjectTarget as T;
+        let Some(mut edit) = self.object_editor else { return };
+        let Some(before) = self.project.graph(edit.graph).cloned() else {
+            self.object_editor = None;
+            return;
+        };
+        let valid = match edit.target {
+            T::Text(id) => before.page.text(id).is_some(),
+            T::Legend(i) => before.page.layers().get(i).is_some_and(|l| l.legend),
+        };
+        if !valid {
+            self.object_editor = None;
+            return;
+        }
+        let (open, action) = edit.show(
+            ctx,
+            self.project.graph_mut(edit.graph).unwrap(),
+            &mut self.history_group,
+        );
+        if self.project.graph(edit.graph) != Some(&before) {
+            let after = std::mem::replace(self.project.graph_mut(edit.graph).unwrap(), before);
+            self.begin_edit("编辑图形对象");
+            *self.project.graph_mut(edit.graph).unwrap() = after;
+            self.history.changed();
+            ctx.request_repaint();
+        }
+        self.object_editor = open.then_some(edit);
+        if let Some(action) = action {
+            self.finish_edit();
+            self.apply_object_action(edit.graph, action);
+        }
     }
 
     fn props_window(&mut self, ctx: &egui::Context) {
@@ -3324,6 +3536,7 @@ impl SciApp {
         }
 
         self.props_window(ctx);
+        self.object_window(ctx);
         self.help_window(ctx);
         self.confirm_window(ctx);
         self.dialogs(ctx);
@@ -3422,6 +3635,138 @@ mod history_tests {
         assert_eq!(&app.project, before);
         app.run_command("edit.redo");
         assert_eq!(app.project, after);
+    }
+
+    fn object_frame(app: &mut SciApp, ctx: &egui::Context, events: Vec<egui::Event>, editor: bool) -> egui::Rect {
+        app.history_group = None;
+        let mut page = egui::Rect::NOTHING;
+        let _ = ctx.run(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1200.0, 900.0))),
+                events,
+                ..Default::default()
+            },
+            |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    page = plot::page_rect(
+                        ui.available_rect_before_wrap(),
+                        app.project.graph(2).unwrap().page.logical_size(),
+                    );
+                    app.graph_ui(ui, 2);
+                });
+                if editor {
+                    app.object_window(ctx);
+                }
+            },
+        );
+        app.finish_frame_edit(app.history_group);
+        page
+    }
+
+    fn object_button(at: egui::Pos2, pressed: bool) -> egui::Event {
+        egui::Event::PointerButton {
+            pos: at,
+            button: egui::PointerButton::Primary,
+            pressed,
+            modifiers: egui::Modifiers::NONE,
+        }
+    }
+
+    #[test]
+    fn object_creation_live_edit_drag_delete_and_auto_legend_are_undoable() {
+        use plot::{ObjectAction as A, ObjectTarget as T};
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        let mut app = app();
+        app.active = Some(2);
+        app.explorer_focus = false;
+        let initial = app.project.clone();
+        app.run_command("graph.text.add");
+        assert_eq!(app.project, initial, "choosing the tool is not an edit");
+        let page = object_frame(&mut app, &ctx, vec![], false);
+        let at = page.min + page.size() * 0.25;
+        object_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::PointerMoved(at), object_button(at, true)],
+            false,
+        );
+        object_frame(&mut app, &ctx, vec![object_button(at, false)], false);
+        let id = app.project.graph(2).unwrap().page.annotations[0].id;
+        assert!(matches!(app.object_editor, Some(ObjectEditor { target: T::Text(t), .. }) if t == id));
+        roundtrip(&mut app, &initial);
+        app.apply_object_action(2, A::Edit(T::Text(id)));
+        object_frame(&mut app, &ctx, vec![], true);
+        object_frame(&mut app, &ctx, vec![], true);
+        let before_edit = app.project.clone();
+        object_frame(&mut app, &ctx, vec![egui::Event::Text("CO_{2} α".into())], true);
+        assert_eq!(app.project.graph(2).unwrap().page.text(id).unwrap().text, "CO_{2} α");
+        object_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::Key {
+                key: egui::Key::Delete,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+            true,
+        );
+        assert_eq!(
+            app.project.graph(2).unwrap().page.annotations.len(),
+            1,
+            "Delete in the editor never deletes the object"
+        );
+        app.finish_edit();
+        roundtrip(&mut app, &before_edit);
+        app.object_editor = None;
+
+        for target in [T::Text(id), T::Legend(0)] {
+            let before = app.project.clone();
+            let page = object_frame(&mut app, &ctx, vec![], false);
+            let scene = scicanvas_core::scene::layout_page(app.project.graph(2).unwrap(), &app.project, &[]);
+            let bounds = scene.objects.iter().find(|o| o.target == target).unwrap().bounds;
+            let at = page.min
+                + egui::vec2((bounds[0] + 4.0) as f32, (bounds[1] + 4.0) as f32) * (page.width() / scene.w as f32);
+            object_frame(
+                &mut app,
+                &ctx,
+                vec![egui::Event::PointerMoved(at), object_button(at, true)],
+                false,
+            );
+            for delta in [20.0, 50.0, 80.0] {
+                object_frame(
+                    &mut app,
+                    &ctx,
+                    vec![egui::Event::PointerMoved(at + egui::vec2(delta, -20.0))],
+                    false,
+                );
+            }
+            object_frame(
+                &mut app,
+                &ctx,
+                vec![object_button(at + egui::vec2(80.0, -20.0), false)],
+                false,
+            );
+            roundtrip(&mut app, &before);
+            let saved = scicanvas_core::project_file::to_scv(&app.project).unwrap();
+            assert_eq!(scicanvas_core::project_file::from_scv(&saved).unwrap(), app.project);
+        }
+        let before = app.project.clone();
+        app.run_command("graph.legend.auto");
+        assert_eq!(app.project.graph(2).unwrap().first_layer().legend_position, None);
+        roundtrip(&mut app, &before);
+        for target in [T::Text(id), T::Legend(0)] {
+            let before = app.project.clone();
+            app.apply_object_action(2, A::Delete(target));
+            app.finish_edit();
+            match target {
+                T::Text(id) => assert!(app.project.graph(2).unwrap().page.text(id).is_none()),
+                T::Legend(_) => assert!(!app.project.graph(2).unwrap().first_layer().legend),
+            }
+            roundtrip(&mut app, &before);
+        }
     }
 
     #[test]

@@ -102,6 +102,7 @@ pub(super) fn compose<'a>(
         }
     }
     let mut grid_index = 0;
+    let mut manual_legends = Vec::new();
     let mut scenes = g.page.layers().iter().enumerate().map(|(i, layer)| {
         let [dx, dy, lw, lh] = match layer.placement {
             Some(rect) => [rect.x * w, rect.y * h, rect.width * w, rect.height * h],
@@ -139,6 +140,28 @@ pub(super) fn compose<'a>(
         scene.plot[1] += dy;
         scene.layers[0].plot = scene.plot;
         scene.layers[0].bounds = [dx, dy, lw, lh];
+        for object in &mut scene.objects {
+            object.target = ObjectTarget::Legend(i);
+            object.bounds = object.bounds.map(|v| v * k);
+            object.bounds[0] += dx;
+            object.bounds[1] += dy;
+        }
+        if let Some(position) = layer.legend_position {
+            if let Some(mut object) = scene.objects.pop() {
+                // Manual placement changes translation only: keep the automatic plot rectangle stable.
+                let x = (position[0] * w).clamp(0.0, (w - object.bounds[2]).max(0.0));
+                let y = (position[1] * h).clamp(0.0, (h - object.bounds[3]).max(0.0));
+                let mut items: Vec<_> = scene.items.drain(object.items.clone()).collect();
+                for item in &mut items {
+                    translate(&mut item.prim, x - object.bounds[0], y - object.bounds[1]);
+                    item.clip = Some([0.0, 0.0, w, h]);
+                }
+                object.bounds[0] = x;
+                object.bounds[1] = y;
+                object.overlay = true;
+                manual_legends.push((object, items));
+            }
+        }
         scene
     });
     let mut page = scenes
@@ -168,12 +191,27 @@ pub(super) fn compose<'a>(
                 clip: None,
             },
         );
+        for object in &mut page.objects {
+            object.items.start += 1;
+            object.items.end += 1;
+        }
     }
     page.layer_plots = vec![page.plot];
-    for scene in scenes {
+    for mut scene in scenes {
         page.layer_plots.push(scene.plot);
         page.layers.extend(scene.layers);
+        let offset = page.items.len();
+        for object in &mut scene.objects {
+            object.items.start += offset;
+            object.items.end += offset;
+        }
+        page.objects.extend(scene.objects);
         page.items.extend(scene.items);
+    }
+    for (mut object, items) in manual_legends {
+        object.items = page.items.len()..page.items.len() + items.len();
+        page.items.extend(items);
+        page.objects.push(object);
     }
     if paper != PAPER {
         for item in &mut page.items {
@@ -186,6 +224,37 @@ pub(super) fn compose<'a>(
                 }
             }
         }
+    }
+    for annotation in &g.page.annotations {
+        let size = annotation.size_pt * 96.0 / 72.0;
+        let text =
+            crate::text::fonts().wrap_formatted(&annotation.text, size, false, (w - 4.0).max(1.0), annotation.rich);
+        let layout = crate::text::layout_formatted(&text, size, false, annotation.rich);
+        let width = layout.width.max(8.0);
+        let height = layout.height;
+        let x = (annotation.position[0] * w).clamp(0.0, (w - width).max(0.0));
+        let y = (annotation.position[1] * h).clamp(0.0, (h - height).max(0.0));
+        let start = page.items.len();
+        page.items.push(Item {
+            prim: Prim::Text {
+                x,
+                y: y + height / 2.0,
+                text,
+                size,
+                anchor: Anchor::Start,
+                vertical: false,
+                bold: false,
+                rich: annotation.rich,
+                color: (annotation.color[0], annotation.color[1], annotation.color[2]),
+            },
+            clip: Some([0.0, 0.0, w, h]),
+        });
+        page.objects.push(ObjectLayout {
+            target: ObjectTarget::Text(annotation.id),
+            bounds: [x, y, width, height],
+            items: start..page.items.len(),
+            overlay: true,
+        });
     }
     page
 }

@@ -246,6 +246,10 @@ pub static TABS: &[Tab] = &[
                 items: &[Big("graph.legend"), Big("graph.labels")],
             },
             Group {
+                label: "标注",
+                items: &[Smalls(&["graph.text.add", "graph.text.manage", "graph.legend.auto"])],
+            },
+            Group {
                 label: "设置",
                 items: &[
                     Big("graph.props"),

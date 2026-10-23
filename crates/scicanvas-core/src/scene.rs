@@ -109,6 +109,25 @@ pub struct Scene {
     pub items: Vec<Item>,
     pub layer_plots: Vec<[f64; 4]>,
     pub layers: Vec<LayerView>,
+    pub objects: Vec<ObjectLayout>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum ObjectTarget {
+    Text(u64),
+    Legend(usize),
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct ObjectLayout {
+    pub target: ObjectTarget,
+    pub bounds: [f64; 4],
+    pub items: std::ops::Range<usize>,
+    pub overlay: bool,
+}
+fn contains(rect: [f64; 4], x: f64, y: f64) -> bool {
+    let [l, t, w, h] = rect;
+    x >= l && x <= l + w && y >= t && y <= t + h
 }
 
 /// 鼠标吸附到的数据点：曲线名、原始行（统计变换后为 None）、数据值和页面位置。
@@ -192,6 +211,7 @@ pub struct LayerView {
     pub bounds: [f64; 4],
     pub plot: [f64; 4],
     pub axes: crate::coord::AxisSet,
+    pub opaque: bool,
 }
 impl LayerView {
     pub fn contains(&self, x: f64, y: f64) -> bool {
@@ -216,6 +236,27 @@ impl LayerView {
 }
 
 impl Scene {
+    pub fn object_at(&self, x: f64, y: f64) -> Option<ObjectTarget> {
+        self.objects
+            .iter()
+            .rev()
+            .find(|object| {
+                if !contains(object.bounds, x, y) {
+                    return false;
+                }
+                if let ObjectTarget::Legend(index) = object.target {
+                    if !object.overlay
+                        && self.layers[index + 1..]
+                            .iter()
+                            .any(|l| l.opaque && contains(l.bounds, x, y))
+                    {
+                        return false;
+                    }
+                }
+                true
+            })
+            .map(|o| o.target)
+    }
     /// 返回最上方图层；不穿透上层的背景与轴标签区域。
     pub fn layer_at(&self, x: f64, y: f64) -> Option<usize> {
         self.layers.iter().rposition(|layer| {
@@ -837,6 +878,7 @@ fn build_layer_full<'a>(
     let inside_y = |y: f64| y >= top - 0.5 && y <= top + ph + 0.5;
 
     let mut items: Vec<Item> = Vec::new();
+    let mut objects = Vec::new();
     let data_start;
     {
         // 记录本图层数据图元范围，供图例避让。
@@ -1152,6 +1194,7 @@ fn build_layer_full<'a>(
             return build_layer_full(g, book, others, w, h, view, wider, true);
         }
         // 上面借用过 items，图例图元（都不裁剪）改用新的 push 推入
+        let start = items.len();
         let mut push = |prim: Prim| items.push(Item { prim, clip: None });
         push(Prim::Rect {
             x: lx,
@@ -1210,6 +1253,12 @@ fn build_layer_full<'a>(
                 g.rich_text,
             ));
         }
+        objects.push(ObjectLayout {
+            target: ObjectTarget::Legend(0),
+            bounds: [lx, ly, lw, lhh],
+            items: start..items.len(),
+            overlay: false,
+        });
     }
 
     Scene {
@@ -1220,10 +1269,12 @@ fn build_layer_full<'a>(
             bounds: [0.0, 0.0, w, h],
             plot: [left, top, pw, ph],
             axes: axes.clone(),
+            opaque: !g.transparent,
         }],
         axes,
         items,
         layer_plots: vec![[left, top, pw, ph]],
+        objects,
     }
 }
 

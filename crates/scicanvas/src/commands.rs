@@ -337,6 +337,18 @@ fn build() -> Vec<Command> {
             |a| a.export_csv(),
         ),
         c(
+            "graph.text.add", "添加文字标注", "note", "", "图形", "text annotation label 文字 标注", need_any_graph,
+            |a| a.start_text_annotation(),
+        ),
+        c(
+            "graph.text.manage", "管理文字标注", "props", "", "图形", "text annotation edit 文字 编辑", need_any_graph,
+            |a| a.manage_annotations(),
+        ),
+        c(
+            "graph.legend.auto", "图例自动避让", "legend", "", "图形", "legend automatic position reset 图例 位置 自动", need_any_graph,
+            |a| a.auto_legend(),
+        ).modifies(),
+        c(
             "graph.export_pdf",
             "导出 PDF",
             "export",

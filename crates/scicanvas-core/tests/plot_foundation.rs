@@ -7,6 +7,144 @@ use scicanvas_core::{
 };
 
 #[test]
+fn page_text_and_manual_legends_keep_page_positions_when_axes_zoom() {
+    use scene::ObjectTarget as T;
+    let mut p = Project::sample();
+    let automatic = scene::layout_page(&p.graphs[0], &p, &[]);
+    let id = p.graphs[0].page.add_text([0.3, 0.2]).unwrap();
+    let text = p.graphs[0].page.text_mut(id).unwrap();
+    text.text = "CO_{2} α\n\\i{k}".into();
+    text.size_pt = 11.0;
+    text.color = [20, 30, 40];
+    p.graphs[0].first_layer_mut().legend_position = Some([0.05, 0.05]);
+    let sc = scene::layout_page(&p.graphs[0], &p, &[]);
+    assert_eq!(sc.plot, automatic.plot, "moving objects does not move data/axes");
+    for object in &sc.objects {
+        assert!(object.items.start < object.items.end && object.items.end <= sc.items.len());
+        assert_eq!(
+            sc.object_at(object.bounds[0] + 2.0, object.bounds[1] + 2.0),
+            Some(object.target)
+        );
+    }
+    let text = sc.objects.iter().find(|o| o.target == T::Text(id)).unwrap();
+    assert!((text.bounds[0] / sc.w - 0.3).abs() < 1e-9);
+    assert!((text.bounds[1] / sc.h - 0.2).abs() < 1e-9);
+    assert!(matches!(
+        sc.items[text.items.start].prim,
+        scene::Prim::Text {
+            rich: true,
+            color: (20, 30, 40),
+            ..
+        }
+    ));
+    let zoomed = scene::layout_page(
+        &p.graphs[0],
+        &p,
+        &[Some(scene::View {
+            x: (2.0, 8.0),
+            y: (-2.0, 6.0),
+        })],
+    );
+    assert_ne!(sc.axes, zoomed.axes);
+    for object in &sc.objects {
+        let after = zoomed.objects.iter().find(|o| o.target == object.target).unwrap();
+        assert_eq!(&object.bounds[..2], &after.bounds[..2]);
+    }
+    let svg = svg::render_page(&p.graphs[0], &p);
+    assert!(svg.contains("CO2 α") && svg.contains("#141e28"));
+    p.graphs[0].first_layer_mut().legend_position = None;
+    p.graphs[0].page.annotations.clear();
+    assert_eq!(
+        scene::layout_page(&p.graphs[0], &p, &[]).items,
+        automatic.items,
+        "automatic avoidance is restored exactly"
+    );
+    let next = p.graphs[0].page.add_text([0.4, 0.3]).unwrap();
+    assert!(next > id, "deleted text IDs are not reused");
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn v13_objects_roundtrip_and_legacy_defaults_keep_literal_text_and_auto_legends() {
+    use scicanvas_core::project_file as file;
+    let mut p = Project::sample();
+    p.graphs[0].first_layer_mut().title = "literal x_{2}".into();
+    for version in [11, 12] {
+        let mut wire: serde_json::Value = serde_json::from_str(&file::to_json(&p).unwrap()).unwrap();
+        wire["version"] = version.into();
+        let page = wire["graphs"][0]["page"].as_object_mut().unwrap();
+        page.remove("annotations");
+        page.remove("next_text_id");
+        let old = file::from_json(&wire.to_string()).unwrap();
+        assert_eq!(old, p);
+        assert!(old.graphs[0].page.annotations.is_empty());
+        assert_eq!(old.graphs[0].first_layer().legend_position, None);
+    }
+    let id = p.graphs[0].page.add_text([0.2, 0.4]).unwrap();
+    p.graphs[0].page.text_mut(id).unwrap().text = "R^{2} α".into();
+    p.graphs[0].first_layer_mut().legend_position = Some([0.6, 0.1]);
+    let json = file::to_json(&p).unwrap();
+    let restored = file::from_json(&json).unwrap();
+    assert_eq!(restored, p);
+    assert_eq!(file::from_scv(&file::to_scv(&p).unwrap()).unwrap(), p);
+    assert_eq!(
+        svg::render_page(&restored.graphs[0], &restored),
+        svg::render_page(&p.graphs[0], &p)
+    );
+    for bad in ["id", "size_pt", "position", "duplicate", "counter", "legend"] {
+        let mut wire: serde_json::Value = serde_json::from_str(&json).unwrap();
+        let page = &mut wire["graphs"][0]["page"];
+        match bad {
+            "id" => page["annotations"][0]["id"] = 0.into(),
+            "size_pt" => page["annotations"][0]["size_pt"] = (-1).into(),
+            "position" => page["annotations"][0]["position"] = serde_json::json!([1.2, 0.0]),
+            "duplicate" => {
+                let duplicate = page["annotations"][0].clone();
+                page["annotations"].as_array_mut().unwrap().push(duplicate);
+            }
+            "counter" => page["next_text_id"] = 0.into(),
+            _ => page["layers"][0]["legend_position"] = serde_json::json!([0.2, -0.1]),
+        }
+        assert!(file::from_json(&wire.to_string()).is_err(), "reject {bad}");
+    }
+    p.graphs[0].page.text_mut(id).unwrap().position[0] = f64::NAN;
+    assert!(file::to_json(&p).is_err());
+}
+
+#[test]
+fn manual_legends_and_page_text_are_overlays_above_insets() {
+    use scene::ObjectTarget as T;
+    let mut p = Project::sample();
+    let mut upper = p.graphs[0].first_layer().clone();
+    upper.placement = Some(scicanvas_core::page::LayerRect {
+        x: 0.0,
+        y: 0.0,
+        width: 1.0,
+        height: 1.0,
+    });
+    upper.legend = false;
+    p.graphs[0].page.add_layer(upper);
+    let auto = scene::layout_page(&p.graphs[0], &p, &[]);
+    let hidden = auto.objects.iter().find(|o| o.target == T::Legend(0)).unwrap();
+    assert_eq!(auto.object_at(hidden.bounds[0] + 2.0, hidden.bounds[1] + 2.0), None);
+    p.graphs[0].first_layer_mut().legend_position = Some([0.2, 0.2]);
+    let manual = scene::layout_page(&p.graphs[0], &p, &[]);
+    let legend = manual.objects.iter().find(|o| o.target == T::Legend(0)).unwrap();
+    assert!(legend.overlay);
+    assert_eq!(legend.items.end, manual.items.len());
+    assert_eq!(
+        manual.object_at(legend.bounds[0] + 2.0, legend.bounds[1] + 2.0),
+        Some(T::Legend(0))
+    );
+    let id = p.graphs[0].page.add_text([0.2, 0.2]).unwrap();
+    let text = scene::layout_page(&p.graphs[0], &p, &[]);
+    assert_eq!(
+        text.object_at(legend.bounds[0] + 2.0, legend.bounds[1] + 2.0),
+        Some(T::Text(id))
+    );
+}
+
+#[test]
 fn scientific_titles_legends_and_labels_share_layout_history_and_project_files() {
     use scicanvas_core::page::{CurveStyle, LabelSource};
     let mut p = Project::sample();

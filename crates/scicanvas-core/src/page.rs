@@ -19,6 +19,26 @@ pub struct Page {
     /// 网格图层之间的间距 mm（横向、纵向）。
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "no_gap"))]
     pub gap_mm: [f64; 2],
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Vec::is_empty"))]
+    pub annotations: Vec<TextAnnotation>,
+    /// Page-local stable IDs are never reused after deletion.
+    next_text_id: u64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct TextAnnotation {
+    pub id: u64,
+    pub text: String,
+    /// Top-left anchor as fractions of the entire page, independent of data axes and window pixels.
+    pub position: [f64; 2],
+    pub size_pt: f64,
+    pub color: [u8; 3],
+    pub rich: bool,
+}
+
+fn valid_position(position: [f64; 2]) -> bool {
+    position.iter().all(|v| v.is_finite() && (0.0..=1.0).contains(v))
 }
 
 #[cfg(feature = "serde")]
@@ -50,10 +70,34 @@ impl Default for Page {
             background: None,
             margin_mm: [0.0; 4],
             gap_mm: [0.0; 2],
+            annotations: Vec::new(),
+            next_text_id: 1,
         }
     }
 }
 impl Page {
+    pub fn add_text(&mut self, position: [f64; 2]) -> Result<u64, String> {
+        if !valid_position(position) {
+            return Err("文字位置应在页面内".into());
+        }
+        let id = self.next_text_id;
+        self.next_text_id = id.checked_add(1).ok_or("文字编号已用尽")?;
+        self.annotations.push(TextAnnotation {
+            id,
+            text: "文字".into(),
+            position,
+            size_pt: 10.0,
+            color: [0, 0, 0],
+            rich: true,
+        });
+        Ok(id)
+    }
+    pub fn text(&self, id: u64) -> Option<&TextAnnotation> {
+        self.annotations.iter().find(|t| t.id == id)
+    }
+    pub fn text_mut(&mut self, id: u64) -> Option<&mut TextAnnotation> {
+        self.annotations.iter_mut().find(|t| t.id == id)
+    }
     /// 页面固定逻辑画布，96 个逻辑单位对应一英寸。
     pub fn logical_size(&self) -> [f64; 2] {
         [self.width_mm * 96.0 / 25.4, self.height_mm * 96.0 / 25.4]
@@ -110,6 +154,25 @@ impl Page {
         Ok(layer)
     }
     pub fn validate(&self) -> Result<(), String> {
+        let mut ids = std::collections::BTreeSet::new();
+        for text in &self.annotations {
+            if text.id == 0 || text.id >= self.next_text_id || !ids.insert(text.id) {
+                return Err("文字标注编号无效或重复".into());
+            }
+            if !valid_position(text.position) || !text.size_pt.is_finite() || !(1.0..=256.0).contains(&text.size_pt) {
+                return Err("文字标注位置或字号无效".into());
+            }
+        }
+        if self.next_text_id == 0 {
+            return Err("文字标注编号无效".into());
+        }
+        if self
+            .layers
+            .iter()
+            .any(|l| l.legend_position.is_some_and(|p| !valid_position(p)))
+        {
+            return Err("图例位置应为有效的页面比例".into());
+        }
         if self.layers.is_empty() || self.columns == 0 || self.columns > self.layers.len() {
             return Err("页面需要至少一个图层，排版列数应在 1 与图层数之间".into());
         }
@@ -180,6 +243,9 @@ pub struct Layer {
     pub labels: DataLabels,
     pub grid: bool,
     pub legend: bool,
+    /// None keeps automatic avoidance; manual anchors are fractions of the entire page.
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Option::is_none"))]
+    pub legend_position: Option<[f64; 2]>,
     /// 四边框：补上顶边和右边，并在这两边画不带标签的镜像刻度。
     #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "is_false"))]
     pub frame: bool,
@@ -340,6 +406,7 @@ impl Default for Layer {
             labels: Default::default(),
             grid: false,
             legend: true,
+            legend_position: None,
             frame: false,
             tick_dir: TickDir::Out,
             connect: Connect::Straight,

@@ -193,6 +193,9 @@ mod tests {
         scientific.books[0].columns.push(label);
         scientific.graphs[0].page.width_mm = 89.0;
         scientific.graphs[0].page.height_mm = 80.0;
+        scientific.graphs[0].first_layer_mut().legend_position = Some([0.52, 0.73]);
+        let id = scientific.graphs[0].page.add_text([0.15, 0.15]).unwrap();
+        scientific.graphs[0].page.text_mut(id).unwrap().text = "Annotation α 中文\n\\b{Result} R^{2}".into();
         cases.push(("scientific".into(), scientific.clone()));
         let mut inset = scientific.graphs[0].first_layer().clone();
         scientific.graphs[0].page.add_layer(inset.clone());

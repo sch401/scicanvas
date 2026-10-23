@@ -8,6 +8,7 @@ use std::f32::consts::FRAC_PI_2;
 
 use eframe::egui::{self, pos2, vec2, Color32, Pos2, Rect, Sense, Shape, Stroke};
 use scicanvas_core::page::Layer;
+pub use scicanvas_core::scene::ObjectTarget;
 use scicanvas_core::scene::{self, Anchor, Prim, Rgb, Scene, View};
 use scicanvas_core::{Graph, Project};
 
@@ -185,6 +186,178 @@ pub struct PlotOutput {
     pub hover_layer: Option<usize>,
     /// 鼠标吸附到的数据点。
     pub point: Option<scene::PointHit>,
+    pub object: Option<ObjectTarget>,
+    pub action: Option<ObjectAction>,
+    pub object_dragging: bool,
+}
+
+#[derive(Clone, Copy)]
+pub struct ObjectUi {
+    pub adding: bool,
+    pub epoch: u64,
+    pub keyboard: bool,
+}
+impl Default for ObjectUi {
+    fn default() -> Self {
+        Self {
+            adding: false,
+            epoch: 0,
+            keyboard: true,
+        }
+    }
+}
+#[derive(Clone, Copy, Debug)]
+pub enum ObjectAction {
+    AddText([f64; 2]),
+    Move(ObjectTarget, [f64; 2]),
+    Edit(ObjectTarget),
+    Delete(ObjectTarget),
+    AutoLegend(usize),
+    CancelAdd,
+}
+#[derive(Clone)]
+struct ObjectDrag {
+    target: ObjectTarget,
+    grab: [f64; 2],
+    expected: Option<[f64; 2]>,
+}
+struct ObjectInteraction {
+    hover: Option<ObjectTarget>,
+    selected: Option<ObjectTarget>,
+    action: Option<ObjectAction>,
+    dragging: bool,
+    block_pan: bool,
+}
+fn object_position(g: &Graph, target: ObjectTarget) -> Option<Option<[f64; 2]>> {
+    match target {
+        ObjectTarget::Text(id) => g.page.text(id).map(|t| Some(t.position)),
+        ObjectTarget::Legend(i) => g.page.layers().get(i).map(|l| l.legend_position),
+    }
+}
+fn interact_objects(
+    ui: &mut egui::Ui,
+    response: &egui::Response,
+    g: &Graph,
+    sc: &Scene,
+    transform: egui::emath::TSTransform,
+    config: ObjectUi,
+) -> ObjectInteraction {
+    let id = view_id(g.id).with(("objects", config.epoch));
+    let mut selected = ui.data(|d| d.get_temp::<ObjectTarget>(id));
+    if selected.is_some_and(|t| !sc.objects.iter().any(|o| o.target == t)) {
+        selected = None;
+    }
+    let mut drag = ui.data(|d| d.get_temp::<ObjectDrag>(id.with("drag")));
+    if drag
+        .as_ref()
+        .is_some_and(|d| object_position(g, d.target) != Some(d.expected))
+    {
+        drag = None;
+    }
+    let point = ui.input(|i| i.pointer.interact_pos()).map(|p| transform.inverse() * p);
+    let hover = if response.contains_pointer() {
+        point.and_then(|p| sc.object_at(p.x as f64, p.y as f64))
+    } else {
+        None
+    };
+    let mut action = None;
+    if response.contains_pointer() && ui.input(|i| i.pointer.primary_pressed() || i.pointer.secondary_pressed()) {
+        selected = hover;
+        response.request_focus();
+        if !config.adding && ui.input(|i| i.pointer.primary_pressed()) {
+            if let (Some(target), Some(p)) = (hover, point) {
+                let object = sc.objects.iter().find(|o| o.target == target).unwrap();
+                drag = Some(ObjectDrag {
+                    target,
+                    grab: [p.x as f64 - object.bounds[0], p.y as f64 - object.bounds[1]],
+                    expected: object_position(g, target).flatten(),
+                });
+            }
+        }
+    }
+    let mut dragging = false;
+    // The page is one egui widget; track clicks per object so rapidly switching objects
+    // cannot turn a double-click on the new object into a page-wide triple-click.
+    let double_clicked = if !config.adding && response.clicked() {
+        if let (Some(target), Some(p)) = (hover.filter(|t| selected == Some(*t)), point) {
+            let now = ui.input(|i| i.time);
+            let at = transform * p;
+            let key = id.with("click");
+            let previous = ui.data(|d| d.get_temp::<(ObjectTarget, f64, Pos2)>(key));
+            let double = previous
+                .is_some_and(|(old, time, position)| old == target && now - time < 0.3 && position.distance(at) <= 6.0);
+            ui.data_mut(|d| {
+                if double {
+                    d.remove::<(ObjectTarget, f64, Pos2)>(key);
+                } else {
+                    d.insert_temp(key, (target, now, at));
+                }
+            });
+            double
+        } else {
+            false
+        }
+    } else {
+        false
+    };
+    let block_pan = config.adding || drag.is_some() || (hover.is_some() && response.double_clicked());
+    if config.adding && response.clicked() {
+        if let Some(p) = point {
+            action = Some(ObjectAction::AddText([
+                (p.x as f64 / sc.w).clamp(0.0, 1.0),
+                (p.y as f64 / sc.h).clamp(0.0, 1.0),
+            ]));
+        }
+    } else if double_clicked {
+        if let Some(target) = hover {
+            action = Some(ObjectAction::Edit(target));
+        }
+    } else if response.dragged_by(egui::PointerButton::Primary)
+        || response.drag_stopped_by(egui::PointerButton::Primary)
+    {
+        if let (Some(d), Some(p)) = (&mut drag, point) {
+            if let Some(object) = sc.objects.iter().find(|o| o.target == d.target) {
+                let position = [
+                    (p.x as f64 - d.grab[0]).clamp(0.0, (sc.w - object.bounds[2]).max(0.0)) / sc.w,
+                    (p.y as f64 - d.grab[1]).clamp(0.0, (sc.h - object.bounds[3]).max(0.0)) / sc.h,
+                ];
+                if object_position(g, d.target) != Some(Some(position)) {
+                    action = Some(ObjectAction::Move(d.target, position));
+                }
+                d.expected = Some(position);
+                dragging = response.dragged_by(egui::PointerButton::Primary);
+            }
+        }
+    }
+    if config.keyboard && response.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Delete)) {
+        action = selected.map(ObjectAction::Delete);
+    }
+    if (response.has_focus() || config.adding) && ui.input(|i| i.key_pressed(egui::Key::Escape)) {
+        action = config.adding.then_some(ObjectAction::CancelAdd);
+        selected = None;
+        drag = None;
+        dragging = false;
+    }
+    if !ui.input(|i| i.pointer.primary_down()) {
+        drag = None;
+    }
+    ui.data_mut(|d| {
+        d.remove::<ObjectTarget>(id);
+        d.remove::<ObjectDrag>(id.with("drag"));
+        if let Some(target) = selected {
+            d.insert_temp(id, target);
+        }
+        if let Some(drag) = drag {
+            d.insert_temp(id.with("drag"), drag);
+        }
+    });
+    ObjectInteraction {
+        hover,
+        selected,
+        action,
+        dragging,
+        block_pan,
+    }
 }
 
 fn rgb(c: Rgb) -> Color32 {
@@ -260,13 +433,13 @@ fn paint_canvas(ui: &egui::Ui, canvas: Rect, page: Rect) {
     );
 }
 
-pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize) -> PlotOutput {
+pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize, objects: ObjectUi) -> PlotOutput {
     let id = view_id(g.id);
     let available = ui.available_size().max(vec2(120.0, 90.0));
     let (canvas, _) = ui.allocate_exact_size(available, Sense::hover());
     let rect = page_rect(canvas, g.page.logical_size());
     paint_canvas(ui, canvas, rect);
-    let response = ui.interact(rect, id.with("page"), Sense::click_and_drag());
+    let response = ui.interact(rect, id.with(("page", objects.epoch)), Sense::click_and_drag());
     let transform = page_transform(rect, g.page.logical_size());
     let local = |p: Pos2| {
         let p = transform.inverse() * p;
@@ -287,20 +460,26 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize) ->
     }
     let views = |saved: &[Option<Saved>]| saved.iter().map(|s| s.as_ref().map(|s| s.view)).collect::<Vec<_>>();
     let mut sc = cached_layout(ui, id, g, project, views(&saved));
+    let object = interact_objects(ui, &response, g, &sc, transform, objects);
     let hovered = response.hover_pos().and_then(|p| {
         let (x, y) = local(p);
         sc.layer_at(x, y).filter(|index| sc.layers[*index].contains(x, y))
     });
-    let selected_layer = if response.contains_pointer() && ui.input(|i| i.pointer.any_pressed()) {
-        response.interact_pointer_pos().and_then(|p| {
-            let (x, y) = local(p);
-            sc.layer_at(x, y)
-        })
-    } else {
-        None
-    };
+    let selected_layer =
+        if let Some(ObjectTarget::Legend(i)) = object.hover.filter(|_| ui.input(|i| i.pointer.any_pressed())) {
+            Some(i)
+        } else if object.hover.is_some() || objects.adding {
+            None
+        } else if response.contains_pointer() && ui.input(|i| i.pointer.any_pressed()) {
+            response.interact_pointer_pos().and_then(|p| {
+                let (x, y) = local(p);
+                sc.layer_at(x, y)
+            })
+        } else {
+            None
+        };
     // 拖动锁定按下时的图层，越过其他图层也继续操作原图层。
-    let dragging = if response.dragged_by(egui::PointerButton::Primary) {
+    let dragging = if !object.block_pan && response.dragged_by(egui::PointerButton::Primary) {
         ui.input(|i| i.pointer.press_origin()).and_then(|p| {
             let (x, y) = local(p);
             sc.layer_at(x, y).filter(|index| sc.layers[*index].contains(x, y))
@@ -309,7 +488,7 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize) ->
         None
     };
     let mut changed = false;
-    if let Some(index) = dragging.or(hovered) {
+    if let Some(index) = dragging.or(hovered).filter(|_| !object.block_pan) {
         let layer = &g.page.layers()[index];
         let layout = &sc.layers[index];
         if response.double_clicked() {
@@ -374,6 +553,18 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize) ->
         sc = cached_layout(ui, id, g, project, views(&saved));
     }
     paint(ui, rect, &sc);
+    if let Some(layout) = object.selected.and_then(|t| sc.objects.iter().find(|o| o.target == t)) {
+        let [x, y, w, h] = layout.bounds;
+        let selection = Rect::from_min_size(
+            transform * pos2(x as f32, y as f32),
+            vec2(w as f32, h as f32) * transform.scaling,
+        );
+        ui.painter().rect_stroke(
+            selection.expand(2.0),
+            0.0,
+            Stroke::new(1.0_f32, ui.visuals().selection.bg_fill),
+        );
+    }
     if sc.layers.len() > 1 {
         let index = selected_layer.unwrap_or(selected).min(sc.layers.len() - 1);
         let [x, y, w, h] = sc.layers[index].plot;
@@ -387,18 +578,22 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize) ->
             Stroke::new(1.0_f32, ui.visuals().selection.bg_fill),
         );
     }
-    let hover = hovered.and_then(|index| {
-        response.hover_pos().map(|p| {
-            let (x, y) = local(p);
-            sc.layers[index].data_at(x, y)
-        })
-    });
+    let hover = hovered
+        .filter(|_| object.hover.is_none() && !object.dragging && !objects.adding)
+        .and_then(|index| {
+            response.hover_pos().map(|p| {
+                let (x, y) = local(p);
+                sc.layers[index].data_at(x, y)
+            })
+        });
     if hover.is_some() && !response.dragged() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
     }
     // 数据点提示：屏幕上 8 像素以内吸附到最近的数据点
     let point = match (hovered, response.hover_pos()) {
-        (Some(index), Some(p)) if dragging.is_none() => {
+        (Some(index), Some(p))
+            if dragging.is_none() && !object.dragging && object.hover.is_none() && !objects.adding =>
+        {
             let (x, y) = local(p);
             let layer = &g.page.layers()[index];
             scene::nearest_point(
@@ -432,9 +627,19 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize) ->
     if dragging.is_some() {
         ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
     }
+    if object.dragging {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+    } else if objects.adding {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Text);
+    } else if object.hover.is_some() {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
+    }
     let zoomed = saved.iter().any(Option::is_some);
     ui.data_mut(|d| d.insert_temp(id, saved));
     PlotOutput {
+        object: object.hover,
+        action: object.action,
+        object_dragging: object.dragging,
         response,
         hover,
         zoomed,
@@ -589,7 +794,7 @@ mod tests {
         };
         let _ = ctx.run(input, |ctx| {
             egui::CentralPanel::default().show(ctx, |ui| {
-                output = Some(show(ui, &p.graphs[0], p, 0));
+                output = Some(show(ui, &p.graphs[0], p, 0, ObjectUi::default()));
             });
         });
         output.unwrap()
@@ -607,6 +812,75 @@ mod tests {
     fn point(rect: Rect, sc: &Scene, index: usize) -> Pos2 {
         let [x, y, w, h] = sc.layers[index].plot;
         page_transform(rect, [sc.w, sc.h]) * pos2((x + w / 2.0) as f32, (y + h / 2.0) as f32)
+    }
+
+    #[test]
+    fn objects_capture_drags_and_double_clicks_without_panning_the_axes() {
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        let mut p = Project::sample();
+        let id = p.graphs[0].page.add_text([0.25, 0.25]).unwrap();
+        p.graphs[0].page.text_mut(id).unwrap().text = "Text".into();
+        let initial = frame(&ctx, &p, vec![]);
+        let object_point = |sc: &Scene, target: ObjectTarget, rect| {
+            let o = sc.objects.iter().find(|o| o.target == target).unwrap();
+            page_transform(rect, [sc.w, sc.h]) * pos2((o.bounds[0] + 4.0) as f32, (o.bounds[1] + 4.0) as f32)
+        };
+        for target in [ObjectTarget::Text(id), ObjectTarget::Legend(0)] {
+            let sc = scene::layout_page(&p.graphs[0], &p, &[]);
+            let at = object_point(&sc, target, initial.response.rect);
+            frame(&ctx, &p, vec![egui::Event::PointerMoved(at), button(at, true)]);
+            let end = at + vec2(70.0, -30.0);
+            let moved = frame(&ctx, &p, vec![egui::Event::PointerMoved(end)]);
+            assert!(moved.object_dragging);
+            let Some(ObjectAction::Move(actual, position)) = moved.action else {
+                panic!("object was not dragged")
+            };
+            assert_eq!(actual, target);
+            match target {
+                ObjectTarget::Text(id) => p.graphs[0].page.text_mut(id).unwrap().position = position,
+                ObjectTarget::Legend(i) => p.graphs[0].page.layers_mut()[i].legend_position = Some(position),
+            }
+            frame(&ctx, &p, vec![button(end, false)]);
+            assert!(!frame(&ctx, &p, vec![]).zoomed);
+            let after = scene::layout_page(&p.graphs[0], &p, &[]);
+            let at = object_point(&after, target, initial.response.rect);
+            let mut edits = Vec::new();
+            let mut info = Vec::new();
+            for _ in 0..2 {
+                frame(&ctx, &p, vec![egui::Event::PointerMoved(at), button(at, true)]);
+                let release = frame(&ctx, &p, vec![button(at, false)]);
+                info.push((
+                    release.object,
+                    release.response.clicked(),
+                    release.response.double_clicked(),
+                    release.response.drag_stopped(),
+                ));
+                edits.push(release.action);
+            }
+            assert!(
+                matches!(edits.last(), Some(Some(ObjectAction::Edit(t))) if *t == target),
+                "{target:?}: {edits:?}, {info:?}, {at:?}"
+            );
+            assert!(!frame(&ctx, &p, vec![]).zoomed);
+        }
+        let sc = scene::layout_page(&p.graphs[0], &p, &[]);
+        let at = object_point(&sc, ObjectTarget::Text(id), initial.response.rect);
+        frame(&ctx, &p, vec![egui::Event::PointerMoved(at), button(at, true)]);
+        frame(&ctx, &p, vec![button(at, false)]);
+        let deleted = frame(
+            &ctx,
+            &p,
+            vec![egui::Event::Key {
+                key: egui::Key::Delete,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+        );
+        assert!(matches!(deleted.action, Some(ObjectAction::Delete(ObjectTarget::Text(t))) if t == id));
+        assert_eq!(sc.plot, scene::layout_page(&p.graphs[0], &p, &[]).plot);
     }
 
     #[test]
@@ -687,6 +961,9 @@ mod tests {
         let mut p = Project::sample();
         p.graphs[0].first_layer_mut().title = r"WWW iii μ ± 中文 CO_{2} R^{2} \b{normal} \i{italic}".into();
         p.graphs[0].first_layer_mut().rich_text = true;
+        let annotation = p.graphs[0].page.add_text([0.2, 0.45]).unwrap();
+        p.graphs[0].page.text_mut(annotation).unwrap().text = "Note_{1} α\n\\i{second}".into();
+        p.graphs[0].first_layer_mut().legend_position = Some([0.6, 0.55]);
         p.graphs[0].first_layer_mut().y_title = r"\i{c} / mol L^{−1}".into();
         let sc = scene::layout_page(&p.graphs[0], &p, &[]);
         let svg = scicanvas_core::svg::render_page(&p.graphs[0], &p);
@@ -929,7 +1206,7 @@ mod tests {
                 let _ = ctx.run(input, |ctx| {
                     egui::CentralPanel::default().show(ctx, |ui| {
                         canvas = ui.available_rect_before_wrap();
-                        output = Some(show(ui, &p.graphs[0], &p, 0));
+                        output = Some(show(ui, &p.graphs[0], &p, 0, ObjectUi::default()));
                     });
                 });
                 let page = output.unwrap().response.rect;
