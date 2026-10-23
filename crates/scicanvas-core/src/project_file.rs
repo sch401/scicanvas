@@ -32,6 +32,9 @@ struct StoredCurve {
     style: Option<crate::page::CurveStyle>,
     #[serde(default)]
     x_override: bool,
+    /// 下端已删除，区别于尚未指定下端，禁止自动重新配对。
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    base_missing: bool,
 }
 
 fn decode_plots(
@@ -55,6 +58,9 @@ fn decode_plots(
     for plot in plots {
         let m = plot.mapping;
         m.validate()?;
+        if plot.base_missing && m.base.is_some() {
+            return Err("曲线下端不能同时为缺失和已指定".into());
+        }
         if !seen.insert(m.y.clone()) {
             return Err("曲线行范围无效或来源重复".into());
         }
@@ -75,6 +81,8 @@ fn decode_plots(
         }
         if let Some(base) = m.base {
             bases.insert(key.clone(), base.key(main).into());
+        } else if plot.base_missing {
+            bases.insert(key.clone(), "".into());
         }
         let inherited = if Some(m.y.book) == main && !m.line_only {
             rows
@@ -240,6 +248,7 @@ pub fn to_json(project: &Project) -> Result<String, String> {
                 .plots_in(&|id| project.book(id))
                 .into_iter()
                 .map(|plot| StoredCurve {
+                    base_missing: layer.base_by_y.get(&plot.key).is_some_and(String::is_empty),
                     mapping: plot.mapping,
                     style: plot.style,
                     x_override: plot.x_override,

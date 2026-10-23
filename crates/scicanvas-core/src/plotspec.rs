@@ -182,6 +182,7 @@ impl PlotSpec {
             base: self
                 .base_by_y
                 .get(key)
+                .filter(|base| !base.is_empty())
                 .and_then(|base| DataRef::from_key(self.book_id, base)),
             rows: self
                 .row_by_y

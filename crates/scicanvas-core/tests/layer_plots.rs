@@ -331,7 +331,7 @@ fn invalid_edits_and_missing_sources_leave_the_whole_layer_unchanged() {
 }
 
 #[test]
-fn new_entries_match_legacy_rendering_history_and_v13_persistence() {
+fn new_entries_match_legacy_rendering_history_and_current_persistence() {
     let (mut p, foreign) = project();
     let before = p.clone();
     let mut legacy = before.clone();
@@ -384,7 +384,7 @@ fn new_entries_match_legacy_rendering_history_and_v13_persistence() {
         let json = project_file::to_json(&p).unwrap();
         assert_eq!(json, project_file::to_json(&legacy).unwrap());
         let wire: serde_json::Value = serde_json::from_str(&json).unwrap();
-        assert_eq!(wire["version"], 13);
+        assert_eq!(wire["version"], scicanvas_core::project_file::CURRENT_VERSION);
         assert!(wire["graphs"][0]["page"]["layers"][0].get("y_keys").is_none());
         assert_eq!(
             wire["graphs"][0]["page"]["layers"][0]["plots"]

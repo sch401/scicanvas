@@ -715,9 +715,12 @@ impl Layer {
             .plots(books)
             .into_iter()
             .filter(|plot| plot.mapping.y.book != deleted && books(plot.mapping.y.book).is_some())
-            .map(|plot| (plot.mapping, plot.style))
+            .map(|plot| {
+                let missing_base = self.base_by_y.get(&plot.key).is_some_and(String::is_empty);
+                (plot.mapping, plot.style, missing_base)
+            })
             .collect();
-        let Some((first, _)) = remaining.first() else {
+        let Some((first, _, _)) = remaining.first() else {
             self.book_id = None;
             return;
         };
@@ -732,7 +735,7 @@ impl Layer {
         self.spec.line_only.clear();
         self.curves.clear();
         self.labels.column = None;
-        for (mapping, style) in remaining {
+        for (mapping, style, missing_base) in remaining {
             let key = mapping.y.key(main);
             self.spec.y_keys.push(key.clone());
             if let Some(x) = mapping.x {
@@ -740,6 +743,8 @@ impl Layer {
             }
             if let Some(base) = mapping.base {
                 self.spec.base_by_y.insert(key.clone(), base.key(main));
+            } else if missing_base {
+                self.spec.base_by_y.insert(key.clone(), String::new());
             }
             if let Some(rows) = mapping.rows {
                 self.spec.row_by_y.insert(key.clone(), Some(rows));
