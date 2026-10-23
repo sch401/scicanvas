@@ -4,6 +4,8 @@
 
 **当前平台范围：Windows。** 开发、测试、性能验收、内置 Python 和安装包均以 Windows 为目标；macOS、Linux 适配与发布安排在后续阶段。
 
+开发环境、完整检查、文档同步和发布步骤见 [贡献说明](CONTRIBUTING.md)。
+
 ## 版权与分发
 
 应用自有部分沿用 **MIT OR Apache-2.0**，见 [LICENSE-MIT](LICENSE-MIT) / [LICENSE-APACHE](LICENSE-APACHE)；第三方材料保留各自许可，详见 [第三方版权声明](THIRD_PARTY_NOTICES.md)、[MPL 对应源码说明](MPL_SOURCE.md)和[代码/素材检查记录](docs/COPYRIGHT_AUDIT.md)。AI 生成来源说明、AS R94 算法核对及发行边界在检查记录中单独说明。
@@ -128,15 +130,18 @@ crates/
     scene.rs        图形版面：坐标框、刻度、曲线、图例排成图元，界面绘制和 SVG 导出共用
     svg.rs          SVG 导出
   scicanvas/        桌面界面（eframe + egui）
-    app.rs          应用状态、界面调度、图形属性与分析操作
+    app.rs          应用状态、界面调度与分析操作
+    app/props.rs     绘图属性的页面、图层、坐标轴与样式分区
     app/workspace.rs 项目管理器、对象操作与子窗口
-    app/worksheet.rs 工作表绘制、选区、键盘编辑与列操作
+    app/worksheet.rs 工作表选区、键盘编辑、事务与列操作
+    app/worksheet/table.rs 表头、单元格和右键菜单绘制
     builder.rs      拖放 X/Y 映射、当前数据图库与预览
-    commands.rs     命令注册表
+    commands.rs     命令接口与注册表组装
+    commands/       按文件、编辑、数据、绘图等职责分组的命令定义
     ribbon.rs       功能区、文件页、命令面板
     mdi.rs          多文档子窗口（标题栏按钮、移动、改变大小、最小化 / 最大化）
     plot.rs         图形绘制与缩放平移
-    dialogs.rs      分析对话框与结果报告
+    dialogs/        按类型拆分的设置、分析对话框与结果报告
     icons.rs        功能区图标（SVG，与网页原型共用）
     theme.rs        浅色 / 深色主题（控件样式、配色、字号、间距）
     fonts.rs        中文字体与图形字体（Arial）加载

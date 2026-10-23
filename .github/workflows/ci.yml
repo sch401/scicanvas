@@ -49,7 +49,7 @@ jobs:
           python -m unittest discover -s tools -p "test_*.py"
       - name: 清单同步与子项显示回归
         run: |
-          python docs/parity/build_parity.py --check
+          python tools/sync_docs.py --check
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -m unittest discover -s docs/parity -p "test_*.py"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
