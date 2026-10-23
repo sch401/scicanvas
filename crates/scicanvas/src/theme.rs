@@ -153,7 +153,7 @@ pub fn palette(theme: Theme) -> Palette {
         window: t.window,
         title: if t.dark { hex(0x2F5F9E) } else { hex(0x2C5D9F) },
         title2: if t.dark { hex(0x3A6FB4) } else { hex(0x3F78C2) },
-        title_in: if t.dark { hex(0x3B434F) } else { hex(0x9AA5B4) },
+        title_in: if t.dark { hex(0x3B434F) } else { hex(0xE7ECF3) },
     }
 }
 

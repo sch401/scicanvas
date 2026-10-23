@@ -47,10 +47,11 @@ pub static TABS: &[Tab] = &[
         ctx: None,
         groups: &[
             Group {
-                label: "新建",
+                label: "项目",
                 items: &[
                     Big("book.new"),
-                    Smalls(&["note.new", "file.import", "file.open", "file.save"]),
+                    Smalls(&["note.new", "file.import"]),
+                    Smalls(&["file.open", "file.save"]),
                 ],
             },
             Group {
@@ -563,6 +564,7 @@ fn group(ui: &mut egui::Ui, app: &SciApp, g: &Group, pal: &Palette, clicked: &mu
             }
         });
         let w = items.response.rect.width().max(40.0);
+        ui.add_space((72.0 - items.response.rect.height()).max(0.0));
         let (rect, _) = ui.allocate_exact_size(vec2(w, 16.0), Sense::hover());
         ui.painter().text(
             rect.center(),
@@ -676,7 +678,11 @@ fn gallery_tile(
     clicked: &mut Option<&'static str>,
 ) -> egui::Response {
     let enabled = (c.when)(app).is_ok();
-    let (rect, resp) = ui.allocate_exact_size(vec2(72.0, 62.0), if enabled { Sense::click() } else { Sense::hover() });
+    let label = ui
+        .painter()
+        .layout_no_wrap(c.label.to_owned(), FontId::proportional(11.5), text_color(enabled, pal));
+    let width = (label.size().x + 12.0).max(72.0);
+    let (rect, resp) = ui.allocate_exact_size(vec2(width, 62.0), if enabled { Sense::click() } else { Sense::hover() });
     button_bg(ui, rect, &resp, enabled, false, pal);
     let kind = c.id.split('.').nth(1).unwrap_or("line");
     let thumb_rect = Rect::from_center_size(egui::pos2(rect.center().x, rect.top() + 24.0), vec2(58.0, 40.0));

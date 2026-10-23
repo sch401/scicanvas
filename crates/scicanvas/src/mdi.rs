@@ -283,11 +283,11 @@ pub fn window(
             } else {
                 painter.rect_filled(bar, 0.0, pal.title_in);
             }
-            let fg = Color32::WHITE;
+            let fg = if active { Color32::WHITE } else { pal.ink };
             let bar_resp = ui.interact(bar, id.with("title"), Sense::click_and_drag());
             out.pressed = bar_resp.is_pointer_button_down_on();
             let ic = Rect::from_center_size(pos2(bar.left() + 14.0, bar.center().y), vec2(14.0, 14.0));
-            icons::icon(icon, true).paint_at(ui, ic);
+            icons::icon(icon, active || pal.dark).paint_at(ui, ic);
 
             let bw = 22.0;
             let by = bar.center().y;

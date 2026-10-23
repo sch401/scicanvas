@@ -152,10 +152,10 @@ impl PlotObjectEditor {
                 }
                 ui.separator();
                 ui.horizontal(|ui| {
-                    if ui.button("删除").clicked() {
+                    if ui.add(plain("删除")).clicked() {
                         action = Some(plot::ObjectAction::Delete(edit.target));
                     }
-                    if ui.button("关闭").clicked() {
+                    if ui.add(primary(ui, "关闭")).clicked() {
                         close = true;
                     }
                 });
@@ -1036,6 +1036,8 @@ fn dock_panel(ctx: &egui::Context, id: egui::Id, side: Option<DockSide>, pos: Op
     ctx.request_repaint();
 }
 
+const PANEL_MARGIN: f32 = 8.0;
+
 pub(crate) struct SettingsWindow<'open> {
     window: egui::Window<'open>,
     id: egui::Id,
@@ -1091,8 +1093,10 @@ impl<'open> SettingsWindow<'open> {
         if let Some(rect) = panel.rect {
             let size = (rect.size()
                 - egui::vec2(
-                    8.0,
-                    panel.chrome_height.unwrap_or_else(|| panel_header_height(ctx) + 8.0),
+                    2.0 * PANEL_MARGIN,
+                    panel
+                        .chrome_height
+                        .unwrap_or_else(|| panel_header_height(ctx) + 2.0 * PANEL_MARGIN),
                 ))
             .max(egui::vec2(1.0, 1.0));
             dock_size = Some(size);
@@ -1108,7 +1112,10 @@ impl<'open> SettingsWindow<'open> {
             if let Some(size) = dock_size {
                 ui.set_min_size(size);
             }
-            contents(ui)
+            egui::ScrollArea::vertical()
+                .auto_shrink([false, dock_size.is_none()])
+                .show(ui, contents)
+                .inner
         });
         if let Some(out) = &out {
             // The native title consumes clicks for collapsing. Give its middle portion a panel menu,
@@ -1230,9 +1237,9 @@ pub(crate) fn window<'open>(ctx: &egui::Context, title: &str) -> SettingsWindow<
             .default_width(360.0)
             .min_width(280.0)
             .default_height(ctx.screen_rect().height() * 0.75)
-            .max_height((ctx.screen_rect().height() - 100.0).max(100.0))
-            .vscroll(true)
-            .frame(egui::Frame::window(&ctx.style()).inner_margin(egui::Margin::same(4.0))),
+            .max_height((ctx.available_rect().height() - 64.0).max(100.0))
+            .vscroll(false)
+            .frame(egui::Frame::window(&ctx.style()).inner_margin(egui::Margin::same(PANEL_MARGIN))),
     }
 }
 
@@ -1759,61 +1766,65 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
         }
         Dialog::FitReport(reports) => {
             window(ctx, "拟合结果").show(ctx, |ui| {
-                egui::ScrollArea::both().max_height(480.0).show(ui, |ui| {
-                    for (ri, r) in reports.iter().enumerate() {
-                        ui.label(RichText::new(format!("{} · {}", r.name, r.kind)).strong());
-                        table_grid(ui, ("fit-grid", ri), &fit_param_rows(r, false), pal);
-                        ui.add_space(4.0);
-                        let mut stats = vec![
-                            ("R²".to_string(), fmt_num(r.fit.r2)),
-                            ("调整后 R²".to_string(), fmt_num(r.fit.adj_r2)),
-                        ];
-                        if let Some(pr) = r.fit.pearson_r() {
-                            stats.push(("Pearson r".into(), fmt_num(pr)));
+                egui::ScrollArea::both()
+                    .max_height((ctx.available_rect().height() - 220.0).clamp(100.0, 480.0))
+                    .show(ui, |ui| {
+                        for (ri, r) in reports.iter().enumerate() {
+                            ui.label(RichText::new(format!("{} · {}", r.name, r.kind)).strong());
+                            table_grid(ui, ("fit-grid", ri), &fit_param_rows(r, false), pal);
+                            ui.add_space(4.0);
+                            let mut stats = vec![
+                                ("R²".to_string(), fmt_num(r.fit.r2)),
+                                ("调整后 R²".to_string(), fmt_num(r.fit.adj_r2)),
+                            ];
+                            if let Some(pr) = r.fit.pearson_r() {
+                                stats.push(("Pearson r".into(), fmt_num(pr)));
+                            }
+                            stats.push(("残差平方和".into(), fmt_num(r.fit.rss)));
+                            stats.push(("数据点数 N".into(), r.fit.n.to_string()));
+                            let stats: Vec<Vec<String>> = stats.into_iter().map(|(k, v)| vec![k, v]).collect();
+                            table_grid(
+                                ui,
+                                ("fit-stats", ri),
+                                &[vec!["统计量".into(), "值".into()]]
+                                    .into_iter()
+                                    .chain(stats)
+                                    .collect::<Vec<_>>(),
+                                pal,
+                            );
+                            ui.add_space(4.0);
+                            ui.label(RichText::new("方差分析").color(pal.weak));
+                            table_grid(ui, ("fit-anova", ri), &fit_anova_rows(r), pal);
+                            ui.add_space(4.0);
+                            ui.label(RichText::new(r.fit.equation()).monospace());
+                            ui.add_space(10.0);
                         }
-                        stats.push(("残差平方和".into(), fmt_num(r.fit.rss)));
-                        stats.push(("数据点数 N".into(), r.fit.n.to_string()));
-                        let stats: Vec<Vec<String>> = stats.into_iter().map(|(k, v)| vec![k, v]).collect();
-                        table_grid(
-                            ui,
-                            ("fit-stats", ri),
-                            &[vec!["统计量".into(), "值".into()]]
-                                .into_iter()
-                                .chain(stats)
-                                .collect::<Vec<_>>(),
-                            pal,
-                        );
-                        ui.add_space(4.0);
-                        ui.label(RichText::new("方差分析").color(pal.weak));
-                        table_grid(ui, ("fit-anova", ri), &fit_anova_rows(r), pal);
-                        ui.add_space(4.0);
-                        ui.label(RichText::new(r.fit.equation()).monospace());
-                        ui.add_space(10.0);
-                    }
-                });
+                    });
                 ui.label(
                     RichText::new("拟合曲线和逐点残差已写入工作簿，拟合曲线加到图形中。")
                         .small()
                         .color(pal.weak),
                 );
-                ui.add_space(6.0);
                 ui.add_space(10.0);
                 ui.separator();
                 ui.add_space(4.0);
                 ui.horizontal_wrapped(|ui| {
-                    center_buttons(ui, 5);
+                    center_buttons(ui, 2);
+                    if ui.add(plain("残差图")).clicked() {
+                        action = Action::ResidualPlot(reports.clone());
+                    }
+                    if ui.add(plain("置信/预测带")).on_hover_text("95%").clicked() {
+                        action = Action::FitBands(reports.clone());
+                    }
+                });
+                ui.horizontal_wrapped(|ui| {
+                    center_buttons(ui, 3);
                     if ui
                         .add(plain("复制结果"))
                         .on_hover_text("复制为制表符分隔的文本，可粘贴到 Excel")
                         .clicked()
                     {
                         ui.ctx().copy_text(fit_text(reports));
-                    }
-                    if ui.add(plain("残差图")).clicked() {
-                        action = Action::ResidualPlot(reports.clone());
-                    }
-                    if ui.add(plain("置信/预测带")).on_hover_text("95%").clicked() {
-                        action = Action::FitBands(reports.clone());
                     }
                     if ui.add(plain("保存为 Note")).clicked() {
                         action = Action::SaveNote("拟合结果".into(), fit_markdown(reports));
@@ -1943,7 +1954,6 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                     .small()
                     .color(pal.weak),
                 );
-                ui.add_space(6.0);
                 ui.add_space(10.0);
                     ui.separator();
                     ui.add_space(4.0);
@@ -2014,7 +2024,6 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                     .small()
                     .color(pal.weak),
                 );
-                ui.add_space(6.0);
                 ui.add_space(10.0);
                     ui.separator();
                     ui.add_space(4.0);
@@ -2065,12 +2074,13 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                 });
                 egui::Grid::new("nlfit-models")
                     .num_columns(2)
+                    .max_col_width((ui.available_width() - 120.0).max(100.0))
                     .spacing([12.0, 6.0])
                     .show(ui, |ui| {
                         let category = model.category();
                         for m in Model::ALL.into_iter().filter(|m| m.category() == category) {
                             ui.radio_value(model, m, m.name());
-                            ui.label(RichText::new(m.formula()).monospace());
+                            ui.add(egui::Label::new(RichText::new(m.formula()).monospace()).wrap());
                             ui.end_row();
                         }
                     });
@@ -2123,44 +2133,49 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
         }
         Dialog::NlFitReport(reports) => {
             window(ctx, "非线性拟合结果").show(ctx, |ui| {
-                egui::ScrollArea::both().max_height(480.0).show(ui, |ui| {
-                    for (ri, r) in reports.iter().enumerate() {
-                        let f = &r.fit;
-                        ui.label(RichText::new(format!("{} · {}", r.name, f.model.name())).strong());
-                        ui.label(RichText::new(f.model.formula()).monospace().small());
-                        for c in &f.constraints {
-                            ui.label(RichText::new(format!("约束：{c}")).small().color(pal.weak));
+                egui::ScrollArea::both()
+                    .max_height((ctx.available_rect().height() - 220.0).clamp(100.0, 480.0))
+                    .show(ui, |ui| {
+                        for (ri, r) in reports.iter().enumerate() {
+                            let f = &r.fit;
+                            ui.label(RichText::new(format!("{} · {}", r.name, f.model.name())).strong());
+                            ui.label(RichText::new(f.model.formula()).monospace().small());
+                            for c in &f.constraints {
+                                ui.label(RichText::new(format!("约束：{c}")).small().color(pal.weak));
+                            }
+                            if !f.converged {
+                                ui.colored_label(
+                                    egui::Color32::from_rgb(182, 67, 66),
+                                    "迭代 500 次仍未收敛，结果仅供参考；可换用其他函数或检查数据",
+                                );
+                            }
+                            table_grid(ui, ("nlfit-grid", ri), &nlfit_param_rows(f), pal);
+                            ui.add_space(4.0);
+                            let stats: Vec<Vec<String>> = [vec!["统计量".to_string(), "值".to_string()]]
+                                .into_iter()
+                                .chain(nlfit_stats(f).into_iter().map(|(k, v)| vec![k.to_string(), v]))
+                                .collect();
+                            table_grid(ui, ("nlfit-stats", ri), &stats, pal);
+                            ui.add_space(10.0);
                         }
-                        if !f.converged {
-                            ui.colored_label(
-                                egui::Color32::from_rgb(182, 67, 66),
-                                "迭代 500 次仍未收敛，结果仅供参考；可换用其他函数或检查数据",
-                            );
-                        }
-                        table_grid(ui, ("nlfit-grid", ri), &nlfit_param_rows(f), pal);
-                        ui.add_space(4.0);
-                        let stats: Vec<Vec<String>> = [vec!["统计量".to_string(), "值".to_string()]]
-                            .into_iter()
-                            .chain(nlfit_stats(f).into_iter().map(|(k, v)| vec![k.to_string(), v]))
-                            .collect();
-                        table_grid(ui, ("nlfit-stats", ri), &stats, pal);
-                        ui.add_space(10.0);
-                    }
-                });
+                    });
                 ui.add_space(10.0);
                 ui.separator();
                 ui.add_space(4.0);
                 ui.horizontal_wrapped(|ui| {
-                    center_buttons(ui, 4);
+                    center_buttons(ui, 1);
+                    if ui.add(plain("置信/预测带")).on_hover_text("95%").clicked() {
+                        action = Action::NlFitBands(reports.clone());
+                    }
+                });
+                ui.horizontal_wrapped(|ui| {
+                    center_buttons(ui, 3);
                     if ui
                         .add(plain("复制结果"))
                         .on_hover_text("复制为制表符分隔的文本，可粘贴到 Excel")
                         .clicked()
                     {
                         ui.ctx().copy_text(nlfit_text(reports));
-                    }
-                    if ui.add(plain("置信/预测带")).on_hover_text("95%").clicked() {
-                        action = Action::NlFitBands(reports.clone());
                     }
                     if ui.add(plain("保存为 Note")).clicked() {
                         action = Action::SaveNote("非线性拟合结果".into(), nlfit_markdown(reports));
@@ -2289,7 +2304,6 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                         });
                 });
                 ui.label(RichText::new(note.as_str()).small().color(pal.weak));
-                ui.add_space(6.0);
                 ui.add_space(10.0);
                 ui.separator();
                 ui.add_space(4.0);
@@ -2641,7 +2655,6 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                     .small()
                     .color(pal.weak),
                 );
-                ui.add_space(6.0);
                 ui.add_space(10.0);
                 ui.separator();
                 ui.add_space(4.0);

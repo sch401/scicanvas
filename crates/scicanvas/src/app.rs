@@ -200,7 +200,7 @@ impl SciApp {
             ws: egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1000.0, 650.0)),
         };
         app.load_project(Project::sample(), None);
-        app.status = "就绪 — 单击列标题选列，再点功能区里的绘图按钮；Ctrl+K 搜索任何命令，F1 查看快速上手".into();
+        app.status = "就绪".into();
         app
     }
 
@@ -7227,3 +7227,7 @@ mod snap_assist_tests {
         assert!((three[2].center().x - zone.center().x).abs() < 0.5 || three[0].top() != three[2].top());
     }
 }
+
+#[cfg(test)]
+#[path = "ui_review.rs"]
+mod ui_review;
