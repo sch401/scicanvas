@@ -165,26 +165,13 @@ fn estimated_bytes(p: &Project) -> usize {
     for g in &p.graphs {
         bytes += g.name.capacity() + std::mem::size_of_val(g.page.layers());
         for layer in g.page.layers() {
-            bytes += layer.row_by_y.keys().map(|key| 128 + key.capacity()).sum::<usize>();
+            bytes += layer.estimated_plot_bytes();
             bytes += [&layer.title, &layer.x_title, &layer.y_title]
                 .iter()
                 .map(|s| s.capacity())
                 .sum::<usize>();
             bytes += layer.x_key.as_ref().map_or(0, String::capacity);
             bytes += layer.labels.column.as_ref().map_or(0, String::capacity);
-            for keys in [&layer.y_keys, &layer.line_only] {
-                bytes += keys.capacity() * size_of::<String>() + keys.iter().map(String::capacity).sum::<usize>();
-            }
-            bytes += layer
-                .x_by_y
-                .iter()
-                .map(|(k, v)| 128 + k.capacity() + v.capacity())
-                .sum::<usize>();
-            bytes += layer
-                .base_by_y
-                .iter()
-                .map(|(k, v)| 128 + k.capacity() + v.capacity())
-                .sum::<usize>();
         }
     }
     bytes
@@ -283,5 +270,171 @@ mod tests {
         p = h.undo(&p).unwrap();
         assert!(h.bytes <= 4096);
         assert!(h.redo(&p).is_none());
+    }
+    fn legacy_estimated_bytes(p: &Project) -> usize {
+        let mut bytes = p.books.capacity() * size_of::<Book>() + p.graphs.capacity() * size_of::<Graph>();
+        bytes += p.notes.capacity() * size_of::<crate::Note>()
+            + p.notes
+                .iter()
+                .map(|n| n.name.capacity() + n.text.capacity())
+                .sum::<usize>();
+        bytes += p.folders.capacity() * size_of::<crate::project_tree::Folder>()
+            + p.folders
+                .iter()
+                .map(|f| f.name.capacity() + f.items.capacity() * size_of::<u64>())
+                .sum::<usize>();
+        for b in &p.books {
+            bytes += b.name.capacity() + b.columns.capacity() * size_of::<Column>();
+            for c in &b.columns {
+                bytes += [&c.key, &c.long_name, &c.units, &c.comment]
+                    .iter()
+                    .map(|s| s.capacity())
+                    .sum::<usize>();
+                bytes += c.data.estimated_bytes();
+                bytes += c.derived_from.as_ref().map_or(0, String::capacity);
+                bytes += c.error_for.as_ref().map_or(0, String::capacity);
+            }
+        }
+        for g in &p.graphs {
+            bytes += g.name.capacity() + std::mem::size_of_val(g.page.layers());
+            for layer in g.page.layers() {
+                bytes += layer.row_by_y.keys().map(|key| 128 + key.capacity()).sum::<usize>();
+                bytes += [&layer.title, &layer.x_title, &layer.y_title]
+                    .iter()
+                    .map(|s| s.capacity())
+                    .sum::<usize>();
+                bytes += layer.x_key.as_ref().map_or(0, String::capacity);
+                bytes += layer.labels.column.as_ref().map_or(0, String::capacity);
+                for keys in [&layer.y_keys, &layer.line_only] {
+                    bytes += keys.capacity() * size_of::<String>() + keys.iter().map(String::capacity).sum::<usize>();
+                }
+                bytes += layer
+                    .x_by_y
+                    .iter()
+                    .map(|(k, v)| 128 + k.capacity() + v.capacity())
+                    .sum::<usize>();
+                bytes += layer
+                    .base_by_y
+                    .iter()
+                    .map(|(k, v)| 128 + k.capacity() + v.capacity())
+                    .sum::<usize>();
+            }
+        }
+        bytes
+    }
+
+    fn curve_budget_fixture(unbound: bool, empty: bool) -> Project {
+        fn reserved(text: &str, capacity: usize) -> String {
+            let mut value = String::with_capacity(capacity);
+            value.push_str(text);
+            value
+        }
+        let mut p = Project::sample();
+        p.books.reserve(3);
+        p.graphs.reserve(2);
+        let layer = p.graphs[0].first_layer_mut();
+        if unbound {
+            layer.book_id = None;
+        }
+        layer.spec.y_keys.reserve(37);
+        layer.spec.line_only.reserve(19);
+        layer.spec.y_keys.push(reserved("中文列@2", 96));
+        layer.spec.y_keys.push(reserved("B", 64));
+        layer.spec.line_only.push(reserved("派生线@2", 128));
+        layer.spec.x_by_y.insert(reserved("hidden@2", 80), reserved("A@2", 192));
+        layer.spec.base_by_y.insert(reserved("B", 64), reserved("", 96));
+        layer
+            .spec
+            .base_by_y
+            .insert(reserved("hidden@2", 160), reserved("lower@2", 320));
+        layer.spec.row_by_y.insert(reserved("hidden", 144), None);
+        layer.spec.row_by_y.insert(reserved("中文列@2", 240), Some((1, 3)));
+        layer.spec.x_key = Some(reserved("A", 64));
+        layer.labels.column = Some(reserved("标签列", 128));
+        layer.title = reserved("预算回归", 256);
+        if empty {
+            layer.spec.y_keys.clear();
+            layer.spec.line_only.clear();
+        }
+        let second = layer.clone();
+        p.graphs[0].page.add_layer(second);
+        p
+    }
+
+    #[test]
+    fn curve_budget_matches_legacy_with_capacity_hidden_and_unbound_entries() {
+        for unbound in [false, true] {
+            for empty in [false, true] {
+                let p = curve_budget_fixture(unbound, empty);
+                // 原项目的预留容量和快照克隆后的容量分别核对。
+                assert_eq!(estimated_bytes(&p), legacy_estimated_bytes(&p));
+                let mut snapshot = p.clone();
+                assert_eq!(estimated_bytes(&snapshot), legacy_estimated_bytes(&snapshot));
+                let before = estimated_bytes(&snapshot);
+                snapshot.graphs[0].first_layer_mut().curves.insert(
+                    "style-only".into(),
+                    crate::page::CurveStyle {
+                        legend_label: "旧估算范围".repeat(100),
+                        right_axis: true,
+                        ..Default::default()
+                    },
+                );
+                assert_eq!(estimated_bytes(&snapshot), before, "保留原计入范围");
+                assert_eq!(estimated_bytes(&snapshot), legacy_estimated_bytes(&snapshot));
+            }
+        }
+    }
+
+    #[test]
+    fn curve_budget_preserves_exact_limits_eviction_redo_and_branching() {
+        let initial = curve_budget_fixture(true, true);
+        let label = "曲线改动😀";
+        let cost = legacy_estimated_bytes(&initial.clone()) + size_of::<Snapshot>() + label.len();
+        for (max_steps, max_bytes, retained) in [
+            (2, usize::MAX, 2),
+            (100, 2 * cost, 2),
+            (100, 2 * cost - 1, 1),
+            (100, cost - 1, 0),
+        ] {
+            let mut p = initial.clone();
+            let mut states = vec![p.clone()];
+            let mut h = History::with_limits(max_steps, max_bytes);
+            for rows in [Some((0, 3)), Some((1, 4))] {
+                h.begin(&p, label);
+                assert_eq!(h.pending.as_ref().unwrap().before.bytes, cost);
+                p.graphs[0].first_layer_mut().spec.rows = rows;
+                h.changed();
+                assert!(h.commit(&p));
+                states.push(p.clone());
+            }
+            assert_eq!(h.undo.len(), retained);
+            assert_eq!(h.bytes, retained * cost);
+            for i in (2 - retained..2).rev() {
+                assert_eq!(h.undo_label(), Some(label));
+                p = h.undo(&p).unwrap();
+                assert_eq!(p, states[i]);
+                assert_eq!(h.bytes, retained * cost);
+            }
+            assert!(h.undo(&p).is_none());
+            for state in states.iter().skip(3 - retained) {
+                assert_eq!(h.redo_label(), Some(label));
+                p = h.redo(&p).unwrap();
+                assert_eq!(&p, state);
+                assert_eq!(h.bytes, retained * cost);
+            }
+            assert!(h.redo(&p).is_none());
+            if retained > 0 {
+                p = h.undo(&p).unwrap();
+                h.begin(&p, label);
+                assert!(!h.commit(&p));
+                assert_eq!(h.redo_label(), Some(label));
+                h.begin(&p, label);
+                p.graphs[0].first_layer_mut().spec.rows = Some((2, 5));
+                h.changed();
+                assert!(h.commit(&p));
+                assert_eq!(h.bytes, retained * cost);
+                assert!(h.redo(&p).is_none());
+            }
+        }
     }
 }

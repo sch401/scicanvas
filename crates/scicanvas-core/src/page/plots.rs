@@ -3,6 +3,26 @@ use super::{CurveStyle, Layer};
 use crate::plotspec::{default_x, split_key, BookLookup, DataRef, Plot};
 
 impl Layer {
+    /// 沿用撤销预算的原计入范围、实际预留容量和每项 128 字节节点估值。
+    /// 包含隐藏、未绑定和暂存映射，直接读取分配，避免描述快照丢失容量信息。
+    pub(crate) fn estimated_plot_bytes(&self) -> usize {
+        let mut bytes = self.row_by_y.keys().map(|key| 128 + key.capacity()).sum::<usize>();
+        for keys in [&self.y_keys, &self.line_only] {
+            bytes += keys.capacity() * std::mem::size_of::<String>() + keys.iter().map(String::capacity).sum::<usize>();
+        }
+        bytes += self
+            .x_by_y
+            .iter()
+            .map(|(k, v)| 128 + k.capacity() + v.capacity())
+            .sum::<usize>();
+        bytes += self
+            .base_by_y
+            .iter()
+            .map(|(k, v)| 128 + k.capacity() + v.capacity())
+            .sum::<usize>();
+        bytes
+    }
+
     /// 编辑视图的顺序键，保留未绑定主表的旧条目；属性样式可排除派生线。
     pub fn plot_keys(&self, include_derived: bool) -> Vec<String> {
         self.y_keys
