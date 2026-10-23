@@ -133,6 +133,7 @@ impl SciApp {
         let sample = (0..col.data.len()).find_map(|r| col.data.f64_at(r).filter(|v| v.is_finite()));
         self.dialog = Some(Dialog::ColumnProps {
             book: id,
+            before: dialogs::ColumnEdit::from(col),
             edit: dialogs::ColumnEdit::from(col),
             sample,
             error: None,

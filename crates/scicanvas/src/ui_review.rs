@@ -342,3 +342,34 @@ fn live_settings_keep_edits_through_minimize_close_and_undo() {
         );
     }
 }
+
+#[test]
+fn live_panels_follow_external_changes_without_reverting_them() {
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut app = SciApp::initial(theme::palette(egui::Theme::Light));
+    let frame = |app: &mut SciApp| {
+        let _ = ctx.run(egui::RawInput::default(), |ctx| app.ui_frame(ctx));
+    };
+    app.active = Some(1);
+    app.selection.insert(1, vec!["B".into()]);
+    app.run_command("col.props");
+    frame(&mut app);
+    app.run_command("col.setX");
+    let changed = app.project.clone();
+    frame(&mut app);
+    frame(&mut app);
+    assert_eq!(app.project, changed);
+    assert!(matches!(&app.dialog, Some(Dialog::ColumnProps { edit, .. }) if edit.role == scicanvas_core::Role::X));
+    app.active = Some(2);
+    app.run_command("layer.contents");
+    frame(&mut app);
+    app.run_command("graph.grid");
+    let changed = app.project.clone();
+    frame(&mut app);
+    frame(&mut app);
+    assert_eq!(app.project, changed);
+    assert!(
+        matches!(&app.dialog, Some(Dialog::LayerContents(edit)) if edit.draft == *app.project.graph(2).unwrap().first_layer())
+    );
+}

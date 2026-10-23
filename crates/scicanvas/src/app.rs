@@ -770,9 +770,16 @@ impl SciApp {
                     self.dialog = None;
                 }
             }
-            Some(Dialog::ColumnProps { book, edit, error, .. }) => {
+            Some(Dialog::ColumnProps {
+                book,
+                before,
+                edit,
+                error,
+                ..
+            }) => {
                 if let Some(column) = self.project.book(*book).and_then(|b| b.column(&edit.key)) {
                     *edit = dialogs::ColumnEdit::from(column);
+                    *before = edit.clone();
                     *error = None;
                 } else {
                     self.dialog = None;
@@ -1828,6 +1835,33 @@ impl SciApp {
 
     fn dialogs(&mut self, ctx: &egui::Context) {
         let Some(d) = self.dialog.as_mut() else { return };
+        // Clean live controls follow edits made through the ribbon or another open panel.
+        match d {
+            Dialog::LayerContents(edit) if edit.draft == edit.before => {
+                if let Some(layer) = self
+                    .project
+                    .graph(edit.graph)
+                    .and_then(|g| g.page.layers().get(edit.index))
+                {
+                    if layer != &edit.before {
+                        edit.before = layer.clone();
+                        edit.draft = layer.clone();
+                        edit.error = None;
+                    }
+                }
+            }
+            Dialog::ColumnProps { book, before, edit, .. } if edit == before => {
+                if let Some(column) = self.project.book(*book).and_then(|b| b.column(&edit.key)) {
+                    let current = dialogs::ColumnEdit::from(column);
+                    if &current != before {
+                        *before = current.clone();
+                        *edit = current;
+                        self.book_preview = None;
+                    }
+                }
+            }
+            _ => {}
+        }
         let layer_before = match d {
             Dialog::LayerContents(edit) => Some(edit.draft.clone()),
             _ => None,
@@ -1948,6 +1982,9 @@ impl SciApp {
                 match self.apply_column_props(book, edit) {
                     Ok(()) => {
                         self.history.changed();
+                        if let Some(Dialog::ColumnProps { before, edit, .. }) = &mut self.dialog {
+                            *before = edit.clone();
+                        }
                         if let Some(preview) = &mut preview {
                             preview.applied = true;
                         }

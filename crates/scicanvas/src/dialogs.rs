@@ -613,6 +613,7 @@ pub enum Dialog {
     /// 列属性：编辑内容、第一行的数值（数值列或日期列的毫秒，用于格式预览）、转换失败等错误。
     ColumnProps {
         book: u64,
+        before: ColumnEdit,
         edit: ColumnEdit,
         sample: Option<f64>,
         error: Option<String>,
@@ -1155,6 +1156,17 @@ impl<'open> SettingsWindow<'open> {
                 minimized.store(ctx);
                 ctx.request_repaint();
             }
+            button.widget_info(|| {
+                egui::WidgetInfo::labeled(
+                    egui::WidgetType::Button,
+                    button.enabled(),
+                    if minimized.is_open() {
+                        "最小化面板"
+                    } else {
+                        "还原面板"
+                    },
+                )
+            });
             button.on_hover_text(if minimized.is_open() {
                 "最小化面板"
             } else {
@@ -1350,6 +1362,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             edit,
             sample,
             error,
+            ..
         } => {
             use scicanvas_core::format::{DateFormat, NumberFormat};
             use scicanvas_core::{DataKind, Role};
