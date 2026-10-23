@@ -58,18 +58,10 @@ fn data_fingerprint(g: &Graph, project: &Project) -> u64 {
             mix(book.id);
             text(&book.name, &mut mix);
             let local = book.id == main.id;
-            let used = |k: &str| {
-                let q = scicanvas_core::plotspec::foreign_key(book.id, k);
-                let is = |x: &str| x == q || (local && x == k);
-                (local && layer.x_key.as_deref() == Some(k))
-                    || layer.y_keys.iter().any(|y| is(y))
-                    || layer.x_by_y.values().any(|x| is(x))
-                    || layer.base_by_y.values().any(|b| is(b))
-                    || (local && layer.labels.column.as_deref() == Some(k))
-                    || (!local && default_x_of(layer, book, k))
-            };
             for (index, col) in book.columns.iter().enumerate() {
-                if !used(&col.key) && !matches!(col.role, Role::XError | Role::YError | Role::Label) {
+                if !layer.references_plot_column(book, &col.key)
+                    && !matches!(col.role, Role::XError | Role::YError | Role::Label)
+                {
                     continue;
                 }
                 text(&col.key, &mut mix);
@@ -101,19 +93,6 @@ fn data_fingerprint(g: &Graph, project: &Project) -> u64 {
         }
     }
     h
-}
-
-/// 其他工作簿的曲线没有映射 X 列时用该表默认 X 列：`k` 是否为某条这样的曲线的 X。
-fn default_x_of(layer: &scicanvas_core::page::Layer, book: &scicanvas_core::Book, k: &str) -> bool {
-    layer
-        .y_keys
-        .iter()
-        .any(|y| match scicanvas_core::plotspec::split_key(y) {
-            (col, Some(id)) if id == book.id && !layer.x_by_y.contains_key(y) => {
-                scicanvas_core::plotspec::default_x(book, col).as_deref() == Some(k)
-            }
-            _ => false,
-        })
 }
 
 /// 取场景：与缓存的图形、视图、数据指纹都相同时复用，否则重新排版并更新缓存。

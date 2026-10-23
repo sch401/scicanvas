@@ -52,7 +52,7 @@ impl SciApp {
                         foreign_curves(ui, g, &book_specs, &curve_options, &curve_names, &lookup);
                         if g.plot_type == PlotType::FloatingBar {
                             ui.label("浮动柱下端");
-                            crate::builder::floating_columns(ui, &mut g.spec, &cols);
+                            crate::builder::floating_columns(ui, g, &cols);
                             ui.end_row();
                         }
                         titles(ui, g, history_group);

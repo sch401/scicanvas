@@ -810,12 +810,7 @@ impl SciApp {
             let Some(layer) = self.project.graph(*graph).and_then(|g| g.page.layers().get(*index)) else {
                 return false;
             };
-            curves.retain(|r| {
-                layer
-                    .y_keys
-                    .iter()
-                    .any(|key| scicanvas_core::plotspec::DataRef::from_key(layer.book_id, key).as_ref() == Some(r))
-            });
+            curves.retain(|r| layer.plot(r, &|id| self.project.book(id)).is_some());
             true
         });
         self.active_layers.retain(|id, index| {
@@ -2409,7 +2404,7 @@ impl SciApp {
         let graph = self.project.graph(id)?;
         if let Some(Dialog::LayerContents(edit)) = &self.dialog {
             if edit.graph == id && graph.page.layers().get(edit.index) == Some(&edit.before) {
-                let valid = edit.draft.y_keys.is_empty()
+                let valid = edit.draft.plot_keys(true).is_empty()
                     || edit
                         .draft
                         .book_id
@@ -2740,7 +2735,7 @@ impl SciApp {
             .graph_mut(gid)
             .and_then(|g| g.page.layers_mut().get_mut(layer))
         {
-            if l.y_keys.iter().any(|k| k == key) {
+            if l.plot_keys(true).iter().any(|k| k == key) {
                 l.remove_curve(key);
                 self.history.changed();
                 self.status = "已移除曲线".into();

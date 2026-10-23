@@ -544,7 +544,7 @@ impl Layer {
         others: crate::plotspec::BookLookup<'a, '_>,
     ) -> (Option<&'a crate::Column>, Vec<PreparedPlot>) {
         let g = self;
-        let plots = self.plots_in(&|id| if id == book.id { Some(book) } else { others(id) });
+        let plots = self.plots(&|id| if id == book.id { Some(book) } else { others(id) });
         let (xcol, mut series) = self.spec.series_from_plots(book, others, &plots);
         let recipe = crate::presets::recipe(self.plot_type);
         let horizontal = recipe.orientation == crate::coord::Orientation::Horizontal;

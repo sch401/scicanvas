@@ -245,10 +245,10 @@ pub fn to_json(project: &Project) -> Result<String, String> {
                 continue;
             }
             let plots: Vec<StoredCurve> = layer
-                .plots_in(&|id| project.book(id))
+                .plots(&|id| project.book(id))
                 .into_iter()
                 .map(|plot| StoredCurve {
-                    base_missing: layer.base_by_y.get(&plot.key).is_some_and(String::is_empty),
+                    base_missing: layer.plot_base_key(&plot.key) == Some(""),
                     mapping: plot.mapping,
                     style: plot.style,
                     x_override: plot.x_override,
@@ -300,12 +300,8 @@ fn validate(project: &Project) -> Result<(), String> {
     for graph in &project.graphs {
         graph.page.validate()?;
         for layer in graph.page.layers() {
-            for key in &layer.y_keys {
-                if let Some(reference) = crate::plotspec::DataRef::from_key(layer.book_id, key) {
-                    if let Some(mapping) = layer.curve_mapping(key, project.book(reference.book)) {
-                        mapping.validate()?;
-                    }
-                }
+            for plot in layer.plots(&|id| project.book(id)) {
+                plot.mapping.validate()?;
             }
             if [
                 layer.x_min,
@@ -335,13 +331,7 @@ fn validate(project: &Project) -> Result<(), String> {
             {
                 return Err("数据标签字号应为有限正数，偏移应为有限非负数".into());
             }
-            if layer.rows.is_some_and(|(a, b)| a > b || b == usize::MAX)
-                || layer
-                    .row_by_y
-                    .values()
-                    .flatten()
-                    .any(|(a, b)| a > b || *b == usize::MAX)
-            {
+            if !layer.valid_plot_rows() {
                 return Err("图层行范围无效".into());
             }
         }

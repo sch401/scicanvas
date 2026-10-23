@@ -188,3 +188,116 @@ fn v2_layers_roundtrip_and_invalid_page_is_rejected() {
     value["graphs"][0]["page"]["columns"] = 0.into();
     assert!(project_file::from_json(&value.to_string()).is_err());
 }
+
+// 迁移前 v14 的保存投影，用于逐字节核对，保持原字段、顺序和省略规则。
+fn legacy_curve_projection(p: &Project) -> String {
+    let mut value = serde_json::to_value(p).unwrap();
+    for (graph, wire) in p.graphs.iter().zip(value["graphs"].as_array_mut().unwrap()) {
+        for (layer, wire) in graph
+            .page
+            .layers()
+            .iter()
+            .zip(wire["page"]["layers"].as_array_mut().unwrap())
+        {
+            if layer.book_id.is_none() {
+                continue;
+            }
+            let plots: Vec<_> = layer.plots_in(&|id| p.book(id)).into_iter().map(|plot| {
+                let mut curve = serde_json::json!({"mapping": plot.mapping, "style": plot.style, "x_override": plot.x_override});
+                if layer.base_by_y.get(&plot.key).is_some_and(String::is_empty) {
+                    curve["base_missing"] = true.into();
+                }
+                curve
+            }).collect();
+            wire["plots"] = plots.into();
+            for key in ["y_keys", "x_by_y", "base_by_y", "line_only", "curves", "row_by_y"] {
+                wire.as_object_mut().unwrap().remove(key);
+            }
+        }
+    }
+    value["version"] = project_file::CURRENT_VERSION.into();
+    serde_json::to_string_pretty(&value).unwrap()
+}
+
+#[test]
+fn unified_export_preserves_v14_bytes_previews_and_legacy_projects() {
+    fixture_fonts();
+    let mut original = Project::sample();
+    let foreign = original.new_book();
+    let book = original.book_mut(foreign).unwrap();
+    book.push_column(scicanvas_core::Role::Y);
+    for (i, col) in book.columns.iter_mut().enumerate() {
+        col.data = vec![(i + 1).to_string(), (i + 3).to_string()].into();
+    }
+    let keys = ["B".into(), "C".into()];
+    let (gid, _) = original.plot_from_selection(1, &keys, PlotType::FloatingBar).unwrap();
+    original.add_curves(gid, 0, foreign, &keys).unwrap();
+    let layer = original.graph_mut(gid).unwrap().first_layer_mut();
+    layer.rows = Some((0, 1));
+    layer.row_by_y.insert("C".into(), Some((0, 1)));
+    layer.x_by_y.insert("C".into(), "A".into());
+    layer
+        .curves
+        .insert("C".into(), scicanvas_core::page::CurveStyle::default());
+    for mode in ["bound", "missing-base", "unbound", "inactive"] {
+        let mut p = original.clone();
+        match mode {
+            "missing-base" => p.delete_columns(1, &["B".into()]),
+            "unbound" => p.graphs[0].first_layer_mut().book_id = None,
+            "inactive" => p.graph_mut(gid).unwrap().first_layer_mut().spec.y_keys.clear(),
+            _ => {}
+        }
+        let json = project_file::to_json(&p).unwrap();
+        assert_eq!(json, legacy_curve_projection(&p), "{mode}");
+        let restored = project_file::from_json(&json).unwrap();
+        assert_eq!(project_file::to_json(&restored).unwrap(), json);
+        let archive = project_file::to_scv(&p).unwrap();
+        assert_eq!(project_file::to_scv(&p).unwrap(), archive);
+        assert_eq!(project_file::from_scv(&archive).unwrap(), restored);
+        for graph in &p.graphs {
+            assert_eq!(
+                svg::render_page(graph, &p),
+                svg::render_page(restored.graph(graph.id).unwrap(), &restored)
+            );
+        }
+    }
+    // v0/v1 使用真实旧文件；v10 使用旧平行表，v11/v13 使用旧类型化曲线。
+    let mut legacy_files = vec![V0.to_string(), V1.to_string()];
+    for version in [10, 11, 13] {
+        let mut wire = if version == 10 {
+            serde_json::to_value(&original).unwrap()
+        } else {
+            serde_json::from_str(&legacy_curve_projection(&original)).unwrap()
+        };
+        wire["version"] = version.into();
+        legacy_files.push(wire.to_string());
+    }
+    for file in legacy_files {
+        let p = project_file::from_json(&file).unwrap();
+        let json = project_file::to_json(&p).unwrap();
+        assert_eq!(json, legacy_curve_projection(&p));
+        // 旧格式会省略与默认值相同的冗余行范围覆盖，核对权威保存投影和图形语义。
+        let restored = project_file::from_json(&json).unwrap();
+        assert_eq!(project_file::to_json(&restored).unwrap(), json);
+        for graph in &p.graphs {
+            assert_eq!(
+                svg::render_page(graph, &p),
+                svg::render_page(restored.graph(graph.id).unwrap(), &restored)
+            );
+        }
+    }
+}
+
+#[test]
+fn export_still_rejects_inactive_ranges_and_preserves_validation_error_order() {
+    for (key, range, expected) in [
+        ("hidden", (3, 1), "图层行范围无效"),
+        ("hidden", (0, usize::MAX), "图层行范围无效"),
+        ("B", (3, 1), "曲线行范围无效"),
+    ] {
+        let mut p = Project::sample();
+        p.graphs[0].first_layer_mut().row_by_y.insert(key.into(), Some(range));
+        assert_eq!(project_file::to_json(&p).unwrap_err(), expected);
+        assert_eq!(project_file::to_scv(&p).unwrap_err(), expected);
+    }
+}

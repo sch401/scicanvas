@@ -27,6 +27,41 @@ impl Layer {
         }
     }
 
+    /// 编辑和保存共用原始下端键，空字符串仍表示已删除下端。
+    pub fn plot_base_key(&self, key: &str) -> Option<&str> {
+        self.base_by_y.get(key).map(String::as_str)
+    }
+
+    /// 草稿允许暂不完整的下端映射，沿用控件选值后直接写入的规则。
+    pub fn set_plot_base_key(&mut self, key: &str, base: String) {
+        self.spec.base_by_y.insert(key.to_string(), base);
+    }
+
+    /// 保存也检查暂未勾选曲线的旧行范围，错误不能被活动曲线快照漏掉。
+    pub fn valid_plot_rows(&self) -> bool {
+        !self.rows.is_some_and(|(a, b)| a > b || b == usize::MAX)
+            && !self.row_by_y.values().flatten().any(|(a, b)| a > b || *b == usize::MAX)
+    }
+
+    /// 屏幕缓存引用判定：保留隐藏映射以及其他表未显式指定的默认 X。
+    pub fn references_plot_column(&self, book: &crate::Book, key: &str) -> bool {
+        let local = self.book_id == Some(book.id);
+        let qualified = crate::plotspec::foreign_key(book.id, key);
+        let matches = |other: &str| other == qualified || (local && other == key);
+        (local && self.x_key.as_deref() == Some(key))
+            || self.y_keys.iter().any(|y| matches(y))
+            || self.x_by_y.values().any(|x| matches(x))
+            || self.base_by_y.values().any(|base| matches(base))
+            || (local && self.labels.column.as_deref() == Some(key))
+            || (!local
+                && self.y_keys.iter().any(|y| match split_key(y) {
+                    (col, Some(id)) if id == book.id && !self.x_by_y.contains_key(y) => {
+                        default_x(book, col).as_deref() == Some(key)
+                    }
+                    _ => false,
+                }))
+    }
+
     /// 样式独立于数据绑定，未绑定或暂时取消勾选的旧项仍可编辑。
     pub fn plot_style(&self, key: &str) -> Option<&CurveStyle> {
         self.curves.get(key)

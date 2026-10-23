@@ -541,3 +541,65 @@ fn editor_styles_share_storage_without_changing_pending_or_unbound_mappings() {
         }
     }
 }
+
+#[test]
+fn builder_base_and_cache_references_preserve_hidden_and_foreign_editor_state() {
+    let (p, foreign) = project();
+    for bound in [None, Some(1)] {
+        for explicit_x in [None, Some(""), Some("A")] {
+            let mut layer = p.graphs[0].first_layer().clone();
+            layer.book_id = bound;
+            layer.labels.column = Some("C".into());
+            layer.base_by_y.insert("C".into(), String::new());
+            layer.x_by_y.insert("hidden".into(), format!("C@{foreign}"));
+            layer.base_by_y.insert("hidden".into(), "B".into());
+            let key = format!("B@{foreign}");
+            if let Some(x) = explicit_x {
+                layer.x_by_y.insert(
+                    key,
+                    if x.is_empty() {
+                        String::new()
+                    } else {
+                        format!("{x}@{foreign}")
+                    },
+                );
+            } else {
+                layer.x_by_y.remove(&key);
+            }
+            for book in &p.books {
+                for col in &book.columns {
+                    let local = bound == Some(book.id);
+                    let qualified = format!("{}@{}", col.key, book.id);
+                    let matches = |x: &str| x == qualified || (local && x == col.key);
+                    let old_default =
+                        layer
+                            .y_keys
+                            .iter()
+                            .any(|raw_y| match scicanvas_core::plotspec::split_key(raw_y) {
+                                (y, Some(id)) if id == book.id && !layer.x_by_y.contains_key(raw_y) => {
+                                    scicanvas_core::plotspec::default_x(book, y).as_deref() == Some(&col.key)
+                                }
+                                _ => false,
+                            });
+                    let expected = (local && layer.x_key.as_deref() == Some(&col.key))
+                        || layer.y_keys.iter().any(|y| matches(y))
+                        || layer.x_by_y.values().any(|x| matches(x))
+                        || layer.base_by_y.values().any(|b| matches(b))
+                        || (local && layer.labels.column.as_deref() == Some(&col.key))
+                        || (!local && old_default);
+                    assert_eq!(layer.references_plot_column(book, &col.key), expected);
+                }
+            }
+            for key in ["C", "hidden", "not-selected"] {
+                assert_eq!(layer.plot_base_key(key), layer.base_by_y.get(key).map(String::as_str));
+                let mut legacy = layer.clone();
+                layer.set_plot_base_key(key, "A".into());
+                legacy.spec.base_by_y.insert(key.into(), "A".into());
+                assert_eq!(layer, legacy);
+                layer.set_plot_base_key(key, String::new());
+                legacy.spec.base_by_y.insert(key.into(), String::new());
+                assert_eq!(layer, legacy);
+            }
+        }
+    }
+}

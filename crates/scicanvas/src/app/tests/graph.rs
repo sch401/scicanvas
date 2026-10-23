@@ -1136,3 +1136,76 @@ fn properties_y_toggle_keeps_curve_configuration_and_undo_history() {
     app.run_command("edit.redo");
     assert_eq!(app.project, after);
 }
+
+#[test]
+fn builder_edits_keep_draft_mapping_and_create_with_the_existing_undo_transaction() {
+    for kind in [PlotType::LineSymbol, PlotType::FloatingBar] {
+        let mut app = app();
+        app.active = Some(1);
+        app.run_command("plot.builder");
+        let draft = app.plot_draft.as_mut().unwrap();
+        draft.set_plot_type(kind).unwrap();
+        draft.x_by_y.insert("B".into(), "A".into());
+        draft.row_by_y.insert("B".into(), Some((0, 2)));
+        draft.base_by_y.insert("hidden".into(), String::new());
+        draft.row_by_y.insert("hidden".into(), None);
+        let before_draft = draft.clone();
+        let before = app.project.clone();
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        ctx.style_mut(|s| s.animation_time = 0.0);
+        let mut harness = crate::test_ui::Harness::new(
+            ctx,
+            Some(egui::vec2(1400.0, 1200.0)),
+            |app: &mut SciApp, ctx: &egui::Context| {
+                if crate::builder::show(ctx, &app.project, &mut app.plot_draft) {
+                    app.run_command("plot.apply_spec");
+                }
+            },
+        )
+        .with_step(0.02);
+        harness.frame(&mut app, vec![]);
+        harness.frame(&mut app, vec![]);
+        let output = harness.frame(&mut app, vec![]);
+        assert_eq!(app.plot_draft.as_ref(), Some(&before_draft));
+        let key = if kind == PlotType::FloatingBar { "C" } else { "B" };
+        let name = if key == "C" { "C · 电压 B" } else { "B · 电压 A" };
+        let pos = crate::test_ui::text_positions(&output, name).last().copied().unwrap() + egui::vec2(4.0, 4.0);
+        harness.click(&mut app, pos);
+        assert!(!app.plot_draft.as_ref().unwrap().y_keys.contains(&key.into()));
+        assert_eq!(app.project, before);
+        let output = harness.frame(&mut app, vec![]);
+        let pos = crate::test_ui::text_positions(&output, name).last().copied().unwrap() + egui::vec2(4.0, 4.0);
+        harness.click(&mut app, pos);
+        let mut expected_draft = before_draft.clone();
+        expected_draft.y_keys.retain(|k| k != key);
+        expected_draft.y_keys.push(key.into());
+        assert_eq!(app.plot_draft.as_ref(), Some(&expected_draft));
+        if kind == PlotType::FloatingBar {
+            let output = harness.frame(&mut app, vec![]);
+            harness.click_text(&mut app, &output, "C 的下端：B");
+            let output = harness.frame(&mut app, vec![]);
+            let pos = crate::test_ui::text_positions(&output, "A · 时间")
+                .last()
+                .copied()
+                .unwrap()
+                + egui::vec2(4.0, 4.0);
+            harness.click(&mut app, pos);
+            expected_draft.base_by_y.insert("C".into(), "A".into());
+            assert_eq!(app.plot_draft.as_ref(), Some(&expected_draft));
+        }
+        assert_eq!(app.project, before);
+        let output = harness.frame(&mut app, vec![]);
+        harness.click_text(&mut app, &output, "创建图形");
+        assert!(app.plot_draft.is_none());
+        let mut expected = before.clone();
+        expected.plot_spec(expected_draft).unwrap();
+        assert_eq!(app.project, expected);
+        roundtrip(&mut app, &before);
+        let json = scicanvas_core::project_file::to_json(&app.project).unwrap();
+        assert_eq!(
+            scicanvas_core::project_file::to_json(&scicanvas_core::project_file::from_json(&json).unwrap()).unwrap(),
+            json
+        );
+    }
+}
