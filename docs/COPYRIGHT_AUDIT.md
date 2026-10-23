@@ -22,6 +22,12 @@ THIRD_PARTY_NOTICES.md 是用户入口；发行候选包同时附许可证和五
 
 共享度量模块直接复用既有 ab_glyph、ttf-parser 和 epaint_default_fonts 包及原始字体字节。未导入外部字体素材，Ubuntu/Hack/Noto Emoji 的原始声明继续由 third_party.py 提取并随发布包保留。系统 Arial/微软雅黑等只在内存中用于测量、显示及栅格化，SVG 引用字体名称与字宽，未把系统字体嵌入文件或拷入包中。
 
+## A6 PDF 字体嵌入补充（2026-10-23）
+
+PDF 使用 svg2pdf 0.13.0 及其锁定依赖。新增 0.45 系列 resvg/usvg 使用包内声明的 MIT OR Apache-2.0，不扩大 MPL 例外；既有 0.37 MPL 包继续保留完整源码归档。全部许可、原始声明和校验值随实际 Windows 依赖树生成。clipboard-win 5.4.1 被上游撤回后更新为 5.4.3，补充许可来源指向新 crate 的 VCS 提交，BSL-1.0 原文及 SHA-256 已核对。
+
+与此前 SVG/PNG 路径不同，PDF 文档会嵌入实际使用字体的子集。程序先读取字体 OpenType OS/2 fsType，通过 ttf-parser 检查权限、轮廓嵌入与子集化限制，拒绝受限、仅位图、禁止子集或无效权限的字体。程序不修改系统字体文件；exe 和发布包仍不复制 Windows 或用户外部字体。检查依据见 [Microsoft OpenType fsType 规范](https://learn.microsoft.com/typography/opentype/spec/os2#fstype)。实际导出已检查 Arial 四种样式、微软雅黑常规/粗体的字体流及 Unicode 映射，系统字体对应的使用条款继续适用。
+
 ## 来源记录与发布边界
 
 2026-10-18 用户确认：图标/网页原型及 Shapiro–Wilk 检验由 AI 生成，用户未向 AI 提供外部代码或素材。以下结合这条开发记录与仓库证据说明范围。

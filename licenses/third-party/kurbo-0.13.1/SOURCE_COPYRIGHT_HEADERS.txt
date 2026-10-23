@@ -1,0 +1,643 @@
+[benches/cubic.rs]
+// Copyright 2022 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Benchmarks of the cubic equation solver.
+
+#![allow(missing_docs, reason = "criterion emits undocumented functions")]
+
+use criterion::{Criterion, criterion_group, criterion_main};
+use std::hint::black_box;
+
+use kurbo::common::solve_cubic;
+
+
+[benches/cubic_arclen.rs]
+// Copyright 2018 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Benchmarks of cubic arclength approaches.
+
+#![allow(missing_docs, reason = "criterion emits undocumented functions")]
+
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use std::hint::black_box;
+
+use kurbo::{CubicBez, ParamCurveArclen};
+
+
+[benches/nearest.rs]
+// Copyright 2022 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Benchmarks of the quartic equation solver.
+
+#![allow(missing_docs, reason = "criterion emits undocumented functions")]
+
+use criterion::{BenchmarkId, Criterion, criterion_group, criterion_main};
+use std::hint::black_box;
+
+use kurbo::{CubicBez, ParamCurveNearest as _, Point, QuadBez};
+
+
+[benches/quad_arclen.rs]
+// Copyright 2018 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Benchmarks of quadratic arclength approaches.
+
+#![allow(missing_docs, reason = "criterion emits undocumented functions")]
+
+// TODO: organize so there's less cut'n'paste from arclen_accuracy example.
+
+use criterion::{Criterion, criterion_group, criterion_main};
+use std::hint::black_box;
+
+
+[benches/quartic.rs]
+// Copyright 2022 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Benchmarks of the quartic equation solver.
+
+#![allow(missing_docs, reason = "criterion emits undocumented functions")]
+
+use criterion::{Criterion, criterion_group, criterion_main};
+use std::hint::black_box;
+
+use kurbo::common::solve_quartic;
+
+
+[benches/rect_expand.rs]
+// Copyright 2020 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Benchmarks of rect expansion.
+
+#![allow(missing_docs, reason = "criterion emits undocumented functions")]
+
+use criterion::{Criterion, criterion_group, criterion_main};
+use std::hint::black_box;
+
+use kurbo::Rect;
+
+
+[examples/arclen_accuracy.rs]
+// Copyright 2018 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! A test program to plot the error of arclength approximation.
+
+#![allow(unused, reason = "a bunch of experiments in the code")]
+
+// TODO: make more functionality accessible from command line rather than uncommenting.
+
+use std::env;
+use std::time::{Duration, Instant};
+
+
+[examples/circle.rs]
+// Copyright 2019 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Example of circle
+
+#[cfg(feature = "std")]
+fn main() {
+    use kurbo::{Circle, Shape};
+
+    let circle = Circle::new((400.0, 400.0), 380.0);
+    println!("<!DOCTYPE html>");
+    println!("<html>");
+
+[examples/cubic_arclen.rs]
+// Copyright 2018 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Research testbed for arclengths of cubic Bézier segments.
+
+#![allow(unused, reason = "a bunch of experiments in the code")]
+
+use kurbo::common::{GAUSS_LEGENDRE_COEFFS_7, GAUSS_LEGENDRE_COEFFS_9, GAUSS_LEGENDRE_COEFFS_11};
+use kurbo::{
+    CubicBez, ParamCurve, ParamCurveArclen, ParamCurveCurvature, ParamCurveDeriv, Point, Vec2,
+};
+
+
+[examples/ellipse.rs]
+// Copyright 2020 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Example of ellipse
+
+#[cfg(feature = "std")]
+fn main() {
+    use kurbo::{Ellipse, Shape};
+    use std::f64::consts::PI;
+
+    let ellipse = Ellipse::new((400.0, 400.0), (200.0, 100.0), 0.25 * PI);
+    println!("<!DOCTYPE html>");
+
+[examples/fit_poly.rs]
+// Copyright 2022 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! A test case for the cubic Bézier path simplifier, generating a very
+//! efficient and accurate SVG file to plot a quartic polynomial. This
+//! file was used to generate the image for the Wikipedia article on
+//! quartic polynomials.
+
+use std::{io::Write, ops::Range};
+
+use kurbo::{BezPath, CurveFitSample, ParamCurveFit, PathEl, Point, Vec2};
+
+
+[examples/quad_intersect.rs]
+// Copyright 2022 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Test case that demonstrates quadratic/quadratic intersection using
+//! new quartic solver.
+
+use arrayvec::ArrayVec;
+use kurbo::{ParamCurve, Point, QuadBez, Shape, common::solve_quartic};
+use rand::Rng;
+
+fn rand_point() -> Point {
+    let mut rng = rand::rng();
+
+[examples/simplify.rs]
+// Copyright 2022 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Test case showing simplification of a Bézier path. In this case, the
+//! source path is a simple mathematical function, but it should work for
+//! more general cases as well.
+
+use kurbo::{BezPath, Point};
+
+fn plot_fn(f: &dyn Fn(f64) -> f64, d: &dyn Fn(f64) -> f64, xa: f64, xb: f64, n: usize) -> BezPath {
+    let width = 800.;
+    let dx = (xb - xa) / n as f64;
+
+[examples/stroke.rs]
+// Copyright 2025 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Stroke example.
+//!
+//! This example has been lightly adapted from Vello, which in turn has
+//! been adapted from the Skia "tricky stroke" test.
+
+use kurbo::{Affine, BezPath, Cap, Join, Rect, Shape, Stroke, StrokeOpts, stroke};
+
+fn tricky_strokes() {
+    const CELL_SIZE: f64 = 200.;
+
+[src/affine.rs]
+// Copyright 2018 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Affine transforms.
+
+use core::ops::{Mul, MulAssign};
+
+use crate::{Point, Rect, Vec2};
+
+#[cfg(not(feature = "std"))]
+use crate::common::FloatFuncs;
+
+
+[src/arc.rs]
+// Copyright 2019 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! An ellipse arc.
+
+use crate::{Affine, Ellipse, ParamCurve, PathEl, Point, Rect, Shape, Vec2};
+use core::{
+    f64::consts::{FRAC_PI_2, PI},
+    iter,
+    ops::{Mul, Range},
+};
+
+
+[src/axis.rs]
+// Copyright 2025 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use crate::{Point, Size, Vec2};
+
+/// An axis in the plane.
+#[derive(Copy, Clone, PartialEq, Eq, Debug, Hash)]
+pub enum Axis {
+    /// The x axis.
+    Horizontal,
+    /// The y axis.
+    Vertical,
+
+[src/bezpath.rs]
+// Copyright 2018 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Bézier paths (up to cubic).
+
+#![allow(clippy::many_single_char_names)]
+
+use core::iter::{Extend, FromIterator};
+use core::mem;
+use core::ops::{Mul, Range};
+
+use alloc::vec::Vec;
+
+[src/circle.rs]
+// Copyright 2019 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Implementation of circle shape.
+
+use core::{
+    f64::consts::{FRAC_PI_2, PI},
+    iter,
+    ops::{Add, Mul, Sub},
+};
+
+use crate::{Affine, Arc, ArcAppendIter, Ellipse, PathEl, Point, Rect, Shape, Vec2};
+
+[src/common.rs]
+// Copyright 2018 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Common mathematical operations
+
+#![allow(missing_docs)]
+
+#[cfg(not(feature = "std"))]
+mod sealed {
+    /// A [sealed trait](https://predr.ag/blog/definitive-guide-to-sealed-traits-in-rust/)
+    /// which stops [`super::FloatFuncs`] from being implemented outside kurbo. This could
+    /// be relaxed in the future if there is are good reasons to allow external impls.
+
+[src/cubicbez.rs]
+// Copyright 2018 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Cubic Bézier segments.
+
+use alloc::vec;
+use alloc::vec::Vec;
+use core::ops::{Mul, Range};
+
+use crate::MAX_EXTREMA;
+use crate::{Line, QuadSpline, Vec2};
+use arrayvec::ArrayVec;
+
+[src/ellipse.rs]
+// Copyright 2020 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Implementation of ellipse shape.
+
+use core::f64::consts::PI;
+use core::{
+    iter,
+    ops::{Add, Mul, Sub},
+};
+
+use crate::{Affine, Arc, ArcAppendIter, Circle, PathEl, Point, Rect, Shape, Size, Vec2};
+
+[src/expand.rs]
+// Copyright 2026 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use crate::{
+    Affine, Arc, BezPath, CubicBez, Join, ParamCurve, ParamCurveDeriv, PathEl, PathSeg, Point,
+    QuadBez, Shape, Vec2, bezpath::close_subpaths, segments,
+};
+
+#[cfg(not(feature = "std"))]
+use crate::common::FloatFuncs;
+
+/// A diagonal matrix, suitable for representing anisotropic scaling.
+
+[src/fit.rs]
+// Copyright 2022 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! An implementation of cubic Bézier curve fitting based on a quartic
+//! solver making signed area and moment match the source curve.
+
+use core::ops::Range;
+
+use alloc::vec::Vec;
+
+use arrayvec::ArrayVec;
+
+
+[src/insets.rs]
+// Copyright 2019 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! A description of the distances between the edges of two rectangles.
+
+use core::ops::{Add, Div, Mul, Neg, Sub};
+
+use crate::{Rect, Size};
+
+/// Insets from the edges of a rectangle.
+///
+///
+
+[src/interop_euclid.rs]
+// Copyright 2025 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use euclid::UnknownUnit;
+
+impl From<euclid::Vector2D<f64, UnknownUnit>> for crate::Vec2 {
+    #[inline(always)]
+    fn from(value: euclid::Vector2D<f64, UnknownUnit>) -> Self {
+        Self::new(value.x, value.y)
+    }
+}
+
+
+[src/lib.rs]
+// Copyright 2018 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! 2D geometry, with a focus on curves.
+//!
+//! The kurbo library contains data structures and algorithms for curves and
+//! vector paths. It was designed to serve the needs of 2D graphics applications,
+//! but it is intended to be general enough to be useful for other applications.
+//! It can be used as "vocabulary types" for representing curves and paths, and
+//! also contains a number of computational geometry methods.
+//!
+//! # Examples
+
+[src/line.rs]
+// Copyright 2018 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Lines.
+
+use core::ops::{Add, Mul, Range, Sub};
+
+use arrayvec::ArrayVec;
+
+use crate::{
+    Affine, DEFAULT_ACCURACY, MAX_EXTREMA, Nearest, ParamCurve, ParamCurveArclen, ParamCurveArea,
+    ParamCurveCurvature, ParamCurveDeriv, ParamCurveExtrema, ParamCurveNearest, PathEl, Point,
+
+[src/mindist.rs]
+// Copyright 2021 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Minimum distance between two Bézier curves
+//!
+//! This implements the algorithm in "Computing the minimum distance between
+//! two Bézier curves", Chen et al., *Journal of Computational and Applied
+//! Mathematics* 229(2009), 294-301
+
+use crate::Vec2;
+use core::cmp::Ordering;
+
+
+[src/moments.rs]
+// Copyright 2025 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use crate::{PathEl, Point};
+
+#[cfg(not(feature = "std"))]
+use crate::common::FloatFuncs;
+
+/// A collect of moment integrals for a path, used for computing
+/// shape properties like area, centroid, and inertia.
+///
+/// The moments are computed using Green's theorem, which relates the
+
+[src/offset.rs]
+// Copyright 2022 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Computation of offset curves of cubic Béziers.
+//!
+//! The main algorithm in this module is a new technique designed for robustness
+//! and speed. The details are involved; hopefully there will be a paper.
+
+use arrayvec::ArrayVec;
+
+#[cfg(not(feature = "std"))]
+use crate::common::FloatFuncs;
+
+[src/param_curve.rs]
+// Copyright 2018 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! A trait for curves parameterized by a scalar.
+
+use core::ops::Range;
+
+use arrayvec::ArrayVec;
+
+use crate::{Point, Rect, common};
+
+#[cfg(not(feature = "std"))]
+
+[src/point.rs]
+// Copyright 2019 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! A 2D point.
+
+use core::fmt;
+use core::ops::{Add, AddAssign, Sub, SubAssign};
+
+use crate::common::FloatExt;
+use crate::{Axis, Vec2};
+
+#[cfg(not(feature = "std"))]
+
+[src/quadbez.rs]
+// Copyright 2018 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Quadratic Bézier segments.
+
+use core::ops::{Mul, Range};
+
+use arrayvec::ArrayVec;
+
+use crate::MAX_EXTREMA;
+use crate::common::{solve_cubic, solve_quadratic};
+use crate::{
+
+[src/quadspline.rs]
+// Copyright 2021 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Quadratic Bézier splines.
+use crate::Point;
+
+use crate::QuadBez;
+use alloc::vec::Vec;
+
+/// A quadratic Bézier spline in [B-spline](https://en.wikipedia.org/wiki/B-spline) format.
+#[derive(Clone, Debug, PartialEq)]
+pub struct QuadSpline(Vec<Point>);
+
+[src/rect.rs]
+// Copyright 2019 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! A rectangle.
+
+use core::fmt;
+use core::ops::{Add, Sub};
+
+use crate::{
+    Axis, Ellipse, Insets, PathEl, Point, RoundedRect, RoundedRectRadii, Shape, Size, Vec2,
+};
+
+
+[src/rounded_rect.rs]
+// Copyright 2019 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! A rectangle with rounded corners.
+
+use core::f64::consts::{FRAC_PI_2, FRAC_PI_4};
+use core::ops::{Add, Sub};
+
+use crate::{Arc, PathEl, Point, Rect, RoundedRectRadii, Shape, Size, Vec2, arc::ArcAppendIter};
+
+#[allow(unused_imports)] // This is unused in later versions of Rust because of additions to core::f32
+#[cfg(not(feature = "std"))]
+
+[src/rounded_rect_radii.rs]
+// Copyright 2021 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! A description of the radii for each corner of a rounded rectangle.
+
+use core::convert::From;
+
+#[allow(unused_imports)] // This is unused in later versions of Rust because of additions to core::f32
+#[cfg(not(feature = "std"))]
+use crate::common::FloatFuncs;
+
+/// Radii for each corner of a rounded rectangle.
+
+[src/shape.rs]
+// Copyright 2019 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! A generic trait for shapes.
+
+use crate::{BezPath, Circle, Line, PathEl, Point, Rect, RoundedRect, Segments, segments};
+
+/// A generic trait for open and closed shapes.
+///
+/// This trait provides conversion from shapes to [`BezPath`]s, as well as
+/// general geometry functionality like computing [`area`], [`bounding_box`]es,
+/// and [`winding`] number.
+
+[src/simplify.rs]
+// Copyright 2022 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Simplification of a Bézier path.
+//!
+//! This module is currently experimental.
+//!
+//! The methods in this module create a `SimplifyBezPath` object, which can then
+//! be fed to [`fit_to_bezpath`] or [`fit_to_bezpath_opt`] depending on the degree
+//! of optimization desired.
+//!
+//! The implementation uses a number of techniques to achieve high performance and
+
+[src/size.rs]
+// Copyright 2019 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! A 2D size.
+
+use core::fmt;
+use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Sub, SubAssign};
+
+use crate::common::FloatExt;
+use crate::{Axis, Rect, RoundedRect, RoundedRectRadii, Vec2};
+
+#[cfg(not(feature = "std"))]
+
+[src/stroke.rs]
+// Copyright 2023 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use core::{borrow::Borrow, f64::consts::PI};
+
+use alloc::vec::Vec;
+
+use smallvec::SmallVec;
+
+#[cfg(not(feature = "std"))]
+use crate::common::FloatFuncs;
+
+
+[src/svg.rs]
+// Copyright 2018 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! SVG path representation.
+
+use alloc::vec::Vec;
+use core::error::Error;
+use core::f64::consts::PI;
+use core::fmt::{self, Display, Formatter};
+#[cfg(feature = "std")]
+use std::io::{self, Write};
+
+
+[src/translate_scale.rs]
+// Copyright 2019 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! A transformation that includes both scale and translation.
+
+use core::ops::{Add, AddAssign, Mul, MulAssign, Sub, SubAssign};
+
+use crate::{
+    Affine, Circle, CubicBez, Line, Point, QuadBez, Rect, RoundedRect, RoundedRectRadii, Vec2,
+};
+
+/// A transformation consisting of a uniform scaling followed by a translation.
+
+[src/triangle.rs]
+// Copyright 2024 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! Triangle shape
+use crate::{Circle, PathEl, Point, Rect, Shape, Vec2};
+
+use core::cmp::*;
+use core::f64::consts::FRAC_PI_4;
+use core::ops::{Add, Sub};
+
+#[cfg(not(feature = "std"))]
+use crate::common::FloatFuncs;
+
+[src/vec2.rs]
+// Copyright 2018 the Kurbo Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! A simple 2D vector.
+
+use core::fmt;
+use core::iter::Sum;
+use core::ops::{Add, AddAssign, Div, DivAssign, Mul, MulAssign, Neg, Sub, SubAssign};
+
+use crate::common::FloatExt;
+use crate::{Axis, Point, Size};
+

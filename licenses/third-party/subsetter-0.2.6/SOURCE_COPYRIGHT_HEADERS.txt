@@ -1,0 +1,34 @@
+[src/cff/dict/top_dict.rs]
+        match operator {
+            // We only need to preserve the copyrights and font name.
+            NOTICE => top_dict.notice = Some(dict_parser.parse_sid()?),
+
+[src/cff/dict/top_dict.rs]
+    pub notice: Option<StringId>,
+    pub copyright: Option<StringId>,
+    pub font_name: Option<StringId>,
+    pub has_ros: bool,
+    pub font_matrix: Option<[Number; 6]>,
+    pub font_bbox: Option<[Number; 4]>,
+}
+
+pub fn parse_top_dict_index(r: &mut Reader) -> Option<TopDictData> {
+    use super::operators::*;
+    let mut top_dict = TopDictData::default();
+
+    let index = parse_index::<u16>(r)?;
+
+[src/lib.rs]
+  so you must provide your own cmap table in the PDF.
+- Copyright information in the font will be retained.
+- When writing a CID font in PDF, CIDs must be used to address glyphs. This can be pretty tricky,
+  because the meaning of CID depends on the type of font you are embedding (see the PDF specification
+  for more information). The subsetter will convert SID-keyed fonts to CID-keyed ones and an identity
+  mapping from GID to CID for all fonts, regardless of the previous mapping. Because of this, you can
+  always use the remapped GID as the CID for a glyph, and do not need to worry about the type of font
+  you are embedding.
+
+# Example
+In the example below, we remove all glyphs except the ones with IDs 68, 69, 70 from Noto Sans.
+Those correspond to the letters 'a', 'b' and 'c'. We then save the resulting font to disk.
+

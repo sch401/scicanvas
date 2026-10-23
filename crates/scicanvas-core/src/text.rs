@@ -6,6 +6,23 @@ use std::sync::OnceLock;
 
 static FONTS: OnceLock<Fonts> = OnceLock::new();
 
+/// Check OpenType embedding permissions before exporting a document with font subsets.
+pub fn check_subset_embedding(data: &[u8], index: u32) -> Result<(), &'static str> {
+    let face = ttf_parser::Face::parse(data, index).map_err(|_| "字体文件无法读取")?;
+    match face.permissions() {
+        Some(ttf_parser::Permissions::Restricted) => return Err("字体禁止嵌入"),
+        None => return Err("字体嵌入权限信息无效"),
+        _ => {}
+    }
+    if !face.is_outline_embedding_allowed() {
+        return Err("字体只允许嵌入位图，无法嵌入矢量字形");
+    }
+    if !face.is_subsetting_allowed() {
+        return Err("字体要求完整嵌入，当前 PDF 导出使用字体子集");
+    }
+    Ok(())
+}
+
 pub struct Face {
     font: FontArc,
     pub index: u32,
@@ -520,6 +537,32 @@ pub fn fit_size_formatted(text: &str, size: f64, bold: bool, width: f64, rich: b
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[test]
+    fn document_embedding_checks_restricted_bitmap_only_and_no_subset_fonts() {
+        let original = epaint_default_fonts::UBUNTU_LIGHT;
+        let raw = ttf_parser::RawFace::parse(original, 0).unwrap();
+        let offset = raw
+            .table_records
+            .into_iter()
+            .find(|r| r.tag == ttf_parser::Tag::from_bytes(b"OS/2"))
+            .unwrap()
+            .offset as usize;
+        for (bits, allowed) in [
+            (0u16, true),
+            (4, true),
+            (8, true),
+            (2, false),
+            (0x100, false),
+            (0x200, false),
+            (6, false),
+        ] {
+            let mut bytes = original.to_vec();
+            bytes[offset..offset + 2].copy_from_slice(&3u16.to_be_bytes());
+            bytes[offset + 8..offset + 10].copy_from_slice(&bits.to_be_bytes());
+            assert_eq!(check_subset_embedding(&bytes, 0).is_ok(), allowed, "fsType={bits}");
+        }
+        assert!(check_subset_embedding(b"broken font", 0).is_err());
+    }
     #[test]
     fn scientific_spans_preserve_plain_input_nesting_and_script_metrics() {
         let f = Fonts::bundled();

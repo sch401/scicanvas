@@ -1,7 +1,7 @@
 {
   "target": "x86_64-pc-windows-msvc",
   "scope": "normal,build; all workspace features",
-  "cargo_lock_sha256": "e1ba98182338d8cf225fa642b371f448e8edc91223556d034e04b37ece6a5405",
+  "cargo_lock_sha256": "76d156cc2615ae9a38a5415d53cc629141d19d2873fc35239fcbe280df2dda21",
   "packages": [
     {
       "name": "ab_glyph",
@@ -258,6 +258,24 @@
       ]
     },
     {
+      "name": "base64",
+      "version": "0.22.1",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/marshallpierce/rust-base64",
+      "crate_sha256": "72b3254f16251a8381aa12e40e3c4d2f0199f8c6508fbecb9d91f575e0fbb8c6",
+      "revision": "e14400697453bcc85997119b874bc03d9601d0af",
+      "files": [
+        {
+          "path": "licenses/third-party/base64-0.22.1/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+        },
+        {
+          "path": "licenses/third-party/base64-0.22.1/LICENSE-MIT",
+          "sha256": "0dd882e53de11566d50f8e8e2d5a651bcf3fabee4987d70f306233cf39094ba7"
+        }
+      ]
+    },
+    {
       "name": "bitflags",
       "version": "1.3.2",
       "license": "MIT/Apache-2.0",
@@ -419,14 +437,14 @@
     },
     {
       "name": "clipboard-win",
-      "version": "5.4.1",
+      "version": "5.4.3",
       "license": "BSL-1.0",
       "repository": "https://github.com/DoumanAsh/clipboard-win",
-      "crate_sha256": "bde03770d3df201d4fb868f2c9c59e66a3e4e2bd06692a0fe701e7103c7e84d4",
-      "revision": "3b27cf2bfd1adcfa6e0264eb51c1025ddaf0f342",
+      "crate_sha256": "052af7878466feccda12ba7a6a67d019d712f296809559b47c12c8cc196d3a9a",
+      "revision": "ed27008ae5d1f10cfbb266de039f0fb35fd05a56",
       "files": [
         {
-          "path": "licenses/third-party/clipboard-win-5.4.1/upstream/LICENSE",
+          "path": "licenses/third-party/clipboard-win-5.4.3/upstream/LICENSE",
           "sha256": "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566"
         }
       ]
@@ -446,6 +464,20 @@
         {
           "path": "licenses/third-party/core_detect-1.0.0/LICENSE-MIT",
           "sha256": "8569ebf6bf52937b961d9c9c934d8400a2bb6b09651a9afacbb3fc18fe5c09b1"
+        }
+      ]
+    },
+    {
+      "name": "core_maths",
+      "version": "0.1.1",
+      "license": "MIT",
+      "repository": "https://github.com/robertbastian/core_maths",
+      "crate_sha256": "77745e017f5edba1a9c1d854f6f3a52dac8a12dd5af5d2f54aecf61e43d80d30",
+      "revision": "d8ea96acac3893ad9a7e16cd7526936fbfc51021",
+      "files": [
+        {
+          "path": "licenses/third-party/core_maths-0.1.1/LICENSE",
+          "sha256": "9ebf8c4cc0b735ca13a766451f7b8097db3185975ceb2ba94b5abf439156a91f"
         }
       ]
     },
@@ -916,6 +948,28 @@
       ]
     },
     {
+      "name": "font-types",
+      "version": "0.11.3",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/googlefonts/fontations",
+      "crate_sha256": "5b38ad915f6dadd993ced50848a8291a543bd41ca62bc10740d5e64e2ab4cfd7",
+      "revision": "9af3f3188ab5522e23446a1fb98135cb3f7d96b6",
+      "files": [
+        {
+          "path": "licenses/third-party/font-types-0.11.3/LICENSE-APACHE",
+          "sha256": "a14f7d685a79c0f4fb64aee305527a6d5fa55f2401f4e6d688d7b1301868e6c0"
+        },
+        {
+          "path": "licenses/third-party/font-types-0.11.3/LICENSE-MIT",
+          "sha256": "8a62fa27ffdccc3df19dce90f8bb3d572e27aecffc1a383d0c2601834dcec434"
+        },
+        {
+          "path": "licenses/third-party/font-types-0.11.3/SOURCE_COPYRIGHT_HEADERS.txt",
+          "sha256": "40e2286c094b6aa92b44e75aadb8974b521bf816a17443eb8446c696b4f69284"
+        }
+      ]
+    },
+    {
       "name": "fontdb",
       "version": "0.16.2",
       "license": "MIT",
@@ -929,6 +983,24 @@
         },
         {
           "path": "licenses/third-party/fontdb-0.16.2/tests/fonts/LICENSE.txt",
+          "sha256": "b84fdd2c3da5db56385cdbb639795e90aa3e035c53bc3591135f18df3331451f"
+        }
+      ]
+    },
+    {
+      "name": "fontdb",
+      "version": "0.23.0",
+      "license": "MIT",
+      "repository": "https://github.com/RazrFalcon/fontdb",
+      "crate_sha256": "457e789b3d1202543297a350643cf459f836cade38934e7a4cf6a39e7cde2905",
+      "revision": "62cfd96671eba4debe73eeecf541b1a3a051d223",
+      "files": [
+        {
+          "path": "licenses/third-party/fontdb-0.23.0/LICENSE",
+          "sha256": "59a1fdac3bd550043599bd159fd70f09a1108c2b09e3751d39b11e1ff8e51f00"
+        },
+        {
+          "path": "licenses/third-party/fontdb-0.23.0/tests/fonts/LICENSE.txt",
           "sha256": "b84fdd2c3da5db56385cdbb639795e90aa3e035c53bc3591135f18df3331451f"
         }
       ]
@@ -1252,6 +1324,20 @@
       ]
     },
     {
+      "name": "imagesize",
+      "version": "0.13.0",
+      "license": "MIT",
+      "repository": "https://github.com/Roughsketch/imagesize",
+      "crate_sha256": "edcd27d72f2f071c64249075f42e205ff93c9a4c5f6c6da53e79ed9f9832c285",
+      "revision": "017b33da886a27484614e9527d14fc5f3f0d5079",
+      "files": [
+        {
+          "path": "licenses/third-party/imagesize-0.13.0/LICENSE",
+          "sha256": "436637bd4909fde7e14c899e9ff2cdd440b5968df12d431f1651f11db19bc2ef"
+        }
+      ]
+    },
+    {
       "name": "immutable-chunkmap",
       "version": "2.1.4",
       "license": "Apache-2.0 OR MIT",
@@ -1325,6 +1411,50 @@
     },
     {
       "name": "kurbo",
+      "version": "0.11.3",
+      "license": "Apache-2.0 OR MIT",
+      "repository": "https://github.com/linebender/kurbo",
+      "crate_sha256": "c62026ae44756f8a599ba21140f350303d4f08dcdcc71b5ad9c9bb8128c13c62",
+      "revision": "ce236de377babb81d8d545a8ed415b44b4a151fb",
+      "files": [
+        {
+          "path": "licenses/third-party/kurbo-0.11.3/LICENSE-APACHE",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        },
+        {
+          "path": "licenses/third-party/kurbo-0.11.3/LICENSE-MIT",
+          "sha256": "23c23145f6eac25c28cdcc03d38506a5712a9a8cffb5bd5301457f6173ea696e"
+        },
+        {
+          "path": "licenses/third-party/kurbo-0.11.3/SOURCE_COPYRIGHT_HEADERS.txt",
+          "sha256": "af4844d82f189c6eeba831dd0e59bdc9cd62677dafc957af37a1e1d5afcc6666"
+        }
+      ]
+    },
+    {
+      "name": "kurbo",
+      "version": "0.13.1",
+      "license": "Apache-2.0 OR MIT",
+      "repository": "https://github.com/linebender/kurbo",
+      "crate_sha256": "4b60dfc32f652b926df6192e55525b16d186c69d47876c3ead4da5cc9f8450e2",
+      "revision": "838b69ef35f3381cefc007d86aa8364f5a6dc673",
+      "files": [
+        {
+          "path": "licenses/third-party/kurbo-0.13.1/LICENSE-APACHE",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        },
+        {
+          "path": "licenses/third-party/kurbo-0.13.1/LICENSE-MIT",
+          "sha256": "23c23145f6eac25c28cdcc03d38506a5712a9a8cffb5bd5301457f6173ea696e"
+        },
+        {
+          "path": "licenses/third-party/kurbo-0.13.1/SOURCE_COPYRIGHT_HEADERS.txt",
+          "sha256": "3dba404d632bd78eba860efa719ef2d98e297c808d4048cdae863472cd1498d6"
+        }
+      ]
+    },
+    {
+      "name": "kurbo",
       "version": "0.9.5",
       "license": "MIT/Apache-2.0",
       "repository": "https://github.com/linebender/kurbo",
@@ -1356,6 +1486,24 @@
         {
           "path": "licenses/third-party/libloading-0.8.9/LICENSE",
           "sha256": "b29f8b01452350c20dd1af16ef83b598fea3053578ccc1c7a0ef40e57be2620f"
+        }
+      ]
+    },
+    {
+      "name": "libm",
+      "version": "0.2.16",
+      "license": "MIT",
+      "repository": "https://github.com/rust-lang/compiler-builtins",
+      "crate_sha256": "b6d2cec3eae94f9f509c767b45932f1ada8350c4bdb85af2fcab4a3c14807981",
+      "revision": "dfd2203a4d6110820ad7bb65cafe1bf331a03a3d",
+      "files": [
+        {
+          "path": "licenses/third-party/libm-0.2.16/LICENSE.txt",
+          "sha256": "3823dda7cf046602f4b4e77ec8e227863dc4736037cc85bb33d9f19febe16bb7"
+        },
+        {
+          "path": "licenses/third-party/libm-0.2.16/SOURCE_COPYRIGHT_HEADERS.txt",
+          "sha256": "38229c154e74ef7b1e31e4a2739d0bf79f74e2319342801b4ccadb9eec3f1851"
         }
       ]
     },
@@ -1454,6 +1602,24 @@
         {
           "path": "licenses/third-party/memchr-2.8.3/UNLICENSE",
           "sha256": "7e12e5df4bae12cb21581ba157ced20e1986a0508dd10d0e8a4ab9a4cf94e85c"
+        }
+      ]
+    },
+    {
+      "name": "memmap2",
+      "version": "0.9.11",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/RazrFalcon/memmap2-rs",
+      "crate_sha256": "d1219ed1b7f229ee7104d281dd01d6802fe28bb6e95d292942c4daacdeb798c0",
+      "revision": "7d76ad3157383db5670fd7e012f44de42aa7444b",
+      "files": [
+        {
+          "path": "licenses/third-party/memmap2-0.9.11/LICENSE-APACHE",
+          "sha256": "04ea4849dba9dcae07113850c6f1b1a69052c625210639914eee352023f750ad"
+        },
+        {
+          "path": "licenses/third-party/memmap2-0.9.11/LICENSE-MIT",
+          "sha256": "0d25d03b5ab49576178ad0cae7a2648d12c17ad0452fe49c07e55e4b59aa5257"
         }
       ]
     },
@@ -1746,6 +1912,24 @@
       ]
     },
     {
+      "name": "pdf-writer",
+      "version": "0.12.1",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/typst/pdf-writer",
+      "crate_sha256": "5df03c7d216de06f93f398ef06f1385a60f2c597bb96f8195c8d98e08a26b1d5",
+      "revision": "02e4234df5a5beb33ea89f5c3820340f3bec5c26",
+      "files": [
+        {
+          "path": "licenses/third-party/pdf-writer-0.12.1/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+        },
+        {
+          "path": "licenses/third-party/pdf-writer-0.12.1/LICENSE-MIT",
+          "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
+        }
+      ]
+    },
+    {
       "name": "percent-encoding",
       "version": "2.3.2",
       "license": "MIT OR Apache-2.0",
@@ -1864,6 +2048,28 @@
       ]
     },
     {
+      "name": "polycool",
+      "version": "0.4.0",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/linebender/kurbo",
+      "crate_sha256": "50596ddc09eb5ad5f75cacd40209568e66df71baf86e1499a0e99c4cff12a5a6",
+      "revision": "0ffc830eca99e68ba6bab54224cfac2c66bde2f9",
+      "files": [
+        {
+          "path": "licenses/third-party/polycool-0.4.0/LICENSE-APACHE",
+          "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30"
+        },
+        {
+          "path": "licenses/third-party/polycool-0.4.0/LICENSE-MIT",
+          "sha256": "23c23145f6eac25c28cdcc03d38506a5712a9a8cffb5bd5301457f6173ea696e"
+        },
+        {
+          "path": "licenses/third-party/polycool-0.4.0/SOURCE_COPYRIGHT_HEADERS.txt",
+          "sha256": "396cfad8a9c7ecd0b35b2ddf451b5e9a8820c886d385cb28c1b3f0c1da27201d"
+        }
+      ]
+    },
+    {
       "name": "potential_utf",
       "version": "0.1.6",
       "license": "Unicode-3.0",
@@ -1972,6 +2178,28 @@
       ]
     },
     {
+      "name": "read-fonts",
+      "version": "0.39.2",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/googlefonts/fontations",
+      "crate_sha256": "c4ed38b89c2c77ff968c524145ad65fb010f38af5c7a224b53b81d47ac2daa81",
+      "revision": "ba086017d5bc36ff0b0e9502f6ea4f30efa70a37",
+      "files": [
+        {
+          "path": "licenses/third-party/read-fonts-0.39.2/LICENSE-APACHE",
+          "sha256": "a14f7d685a79c0f4fb64aee305527a6d5fa55f2401f4e6d688d7b1301868e6c0"
+        },
+        {
+          "path": "licenses/third-party/read-fonts-0.39.2/LICENSE-MIT",
+          "sha256": "8a62fa27ffdccc3df19dce90f8bb3d572e27aecffc1a383d0c2601834dcec434"
+        },
+        {
+          "path": "licenses/third-party/read-fonts-0.39.2/SOURCE_COPYRIGHT_HEADERS.txt",
+          "sha256": "b02e101a2c0358b0ffd641311fafbd72f5d06bc76d53169b82c22070ba90cae8"
+        }
+      ]
+    },
+    {
       "name": "resvg",
       "version": "0.37.0",
       "license": "MPL-2.0",
@@ -1982,6 +2210,28 @@
         {
           "path": "licenses/third-party/resvg-0.37.0/LICENSE.txt",
           "sha256": "fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85"
+        }
+      ]
+    },
+    {
+      "name": "resvg",
+      "version": "0.45.1",
+      "license": "Apache-2.0 OR MIT",
+      "repository": "https://github.com/linebender/resvg",
+      "crate_sha256": "a8928798c0a55e03c9ca6c4c6846f76377427d2c1e1f7e6de3c06ae57942df43",
+      "revision": "1b6c2fddbcbeffa8135df4323b02aaae84890907",
+      "files": [
+        {
+          "path": "licenses/third-party/resvg-0.45.1/LICENSE-APACHE",
+          "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+        },
+        {
+          "path": "licenses/third-party/resvg-0.45.1/LICENSE-MIT",
+          "sha256": "f5d934dc281b44e0003ee461ac740b18b6629a454decd872c774d34e4ee0b21d"
+        },
+        {
+          "path": "licenses/third-party/resvg-0.45.1/SOURCE_COPYRIGHT_HEADERS.txt",
+          "sha256": "61e121058c493c9efb3c4bc9b21b80a4fb0e1b98dfa71b17b092b4cccd696148"
         }
       ]
     },
@@ -2050,6 +2300,24 @@
       ]
     },
     {
+      "name": "rustc-hash",
+      "version": "2.1.3",
+      "license": "Apache-2.0 OR MIT",
+      "repository": "https://github.com/rust-lang/rustc-hash",
+      "crate_sha256": "6b1e7f9a428571be2dc5bc0505c13fb6bf936822b894ec87abf8a08a4e51742d",
+      "revision": "c13e7ccca705e6255387a2ebc6dca142d6881621",
+      "files": [
+        {
+          "path": "licenses/third-party/rustc-hash-2.1.3/LICENSE-APACHE",
+          "sha256": "95bd3988beee069fa2848f648dab43cc6e0b2add2ad6bcb17360caf749802bcc"
+        },
+        {
+          "path": "licenses/third-party/rustc-hash-2.1.3/LICENSE-MIT",
+          "sha256": "30fefc3a7d6a0041541858293bcbea2dde4caa4c0a5802f996a7f7e8c0085652"
+        }
+      ]
+    },
+    {
       "name": "rustversion",
       "version": "1.0.23",
       "license": "MIT OR Apache-2.0",
@@ -2082,6 +2350,46 @@
         {
           "path": "licenses/third-party/rustybuzz-0.12.1/scripts/ms-use/COPYING",
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+        }
+      ]
+    },
+    {
+      "name": "rustybuzz",
+      "version": "0.20.1",
+      "license": "MIT",
+      "repository": "https://github.com/harfbuzz/rustybuzz",
+      "crate_sha256": "fd3c7c96f8a08ee34eff8857b11b49b07d71d1c3f4e88f8a88d4c9e9f90b1702",
+      "revision": "8c52723ff75e91a33ae36e527baed871097e64bf",
+      "files": [
+        {
+          "path": "licenses/third-party/rustybuzz-0.20.1/LICENSE",
+          "sha256": "3a7c3f0b887abb7c638faf022d29257418458614c6724b120ceeffb279f9c7d2"
+        },
+        {
+          "path": "licenses/third-party/rustybuzz-0.20.1/scripts/ms-use/COPYING",
+          "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
+        }
+      ]
+    },
+    {
+      "name": "ryu",
+      "version": "1.0.23",
+      "license": "Apache-2.0 OR BSL-1.0",
+      "repository": "https://github.com/dtolnay/ryu",
+      "crate_sha256": "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f",
+      "revision": "f0b52bb194befe6fd242154f2182fafd43a819b8",
+      "files": [
+        {
+          "path": "licenses/third-party/ryu-1.0.23/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+        },
+        {
+          "path": "licenses/third-party/ryu-1.0.23/LICENSE-BOOST",
+          "sha256": "c9bff75738922193e67fa726fa225535870d2aa1059f91452c411736284ad566"
+        },
+        {
+          "path": "licenses/third-party/ryu-1.0.23/SOURCE_COPYRIGHT_HEADERS.txt",
+          "sha256": "cb0348b1ca8ca6ccb3f24740f5c74d42954304036b0e1b6568c154e0a8423857"
         }
       ]
     },
@@ -2278,6 +2586,24 @@
       ]
     },
     {
+      "name": "skrifa",
+      "version": "0.42.1",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/googlefonts/fontations",
+      "crate_sha256": "0c34617370ae968efb7161bb2beb517d9084659aae19e24b89e3db25b46e4564",
+      "revision": "ba086017d5bc36ff0b0e9502f6ea4f30efa70a37",
+      "files": [
+        {
+          "path": "licenses/third-party/skrifa-0.42.1/LICENSE-APACHE",
+          "sha256": "a14f7d685a79c0f4fb64aee305527a6d5fa55f2401f4e6d688d7b1301868e6c0"
+        },
+        {
+          "path": "licenses/third-party/skrifa-0.42.1/LICENSE-MIT",
+          "sha256": "8a62fa27ffdccc3df19dce90f8bb3d572e27aecffc1a383d0c2601834dcec434"
+        }
+      ]
+    },
+    {
       "name": "slotmap",
       "version": "1.1.1",
       "license": "Zlib",
@@ -2382,6 +2708,54 @@
       ]
     },
     {
+      "name": "subsetter",
+      "version": "0.2.6",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/typst/subsetter",
+      "crate_sha256": "38803281d1c23166c5ebcb455439a5d2afe711cc909cf88af72448c297756ad6",
+      "revision": "c3f23c67bc0190587f639bda84dc0005ca3f54d5",
+      "files": [
+        {
+          "path": "licenses/third-party/subsetter-0.2.6/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+        },
+        {
+          "path": "licenses/third-party/subsetter-0.2.6/LICENSE-MIT",
+          "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
+        },
+        {
+          "path": "licenses/third-party/subsetter-0.2.6/NOTICE",
+          "sha256": "756e3179c6911701fb3fd41e5a364a7fe38360670955444aab40a0070a512c27"
+        },
+        {
+          "path": "licenses/third-party/subsetter-0.2.6/SOURCE_COPYRIGHT_HEADERS.txt",
+          "sha256": "b0e59996a4fff4f745d47ed81f8f763284f480999bf596586c8bfe3819ec7499"
+        }
+      ]
+    },
+    {
+      "name": "svg2pdf",
+      "version": "0.13.0",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/typst/svg2pdf",
+      "crate_sha256": "e50dc062439cc1a396181059c80932a6e6bd731b130e674c597c0c8874b6df22",
+      "revision": "ccab6d7a3081f512d412dfef456caed2caf3a698",
+      "files": [
+        {
+          "path": "licenses/third-party/svg2pdf-0.13.0/LICENSE-APACHE",
+          "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
+        },
+        {
+          "path": "licenses/third-party/svg2pdf-0.13.0/LICENSE-MIT",
+          "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
+        },
+        {
+          "path": "licenses/third-party/svg2pdf-0.13.0/NOTICE",
+          "sha256": "74544feeaa2083014e5c62c4d3eda0e6dfb77f621310b5b602b074df199dcc20"
+        }
+      ]
+    },
+    {
       "name": "svgtypes",
       "version": "0.13.0",
       "license": "MIT/Apache-2.0",
@@ -2396,6 +2770,28 @@
         {
           "path": "licenses/third-party/svgtypes-0.13.0/LICENSE-MIT",
           "sha256": "f3c9fe731c701ed77fd5fbaac573872af04dc5869385eb9bd5e3c73c42713814"
+        }
+      ]
+    },
+    {
+      "name": "svgtypes",
+      "version": "0.15.3",
+      "license": "Apache-2.0 OR MIT",
+      "repository": "https://github.com/linebender/svgtypes",
+      "crate_sha256": "68c7541fff44b35860c1a7a47a7cadf3e4a304c457b58f9870d9706ece028afc",
+      "revision": "537dd52402ad9e9d91b414886acb2e8bddade78f",
+      "files": [
+        {
+          "path": "licenses/third-party/svgtypes-0.15.3/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+        },
+        {
+          "path": "licenses/third-party/svgtypes-0.15.3/LICENSE-MIT",
+          "sha256": "f3c9fe731c701ed77fd5fbaac573872af04dc5869385eb9bd5e3c73c42713814"
+        },
+        {
+          "path": "licenses/third-party/svgtypes-0.15.3/SOURCE_COPYRIGHT_HEADERS.txt",
+          "sha256": "1e2e0b80a6a732984bbe843d2c2ce35bd84097fbdd15882ad3ef548ca70e43ff"
         }
       ]
     },
@@ -2682,6 +3078,24 @@
       ]
     },
     {
+      "name": "unicode-bidi-mirroring",
+      "version": "0.4.0",
+      "license": "MIT/Apache-2.0",
+      "repository": "https://github.com/RazrFalcon/unicode-bidi-mirroring",
+      "crate_sha256": "5dfa6e8c60bb66d49db113e0125ee8711b7647b5579dc7f5f19c42357ed039fe",
+      "revision": "ba8e39b2a3b90d18d1dc2a1ddd1ee3a4a48fd63e",
+      "files": [
+        {
+          "path": "licenses/third-party/unicode-bidi-mirroring-0.4.0/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+        },
+        {
+          "path": "licenses/third-party/unicode-bidi-mirroring-0.4.0/LICENSE-MIT",
+          "sha256": "59a1fdac3bd550043599bd159fd70f09a1108c2b09e3751d39b11e1ff8e51f00"
+        }
+      ]
+    },
+    {
       "name": "unicode-ccc",
       "version": "0.1.2",
       "license": "MIT/Apache-2.0",
@@ -2696,6 +3110,24 @@
         {
           "path": "licenses/third-party/unicode-ccc-0.1.2/LICENSE-MIT",
           "sha256": "10d488aedeb221913a3149e1f36fa599a0da7ac63751ae9c0fbb0a2e82df6da9"
+        }
+      ]
+    },
+    {
+      "name": "unicode-ccc",
+      "version": "0.4.0",
+      "license": "MIT/Apache-2.0",
+      "repository": "https://github.com/RazrFalcon/unicode-ccc",
+      "crate_sha256": "ce61d488bcdc9bc8b5d1772c404828b17fc481c0a582b5581e95fb233aef503e",
+      "revision": "cd2218002fe159d0c01dc084fb6eef883d0cd553",
+      "files": [
+        {
+          "path": "licenses/third-party/unicode-ccc-0.4.0/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+        },
+        {
+          "path": "licenses/third-party/unicode-ccc-0.4.0/LICENSE-MIT",
+          "sha256": "59a1fdac3bd550043599bd159fd70f09a1108c2b09e3751d39b11e1ff8e51f00"
         }
       ]
     },
@@ -2846,6 +3278,28 @@
         {
           "path": "licenses/third-party/usvg-0.37.0/LICENSE.txt",
           "sha256": "fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85"
+        }
+      ]
+    },
+    {
+      "name": "usvg",
+      "version": "0.45.1",
+      "license": "Apache-2.0 OR MIT",
+      "repository": "https://github.com/linebender/resvg",
+      "crate_sha256": "80be9b06fbae3b8b303400ab20778c80bbaf338f563afe567cf3c9eea17b47ef",
+      "revision": "1b6c2fddbcbeffa8135df4323b02aaae84890907",
+      "files": [
+        {
+          "path": "licenses/third-party/usvg-0.45.1/LICENSE-APACHE",
+          "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+        },
+        {
+          "path": "licenses/third-party/usvg-0.45.1/LICENSE-MIT",
+          "sha256": "f5d934dc281b44e0003ee461ac740b18b6629a454decd872c774d34e4ee0b21d"
+        },
+        {
+          "path": "licenses/third-party/usvg-0.45.1/SOURCE_COPYRIGHT_HEADERS.txt",
+          "sha256": "0ad7f370aa5fe87cbef827e499a53b787f84dc3399ffe565b947d386fbfaeeeb"
         }
       ]
     },
@@ -3260,6 +3714,24 @@
         {
           "path": "licenses/third-party/winit-0.30.13/SOURCE_COPYRIGHT_HEADERS.txt",
           "sha256": "c0e3a41b7cdb8e9021ac86fe8947279d3f8f71e7fd764d9a94e3c62f231f23b7"
+        }
+      ]
+    },
+    {
+      "name": "write-fonts",
+      "version": "0.48.1",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/googlefonts/fontations",
+      "crate_sha256": "cb731d4c4d93eacc69a1ad2f270f905788a98e4a3438267bcafbe08d3431c8d8",
+      "revision": "fd0178ce4ea48301a7f06b35a6fce9879c102292",
+      "files": [
+        {
+          "path": "licenses/third-party/write-fonts-0.48.1/LICENSE-APACHE",
+          "sha256": "a14f7d685a79c0f4fb64aee305527a6d5fa55f2401f4e6d688d7b1301868e6c0"
+        },
+        {
+          "path": "licenses/third-party/write-fonts-0.48.1/LICENSE-MIT",
+          "sha256": "8a62fa27ffdccc3df19dce90f8bb3d572e27aecffc1a383d0c2601834dcec434"
         }
       ]
     },

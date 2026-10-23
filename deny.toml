@@ -18,7 +18,7 @@ allow = ["MIT", "Apache-2.0", "BSD-2-Clause", "BSD-3-Clause", "ISC", "Zlib", "Un
 confidence-threshold = 0.93
 # Existing GUI/shared-font dependencies only. New packages still use the permissive allowlist.
 exceptions = [
-    { name = "clipboard-win", version = "=5.4.1", allow = ["BSL-1.0"] },
+    { name = "clipboard-win", version = "=5.4.3", allow = ["BSL-1.0"] },
     { name = "error-code", version = "=3.4.0", allow = ["BSL-1.0"] },
     { name = "epaint_default_fonts", version = "=0.29.1", allow = ["OFL-1.1", "LicenseRef-UFL-1.0"] },
     { name = "resvg", version = "=0.37.0", allow = ["MPL-2.0"] },

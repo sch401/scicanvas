@@ -23,3 +23,5 @@ resvg = { version = "=0.37.0", default-features = false, features = ["text", "sy
 arboard = { version = "3.6", default-features = false, features = ["image-data"] }
 # PNG pHYs 块的 CRC（已在依赖树里）
 crc32fast = "1.4"
+# PDF keeps the shared SVG as vectors and embeds text/font subsets; no image/filter features are needed.
+svg2pdf = { version = "=0.13.0", default-features = false, features = ["text"] }

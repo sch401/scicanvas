@@ -337,6 +337,16 @@ fn build() -> Vec<Command> {
             |a| a.export_csv(),
         ),
         c(
+            "graph.export_pdf",
+            "导出 PDF",
+            "export",
+            "",
+            "文件",
+            "export pdf vector font embed 矢量 字体 嵌入",
+            need_any_graph,
+            |a| a.export_pdf(),
+        ),
+        c(
             "graph.export_png",
             "导出 PNG",
             "export",

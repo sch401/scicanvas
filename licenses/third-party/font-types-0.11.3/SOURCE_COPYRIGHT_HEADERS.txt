@@ -1,0 +1,29 @@
+[src/name_id.rs]
+    /// Copyright notice.
+    pub const COPYRIGHT_NOTICE: Self = Self(0);
+
+    /// Font family name.
+    ///
+    /// The font family name is used in combination with font subfamily name (ID 2),
+    /// and should be shared among at most four fonts that differ only in weight or style (as described below).
+    pub const FAMILY_NAME: Self = Self(1);
+
+    /// Font subfamily name.
+    ///
+    /// The font subfamily name is used in combination with font family name (ID 1),
+    /// and distinguishes the fonts in a group with the same font family name. This should be used for style
+
+[src/name_id.rs]
+impl NameId {
+    /// Copyright notice.
+    pub const COPYRIGHT_NOTICE: Self = Self(0);
+
+    /// Font family name.
+    ///
+    /// The font family name is used in combination with font subfamily name (ID 2),
+    /// and should be shared among at most four fonts that differ only in weight or style (as described below).
+    pub const FAMILY_NAME: Self = Self(1);
+
+    /// Font subfamily name.
+    ///
+    /// The font subfamily name is used in combination with font family name (ID 1),

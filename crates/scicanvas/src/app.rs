@@ -560,6 +560,26 @@ impl SciApp {
         };
     }
 
+    pub(crate) fn export_pdf(&mut self) {
+        let Some(gid) = self.target_graph() else { return };
+        let Some(g) = self.project.graph(gid) else { return };
+        let Some(path) = rfd::FileDialog::new()
+            .set_title("导出 PDF")
+            .add_filter("PDF 矢量图（嵌入字体）", &["pdf"])
+            .set_file_name(format!("{}.pdf", g.name))
+            .save_file()
+        else {
+            return;
+        };
+        // Finish conversion and font checks before opening/replacing the chosen output file.
+        let result = crate::export::pdf_bytes(&svg::render_page(g, &self.project))
+            .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
+        self.status = match result {
+            Ok(()) => format!("已导出 {}（矢量 PDF，已嵌入字体）", path.display()),
+            Err(e) => format!("导出失败：{e}"),
+        };
+    }
+
     pub(crate) fn export_png_dialog(&mut self) {
         let Some(gid) = self.target_graph() else { return };
         let Some(g) = self.project.graph(gid) else { return };
@@ -2330,6 +2350,7 @@ impl SciApp {
                 ("graph.props", "绘图属性…"),
                 ("graph.copy", "复制图形"),
                 ("graph.export", "导出 SVG…"),
+                ("graph.export_pdf", "导出 PDF…"),
                 ("graph.export_png", "导出 PNG…"),
                 ("", ""),
                 ("graph.legend", "图例"),

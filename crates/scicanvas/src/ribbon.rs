@@ -113,7 +113,8 @@ pub static TABS: &[Tab] = &[
                 label: "图形",
                 items: &[
                     Big("graph.props"),
-                    Smalls(&["graph.export", "graph.export_png", "graph.copy"]),
+                    Smalls(&["graph.export", "graph.export_pdf", "graph.export_png"]),
+                    Smalls(&["graph.copy"]),
                 ],
             },
         ],
@@ -254,7 +255,10 @@ pub static TABS: &[Tab] = &[
             },
             Group {
                 label: "导出",
-                items: &[Big("graph.export"), Smalls(&["graph.export_png", "graph.copy"])],
+                items: &[
+                    Big("graph.export"),
+                    Smalls(&["graph.export_pdf", "graph.export_png", "graph.copy"]),
+                ],
             },
         ],
     },
@@ -302,6 +306,7 @@ const BACKSTAGE_NAV: &[&str] = &[
     "file.saveas",
     "graph.export",
     "graph.export_png",
+    "graph.export_pdf",
     "book.export_csv",
     "project.reset",
     "help.show",
@@ -1086,5 +1091,30 @@ pub fn palette(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palett
     }
     if close {
         st.palette = None;
+    }
+}
+
+#[cfg(test)]
+mod export_tests {
+    use super::*;
+    #[test]
+    fn pdf_export_is_registered_without_growing_the_ribbon_rows() {
+        let command = commands::find("graph.export_pdf").unwrap();
+        assert!(!command.modifies);
+        assert!(BACKSTAGE_NAV.contains(&command.id));
+        let mut entries = 0;
+        for tab in TABS {
+            for group in tab.groups {
+                for item in group.items {
+                    if let Smalls(ids) = item {
+                        if ids.contains(&command.id) {
+                            assert!(ids.len() <= 3, "{} / {}", tab.id, group.label);
+                            entries += 1;
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(entries, 2, "home and graph export entry points");
     }
 }

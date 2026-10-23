@@ -1,6 +1,5 @@
-//! 图形导出为 PNG、复制到剪贴板：把 SVG 导出结果交给 resvg 栅格化，
-//! 屏幕、SVG 和位图共用同一份版面。PNG 写入物理分辨率（pHYs），
-//! Word / PPT 插入时按页面毫米尺寸显示。页面始终是白底，与 SVG 一致。
+//! SVG 是导出的共用版面：PNG/剪贴板经 resvg 栅格化，PDF 保留矢量和嵌入字体子集。
+//! PNG 写入 pHYs，PDF 以 72 pt/in 换算页面毫米尺寸。背景与保存的页面设置一致。
 
 use std::sync::OnceLock;
 
@@ -11,6 +10,60 @@ use resvg::usvg::{self, fontdb, TreeParsing, TreeTextToPath};
 pub const CLIPBOARD_DPI: u32 = 300;
 /// 单边像素上限，防止误输入极大的 DPI 时耗尽内存。
 const MAX_SIDE: u32 = 20_000;
+
+/// Export the shared page SVG as vectors, with selectable text and embedded font subsets.
+pub fn pdf_bytes(svg: &str) -> Result<Vec<u8>, String> {
+    use svg2pdf::usvg as pdf_svg;
+    static FONTS: OnceLock<std::sync::Arc<pdf_svg::fontdb::Database>> = OnceLock::new();
+    let db = FONTS.get_or_init(|| {
+        let mut db = pdf_svg::fontdb::Database::new();
+        let shared = scicanvas_core::text::fonts();
+        for face in shared.faces() {
+            db.load_font_data(face.data().to_vec());
+        }
+        db.set_sans_serif_family(&shared.faces()[shared.primary(false)].family);
+        std::sync::Arc::new(db)
+    });
+    let options = pdf_svg::Options {
+        fontdb: db.clone(),
+        ..Default::default()
+    };
+    let tree = pdf_svg::Tree::from_str(svg, &options).map_err(|e| format!("解析 SVG 失败：{e}"))?;
+    fn used_fonts(group: &pdf_svg::Group, ids: &mut std::collections::BTreeSet<pdf_svg::fontdb::ID>) {
+        for node in group.children() {
+            match node {
+                pdf_svg::Node::Group(g) => used_fonts(g, ids),
+                pdf_svg::Node::Text(t) => {
+                    for span in t.layouted() {
+                        ids.extend(span.positioned_glyphs.iter().map(|glyph| glyph.font));
+                    }
+                }
+                _ => {}
+            }
+            node.subroots(|g| used_fonts(g, ids));
+        }
+    }
+    let mut ids = std::collections::BTreeSet::new();
+    used_fonts(tree.root(), &mut ids);
+    for id in ids {
+        let face = tree.fontdb().face(id).ok_or("PDF 字体信息缺失")?;
+        let permission = tree
+            .fontdb()
+            .with_face_data(id, scicanvas_core::text::check_subset_embedding)
+            .ok_or("PDF 字体数据缺失")?;
+        permission.map_err(|e| format!("{}：{e}，请更换字体后导出", face.post_script_name))?;
+    }
+    svg2pdf::to_pdf(
+        &tree,
+        svg2pdf::ConversionOptions {
+            embed_text: true,
+            ..Default::default()
+        },
+        // The shared SVG uses CSS pixels (96/in); PDF page dimensions use points (72/in).
+        svg2pdf::PageOptions { dpi: 96.0 },
+    )
+    .map_err(|e| format!("生成 PDF 失败：{e}"))
+}
 
 fn fonts() -> &'static fontdb::Database {
     static DB: OnceLock<fontdb::Database> = OnceLock::new();
@@ -92,6 +145,107 @@ pub fn copy_to_clipboard(pixmap: &Pixmap) -> Result<(), String> {
 mod tests {
     use super::*;
     use scicanvas_core::{svg, Project};
+
+    #[test]
+    fn pdf_exports_vectors_embedded_fonts_and_page_sizes_for_every_preset() {
+        use scicanvas_core::page::{CurveStyle, LabelSource, LayerRect};
+        let mut cases = Vec::new();
+        for preset in scicanvas_core::presets::all() {
+            let mut p = Project::default();
+            let book = scicanvas_core::presets::example();
+            let mut graph = scicanvas_core::Graph::new(2, preset.name);
+            graph.first_layer_mut().spec =
+                scicanvas_core::plotspec::PlotSpec::from_selection(&book, &[], preset.kind).unwrap();
+            p.books.push(book);
+            p.graphs.push(graph);
+            cases.push((preset.id.to_string(), p));
+        }
+        let mut scientific = Project::sample();
+        let layer = scientific.graphs[0].first_layer_mut();
+        layer.rich_text = true;
+        layer.title = r"CO_{2} R^{2} \b{normal} \i{rate} α 中文".into();
+        layer.x_title = r"Time / s^{−1}".into();
+        layer.y_title = r"\i{c} / mol L^{−1}".into();
+        layer.y2_title = r"\b{R}_{0}".into();
+        layer.curves.insert(
+            "B".into(),
+            CurveStyle {
+                legend_label: r"\i{CO}_{2} β".into(),
+                ..Default::default()
+            },
+        );
+        layer.curves.insert(
+            "C".into(),
+            CurveStyle {
+                right_axis: true,
+                ..Default::default()
+            },
+        );
+        layer.labels.visible = true;
+        layer.labels.source = LabelSource::Column;
+        layer.labels.column = Some("E".into());
+        let mut error = scicanvas_core::Column::new("D", scicanvas_core::Role::YError);
+        error.data = vec!["0.5".to_string(); 41].into();
+        error.error_for = Some("B".into());
+        scientific.books[0].columns.push(error);
+        let mut label = scicanvas_core::Column::new("E", scicanvas_core::Role::Label);
+        label.data = vec![r"\i{p}_{0}".to_string()].into();
+        scientific.books[0].columns.push(label);
+        scientific.graphs[0].page.width_mm = 89.0;
+        scientific.graphs[0].page.height_mm = 80.0;
+        cases.push(("scientific".into(), scientific.clone()));
+        let mut inset = scientific.graphs[0].first_layer().clone();
+        scientific.graphs[0].page.add_layer(inset.clone());
+        scientific.graphs[0].page.columns = 2;
+        inset.transparent = true;
+        inset.placement = Some(LayerRect {
+            x: 0.6,
+            y: 0.05,
+            width: 0.35,
+            height: 0.35,
+        });
+        scientific.graphs[0].page.add_layer(inset);
+        scientific.graphs[0].page.width_mm = 210.0;
+        scientific.graphs[0].page.height_mm = 157.5;
+        cases.push(("panels-inset".into(), scientific));
+        for (name, p) in cases {
+            let before = p.clone();
+            let page = svg::render_page(&p.graphs[0], &p);
+            let pdf = pdf_bytes(&page).unwrap_or_else(|e| panic!("{name}: {e}"));
+            assert!(pdf.starts_with(b"%PDF-1."));
+            let structure = String::from_utf8_lossy(&pdf);
+            assert!(
+                structure.contains("/FontFile2") || structure.contains("/FontFile3"),
+                "{name}: font streams embedded"
+            );
+            assert!(structure.contains("/ToUnicode"), "{name}: selectable Unicode text");
+            assert!(
+                !structure.contains("/Subtype /Image"),
+                "{name}: vectors, no page raster"
+            );
+            let box_text = structure
+                .split("/MediaBox [")
+                .nth(1)
+                .unwrap()
+                .split(']')
+                .next()
+                .unwrap();
+            let dimensions: Vec<f64> = box_text.split_whitespace().map(|v| v.parse().unwrap()).collect();
+            assert_eq!(&dimensions[..2], &[0.0, 0.0]);
+            assert!((dimensions[2] - p.graphs[0].page.width_mm * 72.0 / 25.4).abs() < 0.01);
+            assert!((dimensions[3] - p.graphs[0].page.height_mm * 72.0 / 25.4).abs() < 0.01);
+            assert_eq!(p, before, "export leaves project/history inputs unchanged");
+            if let Ok(directory) = std::env::var("SCICANVAS_PDF_PROBE_DIR") {
+                let dir = std::path::Path::new(&directory);
+                std::fs::create_dir_all(dir).unwrap();
+                std::fs::write(dir.join(format!("{name}.pdf")), pdf).unwrap();
+                std::fs::write(dir.join(format!("{name}.svg")), &page).unwrap();
+                let png = rasterize(&page, 150).unwrap();
+                std::fs::write(dir.join(format!("{name}.png")), png_bytes(&png, 150).unwrap()).unwrap();
+            }
+        }
+        assert!(pdf_bytes("invalid SVG").is_err());
+    }
 
     fn chunk<'a>(png: &'a [u8], kind: &[u8; 4]) -> Option<&'a [u8]> {
         let mut at = 8;
