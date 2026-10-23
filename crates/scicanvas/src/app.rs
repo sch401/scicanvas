@@ -36,6 +36,7 @@ enum BookPreviewEdit {
 }
 
 struct BookPreview {
+    applied: bool,
     edit: BookPreviewEdit,
     result: Result<scicanvas_core::Book, String>,
 }
@@ -743,11 +744,60 @@ impl SciApp {
     fn restore_history(&mut self, project: Project) {
         self.adding_text = None;
         self.plot_epoch = self.plot_epoch.wrapping_add(1);
-        self.object_editor = self.object_editor.filter(|edit| {
-            matches!(edit.target, plot::ObjectTarget::Text(id) if project.graph(edit.graph).is_some_and(|g| g.page.text(id).is_some()))
+        self.object_editor = self.object_editor.filter(|edit| match edit.target {
+            plot::ObjectTarget::Text(id) => project.graph(edit.graph).is_some_and(|g| g.page.text(id).is_some()),
+            plot::ObjectTarget::Legend(index) => project.graph(edit.graph).is_some_and(|g| {
+                g.page.layers().get(index).is_some_and(|l| l.legend)
+                    && self
+                        .project
+                        .graph(edit.graph)
+                        .is_some_and(|old| old.page.layers().len() == g.page.layers().len())
+            }),
         });
         self.book_preview = None;
         self.project = project;
+        match &mut self.dialog {
+            Some(Dialog::LayerContents(edit)) => {
+                if let Some(layer) = self
+                    .project
+                    .graph(edit.graph)
+                    .and_then(|g| g.page.layers().get(edit.index))
+                {
+                    edit.before = layer.clone();
+                    edit.draft = layer.clone();
+                    edit.error = None;
+                } else {
+                    self.dialog = None;
+                }
+            }
+            Some(Dialog::ColumnProps { book, edit, error, .. }) => {
+                if let Some(column) = self.project.book(*book).and_then(|b| b.column(&edit.key)) {
+                    *edit = dialogs::ColumnEdit::from(column);
+                    *error = None;
+                } else {
+                    self.dialog = None;
+                }
+            }
+            Some(Dialog::CategoryOrder {
+                book,
+                key,
+                levels,
+                error,
+            }) => {
+                if let Some(current) = self
+                    .project
+                    .book(*book)
+                    .and_then(|b| b.column(key))
+                    .and_then(|c| c.data.category_levels())
+                {
+                    *levels = current;
+                    *error = None;
+                } else {
+                    self.dialog = None;
+                }
+            }
+            _ => {}
+        }
         self.analysis_curves.retain(|(graph, index), curves| {
             let Some(layer) = self.project.graph(*graph).and_then(|g| g.page.layers().get(*index)) else {
                 return false;
@@ -823,7 +873,12 @@ impl SciApp {
         {
             self.folder_destination = None;
         }
-        self.dialog = None;
+        if !matches!(
+            self.dialog,
+            Some(Dialog::LayerContents(_) | Dialog::ColumnProps { .. } | Dialog::CategoryOrder { .. })
+        ) {
+            self.dialog = None;
+        }
         self.history_group = None;
         self.last_history_group = None;
     }
@@ -1777,13 +1832,62 @@ impl SciApp {
             Dialog::LayerContents(edit) => Some(edit.draft.clone()),
             _ => None,
         };
-        let action = dialogs::show(ctx, d, &self.pal, &self.project);
+        let mut action = dialogs::show(ctx, d, &self.pal, &self.project);
+        let closing = matches!(action, dialogs::Action::Close);
+        if self.refresh_book_preview() {
+            ctx.request_repaint();
+        }
+        if matches!(action, dialogs::Action::None | dialogs::Action::Close) {
+            let live = match &self.dialog {
+                Some(Dialog::AnalysisCurves { graph, layer, curves }) => {
+                    let chosen: Vec<_> = curves
+                        .iter()
+                        .filter(|(_, _, on)| *on)
+                        .map(|(r, _, _)| r.clone())
+                        .collect();
+                    (self.analysis_curves.get(&(*graph, *layer)) != Some(&chosen))
+                        .then_some(dialogs::Action::AnalysisCurves(*graph, *layer, chosen))
+                }
+                Some(Dialog::LayerContents(edit)) if edit.draft != edit.before => {
+                    Some(dialogs::Action::LayerContents(edit.clone()))
+                }
+                Some(Dialog::ColumnProps { book, edit, .. })
+                    if self
+                        .book_preview
+                        .as_ref()
+                        .filter(|p| !p.applied)
+                        .and_then(|p| p.result.as_ref().ok())
+                        .is_some_and(|preview| self.project.book(*book) != Some(preview)) =>
+                {
+                    Some(dialogs::Action::ColumnProps(*book, edit.clone()))
+                }
+                Some(Dialog::CategoryOrder { book, key, levels, .. })
+                    if self
+                        .book_preview
+                        .as_ref()
+                        .filter(|p| !p.applied)
+                        .and_then(|p| p.result.as_ref().ok())
+                        .is_some_and(|preview| self.project.book(*book) != Some(preview)) =>
+                {
+                    Some(dialogs::Action::CategoryOrder(*book, key.clone(), levels.clone()))
+                }
+                _ => None,
+            };
+            if let Some(live) = live {
+                action = live;
+            }
+        }
         if !matches!(action, dialogs::Action::None) {
             ctx.request_repaint();
         }
         match action {
             dialogs::Action::LayerContents(edit) => match self.apply_layer_contents(&edit) {
-                Ok(()) => self.dialog = None,
+                Ok(()) => {
+                    if let Some(Dialog::LayerContents(contents)) = &mut self.dialog {
+                        contents.before = edit.draft.clone();
+                        contents.error = None;
+                    }
+                }
                 Err(error) => {
                     if let Some(Dialog::LayerContents(contents)) = &mut self.dialog {
                         contents.error = Some(error);
@@ -1792,7 +1896,6 @@ impl SciApp {
             },
             dialogs::Action::AnalysisCurves(graph, layer, curves) => {
                 self.analysis_curves.insert((graph, layer), curves);
-                self.dialog = None;
             }
             dialogs::Action::SaveNote(title, text) => {
                 self.finish_edit();
@@ -1840,12 +1943,14 @@ impl SciApp {
             dialogs::Action::None => {}
             dialogs::Action::Close => self.dialog = None,
             dialogs::Action::ColumnProps(book, edit) => {
-                self.finish_edit();
+                let mut preview = self.book_preview.take();
                 self.begin_edit("列属性");
                 match self.apply_column_props(book, edit) {
                     Ok(()) => {
-                        self.dialog = None;
                         self.history.changed();
+                        if let Some(preview) = &mut preview {
+                            preview.applied = true;
+                        }
                     }
                     Err(e) => {
                         if let Some(Dialog::ColumnProps { error, .. }) = &mut self.dialog {
@@ -1853,7 +1958,13 @@ impl SciApp {
                         }
                     }
                 }
-                self.finish_edit();
+                self.book_preview = preview;
+                let focus = ctx
+                    .memory(|m| m.focused())
+                    .filter(|id| egui::TextEdit::load_state(ctx, *id).is_some());
+                if focus.is_some() || ctx.input(|i| i.pointer.primary_down()) {
+                    self.history_group = Some(focus.unwrap_or_else(|| egui::Id::new("live-column-properties")));
+                }
             }
             dialogs::Action::ConvertText(book, key, row, value) => {
                 self.finish_edit();
@@ -1926,7 +2037,6 @@ impl SciApp {
                 match result {
                     Ok(()) => {
                         self.status = format!("已设置 {key} 列的类别顺序");
-                        self.dialog = None;
                         self.history.changed();
                     }
                     Err(e) => self.status = e,
@@ -2070,7 +2180,12 @@ impl SciApp {
                 edit.error = Some("图层已更新，请重新打开图层内容".into());
             }
         }
-        if self.refresh_book_preview() {
+        if closing {
+            self.finish_edit();
+            self.dialog = None;
+            self.book_preview = None;
+            self.history_group = None;
+        } else if self.refresh_book_preview() {
             ctx.request_repaint();
         }
     }
@@ -2206,7 +2321,7 @@ impl SciApp {
             | BookPreviewEdit::Sort(id, ..) => *id,
         };
         let reusable = matches!((&self.book_preview, &edit),
-            (Some(BookPreview { edit: BookPreviewEdit::Properties(old_id, old), result: Ok(_) }),
+            (Some(BookPreview { edit: BookPreviewEdit::Properties(old_id, old), result: Ok(_), .. }),
              BookPreviewEdit::Properties(id, new))
             if old_id == id && old.kind == new.kind && old.role == new.role
                 && old.format.utc_offset == new.format.utc_offset);
@@ -2250,7 +2365,8 @@ impl SciApp {
         if let Some(Dialog::CategoryOrder { error, .. } | Dialog::Sort { error, .. }) = &mut self.dialog {
             *error = result.as_ref().err().cloned();
         }
-        self.book_preview = Some(BookPreview { edit, result });
+        let applied = result.as_ref().is_ok_and(|book| self.project.book(id) == Some(book));
+        self.book_preview = Some(BookPreview { edit, result, applied });
         true
     }
 
@@ -2693,7 +2809,6 @@ impl SciApp {
         let project = &mut self.project;
 
         let mut open = true;
-        let mut close = false;
         dialogs::window(ctx, &title)
             .id(egui::Id::new("scicanvas-props"))
             .open(&mut open)
@@ -3322,17 +3437,6 @@ impl SciApp {
                             }
                         });
                 }
-                ui.add_space(6.0);
-                ui.label(
-                    RichText::new("修改即时生效。导出 SVG 时使用这里的设置。")
-                        .small()
-                        .weak(),
-                );
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("关闭").clicked() {
-                        close = true;
-                    }
-                });
             });
         if self.project.graph(gid).unwrap() != &graph_before {
             ctx.request_repaint();
@@ -3346,7 +3450,7 @@ impl SciApp {
         if props_layer != self.layer_index(gid) {
             self.select_layer(gid, props_layer);
         }
-        if !open || close {
+        if !open {
             self.props_for = None;
         }
     }
@@ -3770,7 +3874,7 @@ mod history_tests {
     }
 
     #[test]
-    fn floating_dialog_moves_beyond_screen_edge_and_reset_preserves_its_draft() {
+    fn floating_dialog_moves_beyond_screen_edge_and_reset_preserves_live_changes() {
         let mut app = app();
         app.run_command("layer.contents");
         let Some(Dialog::LayerContents(edit)) = &mut app.dialog else {
@@ -3842,8 +3946,9 @@ mod history_tests {
             panic!()
         };
         assert_eq!(edit.draft, draft);
-        assert_eq!(app.project, before);
-        assert!(app.history.undo_label().is_none());
+        assert_ne!(app.project, before);
+        assert!(app.history.undo_label().is_some());
+        roundtrip(&mut app, &before);
     }
 
     #[test]
@@ -3926,8 +4031,8 @@ mod history_tests {
             app.ws
         );
         assert_eq!(app.preview_graph(gid).unwrap().page.layers()[0], draft);
-        assert_eq!(app.project, before);
-        assert!(app.history.undo_label().is_none());
+        assert_ne!(app.project, before);
+        assert!(app.history.undo_label().is_some());
         app.run_command("win.reset");
         settle!();
         assert!(!dialogs::has_docks(&ctx, dialogs::DockSide::Left));
@@ -3940,7 +4045,7 @@ mod history_tests {
     }
 
     #[test]
-    fn layer_contents_real_controls_commit_one_target_layer_and_cancel_cleanly() {
+    fn layer_contents_real_controls_apply_live_and_header_close_keeps_changes() {
         let mut app = app();
         let mut p = Project::default();
         let a = p.new_book();
@@ -4002,7 +4107,7 @@ mod history_tests {
         frame(&mut app, vec![]);
         frame(&mut app, vec![]);
         let output = frame(&mut app, vec![]);
-        for label in ["添加 →", "← 移除", "上移", "下移", "按名称排序", "确定", "取消"] {
+        for label in ["添加 →", "← 移除", "上移", "下移", "按名称排序"] {
             let pos = positions(&output, label)[0];
             let rect = output
                 .shapes
@@ -4019,7 +4124,7 @@ mod history_tests {
         let output = frame(&mut app, vec![]);
         click!(positions(&output, "添加 →")[0]);
         let key = scicanvas_core::plotspec::foreign_key(b, "B");
-        assert_eq!(app.project, before, "draft changes do not touch the project");
+        assert_ne!(app.project, before, "controls update the project immediately");
         assert!(app.preview_graph(gid).unwrap().page.layers()[1].y_keys.contains(&key));
         let output = frame(&mut app, vec![]);
         assert!(!positions(&output, "Book2 / A").is_empty());
@@ -4042,9 +4147,10 @@ mod history_tests {
         assert_eq!(edit.draft.y_keys[0], key);
         assert!(edit.draft.curves[&key].right_axis);
         assert_eq!(app.preview_graph(gid).unwrap().page.layers()[1], edit.draft);
-        assert_eq!(app.project, before);
-        let output = frame(&mut app, vec![]);
-        click!(positions(&output, "确定")[0]);
+        assert_ne!(app.project, before);
+        let id = egui::Id::new(("scicanvas-dialog", "图层内容"));
+        let rect = ctx.memory(|m| m.area_rect(id)).unwrap();
+        click!(egui::pos2(rect.right() - 16.0, rect.top() + 15.0));
         assert!(app.dialog.is_none());
         assert_eq!(
             app.project.graph(gid).unwrap().first_layer(),
@@ -4055,32 +4161,49 @@ mod history_tests {
         assert!(layer.curves[&key].right_axis);
         let saved = scicanvas_core::project_file::to_json(&app.project).unwrap();
         assert_eq!(scicanvas_core::project_file::from_json(&saved).unwrap(), app.project);
-        roundtrip(&mut app, &before);
+        let changed = app.project.clone();
+        let mut steps = 0;
+        while app.project != before {
+            app.run_command("edit.undo");
+            steps += 1;
+            assert!(steps <= 6);
+        }
+        for _ in 0..steps {
+            app.run_command("edit.redo");
+        }
+        assert_eq!(app.project, changed);
 
         let committed = app.project.clone();
         app.run_command("layer.contents");
         frame(&mut app, vec![]);
         let output = frame(&mut app, vec![]);
         click!(positions(&output, "← 移除")[0]);
-        assert_eq!(app.project, committed);
-        assert_ne!(
+        assert_ne!(app.project, committed);
+        assert_eq!(
             app.preview_graph(gid).unwrap().as_ref(),
             app.project.graph(gid).unwrap()
         );
-        let output = frame(&mut app, vec![]);
-        click!(positions(&output, "取消")[0]);
+        let rect = ctx.memory(|m| m.area_rect(id)).unwrap();
+        click!(egui::pos2(rect.right() - 16.0, rect.top() + 15.0));
         assert!(app.dialog.is_none());
+        roundtrip(&mut app, &committed);
+        app.run_command("edit.undo");
         assert_eq!(app.project, committed);
         assert_eq!(
             app.preview_graph(gid).unwrap().as_ref(),
             app.project.graph(gid).unwrap()
         );
+        let previous_undo = app.history.undo_label().map(str::to_owned);
         app.run_command("layer.contents");
         frame(&mut app, vec![]);
-        let output = frame(&mut app, vec![]);
-        click!(positions(&output, "确定")[0]);
-        app.run_command("edit.undo");
-        assert_eq!(app.project, before, "confirming an unchanged draft adds no undo step");
+        frame(&mut app, vec![]);
+        let rect = ctx.memory(|m| m.area_rect(id)).unwrap();
+        click!(egui::pos2(rect.right() - 16.0, rect.top() + 15.0));
+        assert_eq!(
+            app.history.undo_label(),
+            previous_undo.as_deref(),
+            "closing unchanged settings adds no step"
+        );
     }
 
     #[test]
@@ -4114,7 +4237,7 @@ mod history_tests {
     }
 
     #[test]
-    fn layer_preview_repaints_the_actual_plot_and_cancel_restores_it() {
+    fn layer_changes_repaint_and_close_preserves_them_until_undo() {
         let mut app = app();
         let gid = app.project.graphs[0].id;
         let before = app.project.clone();
@@ -4148,9 +4271,12 @@ mod history_tests {
             scicanvas_core::project_file::to_json(&app.project).unwrap(),
             scicanvas_core::project_file::to_json(&before).unwrap()
         );
-        press_dialog_button(&mut app, "取消");
+        press_dialog_button(&mut app, "×");
+        assert_ne!(app.project, before);
+        assert_ne!(render(&mut app), original);
+        app.run_command("edit.undo");
         assert_eq!(render(&mut app), original);
-        assert!(app.history.undo_label().is_none());
+        assert_eq!(app.project, before);
     }
 
     #[test]
@@ -4218,7 +4344,7 @@ mod history_tests {
         assert!(has_text(&graph, "preview_unit"));
         assert_eq!(app.project, before, "read-only plotting restores the canonical table");
         app.active = Some(other);
-        press_dialog_button(&mut app, "确定");
+        press_dialog_button(&mut app, "×");
         assert!(app.dialog.is_none());
         assert!(app.book_preview.is_none());
         assert_eq!(
@@ -4233,11 +4359,12 @@ mod history_tests {
         let Some(Dialog::ColumnProps { edit, .. }) = &mut app.dialog else {
             panic!()
         };
-        edit.long_name = "discard".into();
+        edit.long_name = "kept after close".into();
         app.refresh_book_preview();
-        press_dialog_button(&mut app, "取消");
+        press_dialog_button(&mut app, "×");
         assert!(app.book_preview.is_none());
-        assert_eq!(app.project, committed);
+        assert_ne!(app.project, committed);
+        roundtrip(&mut app, &committed);
     }
 
     #[test]
@@ -4267,7 +4394,7 @@ mod history_tests {
                 .kind(),
             DataKind::Category
         );
-        press_dialog_button(&mut app, "确定");
+        press_dialog_button(&mut app, "×");
         roundtrip(&mut app, &before);
         let before = app.project.clone();
         app.run_command("col.categories");
@@ -4285,7 +4412,7 @@ mod history_tests {
             "reordering categories preserves cell labels"
         );
         assert_eq!(app.project, before);
-        press_dialog_button(&mut app, "确定");
+        press_dialog_button(&mut app, "×");
         roundtrip(&mut app, &before);
         app.run_command("sort.custom");
         app.refresh_book_preview();
@@ -4372,7 +4499,11 @@ mod history_tests {
                 ],
             );
         }
-        let pos = at(&frame(&mut app, vec![]), "应用");
+        let _ = frame(&mut app, vec![]);
+        let rect = ctx
+            .memory(|m| m.area_rect(egui::Id::new(("scicanvas-dialog", "分析曲线"))))
+            .unwrap();
+        let pos = egui::pos2(rect.right() - 16.0, rect.top() + 15.0);
         for pressed in [true, false] {
             frame(
                 &mut app,
@@ -4847,14 +4978,42 @@ mod history_tests {
             frame(app, vec![]);
         }
         let output = frame(app, vec![]);
-        let pos = output
-            .shapes
-            .iter()
-            .find_map(|s| match &s.shape {
-                egui::Shape::Text(t) if t.galley.job.text == label => Some(t.pos + egui::vec2(5.0, 5.0)),
-                _ => None,
-            })
-            .unwrap_or_else(|| panic!("missing button {label}"));
+        let pos = if label == "×" {
+            let id = match app.dialog.as_ref().unwrap() {
+                Dialog::LayerContents(_) => egui::Id::new(("scicanvas-dialog", "图层内容")),
+                Dialog::ColumnProps { edit, .. } => {
+                    egui::Id::new(("scicanvas-dialog", format!("列属性 — {}", edit.key)))
+                }
+                Dialog::CategoryOrder { .. } => egui::Id::new(("scicanvas-dialog", "类别顺序")),
+                _ => panic!("unsupported close target"),
+            };
+            let rect = ctx.memory(|m| m.area_rect(id)).unwrap();
+            output
+                .shapes
+                .iter()
+                .find_map(|shape| match &shape.shape {
+                    egui::Shape::LineSegment { points, .. }
+                        if rect.contains(points[0])
+                            && (points[0].x - points[1].x).abs() > 3.0
+                            && (points[0].y - points[1].y).abs() > 3.0
+                            && points[0].y < rect.top() + 30.0
+                            && points[0].x > rect.right() - 32.0 =>
+                    {
+                        Some(points[0].lerp(points[1], 0.5))
+                    }
+                    _ => None,
+                })
+                .expect("title-bar close glyph")
+        } else {
+            output
+                .shapes
+                .iter()
+                .find_map(|s| match &s.shape {
+                    egui::Shape::Text(t) if t.galley.job.text == label => Some(t.pos + egui::vec2(5.0, 5.0)),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("missing button {label}"))
+        };
         frame(app, vec![egui::Event::PointerMoved(pos)]);
         for pressed in [true, false] {
             frame(
@@ -4960,7 +5119,7 @@ mod history_tests {
         };
         *levels = vec!["低".into(), "中".into(), "高".into()];
         let before = app.project.clone();
-        press_dialog_button(&mut app, "确定");
+        press_dialog_button(&mut app, "×");
         assert!(app.dialog.is_none(), "{}", app.status);
         let data = &app.project.book(1).unwrap().columns[2].data;
         assert_eq!(data.category_levels().unwrap(), ["低", "中", "高"]);

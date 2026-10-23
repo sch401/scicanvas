@@ -133,16 +133,7 @@ impl SciApp {
         let sample = (0..col.data.len()).find_map(|r| col.data.f64_at(r).filter(|v| v.is_finite()));
         self.dialog = Some(Dialog::ColumnProps {
             book: id,
-            edit: dialogs::ColumnEdit {
-                key,
-                long_name: col.long_name.clone(),
-                units: col.units.clone(),
-                comment: col.comment.clone(),
-                role: col.role,
-                kind: col.data.kind(),
-                format: col.format,
-                recalc: col.op.as_ref().map(|op| op.mode),
-            },
+            edit: dialogs::ColumnEdit::from(col),
             sample,
             error: None,
         });

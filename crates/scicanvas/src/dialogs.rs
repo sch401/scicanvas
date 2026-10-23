@@ -61,7 +61,6 @@ impl PlotObjectEditor {
             "图例"
         };
         let mut open = true;
-        let mut close = false;
         let mut action = None;
         window(ctx, title).open(&mut open).show(ctx, |ui| {
             ui.push_id((edit.graph, edit.target), |ui| {
@@ -155,13 +154,10 @@ impl PlotObjectEditor {
                     if ui.add(plain("删除")).clicked() {
                         action = Some(plot::ObjectAction::Delete(edit.target));
                     }
-                    if ui.add(primary(ui, "关闭")).clicked() {
-                        close = true;
-                    }
                 });
             });
         });
-        (open && !close, action)
+        (open, action)
     }
 }
 
@@ -328,6 +324,21 @@ pub struct ColumnEdit {
     pub recalc: Option<scicanvas_core::ops::RecalcMode>,
 }
 
+impl From<&scicanvas_core::Column> for ColumnEdit {
+    fn from(col: &scicanvas_core::Column) -> Self {
+        Self {
+            key: col.key.clone(),
+            long_name: col.long_name.clone(),
+            units: col.units.clone(),
+            comment: col.comment.clone(),
+            role: col.role,
+            kind: col.data.kind(),
+            format: col.format,
+            recalc: col.op.as_ref().map(|op| op.mode),
+        }
+    }
+}
+
 impl ColumnEdit {
     pub fn apply(&self, book: &mut scicanvas_core::Book) -> Result<(), String> {
         let col = book.column(&self.key).ok_or("找不到列")?;
@@ -407,8 +418,9 @@ impl LayerContents {
     }
 
     fn show(&mut self, ctx: &egui::Context, project: &scicanvas_core::Project, pal: &Palette) -> Action {
-        let mut action = Action::None;
+        let mut open = true;
         window(ctx, "图层内容")
+            .open(&mut open)
             .default_width(360.0)
             .default_height(660.0)
             .show(ctx, |ui| {
@@ -582,18 +594,12 @@ impl LayerContents {
                 if let Some(error) = &self.error {
                     ui.colored_label(pal.ink, error);
                 }
-                ui.separator();
-                ui.horizontal_wrapped(|ui| {
-                    center_buttons(ui, 2);
-                    if ui.add(primary(ui, "确定")).clicked() {
-                        action = Action::LayerContents(Box::new(self.clone()));
-                    }
-                    if ui.add(plain("取消")).clicked() {
-                        action = Action::Close;
-                    }
-                });
             });
-        action
+        if open {
+            Action::None
+        } else {
+            Action::Close
+        }
     }
 }
 
@@ -1120,12 +1126,46 @@ impl<'open> SettingsWindow<'open> {
         if let Some(out) = &out {
             // The native title consumes clicks for collapsing. Give its middle portion a panel menu,
             // while keeping the native collapse/close buttons and background dragging intact.
+            let mut minimized =
+                egui::collapsing_header::CollapsingState::load_with_default_open(ctx, self.id.with("collapsing"), true);
+            let mut button = out.response.clone();
+            button.id = self.id.with("minimize");
+            button.rect = egui::Rect::from_center_size(
+                egui::pos2(
+                    out.response.rect.right() - 42.0,
+                    out.response.rect.top() + panel_header_height(ctx) / 2.0,
+                ),
+                egui::vec2(20.0, 20.0),
+            );
+            button.interact_rect = button.rect;
+            button.sense = egui::Sense::hover();
+            let button = button.interact(egui::Sense::click());
+            let painter = ctx.layer_painter(out.response.layer_id);
+            if button.hovered() {
+                painter.rect_filled(button.rect, 3.0, ctx.style().visuals.widgets.hovered.bg_fill);
+            }
+            let center = button.rect.center();
+            let stroke = egui::Stroke::new(1.2_f32, ctx.style().visuals.text_color());
+            painter.line_segment([center - egui::vec2(4.0, 0.0), center + egui::vec2(4.0, 0.0)], stroke);
+            if !minimized.is_open() {
+                painter.line_segment([center - egui::vec2(0.0, 4.0), center + egui::vec2(0.0, 4.0)], stroke);
+            }
+            if button.clicked() {
+                minimized.set_open(!minimized.is_open());
+                minimized.store(ctx);
+                ctx.request_repaint();
+            }
+            button.on_hover_text(if minimized.is_open() {
+                "最小化面板"
+            } else {
+                "还原面板"
+            });
             let mut title = out.response.clone();
             title.id = self.id.with("dock-title-menu");
             title.rect = egui::Rect::from_min_max(
                 out.response.rect.min + egui::vec2(32.0, 0.0),
                 egui::pos2(
-                    out.response.rect.right() - 32.0,
+                    out.response.rect.right() - 56.0,
                     out.response.rect.top() + panel_header_height(ctx),
                 ),
             );
@@ -1280,11 +1320,12 @@ fn buttons(ui: &mut egui::Ui, ok: &str) -> (bool, bool) {
 
 pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &scicanvas_core::Project) -> Action {
     let mut action = Action::None;
+    let mut open = true;
     let esc = ctx.input(|i| i.key_pressed(egui::Key::Escape));
     match dialog {
         Dialog::LayerContents(contents) => action = contents.show(ctx, project, pal),
-        Dialog::AnalysisCurves { graph, layer, curves } => {
-            window(ctx, "分析曲线").show(ctx, |ui| {
+        Dialog::AnalysisCurves { curves, .. } => {
+            window(ctx, "分析曲线").open(&mut open).show(ctx, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     if ui.button("全选").clicked() {
                         for (_, _, checked) in curves.iter_mut() {
@@ -1302,29 +1343,10 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                         ui.checkbox(checked, name.as_str());
                     }
                 });
-                ui.horizontal_wrapped(|ui| {
-                    if ui
-                        .add_enabled(curves.iter().any(|(_, _, checked)| *checked), plain("应用"))
-                        .clicked()
-                    {
-                        action = Action::AnalysisCurves(
-                            *graph,
-                            *layer,
-                            curves
-                                .iter()
-                                .filter(|(_, _, checked)| *checked)
-                                .map(|(reference, _, _)| reference.clone())
-                                .collect(),
-                        );
-                    }
-                    if ui.add(plain("取消")).clicked() {
-                        action = Action::Close;
-                    }
-                });
             });
         }
         Dialog::ColumnProps {
-            book,
+            book: _,
             edit,
             sample,
             error,
@@ -1332,7 +1354,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             use scicanvas_core::format::{DateFormat, NumberFormat};
             use scicanvas_core::{DataKind, Role};
             let title = format!("列属性 — {}", edit.key);
-            window(ctx, &title).show(ctx, |ui| {
+            window(ctx, &title).open(&mut open).show(ctx, |ui| {
                 egui::Grid::new("column-props")
                     .num_columns(2)
                     .spacing([12.0, 8.0])
@@ -1463,16 +1485,10 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                         .small()
                         .color(pal.weak),
                 );
-                let (ok, cancel) = buttons(ui, "确定");
-                if ok {
-                    action = Action::ColumnProps(*book, edit.clone());
-                } else if cancel || esc {
-                    action = Action::Close;
-                }
             });
         }
         Dialog::ConvertText { book, key, row, value } => {
-            window(ctx, "转换为文本列？").show(ctx, |ui| {
+            window(ctx, "转换为文本列？").open(&mut open).show(ctx, |ui| {
                 ui.vertical_centered(|ui| {
                     ui.add_space(4.0);
                     ui.label(
@@ -1501,7 +1517,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             });
         }
         Dialog::Poly { order } => {
-            window(ctx, "多项式拟合").show(ctx, |ui| {
+            window(ctx, "多项式拟合").open(&mut open).show(ctx, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.label("阶数");
                     egui::ComboBox::from_id_salt("poly-order")
@@ -1528,7 +1544,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             });
         }
         Dialog::Smooth { method, window: w } => {
-            window(ctx, "平滑").show(ctx, |ui| {
+            window(ctx, "平滑").open(&mut open).show(ctx, |ui| {
                 egui::Grid::new("smooth-grid")
                     .num_columns(2)
                     .spacing([12.0, 8.0])
@@ -1564,12 +1580,12 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             });
         }
         Dialog::CategoryOrder {
-            book,
-            key,
+            book: _,
+            key: _,
             levels,
             error,
         } => {
-            window(ctx, "类别顺序").show(ctx, |ui| {
+            window(ctx, "类别顺序").open(&mut open).show(ctx, |ui| {
                 let mut swap = None;
                 egui::ScrollArea::vertical().max_height(320.0).show(ui, |ui| {
                     egui::Grid::new("category-order")
@@ -1601,12 +1617,6 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
                 if let Some(error) = error {
                     ui.colored_label(ui.visuals().error_fg_color, error.as_str());
                 }
-                let (ok, cancel) = buttons(ui, "确定");
-                if ok {
-                    action = Action::CategoryOrder(*book, key.clone(), levels.clone());
-                } else if cancel {
-                    action = Action::Close;
-                }
             });
         }
         Dialog::Sort {
@@ -1617,7 +1627,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             only_selected,
             error,
         } => {
-            window(ctx, "排序").show(ctx, |ui| {
+            window(ctx, "排序").open(&mut open).show(ctx, |ui| {
                 egui::Grid::new("sort-grid")
                     .num_columns(2)
                     .spacing([12.0, 8.0])
@@ -1675,7 +1685,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             two_sided,
             odd,
         } => {
-            window(ctx, "IFFT").show(ctx, |ui| {
+            window(ctx, "IFFT").open(&mut open).show(ctx, |ui| {
                 egui::Grid::new("ifft-grid")
                     .num_columns(2)
                     .spacing([12.0, 8.0])
@@ -1722,7 +1732,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             order,
             deriv,
         } => {
-            window(ctx, "SG 平滑求导").show(ctx, |ui| {
+            window(ctx, "SG 平滑求导").open(&mut open).show(ctx, |ui| {
                 egui::Grid::new("sgdiff-grid")
                     .num_columns(2)
                     .spacing([12.0, 8.0])
@@ -1752,7 +1762,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             });
         }
         Dialog::Normalize { method } => {
-            window(ctx, "归一化").show(ctx, |ui| {
+            window(ctx, "归一化").open(&mut open).show(ctx, |ui| {
                 for m in NormalizeMethod::ALL {
                     ui.radio_value(method, m, m.label());
                 }
@@ -1765,7 +1775,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             });
         }
         Dialog::FitReport(reports) => {
-            window(ctx, "拟合结果").show(ctx, |ui| {
+            window(ctx, "拟合结果").open(&mut open).show(ctx, |ui| {
                 egui::ScrollArea::both()
                     .max_height((ctx.available_rect().height() - 220.0).clamp(100.0, 480.0))
                     .show(ui, |ui| {
@@ -1836,7 +1846,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             });
         }
         Dialog::Areas(areas) => {
-            window(ctx, "积分结果").show(ctx, |ui| {
+            window(ctx, "积分结果").open(&mut open).show(ctx, |ui| {
                 egui::Grid::new("area-grid")
                     .striped(true)
                     .num_columns(4)
@@ -1871,7 +1881,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             from,
             to,
         } => {
-            window(ctx, "插值").show(ctx, |ui| {
+            window(ctx, "插值").open(&mut open).show(ctx, |ui| {
                 egui::Grid::new("interp-grid")
                     .num_columns(2)
                     .spacing([12.0, 8.0])
@@ -1915,7 +1925,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             });
         }
         Dialog::Anova { result, names, tukey } => {
-            window(ctx, "单因素方差分析").show(ctx, |ui| {
+            window(ctx, "单因素方差分析").open(&mut open).show(ctx, |ui| {
                 let (table, groups) = anova_rows(result, names);
                 let pairs = tukey_rows(tukey, names);
                 for (gi, rows) in [table, groups, pairs].iter().enumerate() {
@@ -1994,7 +2004,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             });
         }
         Dialog::Correlations(pairs) => {
-            window(ctx, "相关系数").show(ctx, |ui| {
+            window(ctx, "相关系数").open(&mut open).show(ctx, |ui| {
                 egui::ScrollArea::both().max_height(420.0).show(ui, |ui| {
                     egui::Grid::new("corr-grid")
                         .striped(true)
@@ -2055,7 +2065,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             limits,
             constraints,
         } => {
-            window(ctx, "非线性拟合").show(ctx, |ui| {
+            window(ctx, "非线性拟合").open(&mut open).show(ctx, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.label("类别");
                     let mut category = model.category();
@@ -2132,7 +2142,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             });
         }
         Dialog::NlFitReport(reports) => {
-            window(ctx, "非线性拟合结果").show(ctx, |ui| {
+            window(ctx, "非线性拟合结果").open(&mut open).show(ctx, |ui| {
                 egui::ScrollArea::both()
                     .max_height((ctx.available_rect().height() - 220.0).clamp(100.0, 480.0))
                     .show(ui, |ui| {
@@ -2187,7 +2197,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             });
         }
         Dialog::FftFilter { kind, lo, hi, nyquist } => {
-            window(ctx, "FFT 滤波").show(ctx, |ui| {
+            window(ctx, "FFT 滤波").open(&mut open).show(ctx, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     for (i, name) in ["低通", "高通", "带通", "带阻"].into_iter().enumerate() {
                         ui.radio_value(kind, i as u8, name);
@@ -2233,7 +2243,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             b,
             rows,
         } => {
-            window(ctx, "填充数据序列").show(ctx, |ui| {
+            window(ctx, "填充数据序列").open(&mut open).show(ctx, |ui| {
                 ui.label(RichText::new(format!("目标列：{target}")).strong());
                 ui.horizontal_wrapped(|ui| {
                     for (i, name) in ["等差序列", "均匀分布随机数", "正态分布随机数"].into_iter().enumerate()
@@ -2282,7 +2292,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             });
         }
         Dialog::Table { title, rows, note } => {
-            window(ctx, title).show(ctx, |ui| {
+            window(ctx, title).open(&mut open).show(ctx, |ui| {
                 egui::ScrollArea::both().max_height(420.0).show(ui, |ui| {
                     egui::Grid::new("result-table")
                         .striped(true)
@@ -2334,7 +2344,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             columns,
             error,
         } => {
-            window(ctx, "设置列值").show(ctx, |ui| {
+            window(ctx, "设置列值").open(&mut open).show(ctx, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.label(RichText::new(format!("{target} =")).strong());
                     let edit = ui.add(
@@ -2396,7 +2406,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             });
         }
         Dialog::Baseline { als, log_lambda, p } => {
-            window(ctx, "扣除基线").show(ctx, |ui| {
+            window(ctx, "扣除基线").open(&mut open).show(ctx, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.radio_value(als, false, "两端连线");
                     ui.radio_value(als, true, "自动基线（ALS）");
@@ -2434,7 +2444,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             });
         }
         Dialog::Peaks { percent } => {
-            window(ctx, "寻峰与峰积分").show(ctx, |ui| {
+            window(ctx, "寻峰与峰积分").open(&mut open).show(ctx, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.label("最小突出度");
                     ui.add(egui::DragValue::new(percent).range(0.1..=100.0).speed(0.2).suffix(" %"));
@@ -2456,7 +2466,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             });
         }
         Dialog::Fft { window: w } => {
-            window(ctx, "FFT").show(ctx, |ui| {
+            window(ctx, "FFT").open(&mut open).show(ctx, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.label("窗函数");
                     for m in FftWindow::ALL {
@@ -2485,7 +2495,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             use_constant,
             constant,
         } => {
-            window(ctx, "列运算").show(ctx, |ui| {
+            window(ctx, "列运算").open(&mut open).show(ctx, |ui| {
                 if b.is_none() {
                     *use_constant = true;
                 }
@@ -2525,7 +2535,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             from,
             to,
         } => {
-            window(ctx, "频数统计").show(ctx, |ui| {
+            window(ctx, "频数统计").open(&mut open).show(ctx, |ui| {
                 egui::Grid::new("freq-grid")
                     .num_columns(2)
                     .spacing([12.0, 8.0])
@@ -2571,7 +2581,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             equal_var,
             level,
         } => {
-            window(ctx, "t 检验").show(ctx, |ui| {
+            window(ctx, "t 检验").open(&mut open).show(ctx, |ui| {
                 const KINDS: [&str; 3] = ["单样本", "双样本（独立）", "配对"];
                 ui.label(format!("参与检验的列：{}", columns.join("、")));
                 ui.horizontal_wrapped(|ui| {
@@ -2629,7 +2639,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             });
         }
         Dialog::TTestReport { result, names } => {
-            window(ctx, "t 检验结果").show(ctx, |ui| {
+            window(ctx, "t 检验结果").open(&mut open).show(ctx, |ui| {
                 let rows = ttest_rows(result, names);
                 egui::Grid::new("ttest-report")
                     .striped(true)
@@ -2679,7 +2689,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             });
         }
         Dialog::Png { dpi, page_mm } => {
-            window(ctx, "导出 PNG").show(ctx, |ui| {
+            window(ctx, "导出 PNG").open(&mut open).show(ctx, |ui| {
                 ui.horizontal_wrapped(|ui| {
                     ui.label("分辨率");
                     for preset in [150, 300, 600, 1200] {
@@ -2709,7 +2719,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
             });
         }
     }
-    if esc && matches!(action, Action::None) {
+    if !open || (esc && matches!(action, Action::None)) {
         action = Action::Close;
     }
     action

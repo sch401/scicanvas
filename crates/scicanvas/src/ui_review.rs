@@ -176,3 +176,169 @@ fn long_settings_fit_the_work_area_and_report_actions_stay_visible() {
         }
     }
 }
+
+#[test]
+fn live_settings_keep_edits_through_minimize_close_and_undo() {
+    for command in [
+        "graph.props",
+        "layer.contents",
+        "col.props",
+        "col.categories",
+        "graph.text.manage",
+        "legend",
+        "analysis.curves",
+    ] {
+        let ctx = egui::Context::default();
+        crate::theme::install(&ctx);
+        crate::fonts::setup(&ctx);
+        ctx.style_mut(|s| s.animation_time = 0.0);
+        let mut app = SciApp::initial(theme::palette(egui::Theme::Light));
+        app.active = Some(2);
+        let id = match command {
+            "graph.props" => egui::Id::new("scicanvas-props"),
+            "layer.contents" => egui::Id::new(("scicanvas-dialog", "图层内容")),
+            "col.props" => {
+                app.active = Some(1);
+                app.selection.insert(1, vec!["B".into()]);
+                egui::Id::new(("scicanvas-dialog", "列属性 — B"))
+            }
+            "col.categories" => {
+                app.active = Some(1);
+                app.selection.insert(1, vec!["C".into()]);
+                app.project
+                    .book_mut(1)
+                    .unwrap()
+                    .convert_columns(&["C".into()], scicanvas_core::DataKind::Category)
+                    .unwrap();
+                egui::Id::new(("scicanvas-dialog", "类别顺序"))
+            }
+            "analysis.curves" => egui::Id::new(("scicanvas-dialog", "分析曲线")),
+            "legend" => egui::Id::new(("scicanvas-dialog", "图例")),
+            _ => {
+                app.project.graph_mut(2).unwrap().page.add_text([0.2, 0.2]).unwrap();
+                egui::Id::new(("scicanvas-dialog", "文字标注"))
+            }
+        };
+        if command == "legend" {
+            app.apply_object_action(2, plot::ObjectAction::Edit(plot::ObjectTarget::Legend(0)));
+        } else {
+            app.run_command(command);
+        }
+        let frame = |app: &mut SciApp, events| {
+            ctx.run(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(1400.0, 1000.0))),
+                    events,
+                    ..Default::default()
+                },
+                |ctx| app.ui_frame(ctx),
+            )
+        };
+        for _ in 0..5 {
+            frame(&mut app, vec![]);
+        }
+        let before = app.project.clone();
+        match &mut app.dialog {
+            Some(Dialog::LayerContents(edit)) => edit.draft.grid = !edit.draft.grid,
+            Some(Dialog::ColumnProps { edit, .. }) => edit.long_name = "Live column".into(),
+            Some(Dialog::CategoryOrder { levels, .. }) => levels.reverse(),
+            Some(Dialog::AnalysisCurves { curves, .. }) => curves[0].2 = false,
+            _ if command == "graph.props" => app.run_command("graph.grid"),
+            _ => {
+                frame(&mut app, vec![egui::Event::Text("Live text".into())]);
+            }
+        }
+        let output = frame(&mut app, vec![]);
+        for forbidden in ["确定", "取消", "关闭", "应用"] {
+            assert!(
+                !output
+                    .shapes
+                    .iter()
+                    .any(|shape| matches!(&shape.shape, egui::Shape::Text(t) if t.galley.job.text == forbidden)),
+                "{command} still has {forbidden}"
+            );
+        }
+        if command != "analysis.curves" {
+            assert_ne!(app.project, before, "{command} writes before closing");
+            let changed = app.project.clone();
+            app.run_command("edit.undo");
+            frame(&mut app, vec![]);
+            assert_eq!(
+                app.project, before,
+                "{command}: open controls must not reapply an undone setting"
+            );
+            app.run_command("edit.redo");
+            frame(&mut app, vec![]);
+            assert_eq!(app.project, changed);
+        }
+        if command == "analysis.curves" {
+            assert!(matches!(app.analysis_source(), Some(Source::Curves { curves, .. }) if curves.len() == 1));
+        }
+        let saved = scicanvas_core::project_file::to_scv(&app.project).unwrap();
+        assert_eq!(scicanvas_core::project_file::from_scv(&saved).unwrap(), app.project);
+        let changed = app.project.clone();
+        let click = |app: &mut SciApp, point| {
+            frame(app, vec![egui::Event::PointerMoved(point)]);
+            for pressed in [true, false] {
+                frame(
+                    app,
+                    vec![egui::Event::PointerButton {
+                        pos: point,
+                        button: egui::PointerButton::Primary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    }],
+                );
+            }
+            for _ in 0..3 {
+                frame(app, vec![]);
+            }
+        };
+        let point = ctx
+            .read_response(id.with("minimize"))
+            .unwrap_or_else(|| panic!("{command}: missing title control"))
+            .rect
+            .center();
+        click(&mut app, point);
+        assert!(
+            !egui::collapsing_header::CollapsingState::load_with_default_open(&ctx, id.with("collapsing"), true)
+                .is_open(),
+            "{command} minimizes from its title bar"
+        );
+        assert_eq!(app.project, changed);
+        let point = ctx
+            .read_response(id.with("minimize"))
+            .unwrap_or_else(|| panic!("{command}: missing title control"))
+            .rect
+            .center();
+        click(&mut app, point);
+        assert!(
+            egui::collapsing_header::CollapsingState::load_with_default_open(&ctx, id.with("collapsing"), true)
+                .is_open()
+        );
+        let rect = ctx.memory(|m| m.area_rect(id)).unwrap();
+        let output = frame(&mut app, vec![]);
+        let close = output
+            .shapes
+            .iter()
+            .find_map(|s| match &s.shape {
+                egui::Shape::LineSegment { points, .. }
+                    if rect.contains(points[0])
+                        && (points[0].x - points[1].x).abs() > 3.0
+                        && (points[0].y - points[1].y).abs() > 3.0
+                        && points[0].y < rect.top() + 30.0
+                        && points[0].x > rect.right() - 32.0 =>
+                {
+                    Some(points[0].lerp(points[1], 0.5))
+                }
+                _ => None,
+            })
+            .expect("title-bar X");
+        click(&mut app, close);
+        assert_eq!(app.project, changed, "{command} keeps changes after X");
+        assert!(
+            app.dialog.is_none() && app.props_for.is_none() && app.object_editor.is_none(),
+            "{command} closes from X"
+        );
+    }
+}
