@@ -919,7 +919,7 @@ fn panel_header_height(ctx: &egui::Context) -> f32 {
     let style = ctx.style();
     ctx.fonts(|fonts| title.font_height(fonts, &style))
         .max(style.spacing.interact_size.y)
-        + 8.0
+        + 2.0 * PANEL_MARGIN
 }
 
 /// Reserve sidebar space before drawing document windows; each expanded panel gets a scrollable row.
@@ -1131,26 +1131,35 @@ impl<'open> SettingsWindow<'open> {
                 egui::collapsing_header::CollapsingState::load_with_default_open(ctx, self.id.with("collapsing"), true);
             let mut button = out.response.clone();
             button.id = self.id.with("minimize");
+            let style = ctx.style();
+            let header_height = panel_header_height(ctx);
+            let button_size = egui::Vec2::splat(style.spacing.icon_width);
+            let close_center = egui::pos2(
+                out.response.rect.right() - header_height / 2.0,
+                out.response.rect.top() + header_height / 2.0,
+            );
             button.rect = egui::Rect::from_center_size(
-                egui::pos2(
-                    out.response.rect.right() - 42.0,
-                    out.response.rect.top() + panel_header_height(ctx) / 2.0,
-                ),
-                egui::vec2(20.0, 20.0),
+                close_center - egui::vec2(button_size.x + style.spacing.item_spacing.x, 0.0),
+                button_size,
             );
             button.interact_rect = button.rect;
             button.sense = egui::Sense::hover();
             let button = button.interact(egui::Sense::click());
             let painter = ctx.layer_painter(out.response.layer_id);
-            if button.hovered() {
-                painter.rect_filled(button.rect, 3.0, ctx.style().visuals.widgets.hovered.bg_fill);
-            }
-            let center = button.rect.center();
-            let stroke = egui::Stroke::new(1.2_f32, ctx.style().visuals.text_color());
-            painter.line_segment([center - egui::vec2(4.0, 0.0), center + egui::vec2(4.0, 0.0)], stroke);
+            let visuals = style.interact(&button);
+            let icon_rect = button.rect.shrink(2.0).expand(visuals.expansion);
+            let center = icon_rect.center();
+            painter.line_segment([icon_rect.left_center(), icon_rect.right_center()], visuals.fg_stroke);
             if !minimized.is_open() {
-                painter.line_segment([center - egui::vec2(0.0, 4.0), center + egui::vec2(0.0, 4.0)], stroke);
+                painter.line_segment(
+                    [
+                        egui::pos2(center.x, icon_rect.top()),
+                        egui::pos2(center.x, icon_rect.bottom()),
+                    ],
+                    visuals.fg_stroke,
+                );
             }
+            let controls_left = button.rect.left() - style.spacing.item_spacing.x;
             if button.clicked() {
                 minimized.set_open(!minimized.is_open());
                 minimized.store(ctx);
@@ -1176,10 +1185,7 @@ impl<'open> SettingsWindow<'open> {
             title.id = self.id.with("dock-title-menu");
             title.rect = egui::Rect::from_min_max(
                 out.response.rect.min + egui::vec2(32.0, 0.0),
-                egui::pos2(
-                    out.response.rect.right() - 56.0,
-                    out.response.rect.top() + panel_header_height(ctx),
-                ),
+                egui::pos2(controls_left, out.response.rect.top() + panel_header_height(ctx)),
             );
             title.interact_rect = title.rect;
             title.sense = egui::Sense::hover();

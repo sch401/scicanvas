@@ -373,3 +373,69 @@ fn live_panels_follow_external_changes_without_reverting_them() {
         matches!(&app.dialog, Some(Dialog::LayerContents(edit)) if edit.draft == *app.project.graph(2).unwrap().first_layer())
     );
 }
+
+#[test]
+fn title_buttons_share_native_geometry_at_each_dpi() {
+    for theme in [egui::Theme::Light, egui::Theme::Dark] {
+        for dpi in [1.0, 1.25, 1.5, 2.0] {
+            let ctx = egui::Context::default();
+            crate::theme::install(&ctx);
+            crate::fonts::setup(&ctx);
+            ctx.set_theme(theme);
+            ctx.set_pixels_per_point(dpi);
+            ctx.style_mut(|s| s.animation_time = 0.0);
+            let input = || egui::RawInput {
+                screen_rect: Some(Rect::from_min_size(egui::Pos2::ZERO, vec2(1280.0, 820.0))),
+                ..Default::default()
+            };
+            for _ in 0..2 {
+                let _ = ctx.run(input(), |_| {});
+            }
+            let mut app = SciApp::initial(crate::theme::palette(theme));
+            app.active = Some(2);
+            app.run_command("graph.props");
+            let id = egui::Id::new("scicanvas-props");
+            for collapsed in [false, true] {
+                if collapsed {
+                    let mut state = egui::collapsing_header::CollapsingState::load_with_default_open(
+                        &ctx,
+                        id.with("collapsing"),
+                        true,
+                    );
+                    state.set_open(false);
+                    state.store(&ctx);
+                }
+                let mut output = None;
+                for _ in 0..4 {
+                    output = Some(ctx.run(input(), |ctx| app.ui_frame(ctx)));
+                }
+                let panel = ctx.memory(|m| m.area_rect(id)).unwrap();
+                let min = ctx.read_response(id.with("minimize")).unwrap().rect;
+                let close_icon = output
+                    .unwrap()
+                    .shapes
+                    .into_iter()
+                    .find_map(|shape| match shape.shape {
+                        egui::Shape::LineSegment { points, stroke }
+                            if panel.contains(points[0])
+                                && points[0].x > panel.right() - 32.0
+                                && points[0].y < panel.top() + 40.0
+                                && (points[0].x - points[1].x).abs() > 3.0
+                                && (points[0].y - points[1].y).abs() > 3.0 =>
+                        {
+                            Some((Rect::from_two_pos(points[0], points[1]), stroke))
+                        }
+                        _ => None,
+                    })
+                    .expect("native X");
+                let close = close_icon.0.expand(2.0);
+                assert!(
+                    (min.center().y - close.center().y).abs() < 0.1,
+                    "{theme:?} {dpi} collapsed={collapsed}: {min:?} {close:?}"
+                );
+                assert!((min.width() - close.width()).abs() < 0.1 && (min.height() - close.height()).abs() < 0.1);
+                assert!((close.left() - min.right() - ctx.style().spacing.item_spacing.x).abs() < 0.1);
+            }
+        }
+    }
+}
