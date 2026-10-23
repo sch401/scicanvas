@@ -4,6 +4,8 @@
 use crate::analysis::{self, Describe, NormalizeMethod, PolyFit, SmoothMethod};
 use crate::interpolate::{self, InterpMethod};
 use crate::model::{fmt_num, round_sig, Book, Column, Graph, PlotType, Project, Role};
+use crate::page::{CurveStyle, Layer};
+use crate::plotspec::{default_x, CurveMapping, DataRef, Plot};
 
 /// 统计类操作选中的数据：工作簿编号、列标识和可选的行范围。
 pub struct AnalysisColumn {
@@ -442,6 +444,36 @@ fn name_of(book: &Book, key: &str) -> String {
         .unwrap_or_else(|| key.to_string())
 }
 
+/// 按原分析流程的默认规则构建描述；来源曲线沿用图层行范围，派生线取完整结果列。
+fn analysis_plot(
+    layer: &Layer,
+    book: &Book,
+    y: &str,
+    x: Option<&str>,
+    line_only: bool,
+    style: Option<CurveStyle>,
+) -> Plot {
+    let local = layer.book_id == Some(book.id);
+    let y = DataRef::new(book.id, y);
+    let inherited_x = if local {
+        layer.x_key.clone()
+    } else {
+        default_x(book, &y.col)
+    };
+    Plot {
+        key: y.key(layer.book_id),
+        mapping: CurveMapping {
+            y,
+            x: x.map(str::to_owned).or(inherited_x).map(|x| DataRef::new(book.id, x)),
+            base: None,
+            rows: if local && !line_only { layer.rows } else { None },
+            line_only,
+        },
+        style,
+        x_override: x.is_some(),
+    }
+}
+
 impl Project {
     /// 把分析输入解析成具体的数据组。
     pub fn resolve(&self, src: &Source) -> Result<Resolved, String> {
@@ -459,7 +491,7 @@ impl Project {
                 let bid = g.book_id.ok_or("这个图形没有关联数据")?;
                 self.book(bid).ok_or("这个图形没有关联数据")?;
                 let items: Vec<Item> = g
-                    .plots_in(&|id| self.book(id))
+                    .plots(&|id| self.book(id))
                     .into_iter()
                     .filter_map(|plot| {
                         let curve = plot.mapping;
@@ -548,28 +580,62 @@ impl Project {
     }
 
     /// 结果曲线要加到哪张图：分析的来源图；否则已打开的、含这条 Y 的图；都没有就新建散点图。
-    fn graph_for_result(&mut self, r: &Resolved, item: &Item) -> (u64, usize) {
+    fn graph_for_result(&mut self, r: &Resolved, item: &Item) -> Result<(u64, usize), String> {
         if let Some(g) = r.graph_id {
-            return (g, r.layer_index);
+            return Ok((g, r.layer_index));
         }
         for graph in &self.graphs {
             if let Some(index) = graph.page.layers().iter().position(|g| {
-                g.y_keys.contains(&g.result_key(item.book_id, &item.y))
+                g.plot(&DataRef::new(item.book_id, &item.y), &|id| self.book(id))
+                    .is_some()
                     && g.transform == crate::plotspec::Transform::Identity
             }) {
-                return (graph.id, index);
+                return Ok((graph.id, index));
             }
         }
         let id = self.alloc_id();
         let mut g = Graph::new(id, self.unique_name("Graph"));
         g.first_layer_mut().book_id = Some(item.book_id);
         g.first_layer_mut().x_key = item.x.clone();
-        g.first_layer_mut().y_keys = vec![item.y.clone()];
         g.first_layer_mut().plot_type = PlotType::Scatter;
         g.first_layer_mut().rows = item.rows;
+        let book = self.book(item.book_id).unwrap();
+        let layer = g.first_layer_mut();
+        let plot = analysis_plot(layer, book, &item.y, None, false, None);
+        layer.add_plot(plot, &|id| self.book(id))?;
         self.graphs.push(g);
         self.move_project_item(id, self.folder_of(item.book_id)).unwrap();
-        (id, 0)
+        Ok((id, 0))
+    }
+
+    /// 追加新生成的分析结果；逐曲线只继承右轴，其他样式继续使用原派生线规则。
+    fn attach_result(
+        &mut self,
+        gid: u64,
+        index: usize,
+        item: &Item,
+        result: &str,
+        x: Option<&str>,
+    ) -> Result<(), String> {
+        let book = self.books.iter().find(|b| b.id == item.book_id).unwrap();
+        let layer = &mut self.graphs.iter_mut().find(|g| g.id == gid).unwrap().page.layers_mut()[index];
+        let lookup = |id| (id == book.id).then_some(book);
+        let source = DataRef::new(item.book_id, &item.y);
+        if layer.plot(&source, &lookup).is_none() {
+            let plot = analysis_plot(layer, book, &item.y, None, false, None);
+            layer.add_plot(plot, &lookup)?;
+        }
+        let right_axis = layer
+            .plot(&source, &lookup)
+            .and_then(|p| p.style)
+            .is_some_and(|s| s.right_axis);
+        let style = right_axis.then(|| CurveStyle {
+            right_axis: true,
+            ..Default::default()
+        });
+        let plot = analysis_plot(layer, book, result, x, true, style);
+        layer.add_plot(plot, &lookup)?;
+        Ok(())
     }
 
     /// 多项式拟合（阶数 1 即线性拟合）。每条数据新增“拟合 X”和拟合值两列（200 个等间距点），
@@ -642,9 +708,8 @@ impl Project {
             cy.op = op(OpKind::PolyFitY { order });
             let kx = self.insert_result_column(item.book_id, &item.y, cx).unwrap();
             let ky = self.insert_result_column(item.book_id, &item.y, cy).unwrap();
-            let (gid, index) = self.graph_for_result(&r, item);
-            let g = &mut self.graph_mut(gid).unwrap().page.layers_mut()[index];
-            g.add_analysis_result(item.book_id, &item.y, &ky, Some(&kx));
+            let (gid, index) = self.graph_for_result(&r, item)?;
+            self.attach_result(gid, index, item, &ky, Some(&kx))?;
             graph = Some(gid);
             reports.push(FitReport {
                 name,
@@ -716,13 +781,26 @@ impl Project {
                 .collect();
             keys.push(self.insert_result_column(book_id, y_key, c).unwrap());
         }
-        for graph in &mut self.graphs {
-            for layer in graph.page.layers_mut() {
-                if layer.y_keys.contains(&layer.result_key(book_id, &curve.1)) {
-                    for k in &keys {
-                        layer.add_analysis_result(book_id, &curve.1, k, Some(&curve.0));
-                    }
+        let mut targets = Vec::new();
+        for graph in &self.graphs {
+            for (index, layer) in graph.page.layers().iter().enumerate() {
+                if layer
+                    .plot(&DataRef::new(book_id, &curve.1), &|id| self.book(id))
+                    .is_some()
+                {
+                    targets.push((graph.id, index));
                 }
+            }
+        }
+        let item = Item {
+            book_id,
+            y: curve.1.clone(),
+            x: Some(curve.0.clone()),
+            rows: None,
+        };
+        for (gid, index) in targets {
+            for key in &keys {
+                self.attach_result(gid, index, &item, key, Some(&curve.0))?;
             }
         }
         Ok(keys)
@@ -749,10 +827,13 @@ impl Project {
     /// 残差图：各条拟合的残差对 X 的散点图，新建在工作簿所在目录。
     pub fn residual_plot(&mut self, reports: &[FitReport]) -> Result<u64, String> {
         let first = reports.first().ok_or("没有拟合结果")?;
-        let mut spec = crate::plotspec::PlotSpec {
-            book_id: Some(first.book_id),
-            x_key: first.x_key.clone(),
-            plot_type: PlotType::Scatter,
+        let mut layer = Layer {
+            spec: crate::plotspec::PlotSpec {
+                book_id: Some(first.book_id),
+                x_key: first.x_key.clone(),
+                plot_type: PlotType::Scatter,
+                ..Default::default()
+            },
             ..Default::default()
         };
         for r in reports {
@@ -760,13 +841,10 @@ impl Project {
             if book.column(&r.residual_key).is_none() {
                 return Err("残差列已被删除或不在同一工作簿".into());
             }
-            let key = spec.result_key(r.book_id, &r.residual_key);
-            spec.y_keys.push(key.clone());
-            if let Some(x) = &r.x_key {
-                spec.x_by_y.insert(key, spec.result_key(r.book_id, x));
-            }
+            let plot = analysis_plot(&layer, book, &r.residual_key, r.x_key.as_deref(), false, None);
+            layer.add_plot(plot, &|id| self.book(id))?;
         }
-        self.plot_spec(spec)
+        self.plot_spec(layer.spec)
     }
 
     /// 分析输入里全部有效点的 X 范围（插值对话框的默认范围）。
@@ -847,9 +925,8 @@ impl Project {
             cy.data = fy.iter().map(|y| fmt_num(*y)).collect();
             let kx = self.insert_result_column(item.book_id, &item.y, cx).unwrap();
             let ky = self.insert_result_column(item.book_id, &item.y, cy).unwrap();
-            let (gid, index) = self.graph_for_result(&r, item);
-            let g = &mut self.graph_mut(gid).unwrap().page.layers_mut()[index];
-            g.add_analysis_result(item.book_id, &item.y, &ky, Some(&kx));
+            let (gid, index) = self.graph_for_result(&r, item)?;
+            self.attach_result(gid, index, item, &ky, Some(&kx))?;
             graph = Some(gid);
             made.push(ky);
         }
@@ -909,9 +986,8 @@ impl Project {
             cy.data = fx.iter().map(|x| fmt_num(fit.eval(*x))).collect();
             let kx = self.insert_result_column(item.book_id, &item.y, cx).unwrap();
             let ky = self.insert_result_column(item.book_id, &item.y, cy).unwrap();
-            let (gid, index) = self.graph_for_result(&r, item);
-            let g = &mut self.graph_mut(gid).unwrap().page.layers_mut()[index];
-            g.add_analysis_result(item.book_id, &item.y, &ky, Some(&kx));
+            let (gid, index) = self.graph_for_result(&r, item)?;
+            self.attach_result(gid, index, item, &ky, Some(&kx))?;
             graph = Some(gid);
             reports.push(NlFitReport {
                 name,
@@ -996,9 +1072,8 @@ impl Project {
             )
         })?;
         if let Some(gid) = r.graph_id {
-            let g = &mut self.graph_mut(gid).unwrap().page.layers_mut()[r.layer_index];
             for (item, key) in &made {
-                g.add_analysis_result(item.book_id, &item.y, key, item.x.as_deref());
+                self.attach_result(gid, r.layer_index, item, key, item.x.as_deref())?;
             }
         }
         Ok(made.into_iter().map(|(_, k)| k).collect())
@@ -1051,9 +1126,8 @@ impl Project {
             made.push((bkey.clone(), key));
         }
         if let Some(gid) = r.graph_id {
-            let g = &mut self.graph_mut(gid).unwrap().page.layers_mut()[r.layer_index];
             for (item, key) in &base {
-                g.add_analysis_result(item.book_id, &item.y, key, item.x.as_deref());
+                self.attach_result(gid, r.layer_index, item, key, item.x.as_deref())?;
             }
         }
         Ok(made)
@@ -1088,9 +1162,8 @@ impl Project {
             )
         })?;
         if let Some(gid) = r.graph_id {
-            let g = &mut self.graph_mut(gid).unwrap().page.layers_mut()[r.layer_index];
             for (item, key) in &made {
-                g.add_analysis_result(item.book_id, &item.y, key, item.x.as_deref());
+                self.attach_result(gid, r.layer_index, item, key, item.x.as_deref())?;
             }
         }
         Ok(made.into_iter().map(|(_, k)| k).collect())
