@@ -1,6 +1,9 @@
 //! Worksheet rendering, selection, keyboard editing and column operations.
 
+mod table;
+
 use super::*;
+use table::SheetFrame;
 
 impl SciApp {
     pub(crate) fn selected_keys(&self, book_id: u64) -> Vec<String> {
@@ -421,13 +424,6 @@ impl SciApp {
             self.sheet_keys(ui.ctx(), id, &mut st);
         }
 
-        #[derive(Clone, Copy)]
-        enum Target {
-            Cell(usize, usize),
-            Row(usize),
-            Col(usize),
-        }
-
         let Some(book) = self.project.book_mut(id) else {
             self.sheets.insert(id, st);
             return;
@@ -460,402 +456,79 @@ impl SciApp {
             .max(st.edit.as_ref().map_or(0, |e| e.cell.r + 10));
         let drag = st.drag;
         let scroll_to = st.scroll_to.take();
-        let mut edit = st.edit.take();
+        let edit = st.edit.take();
         let text_color = ui.visuals().text_color();
         let sel_stroke = egui::Stroke::new(2.0_f32, pal.accent);
 
-        let mut clicked: Option<usize> = None;
-        let mut action: Option<(usize, ColAction)> = None;
-        let mut press: Option<Target> = None;
-        let mut hover: Option<Target> = None;
-        let mut dbl_cell: Option<(usize, usize)> = None;
-        let mut right_cell: Option<(usize, usize)> = None;
-        let mut menu_cmd: Option<&'static str> = None;
-        let mut edit_end: Option<(bool, i64, i64)> = None;
-        let mut autoscrolled = false;
-        let mut metadata_edits = Vec::new();
         let dragging_cells = matches!(drag, Some(Drag::Cells | Drag::Rows)) && down;
         // 可见的表格区域（拖到上下边缘时自动滚动）
         let view = ui.clip_rect();
         let grid = egui::Stroke::new(1.0_f32, pal.meta_bg);
+        let mut frame = SheetFrame {
+            id,
+            pal,
+            active,
+            modifiers,
+            pressed,
+            down,
+            dbl,
+            ptr,
+            focus_id,
+            edit_id,
+            graphs,
+            sel_flags,
+            ncols,
+            nrows,
+            range,
+            multi,
+            drag,
+            scroll_to,
+            edit,
+            text_color,
+            sel_stroke,
+            dragging_cells,
+            view,
+            grid,
+            clicked: None,
+            action: None,
+            press: None,
+            hover: None,
+            dbl_cell: None,
+            right_cell: None,
+            menu_cmd: None,
+            edit_end: None,
+            autoscrolled: false,
+            metadata_edits: Vec::new(),
+        };
+        frame.draw(ui, book, preview, &mut self.history_group);
+        self.finish_sheet_frame(ui, id, st, frame, &keys);
+    }
 
-        ui.push_id(("sheet", id), |ui| {
-            egui::ScrollArea::horizontal()
-                .auto_shrink([false, false])
-                .drag_to_scroll(false)
-                .show(ui, |ui| {
-                    // 单元格之间不留空隙，选区和网格线才能连成一片
-                    ui.spacing_mut().item_spacing = egui::vec2(0.0, 0.0);
-                    let mut table = TableBuilder::new(ui)
-                        .striped(true)
-                        .resizable(true)
-                        .auto_shrink([false, false])
-                        .min_scrolled_height(0.0)
-                        .drag_to_scroll(false)
-                        .column(TCol::exact(58.0))
-                        .columns(TCol::initial(96.0).at_least(40.0).clip(true), ncols);
-                    if let Some(r) = scroll_to {
-                        table = table.scroll_to_row(r + META_ROWS.len(), None);
-                    }
-                    table
-                        .header(24.0, |mut header| {
-                            header.col(|ui| {
-                                ui.label("");
-                            });
-                            for (ci, col) in book.columns.iter().enumerate() {
-                                let col = preview.and_then(|b| b.column(&col.key)).unwrap_or(col);
-                                header.col(|ui| {
-                                    let rect = ui.max_rect();
-                                    // 带保存公式的列标 ƒ
-                                    let computed = col.formula.is_some()
-                                        || col
-                                            .op
-                                            .as_ref()
-                                            .is_some_and(|op| op.mode != scicanvas_core::ops::RecalcMode::None);
-                                    let mark = if computed { " ƒ" } else { "" };
-                                    let text =
-                                        RichText::new(format!("{}({}){mark}", col.key, col.role.label())).strong();
-                                    let resp = ui
-                                        .centered_and_justified(|ui| {
-                                            ui.add(egui::SelectableLabel::new(sel_flags[ci], text))
-                                        })
-                                        .inner
-                                        .on_hover_text("单击选中列，Ctrl / Shift 多选，拖动选多列，右键更多操作");
-                                    if multi.is_some_and(|r| ci >= r.c0() && ci <= r.c1()) {
-                                        ui.painter().line_segment(
-                                            [
-                                                rect.left_bottom() + egui::vec2(0.0, -1.0),
-                                                rect.right_bottom() + egui::vec2(0.0, -1.0),
-                                            ],
-                                            sel_stroke,
-                                        );
-                                    }
-                                    if pressed && ui.rect_contains_pointer(rect) {
-                                        press = Some(Target::Col(ci));
-                                    }
-                                    if matches!(drag, Some(Drag::Cols(_))) && down && ui.rect_contains_pointer(rect) {
-                                        hover = Some(Target::Col(ci));
-                                    }
-                                    if resp.clicked() {
-                                        clicked = Some(ci);
-                                    }
-                                    // 双击列标题打开列属性（与 Origin 相同）
-                                    if resp.double_clicked() {
-                                        action = Some((ci, ColAction::Props));
-                                    }
-                                    resp.context_menu(|ui| {
-                                        let mut pick = |ui: &mut egui::Ui, label: &str, a: ColAction| {
-                                            if ui.button(label).clicked() {
-                                                action = Some((ci, a));
-                                                ui.close_menu();
-                                            }
-                                        };
-                                        pick(ui, "列属性…", ColAction::Props);
-                                        ui.separator();
-                                        pick(ui, "设为 X", ColAction::SetRole(Role::X));
-                                        pick(ui, "设为 Y", ColAction::SetRole(Role::Y));
-                                        pick(ui, "设为 X 误差", ColAction::SetRole(Role::XError));
-                                        pick(ui, "设为 Y 误差", ColAction::SetRole(Role::YError));
-                                        pick(ui, "设为 Z", ColAction::SetRole(Role::Z));
-                                        pick(ui, "设为标签", ColAction::SetRole(Role::Label));
-                                        pick(ui, "设为忽略", ColAction::SetRole(Role::Ignore));
-                                        ui.separator();
-                                        ui.label(format!("数据类型：{}", col.data.kind().label()));
-                                        if col.data.kind() == scicanvas_core::DataKind::Category {
-                                            pick(ui, "类别顺序…", ColAction::CategoryOrder);
-                                        }
-                                        for kind in scicanvas_core::DataKind::ALL {
-                                            pick(
-                                                ui,
-                                                &format!("转换为{}列", kind.label()),
-                                                ColAction::SetDataKind(kind),
-                                            );
-                                        }
-                                        ui.separator();
-                                        for t in PlotType::ALL {
-                                            pick(ui, t.label(), ColAction::Plot(t));
-                                        }
-                                        if !graphs.is_empty() {
-                                            ui.menu_button("添加到图形", |ui| {
-                                                for (gid, name) in &graphs {
-                                                    pick(ui, name, ColAction::AddToGraph(*gid));
-                                                }
-                                            });
-                                        }
-                                        ui.separator();
-                                        ui.menu_button("移动列", |ui| {
-                                            pick(ui, "左移", ColAction::Move(scicanvas_core::ColumnMove::Left));
-                                            pick(ui, "右移", ColAction::Move(scicanvas_core::ColumnMove::Right));
-                                            pick(ui, "移到最前", ColAction::Move(scicanvas_core::ColumnMove::First));
-                                            pick(ui, "移到最后", ColAction::Move(scicanvas_core::ColumnMove::Last));
-                                        });
-                                        pick(ui, "在右侧插入列", ColAction::InsertRight);
-                                        pick(ui, "清空", ColAction::Clear);
-                                        pick(ui, "删除列", ColAction::Delete);
-                                    });
-                                });
-                            }
-                        })
-                        .body(|body| {
-                            body.rows(22.0, META_ROWS.len() + nrows, |mut row| {
-                                let ri = row.index();
-                                if ri < META_ROWS.len() {
-                                    row.col(|ui| {
-                                        ui.painter().rect_filled(ui.max_rect(), 0.0, pal.meta_bg);
-                                        ui.centered_and_justified(|ui| {
-                                            ui.label(META_ROWS[ri]);
-                                        });
-                                    });
-                                    for (ci, col) in book.columns.iter_mut().enumerate() {
-                                        row.col(|ui| {
-                                            let bg = if sel_flags[ci] { pal.meta_sel_bg } else { pal.meta_bg };
-                                            let rect = ui.max_rect();
-                                            ui.painter().rect_filled(rect, 0.0, bg);
-                                            ui.painter().line_segment(
-                                                [rect.right_top(), rect.right_bottom()],
-                                                egui::Stroke::new(1.0_f32, pal.window),
-                                            );
-                                            if let Some(col) = preview.and_then(|b| b.column(&col.key)) {
-                                                let text = match ri {
-                                                    0 => &col.long_name,
-                                                    1 => &col.units,
-                                                    _ => &col.comment,
-                                                };
-                                                ui.centered_and_justified(|ui| {
-                                                    ui.label(text);
-                                                });
-                                                return;
-                                            }
-                                            let field = header_field(col, ri);
-                                            let before = field.clone();
-                                            let response = ui.add(
-                                                egui::TextEdit::singleline(field)
-                                                    .frame(false)
-                                                    .horizontal_align(egui::Align::Center)
-                                                    .margin(egui::vec2(5.0, 3.0))
-                                                    .desired_width(f32::INFINITY),
-                                            );
-                                            if response.changed() {
-                                                metadata_edits.push((ci, ri, before, field.clone()));
-                                            }
-                                            edit_group(&response, &mut self.history_group);
-                                        });
-                                    }
-                                    return;
-                                }
-
-                                let r = ri - META_ROWS.len();
-                                // 行号：拖动选整行
-                                row.col(|ui| {
-                                    let rect = ui.max_rect();
-                                    let in_rows = multi.is_some_and(|g| r >= g.r0() && r <= g.r1());
-                                    if in_rows {
-                                        ui.painter().rect_filled(rect, 0.0, pal.sel_bg);
-                                    }
-                                    let resp = ui.interact(
-                                        rect,
-                                        egui::Id::new(("row-head", id, r)),
-                                        egui::Sense::click_and_drag(),
-                                    );
-                                    if resp.hovered() {
-                                        ui.ctx().set_cursor_icon(egui::CursorIcon::Default);
-                                    }
-                                    ui.painter().with_clip_rect(rect).text(
-                                        rect.center(),
-                                        egui::Align2::CENTER_CENTER,
-                                        (r + 1).to_string(),
-                                        egui::FontId::monospace(12.0),
-                                        pal.weak,
-                                    );
-                                    if pressed && ui.rect_contains_pointer(rect) {
-                                        press = Some(Target::Row(r));
-                                    }
-                                    if dragging_cells && ui.rect_contains_pointer(rect) {
-                                        hover = Some(Target::Row(r));
-                                    }
-                                    // 拖到表格上下边缘时自动滚动
-                                    if dragging_cells && !autoscrolled {
-                                        autoscrolled = true;
-                                        if let Some(p) = ptr {
-                                            if p.y > view.bottom() - 12.0 {
-                                                ui.scroll_with_delta(egui::vec2(0.0, -16.0));
-                                            } else if p.y < view.top() + 24.0 + 6.0 {
-                                                ui.scroll_with_delta(egui::vec2(0.0, 16.0));
-                                            }
-                                        }
-                                    }
-                                });
-
-                                for (ci, col) in book.columns.iter_mut().enumerate() {
-                                    row.col(|ui| {
-                                        let rect = ui.max_rect();
-                                        let here = Cell { c: ci, r };
-                                        let painter =
-                                            ui.painter().with_clip_rect(rect.expand(1.0).intersect(ui.clip_rect()));
-
-                                        if let Some(e) = edit.as_mut().filter(|e| e.cell == here) {
-                                            painter.rect_filled(rect, 0.0, pal.window);
-                                            let resp = ui.add(
-                                                egui::TextEdit::singleline(&mut e.buf)
-                                                    .id(edit_id)
-                                                    .frame(false)
-                                                    .margin(egui::vec2(5.0, 3.0))
-                                                    .desired_width(f32::INFINITY)
-                                                    .font(egui::TextStyle::Monospace),
-                                            );
-                                            if !e.focused {
-                                                resp.request_focus();
-                                                e.focused = true;
-                                            }
-                                            edit_group(&resp, &mut self.history_group);
-                                            // Tab、上下方向键由表格处理（结束编辑并移动），不让 egui 切换焦点
-                                            ui.memory_mut(|m| {
-                                                m.set_focus_lock_filter(
-                                                    edit_id,
-                                                    egui::EventFilter {
-                                                        tab: true,
-                                                        horizontal_arrows: true,
-                                                        vertical_arrows: true,
-                                                        escape: false,
-                                                    },
-                                                )
-                                            });
-                                            let (enter, tab, up, dn, esc, shift) = ui.input(|i| {
-                                                (
-                                                    i.key_pressed(egui::Key::Enter),
-                                                    i.key_pressed(egui::Key::Tab),
-                                                    i.key_pressed(egui::Key::ArrowUp),
-                                                    i.key_pressed(egui::Key::ArrowDown),
-                                                    i.key_pressed(egui::Key::Escape),
-                                                    i.modifiers.shift,
-                                                )
-                                            });
-                                            if esc {
-                                                edit_end = Some((false, 0, 0));
-                                            } else if tab {
-                                                edit_end = Some((true, if shift { -1 } else { 1 }, 0));
-                                            } else if up {
-                                                edit_end = Some((true, 0, -1));
-                                            } else if dn {
-                                                edit_end = Some((true, 0, 1));
-                                            } else if resp.lost_focus() {
-                                                edit_end = Some((
-                                                    true,
-                                                    0,
-                                                    if enter {
-                                                        if shift {
-                                                            -1
-                                                        } else {
-                                                            1
-                                                        }
-                                                    } else {
-                                                        0
-                                                    },
-                                                ));
-                                            }
-                                            painter.rect_stroke(rect.shrink(1.0), 0.0, sel_stroke);
-                                            return;
-                                        }
-
-                                        let in_range = multi.is_some_and(|g| g.contains(ci, r));
-                                        if sel_flags[ci] || in_range {
-                                            painter.rect_filled(rect, 0.0, pal.sel_bg);
-                                        }
-                                        painter.line_segment([rect.right_top(), rect.right_bottom()], grid);
-                                        painter.line_segment([rect.left_bottom(), rect.right_bottom()], grid);
-                                        let display = preview.and_then(|b| b.column(&col.key)).unwrap_or(col);
-                                        let shown = (r < display.data.len()).then(|| display.display_at(r));
-                                        if let Some(s) = shown.filter(|s| !s.is_empty()) {
-                                            ui.painter().with_clip_rect(rect.intersect(ui.clip_rect())).text(
-                                                rect.right_center() - egui::vec2(5.0, 0.0),
-                                                egui::Align2::RIGHT_CENTER,
-                                                s,
-                                                egui::FontId::monospace(12.5),
-                                                text_color,
-                                            );
-                                        }
-                                        let resp = ui.interact(
-                                            rect,
-                                            egui::Id::new(("cell", id, ci, r)),
-                                            egui::Sense::click_and_drag(),
-                                        );
-                                        if pressed && ui.rect_contains_pointer(rect) {
-                                            press = Some(Target::Cell(ci, r));
-                                        }
-                                        if dbl && ui.rect_contains_pointer(rect) {
-                                            dbl_cell = Some((ci, r));
-                                        }
-                                        if dragging_cells && ui.rect_contains_pointer(rect) {
-                                            hover = Some(Target::Cell(ci, r));
-                                        }
-                                        if resp.secondary_clicked() {
-                                            right_cell = Some((ci, r));
-                                        }
-                                        resp.context_menu(|ui| {
-                                            for (cid, label) in [
-                                                ("edit.copy", "复制"),
-                                                ("edit.clear", "清除内容"),
-                                                ("", ""),
-                                                ("row.insert", "插入行"),
-                                                ("row.delete", "删除行"),
-                                                ("", ""),
-                                                ("plot.line", "折线图"),
-                                                ("plot.scatter", "散点图"),
-                                                ("plot.linesym", "点线图"),
-                                                ("plot.bar", "柱状图"),
-                                                ("plot.stacked_bar", "堆叠柱图"),
-                                                ("plot.percent_stacked_bar", "百分比堆叠柱图"),
-                                                ("plot.floating_bar", "浮动柱图"),
-                                                ("plot.horizontal_bar", "条形图"),
-                                                ("plot.area", "面积图"),
-                                                ("plot.spline", "样条曲线图"),
-                                                ("plot.spline_symbol", "样条点线图"),
-                                                ("plot.vertical_drop", "垂线图"),
-                                                ("plot.step_horizontal", "水平阶梯图"),
-                                                ("plot.step_vertical", "垂直阶梯图"),
-                                            ] {
-                                                if cid.is_empty() {
-                                                    ui.separator();
-                                                } else if ui.button(label).clicked() {
-                                                    menu_cmd = Some(cid);
-                                                    ui.close_menu();
-                                                }
-                                            }
-                                        });
-
-                                        // 选区外框和活动单元格
-                                        if let Some(g) = range {
-                                            if g.is_multi() && g.contains(ci, r) {
-                                                let (lt, rt, lb, rb) = (
-                                                    rect.left_top(),
-                                                    rect.right_top(),
-                                                    rect.left_bottom(),
-                                                    rect.right_bottom(),
-                                                );
-                                                if ci == g.c0() {
-                                                    painter.line_segment([lt, lb], sel_stroke);
-                                                }
-                                                if ci == g.c1() {
-                                                    painter.line_segment([rt, rb], sel_stroke);
-                                                }
-                                                if r == g.r0() {
-                                                    painter.line_segment([lt, rt], sel_stroke);
-                                                }
-                                                if r == g.r1() {
-                                                    painter.line_segment([lb, rb], sel_stroke);
-                                                }
-                                            }
-                                            if g.a == here && active {
-                                                painter.rect_stroke(rect.shrink(1.0), 0.0, sel_stroke);
-                                            }
-                                        }
-                                    });
-                                }
-                            });
-                        });
-                });
-        });
-
+    fn finish_sheet_frame(
+        &mut self,
+        ui: &mut egui::Ui,
+        id: u64,
+        mut st: SheetState,
+        frame: SheetFrame,
+        keys: &[String],
+    ) {
+        let SheetFrame {
+            metadata_edits,
+            edit_end,
+            press,
+            mut edit,
+            hover,
+            down,
+            modifiers,
+            focus_id,
+            ncols,
+            dbl_cell,
+            right_cell,
+            clicked,
+            action,
+            menu_cmd,
+            ..
+        } = frame;
         // ---- 处理这一帧的鼠标和编辑结果
         self.track_headers(id, &metadata_edits);
         if edit_end.is_some_and(|(ok, _, _)| ok) || (press.is_some() && edit.is_some()) {
@@ -863,9 +536,7 @@ impl SciApp {
         }
         let book = self.project.book_mut(id).unwrap();
         let last_col = ncols.saturating_sub(1);
-        let mut status: Option<String> = None;
         let mut clear_cols = false;
-        let mut new_cols: Option<(usize, usize)> = None;
         let mut want_focus = false;
         let mut cell_changed = false;
         let mut conversion = None;
@@ -939,41 +610,7 @@ impl SciApp {
             }
         }
 
-        if down {
-            match (st.drag, hover) {
-                (Some(Drag::Cells), Some(Target::Cell(c, r))) => {
-                    if let Some(g) = st.range.as_mut() {
-                        if g.b != (Cell { c, r }) {
-                            g.b = Cell { c, r };
-                            st.moved = true;
-                        }
-                    }
-                }
-                (Some(Drag::Cells), Some(Target::Row(r))) => {
-                    if let Some(g) = st.range.as_mut() {
-                        g.b.r = r;
-                        st.moved = true;
-                    }
-                }
-                (Some(Drag::Rows), Some(Target::Cell(_, r) | Target::Row(r))) => {
-                    if let Some(g) = st.range.as_mut() {
-                        g.b = Cell { c: last_col, r };
-                    }
-                }
-                (Some(Drag::Cols(start)), Some(Target::Col(c))) if c != start || st.moved => {
-                    st.moved = true;
-                    new_cols = Some((start.min(c), start.max(c)));
-                }
-                _ => {}
-            }
-        } else if let Some(d) = st.drag.take() {
-            if st.moved && !matches!(d, Drag::Cols(_)) {
-                if let Some(g) = st.range.filter(|g| g.is_multi()) {
-                    status = Some(range_status(book, &g));
-                }
-            }
-        }
-
+        let (new_cols, status) = drag_selection(&mut st, down, hover, last_col, book);
         if let Some((c, r)) = dbl_cell {
             let buf = book
                 .columns
@@ -1024,6 +661,18 @@ impl SciApp {
             self.status = s;
         }
 
+        self.select_sheet_header(id, keys, modifiers, clicked, new_cols);
+        self.sheet_commands(id, keys, action, menu_cmd);
+    }
+
+    fn select_sheet_header(
+        &mut self,
+        id: u64,
+        keys: &[String],
+        modifiers: egui::Modifiers,
+        clicked: Option<usize>,
+        new_cols: Option<(usize, usize)>,
+    ) {
         // 单击列标题：选择列
         if let Some(ci) = clicked.filter(|_| new_cols.is_none()) {
             let key = keys[ci].clone();
@@ -1052,7 +701,15 @@ impl SciApp {
                 s.range = None;
             }
         }
+    }
 
+    fn sheet_commands(
+        &mut self,
+        id: u64,
+        keys: &[String],
+        action: Option<(usize, ColAction)>,
+        menu_cmd: Option<&'static str>,
+    ) {
         // 列标题右键菜单
         if let Some((ci, act)) = action {
             let key = keys[ci].clone();
@@ -1126,45 +783,7 @@ impl SciApp {
             return;
         }
         let Some(mut g) = st.range else { return };
-        let events: Vec<Event> = ctx.input_mut(|i| {
-            let mut mine = Vec::new();
-            i.events.retain(|e| {
-                let take = match e {
-                    Event::Key {
-                        key,
-                        pressed: true,
-                        modifiers,
-                        ..
-                    } => {
-                        matches!(
-                            key,
-                            Key::ArrowUp
-                                | Key::ArrowDown
-                                | Key::ArrowLeft
-                                | Key::ArrowRight
-                                | Key::Enter
-                                | Key::Tab
-                                | Key::F2
-                                | Key::Delete
-                                | Key::Backspace
-                                | Key::Escape
-                                | Key::Home
-                                | Key::End
-                                | Key::PageUp
-                                | Key::PageDown
-                        ) || (modifiers.command && *key == Key::A)
-                    }
-                    Event::Copy | Event::Cut | Event::Paste(_) => true,
-                    Event::Text(t) => !t.chars().all(char::is_control),
-                    _ => false,
-                };
-                if take {
-                    mine.push(e.clone());
-                }
-                !take
-            });
-            mine
-        });
+        let events = sheet_events(ctx);
         if events.is_empty() {
             return;
         }
@@ -1332,4 +951,101 @@ impl SciApp {
             self.history.changed();
         }
     }
+}
+
+#[derive(Clone, Copy)]
+enum Target {
+    Cell(usize, usize),
+    Row(usize),
+    Col(usize),
+}
+
+fn drag_selection(
+    st: &mut SheetState,
+    down: bool,
+    hover: Option<Target>,
+    last_col: usize,
+    book: &scicanvas_core::Book,
+) -> (Option<(usize, usize)>, Option<String>) {
+    let mut status = None;
+    let mut new_cols = None;
+    if down {
+        match (st.drag, hover) {
+            (Some(Drag::Cells), Some(Target::Cell(c, r))) => {
+                if let Some(g) = st.range.as_mut() {
+                    if g.b != (Cell { c, r }) {
+                        g.b = Cell { c, r };
+                        st.moved = true;
+                    }
+                }
+            }
+            (Some(Drag::Cells), Some(Target::Row(r))) => {
+                if let Some(g) = st.range.as_mut() {
+                    g.b.r = r;
+                    st.moved = true;
+                }
+            }
+            (Some(Drag::Rows), Some(Target::Cell(_, r) | Target::Row(r))) => {
+                if let Some(g) = st.range.as_mut() {
+                    g.b = Cell { c: last_col, r };
+                }
+            }
+            (Some(Drag::Cols(start)), Some(Target::Col(c))) if c != start || st.moved => {
+                st.moved = true;
+                new_cols = Some((start.min(c), start.max(c)));
+            }
+            _ => {}
+        }
+    } else if let Some(d) = st.drag.take() {
+        if st.moved && !matches!(d, Drag::Cols(_)) {
+            if let Some(g) = st.range.filter(|g| g.is_multi()) {
+                status = Some(range_status(book, &g));
+            }
+        }
+    }
+
+    (new_cols, status)
+}
+
+fn sheet_events(ctx: &egui::Context) -> Vec<egui::Event> {
+    use egui::{Event, Key};
+    ctx.input_mut(|i| {
+        let mut mine = Vec::new();
+        i.events.retain(|e| {
+            let take = match e {
+                Event::Key {
+                    key,
+                    pressed: true,
+                    modifiers,
+                    ..
+                } => {
+                    matches!(
+                        key,
+                        Key::ArrowUp
+                            | Key::ArrowDown
+                            | Key::ArrowLeft
+                            | Key::ArrowRight
+                            | Key::Enter
+                            | Key::Tab
+                            | Key::F2
+                            | Key::Delete
+                            | Key::Backspace
+                            | Key::Escape
+                            | Key::Home
+                            | Key::End
+                            | Key::PageUp
+                            | Key::PageDown
+                    ) || (modifiers.command && *key == Key::A)
+                }
+                Event::Copy | Event::Cut | Event::Paste(_) => true,
+                Event::Text(t) => !t.chars().all(char::is_control),
+                _ => false,
+            };
+            if take {
+                mine.push(e.clone());
+            }
+            !take
+        });
+        mine
+    })
 }
