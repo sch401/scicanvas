@@ -1,7 +1,7 @@
 //! 绘图属性窗口：保持各分区的绘制顺序与实时编辑事务。
 
 use super::*;
-use scicanvas_core::plotspec::{default_x, foreign_key, split_key};
+use scicanvas_core::plotspec::{default_x, foreign_key, BookLookup, DataRef};
 
 impl SciApp {
     pub(super) fn props_window(&mut self, ctx: &egui::Context) {
@@ -29,7 +29,11 @@ impl SciApp {
             .default_width(360.0)
             .default_height(ctx.screen_rect().height() * 0.75)
             .show(ctx, |ui| {
-                let Some(graph) = project.graph_mut(gid) else { return };
+                let books = &project.books;
+                let lookup = |id| books.iter().find(|book| book.id == id);
+                let Some(graph) = project.graphs.iter_mut().find(|graph| graph.id == gid) else {
+                    return;
+                };
                 page(ui, graph, history_group);
                 props_layer = page_layout(ui, graph, props_layer, history_group);
                 layer(ui, graph, gid, props_layer, history_group);
@@ -45,7 +49,7 @@ impl SciApp {
                     .show(ui, |ui| {
                         data_source(ui, g, &book_specs);
                         columns(ui, g, &cols);
-                        foreign_curves(ui, g, &book_specs, &curve_options, &curve_names);
+                        foreign_curves(ui, g, &book_specs, &curve_options, &curve_names, &lookup);
                         if g.plot_type == PlotType::FloatingBar {
                             ui.label("浮动柱下端");
                             crate::builder::floating_columns(ui, &mut g.spec, &cols);
@@ -404,14 +408,15 @@ fn columns(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, cols: &[(Stri
     ui.end_row();
 
     ui.label("Y 列");
+    let keys = g.plot_keys(true);
     ui.vertical(|ui| {
         for (k, l) in cols {
-            let mut on = g.y_keys.contains(k);
+            let mut on = keys.contains(k);
             if ui.checkbox(&mut on, l.as_str()).changed() {
                 if on {
-                    g.y_keys.push(k.clone());
+                    g.edit_plot_keys(|keys| keys.push(k.clone()));
                 } else {
-                    g.y_keys.retain(|x| x != k);
+                    g.edit_plot_keys(|keys| keys.retain(|x| x != k));
                 }
             }
         }
@@ -425,22 +430,23 @@ fn foreign_curves(
     book_specs: &[(u64, String, Option<scicanvas_core::plotspec::PlotSpec>)],
     curve_options: &CurveOptions,
     curve_names: &HashMap<String, String>,
+    books: BookLookup<'_, '_>,
 ) {
     // 其他工作簿的曲线：同一图层可以放不同工作簿的数据
-    let foreign: Vec<String> = g
-        .y_keys
-        .iter()
-        .filter(|k| split_key(k).1.is_some_and(|b| Some(b) != g.book_id))
-        .cloned()
+    let foreign: Vec<_> = g
+        .plots(books)
+        .into_iter()
+        .filter(|plot| Some(plot.mapping.y.book) != g.book_id)
         .collect();
     if book_specs.len() > 1 || !foreign.is_empty() {
         ui.label("其他工作簿");
         ui.vertical(|ui| {
-            for k in &foreign {
+            for plot in &foreign {
+                let k = &plot.key;
                 ui.horizontal_wrapped(|ui| {
                     ui.label(curve_names.get(k).map_or(k.as_str(), String::as_str));
                     if ui.small_button("✕").on_hover_text("移除").clicked() {
-                        g.remove_curve(k);
+                        g.remove_plot(&plot.mapping.y);
                     }
                 });
             }
@@ -455,12 +461,11 @@ fn foreign_curves(
                     ui.menu_button(name, |ui| {
                         for (key, label, x) in options {
                             let q = foreign_key(*bid, key);
-                            let on = g.y_keys.contains(&q);
+                            let on = g.plot_keys(true).contains(&q);
                             if ui.add_enabled(!on, egui::Button::new(label)).clicked() {
-                                g.y_keys.push(q.clone());
-                                if let Some(x) = x {
-                                    g.x_by_y.insert(q, foreign_key(*bid, x));
-                                }
+                                let source = DataRef::new(*bid, key);
+                                let x = x.as_ref().map(|x| DataRef::new(*bid, x));
+                                g.select_plot(&source, x.as_ref());
                                 ui.close_menu();
                             }
                         }
@@ -677,7 +682,7 @@ fn curve_style(
     history_group: &mut Option<egui::Id>,
 ) {
     // 逐曲线样式：选一条数据曲线，单独设图型、颜色、符号、线宽、符号大小和右侧 Y 轴
-    let curve_keys: Vec<String> = g.y_keys.iter().filter(|k| !g.line_only.contains(k)).cloned().collect();
+    let curve_keys = g.plot_keys(false);
     if !curve_keys.is_empty() {
         egui::CollapsingHeader::new("曲线样式")
             .id_salt(("props-curves", gid, props_layer))
@@ -703,7 +708,7 @@ fn curve_style(
                         }
                     });
                 ui.data_mut(|d| d.insert_temp(pick_id, key.clone()));
-                let mut style = g.curves.get(&key).cloned().unwrap_or_default();
+                let mut style = g.plot_style(&key).cloned().unwrap_or_default();
                 egui::Grid::new(("props-curve-grid", gid, props_layer))
                     .num_columns(2)
                     .spacing([10.0, 6.0])
@@ -777,12 +782,8 @@ fn curve_style(
                         ui.checkbox(&mut style.right_axis, "右侧 Y 轴");
                         ui.end_row();
                     });
-                if style.is_default() {
-                    g.curves.remove(&key);
-                } else if g.curves.get(&key) != Some(&style) {
-                    g.curves.insert(key, style);
-                }
-                if g.curves.values().any(|c| c.right_axis) {
+                g.set_plot_style(&key, (!style.is_default()).then_some(style));
+                if g.has_right_axis_style() {
                     ui.horizontal_wrapped(|ui| {
                         ui.label("右轴标题");
                         edit_group(

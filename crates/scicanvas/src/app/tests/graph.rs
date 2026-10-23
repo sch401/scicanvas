@@ -1077,3 +1077,62 @@ fn layer_placement_control_is_undoable() {
     assert!(app.project.graphs[0].first_layer().placement.is_some());
     roundtrip(&mut app, &before);
 }
+
+#[test]
+fn properties_y_toggle_keeps_curve_configuration_and_undo_history() {
+    let mut app = app();
+    let layer = app.project.graph_mut(2).unwrap().first_layer_mut();
+    layer.x_by_y.insert("B".into(), "A".into());
+    layer.base_by_y.insert("B".into(), "C".into());
+    layer.row_by_y.insert("B".into(), Some((1, 3)));
+    layer.curves.insert(
+        "B".into(),
+        scicanvas_core::page::CurveStyle {
+            right_axis: true,
+            color: Some([80, 40, 120]),
+            ..Default::default()
+        },
+    );
+    let before = app.project.clone();
+    app.props_for = Some(2);
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    ctx.style_mut(|s| s.animation_time = 0.0);
+    let mut harness = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1500.0, 1300.0)),
+        |app: &mut SciApp, ctx: &egui::Context| {
+            app.history_group = None;
+            app.props_window(ctx);
+            app.finish_frame_edit(app.history_group);
+        },
+    )
+    .with_step(0.02);
+    harness.frame(&mut app, vec![]);
+    harness.frame(&mut app, vec![]);
+    let output = harness.frame(&mut app, vec![]);
+    harness.click_text(&mut app, &output, "B · 电压 A");
+    let off = app.project.clone();
+    assert!(!off.graph(2).unwrap().first_layer().y_keys.contains(&"B".into()));
+    let layer = off.graph(2).unwrap().first_layer();
+    let original = before.graph(2).unwrap().first_layer();
+    assert_eq!(layer.curves, original.curves);
+    assert_eq!(layer.x_by_y, original.x_by_y);
+    assert_eq!(layer.base_by_y, original.base_by_y);
+    assert_eq!(layer.row_by_y, original.row_by_y);
+    let output = harness.frame(&mut app, vec![]);
+    harness.click_text(&mut app, &output, "B · 电压 A");
+    let after = app.project.clone();
+    let mut expected = before.clone();
+    expected.graph_mut(2).unwrap().first_layer_mut().spec.y_keys = vec!["C".into(), "B".into()];
+    assert_eq!(after, expected);
+    let json = scicanvas_core::project_file::to_json(&after).unwrap();
+    assert_eq!(scicanvas_core::project_file::from_json(&json).unwrap(), after);
+    app.run_command("edit.undo");
+    assert_eq!(app.project, off);
+    app.run_command("edit.undo");
+    assert_eq!(app.project, before);
+    app.run_command("edit.redo");
+    app.run_command("edit.redo");
+    assert_eq!(app.project, after);
+}

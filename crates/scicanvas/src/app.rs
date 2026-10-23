@@ -990,7 +990,7 @@ impl SciApp {
         let Some(graph) = self.any_open_graph() else { return };
         let index = self.layer_index(graph);
         let layer = self.project.graph(graph).unwrap().page.layers()[index].clone();
-        let active = layer.y_keys.first().cloned();
+        let active = layer.plot_keys(true).first().cloned();
         self.dialog = Some(Dialog::LayerContents(Box::new(dialogs::LayerContents {
             graph,
             index,
@@ -1011,7 +1011,7 @@ impl SciApp {
         if layer != &edit.before {
             return Err("图层已更新，请重新打开图层内容".into());
         }
-        if !edit.draft.y_keys.is_empty() {
+        if !edit.draft.plot_keys(true).is_empty() {
             let book = edit
                 .draft
                 .book_id
@@ -1028,11 +1028,7 @@ impl SciApp {
         self.history.changed();
         self.finish_edit();
         if let Some(selected) = self.analysis_curves.get_mut(&(edit.graph, edit.index)) {
-            selected.retain(|reference| {
-                edit.draft.y_keys.iter().any(|key| {
-                    scicanvas_core::plotspec::DataRef::from_key(edit.draft.book_id, key).as_ref() == Some(reference)
-                })
-            });
+            selected.retain(|reference| edit.draft.plot(reference, &|id| self.project.book(id)).is_some());
         }
         self.show_item(edit.graph);
         self.status = "图层内容已更新".into();

@@ -1,8 +1,54 @@
 //! 曲线访问的过渡入口；数据仍写入原有平行映射表。
-use super::Layer;
+use super::{CurveStyle, Layer};
 use crate::plotspec::{default_x, split_key, BookLookup, DataRef, Plot};
 
 impl Layer {
+    /// 编辑视图的顺序键，保留未绑定主表的旧条目；属性样式可排除派生线。
+    pub fn plot_keys(&self, include_derived: bool) -> Vec<String> {
+        self.y_keys
+            .iter()
+            .filter(|key| include_derived || !self.line_only.contains(key))
+            .cloned()
+            .collect()
+    }
+
+    /// 旧编辑视图仅改变勾选/顺序，保留取消勾选项的映射和样式；真正删除用 remove_plot。
+    pub fn edit_plot_keys(&mut self, edit: impl FnOnce(&mut Vec<String>)) {
+        edit(&mut self.spec.y_keys);
+    }
+
+    /// 属性窗口追加曲线，保留暂存映射/样式；默认 X 按旧规则显式覆盖。
+    /// 与 add_book_curves 的选列校验和浮动柱配对流程不同，编辑过程允许暂不完整。
+    pub fn select_plot(&mut self, source: &DataRef, x: Option<&DataRef>) {
+        let key = source.key(self.book_id);
+        self.spec.y_keys.push(key.clone());
+        if let Some(x) = x {
+            self.spec.x_by_y.insert(key, x.key(self.book_id));
+        }
+    }
+
+    /// 样式独立于数据绑定，未绑定或暂时取消勾选的旧项仍可编辑。
+    pub fn plot_style(&self, key: &str) -> Option<&CurveStyle> {
+        self.curves.get(key)
+    }
+
+    /// 只修改样式，保留所有映射及显式默认样式的有无。
+    pub fn set_plot_style(&mut self, key: &str, style: Option<CurveStyle>) {
+        if self.curves.get(key) == style.as_ref() {
+            return;
+        }
+        if let Some(style) = style {
+            self.curves.insert(key.to_string(), style);
+        } else {
+            self.curves.remove(key);
+        }
+    }
+
+    /// 属性窗口沿用旧规则，也检查暂未勾选曲线的右轴设置。
+    pub fn has_right_axis_style(&self) -> bool {
+        self.curves.values().any(|style| style.right_axis)
+    }
+
     /// 按现有曲线顺序返回只读描述快照；默认 X 的解析复用原逻辑。
     pub fn plots(&self, books: BookLookup<'_, '_>) -> Vec<Plot> {
         self.plots_in(books)
@@ -169,11 +215,7 @@ impl Layer {
             }
         }
         if before.is_none_or(|b| plot.style != b.style) {
-            if let Some(style) = &plot.style {
-                self.curves.insert(key.clone(), style.clone());
-            } else {
-                self.curves.remove(key);
-            }
+            self.set_plot_style(key, plot.style.clone());
         }
         Ok(())
     }

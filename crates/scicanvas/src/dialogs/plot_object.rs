@@ -110,9 +110,9 @@ impl PlotObjectEditor {
                             action = Some(plot::ObjectAction::AutoLegend(index));
                         }
                         ui.checkbox(&mut layer.rich_text, "启用科学文字格式");
-                        for key in layer.y_keys.clone() {
+                        for key in layer.plot_keys(true) {
                             ui.label(format!("曲线 {key}"));
-                            let mut style = layer.curves.get(&key).cloned().unwrap_or_default();
+                            let mut style = layer.plot_style(&key).cloned().unwrap_or_default();
                             let r =
                                 scientific_text(ui, &mut style.legend_label, &mut layer.rich_text, "自动：数据列名称");
                             if edit.focus {
@@ -120,11 +120,7 @@ impl PlotObjectEditor {
                                 edit.focus = false;
                             }
                             edit_group(&r, history_group);
-                            if style.is_default() {
-                                layer.curves.remove(&key);
-                            } else {
-                                layer.curves.insert(key, style);
-                            }
+                            layer.set_plot_style(&key, (!style.is_default()).then_some(style));
                         }
                     }
                 }

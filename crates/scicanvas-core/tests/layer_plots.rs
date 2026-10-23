@@ -396,3 +396,148 @@ fn new_entries_match_legacy_rendering_history_and_current_persistence() {
     }
     roundtrip(&p);
 }
+
+fn compare_editor_state(p: &Project, legacy: &Project) {
+    assert_eq!(p, legacy);
+    assert_eq!(
+        svg::render_page(&p.graphs[0], p),
+        svg::render_page(&legacy.graphs[0], legacy)
+    );
+    #[cfg(feature = "serde")]
+    {
+        use scicanvas_core::project_file;
+        let json = project_file::to_json(p).unwrap();
+        assert_eq!(json, project_file::to_json(legacy).unwrap());
+        let saved = project_file::from_json(&json).unwrap();
+        assert_eq!(project_file::to_json(&saved).unwrap(), json);
+        assert_eq!(
+            project_file::from_scv(&project_file::to_scv(p).unwrap()).unwrap(),
+            saved
+        );
+    }
+}
+
+#[test]
+fn editor_selection_and_order_preserve_inactive_unbound_and_missing_base_states() {
+    for bound in [false, true] {
+        let (mut p, foreign) = project();
+        let layer = p.graphs[0].first_layer_mut();
+        if !bound {
+            layer.book_id = None;
+        }
+        let key = format!("B@{foreign}");
+        layer.line_only.push(key.clone());
+        layer.base_by_y.insert("B".into(), String::new());
+        layer.x_by_y.insert("B".into(), "A".into());
+        layer.row_by_y.insert("B".into(), None);
+        layer.curves.insert(
+            "B".into(),
+            CurveStyle {
+                right_axis: true,
+                ..Default::default()
+            },
+        );
+        let before = p.clone();
+        let mut legacy = p.clone();
+        let mut history = History::default();
+        history.begin(&p, "选择曲线");
+        p.graphs[0]
+            .first_layer_mut()
+            .edit_plot_keys(|keys| keys.retain(|key| key != "B"));
+        legacy.graphs[0].first_layer_mut().spec.y_keys.retain(|key| key != "B");
+        compare_editor_state(&p, &legacy);
+        assert!(p.graphs[0].first_layer().has_right_axis_style());
+        p.graphs[0].first_layer_mut().edit_plot_keys(|keys| {
+            keys.push("B".into());
+            keys.swap(0, 1);
+            keys.sort();
+        });
+        let old = legacy.graphs[0].first_layer_mut();
+        old.spec.y_keys.push("B".into());
+        old.spec.y_keys.swap(0, 1);
+        old.spec.y_keys.sort();
+        compare_editor_state(&p, &legacy);
+        let layer = p.graphs[0].first_layer();
+        assert_eq!(layer.plot_keys(true), layer.y_keys);
+        assert_eq!(
+            layer.plot_keys(false),
+            layer
+                .y_keys
+                .iter()
+                .filter(|key| !layer.line_only.contains(key))
+                .cloned()
+                .collect::<Vec<_>>()
+        );
+        assert_eq!(layer.base_by_y["B"], "");
+        assert_eq!(layer.row_by_y["B"], None);
+        history.changed();
+        history.commit(&p);
+        let undone = history.undo(&p).unwrap();
+        assert_eq!(undone, before);
+        assert_eq!(history.redo(&undone).unwrap(), p);
+    }
+}
+
+#[test]
+fn editor_foreign_addition_preserves_pending_mappings_and_explicit_defaults() {
+    for with_x in [false, true] {
+        let (mut p, foreign) = project();
+        let key = format!("C@{foreign}");
+        let layer = p.graphs[0].first_layer_mut();
+        layer.x_by_y.insert(key.clone(), format!("A@{foreign}"));
+        layer.base_by_y.insert(key.clone(), String::new());
+        layer.row_by_y.insert(key.clone(), None);
+        layer.line_only.push(key.clone());
+        layer.curves.insert(key.clone(), CurveStyle::default());
+        let mut legacy = p.clone();
+        let x = with_x.then(|| DataRef::new(foreign, "B"));
+        p.graphs[0]
+            .first_layer_mut()
+            .select_plot(&DataRef::new(foreign, "C"), x.as_ref());
+        let old = legacy.graphs[0].first_layer_mut();
+        old.spec.y_keys.push(key.clone());
+        if with_x {
+            old.spec.x_by_y.insert(key.clone(), format!("B@{foreign}"));
+        }
+        compare_editor_state(&p, &legacy);
+        let layer = p.graphs[0].first_layer();
+        let plot = layer.plot(&DataRef::new(foreign, "C"), &|id| p.book(id)).unwrap();
+        assert!(plot.x_override && plot.mapping.line_only);
+        assert_eq!(plot.mapping.rows, None);
+        assert_eq!(plot.style, Some(CurveStyle::default()));
+        assert_eq!(layer.base_by_y[&key], "");
+    }
+}
+
+#[test]
+fn editor_styles_share_storage_without_changing_pending_or_unbound_mappings() {
+    let (mut p, _) = project();
+    p.graphs[0].first_layer_mut().book_id = None;
+    // 未绑定的编辑条目及尚未完整的映射仍允许只改样式。
+    p.graphs[0]
+        .first_layer_mut()
+        .base_by_y
+        .insert("B".into(), String::new());
+    for key in ["B", "hidden"] {
+        for style in [
+            Some(CurveStyle::default()),
+            Some(CurveStyle {
+                right_axis: true,
+                legend_label: "β^2".into(),
+                ..Default::default()
+            }),
+            None,
+        ] {
+            let mut legacy = p.clone();
+            p.graphs[0].first_layer_mut().set_plot_style(key, style.clone());
+            let old = legacy.graphs[0].first_layer_mut();
+            if let Some(style) = style.clone() {
+                old.curves.insert(key.into(), style);
+            } else {
+                old.curves.remove(key);
+            }
+            compare_editor_state(&p, &legacy);
+            assert_eq!(p.graphs[0].first_layer().plot_style(key), style.as_ref());
+        }
+    }
+}
