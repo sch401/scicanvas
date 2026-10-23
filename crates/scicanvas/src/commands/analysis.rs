@@ -1,0 +1,324 @@
+use super::*;
+
+pub(super) fn curve_selection(commands: &mut Vec<Command>) {
+    commands.extend([c(
+        "analysis.curves",
+        "分析曲线…",
+        "graph",
+        "",
+        "分析",
+        "select curves 数据选择 跨表",
+        need_graph,
+        |a| a.open_analysis_curves(),
+    )]);
+}
+
+pub(super) fn fits(commands: &mut Vec<Command>) {
+    commands.extend([
+        // 分析
+        c(
+            "fit.linear",
+            "线性拟合",
+            "fitlin",
+            "",
+            "分析",
+            "linear fit regression",
+            need_data,
+            |a| a.fit(1),
+        )
+        .modifies(),
+        c(
+            "fit.poly",
+            "多项式拟合",
+            "fitpoly",
+            "",
+            "分析",
+            "polynomial fit regression",
+            need_data,
+            |a| a.open_poly_dialog(),
+        ),
+        c(
+            "fit.nonlinear",
+            "非线性拟合",
+            "fitpoly",
+            "",
+            "分析",
+            "nonlinear fit curve fitting levenberg marquardt gauss lorentz exponential boltzmann logistic power 非线性拟合 峰 指数 S形",
+            need_data,
+            |a| a.open_nlfit_dialog(),
+        ),
+    ]);
+}
+
+pub(super) fn signal(commands: &mut Vec<Command>) {
+    commands.extend([
+        c(
+            "math.smooth",
+            "平滑",
+            "smooth",
+            "",
+            "分析",
+            "smooth savitzky golay moving average",
+            need_data,
+            |a| a.open_smooth_dialog(),
+        ),
+        c(
+            "signal.baseline",
+            "扣除基线",
+            "fitlin",
+            "",
+            "分析",
+            "baseline subtract als asymmetric least squares background correction 基线 扣除基线 背景 自动基线",
+            need_data,
+            |a| a.open_baseline_dialog(),
+        ),
+        c(
+            "signal.peaks",
+            "寻峰",
+            "integ",
+            "",
+            "分析",
+            "peak find peaks prominence fwhm width area integrate centroid 寻峰 峰 突出度 半峰宽 峰面积 积分 质心",
+            need_data,
+            |a| a.open_peaks_dialog(),
+        ),
+        c(
+            "signal.correlate",
+            "相关函数",
+            "diff",
+            "",
+            "分析",
+            "autocorrelation cross correlation lag 自相关 互相关 相关函数 滞后",
+            need_book,
+            |a| a.correlation_function(),
+        )
+        .modifies(),
+        c(
+            "math.average",
+            "曲线平均",
+            "norm",
+            "",
+            "分析",
+            "average curves mean of curves interpolate 曲线平均 多条曲线 平均",
+            need_data,
+            |a| a.average_curves(),
+        )
+        .modifies(),
+        c(
+            "signal.filter",
+            "FFT 滤波",
+            "smooth",
+            "",
+            "分析",
+            "fft filter low pass high pass band pass band stop frequency 滤波 低通 高通 带通 带阻 去噪",
+            need_data,
+            |a| a.open_fft_filter_dialog(),
+        ),
+        c(
+            "signal.fft",
+            "FFT",
+            "diff",
+            "",
+            "分析",
+            "fft fourier transform spectrum frequency amplitude phase power window hann 傅里叶 频谱 幅值 相位 功率",
+            need_data,
+            |a| a.open_fft_dialog(),
+        ),
+        c(
+            "signal.ifft",
+            "IFFT",
+            "diff",
+            "",
+            "分析",
+            "ifft inverse fourier transform 逆傅里叶 逆变换",
+            need_book,
+            |a| a.open_ifft_dialog(),
+        ),
+    ]);
+}
+
+pub(super) fn calculus(commands: &mut Vec<Command>) {
+    commands.extend([
+        c(
+            "math.colmath",
+            "列运算",
+            "colins",
+            "",
+            "分析",
+            "column arithmetic add subtract multiply divide curve subtract 列运算 加减乘除 曲线相减",
+            need_book,
+            |a| a.open_column_math_dialog(),
+        ),
+        c(
+            "math.interp",
+            "插值",
+            "smooth",
+            "",
+            "分析",
+            "interpolate interpolation spline akima linear extrapolate 插值 外推 样条",
+            need_data,
+            |a| a.open_interpolate_dialog(),
+        ),
+        c(
+            "math.diff",
+            "微分",
+            "diff",
+            "",
+            "分析",
+            "derivative differentiate",
+            need_data,
+            |a| a.differentiate(),
+        )
+        .modifies(),
+        c(
+            "math.diff_sg",
+            "SG 平滑求导",
+            "diff",
+            "",
+            "分析",
+            "savitzky golay derivative differentiate smooth 平滑求导 二阶导数",
+            need_data,
+            |a| a.open_sg_diff_dialog(),
+        ),
+        c(
+            "data.recalc",
+            "重算",
+            "diff",
+            "",
+            "分析",
+            "recalculate recompute 重算 更新结果 公式",
+            need_book,
+            |a| a.recalc_all(),
+        )
+        .modifies(),
+        c(
+            "math.integ",
+            "积分",
+            "integ",
+            "",
+            "分析",
+            "integrate area",
+            need_data,
+            |a| a.integrate(),
+        )
+        .modifies(),
+        c(
+            "math.norm",
+            "归一化",
+            "norm",
+            "",
+            "分析",
+            "normalize",
+            need_data,
+            |a| a.open_normalize_dialog(),
+        ),
+    ]);
+}
+
+pub(super) fn statistics(commands: &mut Vec<Command>) {
+    commands.extend([
+        c(
+            "stats.frequency",
+            "频数统计",
+            "stats",
+            "",
+            "统计",
+            "frequency count histogram bin distribution 频数 分箱 直方图 分布",
+            need_data,
+            |a| a.open_frequency_dialog(),
+        ),
+        c(
+            "stats.rows",
+            "行统计",
+            "stats",
+            "",
+            "统计",
+            "row statistics mean sd replicates 行统计 平行样 均值 标准差 误差棒",
+            need_book,
+            |a| a.row_stats(),
+        )
+        .modifies(),
+        c(
+            "fit.mlr",
+            "多元线性回归",
+            "fitlin",
+            "",
+            "分析",
+            "multiple linear regression mlr least squares 多元 线性回归 多变量",
+            need_book,
+            |a| a.regression(),
+        ),
+        c(
+            "stats.normality",
+            "正态性检验",
+            "stats",
+            "",
+            "统计",
+            "normality test shapiro wilk normal distribution 正态性 正态分布 检验",
+            need_data,
+            |a| a.normality(),
+        ),
+        c(
+            "stats.grubbs",
+            "Grubbs 异常值",
+            "stats",
+            "",
+            "统计",
+            "grubbs outlier test 异常值 离群值 可疑值 检验",
+            need_data,
+            |a| a.grubbs(),
+        ),
+        c(
+            "fit.calibration",
+            "标准曲线反查",
+            "fitlin",
+            "",
+            "分析",
+            "calibration curve standard inverse prediction concentration 标准曲线 反查 浓度 定量 校准",
+            need_book,
+            |a| a.calibrate(),
+        )
+        .modifies(),
+        c(
+            "stats.anova",
+            "单因素方差分析",
+            "stats",
+            "",
+            "统计",
+            "anova one way analysis of variance f test 方差分析 单因素 F 检验",
+            need_data,
+            |a| a.anova(),
+        ),
+        c(
+            "stats.correlation",
+            "相关系数",
+            "stats",
+            "",
+            "统计",
+            "correlation pearson spearman kendall rank 相关 相关系数 秩相关",
+            need_data,
+            |a| a.correlations(),
+        ),
+        c(
+            "stats.ttest",
+            "t 检验",
+            "stats",
+            "",
+            "统计",
+            "t test ttest student welch paired one sample hypothesis 假设检验 显著性 p 值",
+            need_data,
+            |a| a.open_ttest_dialog(),
+        ),
+        c(
+            "stats.columns",
+            "列统计",
+            "stats",
+            "",
+            "统计",
+            "descriptive statistics mean sd",
+            need_data,
+            |a| a.stats_on_columns(),
+        )
+        .modifies(),
+    ]);
+}
