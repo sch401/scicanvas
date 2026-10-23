@@ -1,0 +1,68 @@
+use super::*;
+
+impl Dialog {
+    pub(super) fn show_sort(&mut self, ctx: &egui::Context, _pal: &Palette, open: &mut bool, _esc: bool) -> Action {
+        let Self::Sort {
+            book,
+            columns,
+            keys,
+            selected,
+            only_selected,
+            error,
+        } = self
+        else {
+            unreachable!()
+        };
+        let mut action = Action::None;
+        window(ctx, "排序").open(open).show(ctx, |ui| {
+            egui::Grid::new("sort-grid")
+                .num_columns(2)
+                .spacing([12.0, 8.0])
+                .show(ui, |ui| {
+                    for (level, (col, asc)) in keys.iter_mut().enumerate() {
+                        ui.label(["主关键字", "次关键字", "第三关键字"][level]);
+                        let text = col.map_or("无".to_string(), |i| columns[i].1.clone());
+                        egui::ComboBox::from_id_salt(("sort-key", level))
+                            .selected_text(text)
+                            .width(160.0)
+                            .show_ui(ui, |ui| {
+                                if level > 0 {
+                                    ui.selectable_value(col, None, "无");
+                                }
+                                for (i, (_, label)) in columns.iter().enumerate() {
+                                    ui.selectable_value(col, Some(i), label);
+                                }
+                            });
+                        ui.end_row();
+                        ui.label("方向");
+                        ui.horizontal(|ui| {
+                            ui.radio_value(asc, true, "升序");
+                            ui.radio_value(asc, false, "降序");
+                        });
+                        ui.end_row();
+                    }
+                });
+            if !selected.is_empty() {
+                ui.checkbox(
+                    only_selected,
+                    format!("只排选中列（{}），其余列不动", selected.join("、")),
+                );
+            }
+            if let Some(error) = error {
+                ui.colored_label(ui.visuals().error_fg_color, error.as_str());
+            }
+            let (ok, cancel) = buttons(ui, "排序");
+            if ok {
+                let keys: Vec<(String, bool)> = keys
+                    .iter()
+                    .filter_map(|(c, asc)| c.map(|i| (columns[i].0.clone(), *asc)))
+                    .collect();
+                let within = (*only_selected && !selected.is_empty()).then(|| selected.clone());
+                action = Action::Sort(*book, keys, within);
+            } else if cancel {
+                action = Action::Close;
+            }
+        });
+        action
+    }
+}
