@@ -42,7 +42,9 @@ cargo test --profile ci -p scicanvas-core --all-features --locked
 cargo test --profile ci -p scicanvas --all-features --locked
 ```
 
-提交前仍运行 `python tools/check.py`。Windows CI 会在 push、PR 和手动触发时执行，构建缓存位于 `target/ci`；日常开发和 release 构建使用各自配置。
+提交前仍运行 `python tools/check.py`。Windows CI 在 PR 更新、`main` 推送、标签推送及手动触发时执行全部检查。开发分支通过 PR 验证，避免同一提交同时触发 push 和 PR；尚未创建 PR 时可手动运行，连续更新仍会取消该分支上过时的检查。
+
+缓存使用固定提交的 [Swatinem/rust-cache](https://github.com/Swatinem/rust-cache)，按实际 Rust 编译器、环境、各工作区清单和锁文件复用依赖。`target/ci` 属于 Cargo 的 `target` 根目录，缓存仅保留依赖产物，省去本项目测试程序及可重新解压的 crate 源码，同键命中后不再重复上传。工具链或依赖变化时会重建相应缓存，首次运行的耗时包含冷构建，评估提速以同配置第二次运行的日志为准。缓存命中只复用构建产物，每次仍执行所有检查和测试；日常开发和 release 构建使用各自配置。
 
 ## 文档与功能清单
 

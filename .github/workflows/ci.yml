@@ -1,6 +1,8 @@
 name: 检查
 on:
   push:
+    branches: [main]
+    tags: ["**"]
   pull_request:
   workflow_dispatch:
 
@@ -25,16 +27,12 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal --component rustfmt --component clippy
           rustup default stable
-      - name: 恢复依赖与测试构建缓存
-        uses: actions/cache/restore@v6
+      # 按编译器和依赖复用缓存，仅保存依赖产物，不打包本项目测试程序和解压后的 crate 源码。
+      - name: Rust 依赖缓存
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
         with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target/ci
-          key: ${{ runner.os }}-ci-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-ci-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}-
+          workspaces: ". -> target"
+          cache-bin: false
       - name: 依赖许可、安全与来源检查
         run: |
           python tools/install_cargo_deny.py
@@ -58,13 +56,3 @@ jobs:
       - run: cargo test --profile ci --workspace --all-features --locked
       - run: cargo test --profile ci -p scicanvas-core --no-default-features --locked
       - run: cargo clippy --profile ci --workspace --all-targets --all-features --locked -- -D warnings
-      - name: 保存构建缓存
-        uses: actions/cache/save@v6
-        timeout-minutes: 2
-        continue-on-error: true
-        with:
-          path: |
-            ~/.cargo/registry
-            ~/.cargo/git
-            target/ci
-          key: ${{ runner.os }}-ci-${{ hashFiles('Cargo.lock', 'Cargo.toml') }}-${{ github.sha }}
