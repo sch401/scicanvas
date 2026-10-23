@@ -873,31 +873,10 @@ impl Project {
             }
             b.columns.retain(|c| !keys.contains(&c.key));
         }
+        let books = &self.books;
         for g in &mut self.graphs {
             for layer in g.page.layers_mut() {
-                if layer.book_id != Some(book_id) {
-                    layer.drop_foreign(book_id, Some(keys));
-                }
-                if layer.book_id == Some(book_id) {
-                    layer.y_keys.retain(|k| !keys.contains(k));
-                    layer.line_only.retain(|k| !keys.contains(k));
-                    layer.row_by_y.retain(|k, _| !keys.contains(k));
-                    layer.curves.retain(|k, _| !keys.contains(k));
-                    layer.x_by_y.retain(|y, x| !keys.contains(y) && !keys.contains(x));
-                    // 保留缺失下端的映射，避免删除后把浮动柱静默改成从零开始。
-                    layer.base_by_y.retain(|y, _| !keys.contains(y));
-                    if layer.labels.column.as_ref().is_some_and(|k| keys.contains(k)) {
-                        layer.labels.column = None;
-                    }
-                    for base in layer.base_by_y.values_mut() {
-                        if keys.contains(base) {
-                            base.clear();
-                        }
-                    }
-                    if layer.x_key.as_ref().is_some_and(|k| keys.contains(k)) {
-                        layer.x_key = None;
-                    }
-                }
+                layer.remove_columns(book_id, keys, &|id| books.iter().find(|b| b.id == id));
             }
         }
     }
@@ -964,15 +943,7 @@ impl Project {
         }
         for g in &mut self.graphs {
             for layer in g.page.layers_mut() {
-                let main = layer.book_id;
-                if main == Some(book_id) {
-                    shift(&mut layer.rows);
-                }
-                for (key, range) in &mut layer.spec.row_by_y {
-                    if crate::plotspec::DataRef::from_key(main, key).is_some_and(|r| r.book == book_id) {
-                        shift(range);
-                    }
-                }
+                layer.map_row_ranges(book_id, shift);
             }
         }
     }
@@ -998,9 +969,13 @@ impl Project {
             return Err("浮动柱需要成对的 Y 列，请用单面板绘制".into());
         }
         let book = self.book(book_id).ok_or("找不到工作簿")?;
-        let spec = crate::plotspec::PlotSpec::from_selection(book, selected, plot_type)?;
+        let layer = crate::page::Layer {
+            spec: crate::plotspec::PlotSpec::from_selection(book, selected, plot_type)?,
+            ..Default::default()
+        };
         let n = panels.count();
-        let ys = spec.y_keys.clone();
+        let plots = layer.plots(&|id| self.book(id));
+        let ys: Vec<_> = plots.iter().map(|plot| plot.mapping.y.clone()).collect();
         if ys.len() < n {
             return Err(format!(
                 "{}需要至少 {} 个 Y 列，当前只有 {} 个",
@@ -1018,23 +993,24 @@ impl Project {
             chunks.push(ys[start..start + len].to_vec());
             start += len;
         }
-        let specs: Vec<_> = chunks
+        let layers: Vec<_> = chunks
             .into_iter()
-            .map(|y_keys| crate::plotspec::PlotSpec { y_keys, ..spec.clone() })
+            .map(|sources| {
+                let mut panel = layer.clone();
+                panel.retain_plots(&|id| self.book(id), |plot| sources.contains(&plot.mapping.y));
+                panel
+            })
             .collect();
-        for s in &specs {
-            s.validate(book)?;
+        for layer in &layers {
+            layer.spec.validate(book)?;
         }
         let parent = self.folder_of(book_id);
         let id = self.alloc_id();
         let mut graph = Graph::new(id, self.unique_name("Graph"));
-        let mut specs = specs.into_iter();
-        graph.first_layer_mut().spec = specs.next().unwrap();
-        for s in specs {
-            graph.page.add_layer(crate::page::Layer {
-                spec: s,
-                ..Default::default()
-            });
+        let mut layers = layers.into_iter();
+        *graph.first_layer_mut() = layers.next().unwrap();
+        for layer in layers {
+            graph.page.add_layer(layer);
         }
         graph.page.columns = panels.columns();
         (graph.page.width_mm, graph.page.height_mm) = panels.page_mm();
@@ -1059,7 +1035,14 @@ impl Project {
         let auto = selected.is_empty();
         let spec = crate::plotspec::PlotSpec::from_selection(book, selected, plot_type)?;
         let x_key = spec.x_key.clone();
-        let ys = spec.y_keys.clone();
+        let ys: Vec<_> = crate::page::Layer {
+            spec: spec.clone(),
+            ..Default::default()
+        }
+        .plots(&|id| self.book(id))
+        .into_iter()
+        .map(|plot| plot.key)
+        .collect();
         let book_name = book.name.clone();
 
         let id = self.plot_spec(spec)?;
@@ -1121,7 +1104,21 @@ impl Project {
         let mut g = Graph::new(gid, "Graph1");
         g.first_layer_mut().book_id = Some(bid);
         g.first_layer_mut().x_key = Some("A".into());
-        g.first_layer_mut().y_keys = vec!["B".into(), "C".into()];
+        for y in ["B", "C"] {
+            let plot = crate::plotspec::Plot {
+                key: y.into(),
+                mapping: crate::plotspec::CurveMapping {
+                    y: crate::plotspec::DataRef::new(bid, y),
+                    x: Some(crate::plotspec::DataRef::new(bid, "A")),
+                    base: None,
+                    rows: None,
+                    line_only: false,
+                },
+                style: None,
+                x_override: false,
+            };
+            g.first_layer_mut().add_plot(plot, &|id| p.book(id)).unwrap();
+        }
         p.graphs.push(g);
         p
     }

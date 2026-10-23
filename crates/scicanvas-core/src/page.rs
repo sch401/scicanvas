@@ -643,11 +643,10 @@ impl Layer {
         }
         let floating = self.plot_type == crate::PlotType::FloatingBar;
         if floating {
+            let lookup = |id| (id == book.id).then_some(book);
             let present = |key: &str| {
-                self.y_keys.iter().any(|existing| {
-                    crate::plotspec::DataRef::from_key(self.book_id, existing)
-                        == Some(crate::plotspec::DataRef::new(book.id, key))
-                })
+                self.plot(&crate::plotspec::DataRef::new(book.id, key), &lookup)
+                    .is_some()
             };
             if keys.iter().all(|key| present(key)) {
                 return Ok(0);
@@ -656,16 +655,8 @@ impl Layer {
                 return Err("浮动柱请按下端、上端的顺序选择成对的 Y 列".into());
             }
             for pair in keys.as_chunks::<2>().0 {
-                if let Some(upper) = self.y_keys.iter().find(|key| {
-                    crate::plotspec::DataRef::from_key(self.book_id, key)
-                        == Some(crate::plotspec::DataRef::new(book.id, pair[1]))
-                }) {
-                    if self
-                        .base_by_y
-                        .get(upper)
-                        .and_then(|key| crate::plotspec::DataRef::from_key(self.book_id, key))
-                        != Some(crate::plotspec::DataRef::new(book.id, pair[0]))
-                    {
+                if let Some(upper) = self.plot(&crate::plotspec::DataRef::new(book.id, pair[1]), &lookup) {
+                    if upper.mapping.base != Some(crate::plotspec::DataRef::new(book.id, pair[0])) {
                         return Err("该上端列已关联其他下端列".into());
                     }
                 }
@@ -721,16 +712,10 @@ impl Layer {
             return;
         }
         let remaining: Vec<_> = self
-            .y_keys
-            .iter()
-            .filter_map(|key| {
-                let y = crate::plotspec::DataRef::from_key(self.book_id, key)?;
-                if y.book == deleted {
-                    return None;
-                }
-                let book = books(y.book)?;
-                Some((self.curve_mapping(key, Some(book))?, self.curves.get(key).cloned()))
-            })
+            .plots(books)
+            .into_iter()
+            .filter(|plot| plot.mapping.y.book != deleted && books(plot.mapping.y.book).is_some())
+            .map(|plot| (plot.mapping, plot.style))
             .collect();
         let Some((first, _)) = remaining.first() else {
             self.book_id = None;

@@ -72,6 +72,45 @@ impl Layer {
         before - self.y_keys.len()
     }
 
+    /// 删列的过渡入口：在用曲线统一筛选，隐藏曲线的旧项也按原规则清理。
+    pub(crate) fn remove_columns(&mut self, book: u64, keys: &[String], books: BookLookup<'_, '_>) {
+        if self.book_id != Some(book) {
+            self.drop_foreign(book, Some(keys));
+            return;
+        }
+        self.retain_plots(books, |plot| !keys.contains(&plot.key));
+        self.spec.line_only.retain(|k| !keys.contains(k));
+        self.spec.row_by_y.retain(|k, _| !keys.contains(k));
+        self.curves.retain(|k, _| !keys.contains(k));
+        self.spec.x_by_y.retain(|y, x| !keys.contains(y) && !keys.contains(x));
+        self.spec.base_by_y.retain(|y, _| !keys.contains(y));
+        if self.labels.column.as_ref().is_some_and(|k| keys.contains(k)) {
+            self.labels.column = None;
+        }
+        // 保留旧的缺失下端标记，避免把浮动柱静默改成从零开始。
+        for base in self.spec.base_by_y.values_mut() {
+            if keys.contains(base) {
+                base.clear();
+            }
+        }
+        if self.x_key.as_ref().is_some_and(|k| keys.contains(k)) {
+            self.spec.x_key = None;
+        }
+    }
+
+    /// 映射旧存储中的独立范围，包含隐藏曲线；保留显式覆盖与继承的区别。
+    pub(crate) fn map_row_ranges(&mut self, book: u64, map: impl Fn(&mut Option<(usize, usize)>)) {
+        let main = self.book_id;
+        if main == Some(book) {
+            map(&mut self.spec.rows);
+        }
+        for (key, range) in &mut self.spec.row_by_y {
+            if DataRef::from_key(main, key).is_some_and(|r| r.book == book) {
+                map(range);
+            }
+        }
+    }
+
     fn plot_key(&self, source: &DataRef) -> Option<&str> {
         self.y_keys
             .iter()
