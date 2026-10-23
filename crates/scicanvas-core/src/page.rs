@@ -157,6 +157,9 @@ pub struct Layer {
     #[cfg_attr(feature = "serde", serde(flatten))]
     pub spec: PlotSpec,
     pub title: String,
+    /// Opt-in scientific text; legacy project strings remain literal.
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "is_false"))]
+    pub rich_text: bool,
     pub x_title: String,
     pub y_title: String,
     pub x_auto: bool,
@@ -210,6 +213,8 @@ pub struct Layer {
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize), serde(default))]
 pub struct CurveStyle {
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "String::is_empty"))]
+    pub legend_label: String,
     pub kind: Option<crate::PlotType>,
     pub color: Option<[u8; 3]>,
     pub symbol: Option<crate::Symbol>,
@@ -317,6 +322,7 @@ impl Default for Layer {
             transparent: false,
             spec: Default::default(),
             title: String::new(),
+            rich_text: false,
             x_title: String::new(),
             y_title: String::new(),
             x_auto: true,
@@ -529,6 +535,11 @@ impl Layer {
                 }
             })
             .collect();
+        for p in &mut prepared {
+            if let Some(label) = p.plot.style.as_ref().map(|s| &s.legend_label).filter(|s| !s.is_empty()) {
+                p.series.name = label.clone();
+            }
+        }
         if self.curves.values().any(|c| c.kind.is_some()) {
             let count = prepared
                 .iter()

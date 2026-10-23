@@ -622,7 +622,7 @@ fn runtime_plots_share_sources_order_and_history_with_analysis_and_files() {
     {
         let text = scicanvas_core::project_file::to_json(&p).unwrap();
         let wire: serde_json::Value = serde_json::from_str(&text).unwrap();
-        assert_eq!(wire["version"], 11);
+        assert_eq!(wire["version"], scicanvas_core::project_file::CURRENT_VERSION);
         assert!(wire["graphs"][0]["page"]["layers"][0].get("axes").is_none());
         let reopened = scicanvas_core::project_file::from_json(&text).unwrap();
         assert_eq!(reopened, p);

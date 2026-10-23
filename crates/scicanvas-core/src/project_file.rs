@@ -172,6 +172,10 @@ pub fn migrate(mut value: Value) -> Result<Value, String> {
                 if let Some(layers) = page.get_mut("layers").and_then(Value::as_array_mut) {
                     for layer in layers {
                         decode_plots(layer, &defaults)?;
+                        // v0-v11 titles and column names always keep their literal meaning.
+                        if version < 12 {
+                            layer["rich_text"] = false.into();
+                        }
                     }
                 }
                 let (w, h) = crate::page::LEGACY_PAGE_MM;

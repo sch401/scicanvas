@@ -7,6 +7,101 @@ use scicanvas_core::{
 };
 
 #[test]
+fn scientific_titles_legends_and_labels_share_layout_history_and_project_files() {
+    use scicanvas_core::page::{CurveStyle, LabelSource};
+    let mut p = Project::sample();
+    p.graphs[0].first_layer_mut().title = r"literal CO_{2} \b{x}".into();
+    let original = p.clone();
+    let old_svg = svg::render_page(&p.graphs[0], &p);
+    #[cfg(feature = "serde")]
+    {
+        for version in [10, 11] {
+            let mut wire: serde_json::Value =
+                serde_json::from_str(&scicanvas_core::project_file::to_json(&p).unwrap()).unwrap();
+            wire["version"] = version.into();
+            wire["graphs"][0]["page"]["layers"][0]
+                .as_object_mut()
+                .unwrap()
+                .remove("rich_text");
+            let restored = scicanvas_core::project_file::from_json(&wire.to_string()).unwrap();
+            assert_eq!(restored, p);
+            assert_eq!(svg::render_page(&restored.graphs[0], &restored), old_svg);
+        }
+    }
+    let mut history = scicanvas_core::history::History::default();
+    history.begin(&p, "Scientific text");
+    let layer = p.graphs[0].first_layer_mut();
+    layer.rich_text = true;
+    layer.title = r"CO_{2} R^{2} \b{normal} \i{rate} α".into();
+    layer.x_title = r"Time / s^{−1}".into();
+    layer.y_title = r"\i{c} / mol L^{−1}".into();
+    layer.y2_title = r"\b{R}_{0}".into();
+    layer.curves.insert(
+        "B".into(),
+        CurveStyle {
+            legend_label: r"\i{CO}_{2} \beta".into(),
+            ..Default::default()
+        },
+    );
+    layer.curves.insert(
+        "C".into(),
+        CurveStyle {
+            right_axis: true,
+            ..Default::default()
+        },
+    );
+    layer.labels.visible = true;
+    layer.labels.source = LabelSource::Column;
+    layer.labels.column = Some("B".into());
+    history.changed();
+    history.commit(&p);
+    let sc = scene::layout_page(&p.graphs[0], &p, &[]);
+    assert!(sc.items.iter().any(|i| matches!(
+        &i.prim,
+        scene::Prim::Text {
+            rich: true,
+            vertical: true,
+            ..
+        }
+    )));
+    let mut scripts = 0;
+    for item in &sc.items {
+        if let scene::Prim::Text {
+            text, size, bold, rich, ..
+        } = &item.prim
+        {
+            let l = scicanvas_core::text::layout_formatted(text, *size, *bold, *rich);
+            scripts += l.runs.iter().filter(|r| r.dy != 0.0).count();
+            assert!(l
+                .runs
+                .iter()
+                .all(|r| r.size > 0.0 && r.size.is_finite() && r.x.is_finite()));
+        }
+    }
+    assert!(scripts >= 6);
+    let rendered = svg::render_page(&p.graphs[0], &p);
+    assert!(rendered.contains("CO2 R2 normal rate α"));
+    assert!(!rendered.contains("textLength=") && !rendered.contains("lengthAdjust="));
+    #[cfg(feature = "serde")]
+    {
+        let json = scicanvas_core::project_file::to_json(&p).unwrap();
+        assert!(json.contains("\"rich_text\": true"));
+        let loaded = scicanvas_core::project_file::from_json(&json).unwrap();
+        assert_eq!(loaded, p);
+        assert_eq!(svg::render_page(&loaded.graphs[0], &loaded), rendered);
+        let zipped = scicanvas_core::project_file::to_scv(&p).unwrap();
+        assert_eq!(scicanvas_core::project_file::from_scv(&zipped).unwrap(), p);
+    }
+    let edited = p.clone();
+    p = history.undo(&p).unwrap();
+    assert_eq!(p, original);
+    assert_eq!(svg::render_page(&p.graphs[0], &p), old_svg);
+    p = history.redo(&p).unwrap();
+    assert_eq!(p, edited);
+    assert_eq!(svg::render_page(&p.graphs[0], &p), rendered);
+}
+
+#[test]
 fn presets_have_example_data_and_use_the_shared_scene() {
     let book = scicanvas_core::presets::example();
     let mut project = Project::default();

@@ -112,6 +112,11 @@ mod tests {
                 .query(&fontdb::Query {
                     families: &[fontdb::Family::Name(&face.family)],
                     weight: fontdb::Weight(face.weight),
+                    style: if face.italic {
+                        fontdb::Style::Italic
+                    } else {
+                        fontdb::Style::Normal
+                    },
                     ..Default::default()
                 })
                 .expect("shared font family is loaded");
@@ -168,6 +173,76 @@ mod tests {
                 }
             }
             assert!(count > 30, "the title is rendered: {dpi}");
+        }
+        if let Ok(path) = std::env::var("SCICANVAS_TEXT_PREVIEW") {
+            let transparent = page.replace("fill=\"#ffffff\"", "fill=\"none\"");
+            std::fs::write(path, png_bytes(&rasterize(&transparent, 150).unwrap(), 150).unwrap()).unwrap();
+        }
+    }
+
+    #[test]
+    fn scientific_text_exports_real_styles_scripts_and_scaled_raster_bounds() {
+        let mut p = Project::sample();
+        let g = &mut p.graphs[0];
+        g.page.width_mm = 89.0;
+        g.page.height_mm = 80.0;
+        let layer = g.first_layer_mut();
+        layer.rich_text = true;
+        layer.title = r"CO_{2} R^{2} \b{normal} \i{rate} α".into();
+        layer.x_title = r"Time / s^{−1}".into();
+        layer.y_title = r"\i{c} / mol L^{−1}".into();
+        let page = svg::render_page(&p.graphs[0], &p);
+        assert!(page.contains("font-style=\"italic\""));
+        assert!(page.contains("font-weight=\"700\""));
+        assert!(page.contains("aria-label=\"CO2 R2 normal rate α\""));
+        let sc = scicanvas_core::scene::layout_page(&p.graphs[0], &p, &[]);
+        let (x, y, layout) = sc
+            .items
+            .iter()
+            .find_map(|i| match &i.prim {
+                scicanvas_core::scene::Prim::Text {
+                    x,
+                    y,
+                    text,
+                    size,
+                    bold: true,
+                    rich,
+                    ..
+                } => Some((*x, *y, scicanvas_core::text::layout_formatted(text, *size, true, *rich))),
+                _ => None,
+            })
+            .unwrap();
+        assert!(layout.runs.iter().any(|r| r.dy < 0.0));
+        assert!(layout.runs.iter().any(|r| r.dy > 0.0));
+        let mut bounds = Vec::new();
+        for dpi in [96, 300, 600] {
+            let pixmap = rasterize(&page, dpi).unwrap();
+            let scale = f64::from(dpi) / 96.0;
+            let end = ((y + layout.height / 2.0 + 2.0) * scale).ceil() as u32;
+            let (mut xmin, mut ymin, mut xmax, mut ymax) = (u32::MAX, u32::MAX, 0, 0);
+            for yy in 0..end.min(pixmap.height()) {
+                for xx in 0..pixmap.width() {
+                    let c = pixmap.pixel(xx, yy).unwrap();
+                    // Include antialiased italic edges, rather than only their dark interiors.
+                    if c.alpha() > 100 && c.red() < 220 && c.green() < 220 && c.blue() < 220 {
+                        xmin = xmin.min(xx);
+                        ymin = ymin.min(yy);
+                        xmax = xmax.max(xx);
+                        ymax = ymax.max(yy);
+                    }
+                }
+            }
+            assert!(xmin < xmax && ymin < ymax, "formatted title is visible");
+            let b = [xmin, ymin, xmax, ymax].map(|n| f64::from(n) / scale);
+            assert!(b[0] >= x - layout.width / 2.0 - 1.0 && b[2] <= x + layout.width / 2.0 + 1.0);
+            assert!(b[1] >= y - layout.height / 2.0 - 1.0 && b[3] <= y + layout.height / 2.0 + 1.0);
+            bounds.push(b);
+        }
+        for b in &bounds[1..] {
+            assert!(
+                b.iter().zip(bounds[0]).all(|(a, b)| (a - b).abs() < 1.5),
+                "DPI changes scale the same layout: {bounds:?}"
+            );
         }
         if let Ok(path) = std::env::var("SCICANVAS_TEXT_PREVIEW") {
             let transparent = page.replace("fill=\"#ffffff\"", "fill=\"none\"");

@@ -135,8 +135,14 @@ pub(super) fn labels(ctx: &Context<'_, '_, '_, '_>, plots: &[PreparedPlot], item
             if label.trim().is_empty() {
                 continue;
             }
-            let label_size = crate::text::fit_size(&label, f64::from(ctx.layer.labels.size), false, ctx.rect[2]);
-            let label_layout = crate::text::layout(&label, label_size, false);
+            let label_size = crate::text::fit_size_formatted(
+                &label,
+                f64::from(ctx.layer.labels.size),
+                false,
+                ctx.rect[2],
+                ctx.layer.rich_text,
+            );
+            let label_layout = crate::text::layout_formatted(&label, label_size, false, ctx.layer.rich_text);
             let positive = if crate::presets::recipe(style.kind).position == crate::position::Position::Interval {
                 value >= series.bases[i]
             } else {
@@ -193,6 +199,7 @@ pub(super) fn labels(ctx: &Context<'_, '_, '_, '_>, plots: &[PreparedPlot], item
                     anchor,
                     vertical: false,
                     bold: false,
+                    rich: ctx.layer.rich_text,
                     color: style.color.rgb(),
                 },
                 true,

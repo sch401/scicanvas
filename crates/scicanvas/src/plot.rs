@@ -527,9 +527,10 @@ pub fn paint(ui: &egui::Ui, rect: Rect, sc: &Scene) {
                 anchor,
                 vertical,
                 bold,
+                rich,
                 color,
             } => {
-                let layout = scicanvas_core::text::layout(text, *size, *bold);
+                let layout = scicanvas_core::text::layout_formatted(text, *size, *bold, *rich);
                 let factor = match anchor {
                     Anchor::Start => 0.0,
                     Anchor::Middle => 0.5,
@@ -537,8 +538,11 @@ pub fn paint(ui: &egui::Ui, rect: Rect, sc: &Scene) {
                 };
                 let origin = at(*x, *y);
                 for run in &layout.runs {
-                    let raw =
-                        p.layout_no_wrap(run.text.clone(), plot_font(*size as f32 * scale, run.font), rgb(*color));
+                    let raw = p.layout_no_wrap(
+                        run.text.clone(),
+                        plot_font(run.size as f32 * scale, run.font),
+                        rgb(*color),
+                    );
                     let baseline = raw
                         .rows
                         .first()
@@ -546,7 +550,8 @@ pub fn paint(ui: &egui::Ui, rect: Rect, sc: &Scene) {
                         .map_or(0.0, |g| g.pos.y);
                     // Preserve native glyph proportions; pixel rounding must not stretch the glyph mesh.
                     let dx = (run.x - layout.widths[run.line] * factor) as f32 * scale;
-                    let dy = (-layout.height / 2.0 + layout.ascent + run.line as f64 * layout.line_height) as f32
+                    let dy = (-layout.height / 2.0 + layout.ascent + run.line as f64 * layout.line_height + run.dy)
+                        as f32
                         * scale
                         - baseline;
                     let pos = if *vertical {
@@ -678,18 +683,41 @@ mod tests {
 
     #[test]
     fn text_preserves_native_glyph_geometry_at_different_zoom_and_dpi() {
+        use resvg::usvg::{NodeExt, NodeKind, TreeParsing};
         let mut p = Project::sample();
-        p.graphs[0].first_layer_mut().title = "WWW iii μ ± 中文".into();
+        p.graphs[0].first_layer_mut().title = r"WWW iii μ ± 中文 CO_{2} R^{2} \b{normal} \i{italic}".into();
+        p.graphs[0].first_layer_mut().rich_text = true;
+        p.graphs[0].first_layer_mut().y_title = r"\i{c} / mol L^{−1}".into();
         let sc = scene::layout_page(&p.graphs[0], &p, &[]);
+        let svg = scicanvas_core::svg::render_page(&p.graphs[0], &p);
+        let mut tree = resvg::usvg::Tree::from_str(&svg, &Default::default()).unwrap();
+        tree.calculate_abs_transforms();
+        let mut svg_runs = Vec::new();
+        for node in tree.root.descendants() {
+            if let NodeKind::Text(t) = &*node.borrow() {
+                for chunk in &t.chunks {
+                    let mut point = resvg::tiny_skia::Point::from_xy(chunk.x.unwrap(), chunk.y.unwrap());
+                    node.abs_transform().map_point(&mut point);
+                    svg_runs.push((
+                        chunk.text.clone(),
+                        pos2(point.x, point.y),
+                        chunk.spans[0].font_size.get(),
+                    ));
+                }
+            }
+        }
         let expected: Vec<_> = sc
             .items
             .iter()
             .flat_map(|item| {
-                if let Prim::Text { text, size, bold, .. } = &item.prim {
-                    scicanvas_core::text::layout(text, *size, *bold)
+                if let Prim::Text {
+                    text, size, bold, rich, ..
+                } = &item.prim
+                {
+                    scicanvas_core::text::layout_formatted(text, *size, *bold, *rich)
                         .runs
                         .into_iter()
-                        .map(|run| (run.font, run.text, run.width, *size))
+                        .map(|run| (run.font, run.text, run.width, run.size))
                         .collect::<Vec<_>>()
                 } else {
                     Vec::new()
@@ -732,12 +760,23 @@ mod tests {
                                 assert_eq!(actual.visuals.mesh.vertices, original.visuals.mesh.vertices);
                                 assert_eq!(actual.visuals.mesh.indices, original.visuals.mesh.indices);
                             }
+                            let (svg_text, svg_at, svg_size) = &svg_runs[checked];
+                            assert_eq!(&shape.galley.job.text, svg_text);
+                            assert!((id.size / scale - svg_size).abs() < 1e-3);
+                            let baseline = shape.galley.rows[0].glyphs[0].pos.y;
+                            let (sin, cos) = shape.angle.sin_cos();
+                            let baseline_at = (shape.pos.to_vec2() + vec2(-sin * baseline, cos * baseline)) / scale;
+                            assert!(
+                                (baseline_at - svg_at.to_vec2()).length() < 0.03,
+                                "screen/SVG baseline: {svg_text}"
+                            );
                             checked += 1;
                         }
                     }
                 }
             }
             assert_eq!(checked, expected.len());
+            assert_eq!(checked, svg_runs.len());
         }
     }
 

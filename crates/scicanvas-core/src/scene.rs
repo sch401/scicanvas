@@ -80,6 +80,7 @@ pub enum Prim {
         anchor: Anchor,
         vertical: bool,
         bold: bool,
+        rich: bool,
         color: Rgb,
     },
 }
@@ -301,8 +302,17 @@ fn text(x: f64, y: f64, s: impl Into<String>, size: f64, anchor: Anchor) -> Prim
         anchor,
         vertical: false,
         bold: false,
+        rich: false,
         color: INK,
     }
+}
+
+fn formatted_text(x: f64, y: f64, s: impl Into<String>, size: f64, anchor: Anchor, rich: bool) -> Prim {
+    let mut prim = text(x, y, s, size, anchor);
+    if let Prim::Text { rich: value, .. } = &mut prim {
+        *value = rich;
+    }
+    prim
 }
 
 /// 排版整张图。`book` 为 None 时是一张提示“没有关联数据”的空图。
@@ -473,9 +483,10 @@ fn obstacles(items: &[Item]) -> Vec<Obstacle> {
                 anchor,
                 vertical,
                 bold,
+                rich,
                 ..
             } => {
-                let measured = crate::text::layout(text, *size, *bold);
+                let measured = crate::text::layout_formatted(text, *size, *bold, *rich);
                 let shift = match anchor {
                     Anchor::Start => 0.0,
                     Anchor::Middle => measured.width / 2.0,
@@ -793,8 +804,14 @@ fn build_layer_full<'a>(
     }
     .max(min[2])
     .max(tick_half_width + 4.0);
-    let title = crate::text::fonts().wrap(&g.title, TITLE_FONT, true, (w - (left - right).abs() - 12.0).max(20.0));
-    let title_height = crate::text::layout(&title, TITLE_FONT, true).height;
+    let title = crate::text::fonts().wrap_formatted(
+        &g.title,
+        TITLE_FONT,
+        true,
+        (w - (left - right).abs() - 12.0).max(20.0),
+        g.rich_text,
+    );
+    let title_height = crate::text::layout_formatted(&title, TITLE_FONT, true, g.rich_text).height;
     let has_title = !title.trim().is_empty();
     let top = (if has_title { 6.0 + title_height + 8.0 } else { 10.0f64 }).max(min[1]);
     let bottom = (out + TICK_GAP + tick_height + 5.0 + axis_height + 5.0)
@@ -885,6 +902,7 @@ fn build_layer_full<'a>(
                     anchor: Anchor::Middle,
                     vertical: false,
                     bold: false,
+                    rich: false,
                     color: MUTED,
                 },
                 false,
@@ -996,12 +1014,13 @@ fn build_layer_full<'a>(
 
     // 轴标题与图标题
     push(
-        text(
+        formatted_text(
             left + pw / 2.0,
             top + ph + out + TICK_GAP + tick_height + 5.0 + axis_height / 2.0,
             x_title.clone(),
-            crate::text::fit_size(&x_title, LABEL_FONT, false, pw),
+            crate::text::fit_size_formatted(&x_title, LABEL_FONT, false, pw, g.rich_text),
             Anchor::Middle,
+            g.rich_text,
         ),
         false,
     );
@@ -1048,10 +1067,11 @@ fn build_layer_full<'a>(
                 x: left + pw + out + TICK_GAP + ylab2_w + 5.0 + LABEL_FONT / 2.0,
                 y: top + ph / 2.0,
                 text: y2_title.clone(),
-                size: crate::text::fit_size(&y2_title, LABEL_FONT, false, ph),
+                size: crate::text::fit_size_formatted(&y2_title, LABEL_FONT, false, ph, g.rich_text),
                 anchor: Anchor::Middle,
                 vertical: true,
                 bold: false,
+                rich: g.rich_text,
                 color: INK,
             },
             false,
@@ -1062,10 +1082,11 @@ fn build_layer_full<'a>(
             x: left - out - TICK_GAP - ylab_w - 5.0 - LABEL_FONT / 2.0,
             y: top + ph / 2.0,
             text: y_title.clone(),
-            size: crate::text::fit_size(&y_title, LABEL_FONT, false, ph),
+            size: crate::text::fit_size_formatted(&y_title, LABEL_FONT, false, ph, g.rich_text),
             anchor: Anchor::Middle,
             vertical: true,
             bold: false,
+            rich: g.rich_text,
             color: INK,
         },
         false,
@@ -1080,6 +1101,7 @@ fn build_layer_full<'a>(
                 anchor: Anchor::Middle,
                 vertical: false,
                 bold: true,
+                rich: g.rich_text,
                 color: INK,
             },
             false,
@@ -1091,11 +1113,19 @@ fn build_layer_full<'a>(
         let sw = 18.0;
         let names: Vec<_> = plots
             .iter()
-            .map(|p| crate::text::fonts().wrap(&p.series.name, LEGEND_FONT, false, (pw - sw - 16.0).max(20.0)))
+            .map(|p| {
+                crate::text::fonts().wrap_formatted(
+                    &p.series.name,
+                    LEGEND_FONT,
+                    false,
+                    (pw - sw - 16.0).max(20.0),
+                    g.rich_text,
+                )
+            })
             .collect();
         let layouts: Vec<_> = names
             .iter()
-            .map(|name| crate::text::layout(name, LEGEND_FONT, false))
+            .map(|name| crate::text::layout_formatted(name, LEGEND_FONT, false, g.rich_text))
             .collect();
         let lw = layouts.iter().map(|l| l.width).fold(0.0, f64::max) + sw + 16.0;
         let lhh = layouts.iter().map(|l| l.height + 4.0).sum::<f64>() + 4.0;
@@ -1171,7 +1201,14 @@ fn build_layer_full<'a>(
                     });
                 }
             }
-            push(text(x0 + sw + 4.0, cy, names[i].clone(), LEGEND_FONT, Anchor::Start));
+            push(formatted_text(
+                x0 + sw + 4.0,
+                cy,
+                names[i].clone(),
+                LEGEND_FONT,
+                Anchor::Start,
+                g.rich_text,
+            ));
         }
     }
 

@@ -2783,21 +2783,25 @@ impl SciApp {
                             crate::builder::floating_columns(ui, &mut g.spec, &cols);
                             ui.end_row();
                         }
+                        ui.label("文字格式");
+                        ui.checkbox(&mut g.rich_text, "启用科学文字格式")
+                            .on_hover_text("支持上下标、局部粗体斜体和希腊字母。关闭时按原文显示。");
+                        ui.end_row();
                         ui.label("图标题");
                         edit_group(
-                            &ui.add(egui::TextEdit::singleline(&mut g.title).hint_text("（无）")),
+                            &dialogs::scientific_text(ui, &mut g.title, &mut g.rich_text, "（无）"),
                             history_group,
                         );
                         ui.end_row();
                         ui.label("X 轴标题");
                         edit_group(
-                            &ui.add(egui::TextEdit::singleline(&mut g.x_title).hint_text("自动：长名称 (单位)")),
+                            &dialogs::scientific_text(ui, &mut g.x_title, &mut g.rich_text, "自动：长名称 (单位)"),
                             history_group,
                         );
                         ui.end_row();
                         ui.label("Y 轴标题");
                         edit_group(
-                            &ui.add(egui::TextEdit::singleline(&mut g.y_title).hint_text("自动：长名称 (单位)")),
+                            &dialogs::scientific_text(ui, &mut g.y_title, &mut g.rich_text, "自动：长名称 (单位)"),
                             history_group,
                         );
                         ui.end_row();
@@ -2989,6 +2993,17 @@ impl SciApp {
                                 .num_columns(2)
                                 .spacing([10.0, 6.0])
                                 .show(ui, |ui| {
+                                    ui.label("图例文字");
+                                    edit_group(
+                                        &dialogs::scientific_text(
+                                            ui,
+                                            &mut style.legend_label,
+                                            &mut g.rich_text,
+                                            "自动：曲线名称",
+                                        ),
+                                        history_group,
+                                    );
+                                    ui.end_row();
                                     ui.label("图型");
                                     let text = style.kind.map_or("跟随图层", |k| k.label());
                                     ui.add_enabled_ui(
@@ -3062,9 +3077,11 @@ impl SciApp {
                                 ui.horizontal_wrapped(|ui| {
                                     ui.label("右轴标题");
                                     edit_group(
-                                        &ui.add(
-                                            egui::TextEdit::singleline(&mut g.y2_title)
-                                                .hint_text("自动：长名称 (单位)"),
+                                        &dialogs::scientific_text(
+                                            ui,
+                                            &mut g.y2_title,
+                                            &mut g.rich_text,
+                                            "自动：长名称 (单位)",
                                         ),
                                         history_group,
                                     );
@@ -3673,6 +3690,7 @@ mod history_tests {
         let saved = scicanvas_core::project_file::to_json(&app.project).unwrap();
         assert_eq!(scicanvas_core::project_file::from_json(&saved).unwrap(), app.project);
         roundtrip(&mut app, &before);
+
         let committed = app.project.clone();
         app.run_command("layer.contents");
         frame(&mut app, vec![]);
@@ -6234,6 +6252,74 @@ mod history_tests {
             before_svg
         );
         roundtrip(&mut app, &before);
+    }
+
+    #[test]
+    fn scientific_title_toolbar_is_live_saved_and_undoable() {
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        let mut app = app();
+        let mut p = Project::sample();
+        p.graphs[0].first_layer_mut().title = "CO2".into();
+        app.load_project(p, None);
+        app.props_for = Some(2);
+        let before = app.project.clone();
+        editor_frame(&mut app, &ctx, vec![], true);
+        let output = editor_frame(&mut app, &ctx, vec![], true);
+        let at_text = |output: &egui::FullOutput, text: &str| {
+            output
+                .shapes
+                .iter()
+                .find_map(|s| match &s.shape {
+                    egui::Shape::Text(t) if t.galley.job.text == text => Some(t.pos + t.galley.rect.center().to_vec2()),
+                    _ => None,
+                })
+                .unwrap_or_else(|| panic!("missing text: {text}"))
+        };
+        let click = |app: &mut SciApp, pos| {
+            for pressed in [true, false] {
+                editor_frame(
+                    app,
+                    &ctx,
+                    vec![
+                        egui::Event::PointerMoved(pos),
+                        egui::Event::PointerButton {
+                            pos,
+                            button: egui::PointerButton::Primary,
+                            pressed,
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                    true,
+                );
+            }
+        };
+        click(&mut app, at_text(&output, "CO2"));
+        let id = ctx.memory(|m| m.focused()).unwrap();
+        let mut state = egui::TextEdit::load_state(&ctx, id).unwrap();
+        state.cursor.set_char_range(Some(egui::text::CCursorRange::two(
+            egui::text::CCursor::new(2),
+            egui::text::CCursor::new(3),
+        )));
+        state.store(&ctx, id);
+        let output = editor_frame(&mut app, &ctx, vec![], true);
+        click(&mut app, at_text(&output, "x₂"));
+        let layer = app.project.graphs[0].first_layer();
+        assert_eq!(layer.title, "CO_{2}");
+        assert!(layer.rich_text);
+        let svg = scicanvas_core::svg::render_page(&app.project.graphs[0], &app.project);
+        assert!(svg.contains("aria-label=\"CO2\""));
+        let saved = scicanvas_core::project_file::to_json(&app.project).unwrap();
+        assert_eq!(scicanvas_core::project_file::from_json(&saved).unwrap(), app.project);
+        roundtrip(&mut app, &before);
+
+        let before_symbol = app.project.clone();
+        let output = editor_frame(&mut app, &ctx, vec![], true);
+        click(&mut app, at_text(&output, "Ω"));
+        let output = editor_frame(&mut app, &ctx, vec![], true);
+        click(&mut app, at_text(&output, "α"));
+        assert_eq!(app.project.graphs[0].first_layer().title, "CO_{α}");
+        roundtrip(&mut app, &before_symbol);
     }
 
     #[test]

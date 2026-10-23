@@ -129,15 +129,16 @@ fn prim(out: &mut String, p: &Prim) {
             anchor,
             vertical,
             bold,
+            rich,
             color,
         } => {
-            let layout = crate::text::layout(text, *size, *bold);
+            let layout = crate::text::layout_formatted(text, *size, *bold, *rich);
             let factor = match anchor {
                 Anchor::Start => 0.0,
                 Anchor::Middle => 0.5,
                 Anchor::End => 1.0,
             };
-            let _ = write!(out, r#"<g aria-label="{}""#, esc(text));
+            let _ = write!(out, r#"<g aria-label="{}""#, esc(&crate::text::plain_text(text, *rich)));
             let (origin_x, origin_y) = if *vertical {
                 let _ = write!(out, r#" transform="translate({x:.2},{y:.2}) rotate(-90)""#);
                 (0.0, 0.0)
@@ -148,10 +149,12 @@ fn prim(out: &mut String, p: &Prim) {
             for run in &layout.runs {
                 let face = &crate::text::fonts().faces()[run.font];
                 let xx = origin_x + run.x - layout.widths[run.line] * factor;
-                let yy = origin_y - layout.height / 2.0 + layout.ascent + run.line as f64 * layout.line_height;
+                let yy = origin_y - layout.height / 2.0 + layout.ascent + run.line as f64 * layout.line_height + run.dy;
+                let size = run.size;
+                let italic = if face.italic { "font-style=\"italic\" " } else { "" };
                 let _ = write!(
                     out,
-                    r#"<text x="{xx:.4}" y="{yy:.4}" font-family="{}" font-size="{size}" font-weight="{}" xml:space="preserve" fill="{}">{}</text>"#,
+                    r#"<text x="{xx:.4}" y="{yy:.4}" font-family="{}" font-size="{size}" font-weight="{}" {italic}xml:space="preserve" fill="{}">{}</text>"#,
                     esc(&face.family),
                     face.weight,
                     hex(*color),
