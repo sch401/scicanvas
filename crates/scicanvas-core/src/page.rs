@@ -1,4 +1,6 @@
 //! 页面 → 图层 → 作图描述。图层样式和数据引用均可独立设置。
+mod plots;
+
 use crate::{plotspec::PlotSpec, Book};
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
