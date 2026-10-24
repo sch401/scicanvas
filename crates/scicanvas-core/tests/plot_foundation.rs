@@ -174,20 +174,24 @@ fn scientific_titles_legends_and_labels_share_layout_history_and_project_files()
     layer.x_title = r"Time / s^{−1}".into();
     layer.y_title = r"\i{c} / mol L^{−1}".into();
     layer.y2_title = r"\b{R}_{0}".into();
-    layer.curves.insert(
-        "B".into(),
-        CurveStyle {
-            legend_label: r"\i{CO}_{2} \beta".into(),
-            ..Default::default()
-        },
-    );
-    layer.curves.insert(
-        "C".into(),
-        CurveStyle {
-            right_axis: true,
-            ..Default::default()
-        },
-    );
+    layer.edit_styles(|styles| {
+        styles.insert(
+            "B".into(),
+            CurveStyle {
+                legend_label: r"\i{CO}_{2} \beta".into(),
+                ..Default::default()
+            },
+        )
+    });
+    layer.edit_styles(|styles| {
+        styles.insert(
+            "C".into(),
+            CurveStyle {
+                right_axis: true,
+                ..Default::default()
+            },
+        )
+    });
     layer.labels.visible = true;
     layer.labels.source = LabelSource::Column;
     layer.labels.column = Some("B".into());
@@ -251,7 +255,7 @@ fn presets_have_example_data_and_use_the_shared_scene() {
         assert!(ids.insert(preset.id));
         let spec = PlotSpec::from_selection(&book, &[], preset.kind).unwrap();
         let mut graph = Graph::new(20, preset.name);
-        graph.first_layer_mut().spec = spec;
+        graph.first_layer_mut().spec = spec.into();
         let sc = scene::build_page(&graph, &project, 800.0, 600.0, None);
         assert!(!sc.items.is_empty());
         assert_eq!(sc.layer_plots.len(), 1);
@@ -277,7 +281,7 @@ fn invalid_plot_does_not_mutate_project_and_selection_rules_are_shared() {
     let spec = PlotSpec::from_selection(project.book(1).unwrap(), &["B".into()], PlotType::Line).unwrap();
     assert_eq!(spec.x_key.as_deref(), Some("A"));
     let id = project.plot_spec(spec).unwrap();
-    assert_eq!(project.graph(id).unwrap().first_layer().y_keys, vec!["B"]);
+    assert_eq!(project.graph(id).unwrap().first_layer().draft().y_keys, vec!["B"]);
     let mut book = Book::new(10, "空表");
     book.push_column(Role::X);
     assert_eq!(
@@ -318,7 +322,9 @@ fn multiple_books_and_layers_have_independent_layout_and_clipping() {
     second.name = "第二本".into();
     second.columns[1].long_name = "第二图层曲线".into();
     let layer = Layer {
-        spec: PlotSpec::from_selection(&second, &["B".into()], PlotType::Bar).unwrap(),
+        spec: PlotSpec::from_selection(&second, &["B".into()], PlotType::Bar)
+            .unwrap()
+            .into(),
         title: "第二图层标题".into(),
         ..Default::default()
     };
@@ -339,8 +345,8 @@ fn multiple_books_and_layers_have_independent_layout_and_clipping() {
 
     let key = "B".to_string();
     project.delete_columns(1, &[key]);
-    assert!(!project.graphs[0].page.layers()[0].y_keys.contains(&"B".into()));
-    assert!(project.graphs[0].page.layers()[1].y_keys.contains(&"B".into()));
+    assert!(!project.graphs[0].page.layers()[0].draft().y_keys.contains(&"B".into()));
+    assert!(project.graphs[0].page.layers()[1].draft().y_keys.contains(&"B".into()));
     project.remove(1);
     assert_eq!(project.graphs[0].page.layers()[0].book_id, None);
     assert!(project.graphs[0].page.layers()[1].book_id.is_some());
@@ -379,7 +385,7 @@ fn example_graph(kind: PlotType) -> (Project, Graph) {
     let mut project = Project::default();
     project.books.push(book.clone());
     let mut graph = Graph::new(20, "示例");
-    graph.first_layer_mut().spec = PlotSpec::from_selection(&book, &[], kind).unwrap();
+    graph.first_layer_mut().spec = PlotSpec::from_selection(&book, &[], kind).unwrap().into();
     (project, graph)
 }
 

@@ -833,7 +833,8 @@ impl Project {
                 x_key: first.x_key.clone(),
                 plot_type: PlotType::Scatter,
                 ..Default::default()
-            },
+            }
+            .into(),
             ..Default::default()
         };
         for r in reports {
@@ -844,7 +845,7 @@ impl Project {
             let plot = analysis_plot(&layer, book, &r.residual_key, r.x_key.as_deref(), false, None);
             layer.add_plot(plot, &|id| self.book(id))?;
         }
-        self.plot_spec(layer.spec)
+        self.plot_spec(layer.draft())
     }
 
     /// 分析输入里全部有效点的 X 范围（插值对话框的默认范围）。
@@ -2262,9 +2263,9 @@ mod tests {
             ("D", Some("A"))
         );
         let g = p.graph(2).unwrap().first_layer();
-        assert_eq!(g.y_keys, vec!["B", "C", "F", "I"]);
-        assert_eq!(g.x_by_y.get("F").map(|s| s.as_str()), Some("E"));
-        assert!(g.line_only.contains(&"I".to_string()));
+        assert_eq!(g.draft().y_keys, vec!["B", "C", "F", "I"]);
+        assert_eq!(g.draft().x_by_y.get("F").map(|s| s.as_str()), Some("E"));
+        assert!(g.draft().line_only.contains(&"I".to_string()));
         // 拟合曲线不再参与下一次分析
         assert_eq!(p.resolve(&Source::Graph(2)).unwrap().items.len(), 2);
         // 图形曲线：结果曲线标记为只画线，并记录来源
@@ -2283,13 +2284,13 @@ mod tests {
         let g = p.graph(2).unwrap().first_layer();
         assert!(bands
             .iter()
-            .all(|k| g.line_only.contains(k) && g.x_by_y.get(k).map(|s| s.as_str()) == Some("E")));
+            .all(|k| g.draft().line_only.contains(k) && g.draft().x_by_y.get(k).map(|s| s.as_str()) == Some("E")));
         // 残差图：残差对原 X 的散点图
         let rid = p.residual_plot(&reps).unwrap();
         let rg = p.graph(rid).unwrap().first_layer();
         assert_eq!(rg.plot_type, PlotType::Scatter);
-        assert_eq!(rg.y_keys, vec!["D", "G"]);
-        assert_eq!(rg.x_by_y.get("G").map(|s| s.as_str()), Some("A"));
+        assert_eq!(rg.draft().y_keys, vec!["D", "G"]);
+        assert_eq!(rg.draft().x_by_y.get("G").map(|s| s.as_str()), Some("A"));
     }
 
     #[test]
@@ -2337,7 +2338,7 @@ mod tests {
         assert_eq!(y.data.len(), 200);
         assert!(y.comment.contains("y = y0 + A1·exp(−x/t1)") && y.comment.contains("t1 = "));
         let layer = p.graph(gid).unwrap().first_layer();
-        assert!(layer.line_only.contains(&y.key) && layer.x_by_y.contains_key(&y.key));
+        assert!(layer.draft().line_only.contains(&y.key) && layer.draft().x_by_y.contains_key(&y.key));
         assert!(p.nlfit(&book_src(&["C"]), Model::Gauss, &[], &[]).is_ok());
         let id = p.new_book();
         p.book_mut(id).unwrap().columns[1].data = vec!["1".into(), "2".into()].into();
@@ -2376,7 +2377,7 @@ mod tests {
         let peak = (0..amp.len()).max_by(|a, b| amp[*a].total_cmp(&amp[*b])).unwrap();
         assert!((f[peak] - 2.0).abs() < 1e-9 && (amp[peak] - 4.0).abs() < 1e-6);
         let layer = p.graph(gid).unwrap().first_layer();
-        assert_eq!(layer.y_keys, [out.columns[3].key.clone()]);
+        assert_eq!(layer.draft().y_keys, [out.columns[3].key.clone()]);
         assert_eq!(layer.x_key.as_deref(), Some(out.columns[0].key.as_str()));
 
         // 不等间距的 X 给出提示
@@ -2453,7 +2454,7 @@ mod tests {
         let layer = p.graph(2).unwrap().first_layer();
         assert!(made
             .iter()
-            .all(|(b, _)| layer.y_keys.contains(b) && layer.line_only.contains(b)));
+            .all(|(b, _)| layer.draft().y_keys.contains(b) && layer.draft().line_only.contains(b)));
     }
 
     #[test]
@@ -2699,7 +2700,7 @@ mod tests {
         let keys = p.fft_filter(&Source::Graph(2), FilterKind::HighPass(0.1)).unwrap();
         assert!(keys
             .iter()
-            .all(|k| p.graph(2).unwrap().first_layer().line_only.contains(k)));
+            .all(|k| p.graph(2).unwrap().first_layer().draft().line_only.contains(k)));
         p.book_mut(1).unwrap().columns[0].data.set_text(2, "9".into());
         assert!(p
             .fft_filter(&book_src(&["B"]), FilterKind::LowPass(1.0))
@@ -2739,7 +2740,10 @@ mod tests {
         let lags = out.columns[0].values();
         assert_eq!((lags[0], *lags.last().unwrap()), (1.0 - n, n - 1.0));
         assert!(out.name.contains("互相关"));
-        assert_eq!(p.graph(gid).unwrap().first_layer().y_keys, [out.columns[1].key.clone()]);
+        assert_eq!(
+            p.graph(gid).unwrap().first_layer().draft().y_keys,
+            [out.columns[1].key.clone()]
+        );
         let (bid, _) = p.correlation_function(1, &keys[..1]).unwrap();
         let r = p.book(bid).unwrap().columns[1].values();
         assert_eq!(r[r.len() / 2], 1.0, "autocorrelation peaks at lag 0");
@@ -2929,8 +2933,8 @@ mod tests {
         let book = p.book(1).unwrap();
         let layer = p.graph(2).unwrap().first_layer();
         for key in &keys {
-            assert!(layer.line_only.contains(key) && layer.y_keys.contains(key));
-            let x = book.column(&layer.x_by_y[key]).unwrap();
+            assert!(layer.draft().line_only.contains(key) && layer.draft().y_keys.contains(key));
+            let x = book.column(&layer.draft().x_by_y[key]).unwrap();
             let y = book.column(key).unwrap();
             assert_eq!((x.data.len(), y.data.len()), (41, 41));
             assert_eq!((x.data.text_at(0).as_ref(), x.data.text_at(40).as_ref()), ("0", "20"));
@@ -2949,7 +2953,7 @@ mod tests {
         let x = p
             .book(1)
             .unwrap()
-            .column(&p.graph(2).unwrap().first_layer().x_by_y[&wide[0]])
+            .column(&p.graph(2).unwrap().first_layer().draft().x_by_y[&wide[0]])
             .unwrap();
         assert_eq!(x.data, ["-10", "10", "30"], "custom ranges extrapolate");
 
@@ -3003,7 +3007,9 @@ mod tests {
         let keys = p.smooth(&Source::Graph(2), SmoothMethod::SavitzkyGolay, 7).unwrap();
         assert_eq!(keys.len(), 2);
         let g = p.graph(2).unwrap().first_layer();
-        assert!(keys.iter().all(|k| g.line_only.contains(k) && g.y_keys.contains(k)));
+        assert!(keys
+            .iter()
+            .all(|k| g.draft().line_only.contains(k) && g.draft().y_keys.contains(k)));
     }
 
     #[test]

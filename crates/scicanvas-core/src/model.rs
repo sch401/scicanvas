@@ -776,7 +776,7 @@ impl Project {
         let parent = self.folder_of(book.id);
         let id = self.alloc_id();
         let mut graph = Graph::new(id, self.unique_name("Graph"));
-        graph.first_layer_mut().spec = spec;
+        graph.first_layer_mut().spec = spec.into();
         self.graphs.push(graph);
         self.move_project_item(id, parent)?;
         Ok(id)
@@ -970,7 +970,7 @@ impl Project {
         }
         let book = self.book(book_id).ok_or("找不到工作簿")?;
         let layer = crate::page::Layer {
-            spec: crate::plotspec::PlotSpec::from_selection(book, selected, plot_type)?,
+            spec: crate::plotspec::PlotSpec::from_selection(book, selected, plot_type)?.into(),
             ..Default::default()
         };
         let n = panels.count();
@@ -1036,7 +1036,7 @@ impl Project {
         let spec = crate::plotspec::PlotSpec::from_selection(book, selected, plot_type)?;
         let x_key = spec.x_key.clone();
         let ys: Vec<_> = crate::page::Layer {
-            spec: spec.clone(),
+            spec: spec.clone().into(),
             ..Default::default()
         }
         .plots(&|id| self.book(id))
@@ -1205,7 +1205,7 @@ mod tests {
         // 什么都不选：全部 Y 列，X = A
         let (gid, _) = p.plot_from_selection(1, &[], PlotType::Line).unwrap();
         let g = p.graph(gid).unwrap().first_layer();
-        assert_eq!(g.y_keys, vec!["B", "C"]);
+        assert_eq!(g.draft().y_keys, vec!["B", "C"]);
         assert_eq!(g.x_key.as_deref(), Some("A"));
         // 只选 C：X 自动找左边的 A
         let (gid, _) = p.plot_from_selection(1, &["C".to_string()], PlotType::Scatter).unwrap();
@@ -1234,7 +1234,7 @@ mod tests {
         ] {
             let (id, _) = p.plot_panels(1, &[], PlotType::Line, panels).unwrap();
             let page = &p.graph(id).unwrap().page;
-            let keys: Vec<_> = page.layers().iter().map(|l| l.y_keys.clone()).collect();
+            let keys: Vec<_> = page.layers().iter().map(|l| l.draft().y_keys.clone()).collect();
             assert_eq!(keys, [vec!["B".to_string()], vec!["C".to_string()]]);
             assert_eq!((page.columns, (page.width_mm, page.height_mm)), (columns, size));
             assert!(page.layers().iter().all(|l| l.x_key.as_deref() == Some("A")));
@@ -1254,7 +1254,7 @@ mod tests {
         let (id, msg) = p.plot_panels(1, &[], PlotType::Scatter, Panels::Grid4).unwrap();
         assert!(msg.contains("5 个 Y 列"));
         let g = p.graph(id).unwrap();
-        let sizes: Vec<_> = g.page.layers().iter().map(|l| l.y_keys.len()).collect();
+        let sizes: Vec<_> = g.page.layers().iter().map(|l| l.draft().y_keys.len()).collect();
         assert_eq!(sizes, [2, 1, 1, 1], "earlier panels take the extra columns");
         assert!(g.page.layers().iter().all(|l| l.plot_type == PlotType::Scatter));
         let sc = crate::scene::layout_page(g, &p, &[]);
@@ -1337,7 +1337,7 @@ mod tests {
         p.delete_columns(1, &["A".to_string(), "B".to_string()]);
         let g = p.graph(2).unwrap().first_layer();
         assert_eq!(g.x_key, None);
-        assert_eq!(g.y_keys, vec!["C"]);
+        assert_eq!(g.draft().y_keys, vec!["C"]);
         assert_eq!(p.book(1).unwrap().columns.len(), 1);
         // 新列标识不会和剩下的 C 冲突
         assert_eq!(p.book(1).unwrap().next_key(), "A");

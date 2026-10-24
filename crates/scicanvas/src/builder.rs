@@ -8,7 +8,7 @@ pub fn floating_columns(ui: &mut egui::Ui, layer: &mut Layer, cols: &[(String, S
     }
     ui.vertical(|ui| {
         for key in layer.plot_keys(false).iter() {
-            let mut base = layer.plot_base_key(key).unwrap_or_default().to_string();
+            let mut base = layer.plot_base_key(key).unwrap_or_default();
             let before = base.clone();
             egui::ComboBox::from_id_salt(("floating-base", key))
                 .selected_text(format!(
@@ -35,7 +35,7 @@ pub fn show(ctx: &egui::Context, project: &Project, draft: &mut Option<PlotSpec>
     };
     // 草稿每帧移入图层编辑视图，结束后移回；不复制数据，也不改变应用的草稿类型。
     let mut layer = Layer {
-        spec: std::mem::take(spec),
+        spec: std::mem::take(spec).into(),
         ..Default::default()
     };
     let mut open = true;
@@ -171,6 +171,6 @@ pub fn show(ctx: &egui::Context, project: &Project, draft: &mut Option<PlotSpec>
                 });
             });
         });
-    *draft = open.then_some(layer.spec);
+    *draft = open.then(|| layer.draft());
     apply
 }

@@ -91,8 +91,14 @@ fn spline_autoscale_symbols_gaps_duplicates_and_fit_are_independent() {
         .items
         .iter()
         .any(|it| matches!(&it.prim, Prim::Polyline { pts, .. } if pts.len() == 33)));
-    p.graph_mut(id).unwrap().first_layer_mut().line_only.clear();
-    p.graph_mut(id).unwrap().first_layer_mut().y_keys = vec!["B".into()];
+    p.graph_mut(id)
+        .unwrap()
+        .first_layer_mut()
+        .edit_draft(|draft| draft.line_only.clear());
+    p.graph_mut(id)
+        .unwrap()
+        .first_layer_mut()
+        .edit_draft(|draft| draft.y_keys = vec!["B".into()]);
     p.book_mut(1).unwrap().columns[1].data.set_text(2, String::new());
     let sc = scene::layout_page(p.graph(id).unwrap(), &p, &[]);
     assert_eq!(
@@ -172,7 +178,7 @@ fn bar_labels_use_segment_values_positions_and_independent_layers() {
     c.data = vec!["3".into(); 4].into();
     b.columns.push(c);
     let l = p.graph_mut(id).unwrap().first_layer_mut();
-    l.y_keys.push("C".into());
+    l.edit_draft(|draft| draft.y_keys.push("C".into()));
     l.labels.visible = true;
     let sc = scene::layout_page(p.graph(id).unwrap(), &p, &[]);
     assert_eq!(labels(&sc), ["0", "1", "1", "0", "3", "3", "3", "3"]);
@@ -262,7 +268,7 @@ fn label_and_z_columns_are_not_curves_and_label_column_feeds_data_labels() {
     b.columns.push(z);
     // 全表作图和分析只取 Y 列
     let (all, _) = p.plot_from_selection(1, &[], PlotType::Line).unwrap();
-    assert_eq!(p.graph(all).unwrap().first_layer().y_keys, ["B"]);
+    assert_eq!(p.graph(all).unwrap().first_layer().draft().y_keys, ["B"]);
     let src = Source::Book {
         id: 1,
         selected: vec![],
@@ -318,7 +324,10 @@ fn nearest_point_uses_segment_values_and_swapped_axes() {
         let mut c = Column::new("C", Role::Y);
         c.data = vec!["3".into(); 4].into();
         b.columns.push(c);
-        p.graph_mut(id).unwrap().first_layer_mut().y_keys.push("C".into());
+        p.graph_mut(id)
+            .unwrap()
+            .first_layer_mut()
+            .edit_draft(|draft| draft.y_keys.push("C".into()));
         let sc = scene::layout_page(p.graph(id).unwrap(), &p, &[]);
         let view = &sc.layers[0];
         let layer = p.graph(id).unwrap().first_layer();
@@ -443,7 +452,10 @@ fn curve_styles_override_type_color_width_and_use_a_right_axis() {
     c.units = "L/min".into();
     c.data = ["100", "300", "200", "400"].map(str::to_string).to_vec().into();
     b.columns.push(c);
-    p.graph_mut(id).unwrap().first_layer_mut().y_keys.push("C".into());
+    p.graph_mut(id)
+        .unwrap()
+        .first_layer_mut()
+        .edit_draft(|draft| draft.y_keys.push("C".into()));
     let base = scene::layout_page(p.graph(id).unwrap(), &p, &[]);
     type Line = ((u8, u8, u8), f64, Vec<[f64; 2]>);
     let polylines = |sc: &Scene| -> Vec<Line> {
@@ -458,22 +470,26 @@ fn curve_styles_override_type_color_width_and_use_a_right_axis() {
     assert_eq!(polylines(&base).len(), 2);
     // B 改成散点；C 改成红色 2.5 线宽并放到右侧 Y 轴
     let l = p.graph_mut(id).unwrap().first_layer_mut();
-    l.curves.insert(
-        "B".into(),
-        CurveStyle {
-            kind: Some(PlotType::Scatter),
-            ..Default::default()
-        },
-    );
-    l.curves.insert(
-        "C".into(),
-        CurveStyle {
-            color: Some([200, 30, 30]),
-            line_width: Some(2.5),
-            right_axis: true,
-            ..Default::default()
-        },
-    );
+    l.edit_styles(|styles| {
+        styles.insert(
+            "B".into(),
+            CurveStyle {
+                kind: Some(PlotType::Scatter),
+                ..Default::default()
+            },
+        )
+    });
+    l.edit_styles(|styles| {
+        styles.insert(
+            "C".into(),
+            CurveStyle {
+                color: Some([200, 30, 30]),
+                line_width: Some(2.5),
+                right_axis: true,
+                ..Default::default()
+            },
+        )
+    });
     let sc = scene::layout_page(p.graph(id).unwrap(), &p, &[]);
     let lines = polylines(&sc);
     assert_eq!(lines.len(), 1, "B is now a scatter");
@@ -505,8 +521,8 @@ fn curve_styles_override_type_color_width_and_use_a_right_axis() {
         let json = scicanvas_core::project_file::to_json(&p).unwrap();
         let back = scicanvas_core::project_file::from_json(&json).unwrap();
         assert_eq!(
-            back.graph(id).unwrap().first_layer().curves,
-            p.graph(id).unwrap().first_layer().curves
+            back.graph(id).unwrap().first_layer().styles(),
+            p.graph(id).unwrap().first_layer().styles()
         );
     }
 }

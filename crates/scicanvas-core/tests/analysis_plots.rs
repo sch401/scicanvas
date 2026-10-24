@@ -25,18 +25,21 @@ fn project() -> (Project, u64, u64, u64) {
     let mut target = p.graph(gid).unwrap().first_layer().clone();
     target.rows = Some((2, 9));
     let key = DataRef::new(b, "B").key(target.book_id);
-    target.row_by_y.insert(key, Some((1, 7)));
+    target.edit_draft(|draft| draft.row_by_y.insert(key, Some((1, 7))));
     for (source, right_axis) in [(a, false), (b, true)] {
-        target.curves.insert(
-            DataRef::new(source, "B").key(target.book_id),
-            CurveStyle {
-                right_axis,
-                color: Some([70, 90, 120]),
-                symbol_size: Some(8.0),
-                legend_label: "原数据".into(),
-                ..Default::default()
-            },
-        );
+        let key = DataRef::new(source, "B").key(target.book_id);
+        target.edit_styles(|styles| {
+            styles.insert(
+                key,
+                CurveStyle {
+                    right_axis,
+                    color: Some([70, 90, 120]),
+                    symbol_size: Some(8.0),
+                    legend_label: "原数据".into(),
+                    ..Default::default()
+                },
+            )
+        });
     }
     p.graph_mut(gid).unwrap().page.add_layer(target);
     (p, a, b, gid)
@@ -189,6 +192,7 @@ fn bands_reach_all_matching_layers_and_residuals_keep_each_reports_x_policy() {
         for graph in &mut legacy.graphs {
             for layer in graph.page.layers_mut() {
                 if layer
+                    .draft()
                     .y_keys
                     .contains(&layer.result_key(report.book_id, &report.curve.1))
                 {
@@ -226,7 +230,7 @@ fn bands_reach_all_matching_layers_and_residuals_keep_each_reports_x_policy() {
                     .insert(key, DataRef::new(report.book_id, x).key(spec.book_id));
             }
         }
-        assert_eq!(p.graph(residual).unwrap().first_layer().spec, spec);
+        assert_eq!(p.graph(residual).unwrap().first_layer().draft(), spec);
         assert_eq!(&p.graphs[..previous.len()], previous.as_slice());
         check_roundtrip(&p);
     }
@@ -246,25 +250,28 @@ fn row_number_and_floating_sources_keep_legacy_baseline_bindings() {
             let spec =
                 PlotSpec::from_selection(p.book(a).unwrap(), &["B".into(), "C".into()], PlotType::FloatingBar).unwrap();
             p.graph_mut(gid).unwrap().page.layers_mut()[1] = Layer {
-                spec,
+                spec: spec.into(),
                 ..Default::default()
             };
             p.add_curves(gid, 1, b, &["B".into(), "C".into()]).unwrap();
             let layer = &mut p.graph_mut(gid).unwrap().page.layers_mut()[1];
-            layer.curves.insert(
-                DataRef::new(b, "C").key(layer.book_id),
-                CurveStyle {
-                    right_axis: true,
-                    ..Default::default()
-                },
-            );
+            let key = DataRef::new(b, "C").key(layer.book_id);
+            layer.edit_styles(|styles| {
+                styles.insert(
+                    key,
+                    CurveStyle {
+                        right_axis: true,
+                        ..Default::default()
+                    },
+                )
+            });
         } else {
             for id in [a, b] {
                 p.book_mut(id).unwrap().columns[0].role = Role::Ignore;
             }
             let layer = &mut p.graph_mut(gid).unwrap().page.layers_mut()[1];
             layer.x_key = None;
-            layer.x_by_y.clear();
+            layer.edit_draft(|draft| draft.x_by_y.clear());
         }
         let source = Source::Layer {
             graph_id: gid,
@@ -318,7 +325,7 @@ fn book_analysis_creates_and_reuses_scatter_layers_with_the_original_defaults() 
         let layer = legacy.first_layer_mut();
         layer.book_id = Some(a);
         layer.x_key = report.x_key.clone();
-        layer.y_keys = vec![report.y_key.clone()];
+        layer.edit_draft(|draft| draft.y_keys = vec![report.y_key.clone()]);
         layer.plot_type = PlotType::Scatter;
         layer.rows = Some((2, 8));
         layer.add_analysis_result(a, &report.y_key, &report.curve.1, Some(&report.curve.0));

@@ -97,8 +97,8 @@ fn floating_columns_pair_by_key_and_skip_incomplete_ranges() {
         ],
     );
     let g = p.graph(id).unwrap().first_layer();
-    assert_eq!(g.y_keys, ["C", "E"]);
-    assert_eq!(g.base_by_y.get("C").map(String::as_str), Some("B"));
+    assert_eq!(g.draft().y_keys, ["C", "E"]);
+    assert_eq!(g.draft().base_by_y.get("C").map(String::as_str), Some("B"));
     let s = series(&p, id);
     assert_eq!(s[0].points, [[1.0, 20.0], [3.0, 35.0]]);
     assert_eq!(s[0].bases, [10.0, 40.0]);
@@ -124,15 +124,14 @@ fn invalid_floating_selection_is_atomic_and_mapping_can_be_adjusted() {
     let before = l.spec.clone();
     assert!(l.set_plot_type(PlotType::FloatingBar).is_err());
     assert_eq!(l.spec, before);
-    l.y_keys.pop();
+    l.edit_draft(|draft| draft.y_keys.pop());
     l.set_plot_type(PlotType::FloatingBar).unwrap();
-    l.base_by_y.insert("C".into(), "D".into());
+    l.edit_draft(|draft| draft.base_by_y.insert("C".into(), "D".into()));
     assert_eq!(series(&p, id)[0].bases, [3.0]);
     p.graph_mut(id)
         .unwrap()
         .first_layer_mut()
-        .base_by_y
-        .insert("C".into(), "C".into());
+        .edit_draft(|draft| draft.base_by_y.insert("C".into(), "C".into()));
     assert!(p.graph(id).unwrap().first_layer().validate(p.book(1).unwrap()).is_err());
     assert!(series(&p, id).is_empty());
 }
@@ -277,7 +276,7 @@ fn v5_persists_all_bar_types_and_v4_defaults_to_no_baseline_mapping() {
         .remove("base_by_y");
     let loaded = project_file::from_json(&v.to_string()).unwrap();
     assert_eq!(loaded.version, project_file::CURRENT_VERSION);
-    assert!(loaded.graph(id).unwrap().first_layer().base_by_y.is_empty());
+    assert!(loaded.graph(id).unwrap().first_layer().draft().base_by_y.is_empty());
     assert_eq!(series(&loaded, id), series(&p, id));
     let spec = PlotSpec::from_selection(p.book(1).unwrap(), &[], PlotType::FloatingBar).unwrap();
     spec.validate(p.book(1).unwrap()).unwrap();

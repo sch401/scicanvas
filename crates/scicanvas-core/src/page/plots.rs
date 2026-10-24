@@ -1,126 +1,535 @@
-//! 曲线访问的过渡入口；数据仍写入原有平行映射表。
+//! 图层曲线的唯一存储。旧 PlotSpec 只用于作图草稿和早期文件的边界转换。
 use super::{CurveStyle, Layer};
-use crate::plotspec::{default_x, split_key, BookLookup, DataRef, Plot};
+use crate::plotspec::{default_x, split_key, BookLookup, CurveMapping, DataRef, Plot as Description, PlotSpec};
+use std::collections::BTreeMap;
 
-impl Layer {
-    /// 沿用撤销预算的原计入范围、实际预留容量和每项 128 字节节点估值。
-    /// 包含隐藏、未绑定和暂存映射，直接读取分配，避免描述快照丢失容量信息。
-    pub(crate) fn estimated_plot_bytes(&self) -> usize {
-        let mut bytes = self.row_by_y.keys().map(|key| 128 + key.capacity()).sum::<usize>();
-        for keys in [&self.y_keys, &self.line_only] {
-            bytes += keys.capacity() * std::mem::size_of::<String>() + keys.iter().map(String::capacity).sum::<usize>();
-        }
-        bytes += self
-            .x_by_y
-            .iter()
-            .map(|(k, v)| 128 + k.capacity() + v.capacity())
-            .sum::<usize>();
-        bytes += self
-            .base_by_y
-            .iter()
-            .map(|(k, v)| 128 + k.capacity() + v.capacity())
-            .sum::<usize>();
-        bytes
+/// 一条曲线及其暂存设置。book=0 表示跟随图层主表，允许旧空图尚未绑定。
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct Plot {
+    pub(crate) source: DataRef,
+    pub(crate) active: bool,
+    pub(crate) x: Option<DataRef>,
+    pub(crate) base: Option<DataRef>,
+    pub(crate) rows: Option<Option<(usize, usize)>>,
+    pub(crate) line_order: Option<usize>,
+    pub(crate) style: Option<CurveStyle>,
+}
+
+/// 图层公共设置与有序曲线对象，不再持有平行映射表。
+#[derive(Clone, Debug, PartialEq)]
+pub struct LayerSpec {
+    pub book_id: Option<u64>,
+    pub x_key: Option<String>,
+    pub plot_type: crate::PlotType,
+    pub rows: Option<(usize, usize)>,
+    pub transform: crate::plotspec::Transform,
+    pub color_map: crate::colormap::ColorMap,
+    pub(crate) plots: Vec<Plot>,
+}
+
+fn raw_ref(key: &str) -> DataRef {
+    let (col, book) = split_key(key);
+    DataRef::new(book.unwrap_or(0), col)
+}
+fn raw_key(source: &DataRef) -> String {
+    if source.book == 0 {
+        source.col.clone()
+    } else {
+        crate::plotspec::foreign_key(source.book, &source.col)
     }
+}
+fn resolved(source: &DataRef, main: Option<u64>) -> Option<DataRef> {
+    Some(DataRef::new(
+        if source.book == 0 { main? } else { source.book },
+        &source.col,
+    ))
+}
 
-    /// 编辑视图的顺序键，保留未绑定主表的旧条目；属性样式可排除派生线。
-    pub fn plot_keys(&self, include_derived: bool) -> Vec<String> {
-        self.y_keys
+impl Default for LayerSpec {
+    fn default() -> Self {
+        PlotSpec::default().into()
+    }
+}
+impl From<PlotSpec> for LayerSpec {
+    fn from(spec: PlotSpec) -> Self {
+        Self::from_draft(spec, BTreeMap::new())
+    }
+}
+impl LayerSpec {
+    /// 缩放缓存沿用旧 PlotSpec 的判定范围，样式及仅存样式的隐藏项不重置视图。
+    pub fn same_mapping(&self, other: &Self) -> bool {
+        if (
+            self.book_id,
+            &self.x_key,
+            self.plot_type,
+            self.rows,
+            self.transform,
+            self.color_map,
+        ) != (
+            other.book_id,
+            &other.x_key,
+            other.plot_type,
+            other.rows,
+            other.transform,
+            other.color_map,
+        ) {
+            return false;
+        }
+        let mapping =
+            |p: &&Plot| p.active || p.x.is_some() || p.base.is_some() || p.rows.is_some() || p.line_order.is_some();
+        let a = self.plots.iter().filter(mapping);
+        let b = other.plots.iter().filter(mapping);
+        a.clone().count() == b.clone().count()
+            && a.zip(b).all(|(a, b)| {
+                a.source == b.source
+                    && a.active == b.active
+                    && a.x == b.x
+                    && a.base == b.base
+                    && a.rows == b.rows
+                    && a.line_order == b.line_order
+            })
+    }
+    fn from_draft(spec: PlotSpec, styles: BTreeMap<String, CurveStyle>) -> Self {
+        let mut keys = spec.y_keys.clone();
+        for key in spec
+            .x_by_y
+            .keys()
+            .chain(spec.base_by_y.keys())
+            .chain(spec.row_by_y.keys())
+            .chain(spec.line_only.iter())
+            .chain(styles.keys())
+        {
+            if !keys.contains(key) {
+                keys.push(key.clone());
+            }
+        }
+        let plots = keys
+            .into_iter()
+            .map(|key| Plot {
+                source: raw_ref(&key),
+                active: spec.y_keys.contains(&key),
+                x: spec.x_by_y.get(&key).map(|key| raw_ref(key)),
+                base: spec.base_by_y.get(&key).map(|key| raw_ref(key)),
+                rows: spec.row_by_y.get(&key).copied(),
+                line_order: spec.line_only.iter().position(|k| k == &key),
+                style: styles.get(&key).cloned(),
+            })
+            .collect();
+        let mut result = Self {
+            book_id: spec.book_id,
+            x_key: spec.x_key,
+            plot_type: spec.plot_type,
+            rows: spec.rows,
+            transform: spec.transform,
+            color_map: spec.color_map,
+            plots,
+        };
+        result.normalize();
+        result
+    }
+    fn normalize(&mut self) {
+        self.plots.retain(|p| {
+            p.active
+                || p.x.is_some()
+                || p.base.is_some()
+                || p.rows.is_some()
+                || p.line_order.is_some()
+                || p.style.is_some()
+        });
+        self.plots.sort_by(|a, b| match (a.active, b.active) {
+            (true, true) => std::cmp::Ordering::Equal,
+            (true, false) => std::cmp::Ordering::Less,
+            (false, true) => std::cmp::Ordering::Greater,
+            _ => raw_key(&a.source).cmp(&raw_key(&b.source)),
+        });
+        let mut lines: Vec<_> = self.plots.iter().filter_map(|p| p.line_order).collect();
+        lines.sort_unstable();
+        lines.dedup();
+        for p in &mut self.plots {
+            p.line_order = p.line_order.map(|i| lines.binary_search(&i).unwrap());
+        }
+    }
+    fn entry(&self, key: &str) -> Option<&Plot> {
+        let source = raw_ref(key);
+        self.plots.iter().find(|p| p.source == source)
+    }
+    fn entry_mut(&mut self, key: &str) -> &mut Plot {
+        let source = raw_ref(key);
+        let i = self.plots.iter().position(|p| p.source == source).unwrap_or_else(|| {
+            self.plots.push(Plot {
+                source,
+                active: false,
+                x: None,
+                base: None,
+                rows: None,
+                line_order: None,
+                style: None,
+            });
+            self.plots.len() - 1
+        });
+        &mut self.plots[i]
+    }
+    /// 临时草稿投影，不缓存，也不成为第二份可变存储。
+    pub fn draft(&self) -> PlotSpec {
+        let mut spec = PlotSpec {
+            book_id: self.book_id,
+            x_key: self.x_key.clone(),
+            plot_type: self.plot_type,
+            rows: self.rows,
+            transform: self.transform,
+            color_map: self.color_map,
+            ..Default::default()
+        };
+        let mut lines = Vec::new();
+        for p in &self.plots {
+            let key = raw_key(&p.source);
+            if p.active {
+                spec.y_keys.push(key.clone());
+            }
+            if let Some(x) = &p.x {
+                spec.x_by_y.insert(key.clone(), raw_key(x));
+            }
+            if let Some(base) = &p.base {
+                spec.base_by_y.insert(key.clone(), raw_key(base));
+            }
+            if let Some(rows) = p.rows {
+                spec.row_by_y.insert(key.clone(), rows);
+            }
+            if let Some(order) = p.line_order {
+                lines.push((order, key));
+            }
+        }
+        lines.sort_by_key(|(i, _)| *i);
+        spec.line_only = lines.into_iter().map(|(_, key)| key).collect();
+        spec
+    }
+    pub fn edit_styles<T>(&mut self, edit: impl FnOnce(&mut BTreeMap<String, CurveStyle>) -> T) -> T {
+        let mut styles = self.styles();
+        let result = edit(&mut styles);
+        for p in &mut self.plots {
+            p.style = None;
+        }
+        for (key, style) in styles {
+            self.entry_mut(&key).style = Some(style);
+        }
+        self.normalize();
+        result
+    }
+    pub fn styles(&self) -> BTreeMap<String, CurveStyle> {
+        self.plots
             .iter()
-            .filter(|key| include_derived || !self.line_only.contains(key))
-            .cloned()
+            .filter_map(|p| Some((raw_key(&p.source), p.style.clone()?)))
             .collect()
     }
-
-    /// 旧编辑视图仅改变勾选/顺序，保留取消勾选项的映射和样式；真正删除用 remove_plot。
-    pub fn edit_plot_keys(&mut self, edit: impl FnOnce(&mut Vec<String>)) {
-        edit(&mut self.spec.y_keys);
+    /// 完整替换草稿，保留原本独立于勾选项的样式。
+    pub fn replace_draft(&mut self, spec: PlotSpec) {
+        *self = Self::from_draft(spec, self.styles());
     }
-
-    /// 属性窗口追加曲线，保留暂存映射/样式；默认 X 按旧规则显式覆盖。
-    /// 与 add_book_curves 的选列校验和浮动柱配对流程不同，编辑过程允许暂不完整。
-    pub fn select_plot(&mut self, source: &DataRef, x: Option<&DataRef>) {
-        let key = source.key(self.book_id);
-        self.spec.y_keys.push(key.clone());
-        if let Some(x) = x {
-            self.spec.x_by_y.insert(key, x.key(self.book_id));
+    pub fn edit_draft<T>(&mut self, edit: impl FnOnce(&mut PlotSpec) -> T) -> T {
+        let mut draft = self.draft();
+        let result = edit(&mut draft);
+        self.replace_draft(draft);
+        result
+    }
+    pub fn rebound(&self, book: u64, defaults: Option<&PlotSpec>) -> Self {
+        Self::from_draft(self.draft().rebound(book, defaults), self.styles())
+    }
+    pub fn set_plot_type(&mut self, kind: crate::PlotType) -> Result<(), String> {
+        let mut draft = self.draft();
+        draft.set_plot_type(kind)?;
+        self.replace_draft(draft);
+        Ok(())
+    }
+    pub fn result_key(&self, book: u64, col: &str) -> String {
+        DataRef::new(book, col).key(self.book_id)
+    }
+    pub fn resolve<'a>(
+        &self,
+        main: &'a crate::Book,
+        others: BookLookup<'a, '_>,
+        key: &str,
+    ) -> Option<(&'a crate::Book, &'a crate::Column)> {
+        let (col, id) = split_key(key);
+        let book = match id {
+            Some(id) if id != main.id => others(id)?,
+            _ => main,
+        };
+        book.column(col).map(|c| (book, c))
+    }
+    pub fn curve_label<'a>(&self, main: Option<&'a crate::Book>, others: BookLookup<'a, '_>, key: &str) -> String {
+        self.draft().curve_label(main, others, key)
+    }
+    pub fn foreign_books(&self) -> Vec<u64> {
+        self.draft().foreign_books()
+    }
+    pub fn validate(&self, book: &crate::Book) -> Result<(), String> {
+        self.validate_in(book, &|_| None)
+    }
+    pub fn validate_in<'a>(&self, book: &'a crate::Book, others: BookLookup<'a, '_>) -> Result<(), String> {
+        self.draft().validate_in(book, others)
+    }
+    pub fn add_curve(&mut self, book: &crate::Book, key: &str) -> Result<String, String> {
+        let mut draft = self.draft();
+        let key = draft.add_curve(book, key)?;
+        self.replace_draft(draft);
+        Ok(key)
+    }
+    pub fn remove_curve(&mut self, key: &str) {
+        let source = raw_ref(key);
+        self.plots.retain(|p| p.source != source);
+        self.normalize();
+    }
+    pub fn series<'a>(&self, book: &'a crate::Book) -> (Option<&'a crate::Column>, Vec<crate::Series>) {
+        self.series_in(book, &|_| None)
+    }
+    pub fn series_in<'a>(
+        &self,
+        book: &'a crate::Book,
+        others: BookLookup<'a, '_>,
+    ) -> (Option<&'a crate::Column>, Vec<crate::Series>) {
+        let plots = self.plots_in(&|id| if id == book.id { Some(book) } else { others(id) });
+        self.series_from_plots(book, others, &plots)
+    }
+    pub(crate) fn series_from_plots<'a>(
+        &self,
+        book: &'a crate::Book,
+        others: BookLookup<'a, '_>,
+        plots: &[Description],
+    ) -> (Option<&'a crate::Column>, Vec<crate::Series>) {
+        PlotSpec {
+            book_id: self.book_id,
+            x_key: self.x_key.clone(),
+            plot_type: self.plot_type,
+            transform: self.transform,
+            ..Default::default()
         }
+        .series_from_plots(book, others, plots)
     }
-
-    /// 编辑和保存共用原始下端键，空字符串仍表示已删除下端。
-    pub fn plot_base_key(&self, key: &str) -> Option<&str> {
-        self.base_by_y.get(key).map(String::as_str)
+    pub fn plot_in(&self, key: &str, books: BookLookup<'_, '_>) -> Option<Description> {
+        self.describe(self.entry(key)?, books)
     }
-
-    /// 草稿允许暂不完整的下端映射，沿用控件选值后直接写入的规则。
-    pub fn set_plot_base_key(&mut self, key: &str, base: String) {
-        self.spec.base_by_y.insert(key.to_string(), base);
+    fn describe(&self, p: &Plot, books: BookLookup<'_, '_>) -> Option<Description> {
+        let y = resolved(&p.source, self.book_id)?;
+        let local = self.book_id == Some(y.book);
+        let x = p.x.as_ref().and_then(|x| resolved(x, self.book_id)).or_else(|| {
+            if local {
+                self.x_key.as_ref().map(|key| DataRef::new(y.book, key))
+            } else {
+                books(y.book)
+                    .and_then(|b| default_x(b, &y.col))
+                    .map(|key| DataRef::new(y.book, key))
+            }
+        });
+        Some(Description {
+            key: raw_key(&p.source),
+            mapping: CurveMapping {
+                y,
+                x,
+                base: p
+                    .base
+                    .as_ref()
+                    .filter(|b| !b.col.is_empty())
+                    .and_then(|b| resolved(b, self.book_id)),
+                rows: p.rows.unwrap_or(if local && p.line_order.is_none() {
+                    self.rows
+                } else {
+                    None
+                }),
+                line_only: p.line_order.is_some(),
+            },
+            style: p.style.clone(),
+            x_override: p.x.is_some(),
+        })
     }
-
-    /// 保存也检查暂未勾选曲线的旧行范围，错误不能被活动曲线快照漏掉。
-    pub fn valid_plot_rows(&self) -> bool {
-        !self.rows.is_some_and(|(a, b)| a > b || b == usize::MAX)
-            && !self.row_by_y.values().flatten().any(|(a, b)| a > b || *b == usize::MAX)
+    pub fn plots_in(&self, books: BookLookup<'_, '_>) -> Vec<Description> {
+        self.plots
+            .iter()
+            .filter(|p| p.active)
+            .filter_map(|p| self.describe(p, books))
+            .collect()
     }
+}
 
-    /// 屏幕缓存引用判定：保留隐藏映射以及其他表未显式指定的默认 X。
-    pub fn references_plot_column(&self, book: &crate::Book, key: &str) -> bool {
-        let local = self.book_id == Some(book.id);
-        let qualified = crate::plotspec::foreign_key(book.id, key);
-        let matches = |other: &str| other == qualified || (local && other == key);
-        (local && self.x_key.as_deref() == Some(key))
-            || self.y_keys.iter().any(|y| matches(y))
-            || self.x_by_y.values().any(|x| matches(x))
-            || self.base_by_y.values().any(|base| matches(base))
-            || (local && self.labels.column.as_deref() == Some(key))
-            || (!local
-                && self.y_keys.iter().any(|y| match split_key(y) {
-                    (col, Some(id)) if id == book.id && !self.x_by_y.contains_key(y) => {
-                        default_x(book, col).as_deref() == Some(key)
-                    }
-                    _ => false,
-                }))
+impl Layer {
+    pub(crate) fn estimated_plot_bytes(&self) -> usize {
+        self.spec.plots.capacity() * std::mem::size_of::<Plot>()
+            + self
+                .spec
+                .plots
+                .iter()
+                .map(|p| {
+                    p.source.col.capacity()
+                        + p.x.as_ref().map_or(0, |r| r.col.capacity())
+                        + p.base.as_ref().map_or(0, |r| r.col.capacity())
+                        + p.style.as_ref().map_or(0, |s| s.legend_label.capacity())
+                })
+                .sum::<usize>()
     }
-
-    /// 样式独立于数据绑定，未绑定或暂时取消勾选的旧项仍可编辑。
-    pub fn plot_style(&self, key: &str) -> Option<&CurveStyle> {
-        self.curves.get(key)
+    pub fn plot_keys(&self, include_derived: bool) -> Vec<String> {
+        self.spec
+            .plots
+            .iter()
+            .filter(|p| p.active && (include_derived || p.line_order.is_none()))
+            .map(|p| raw_key(&p.source))
+            .collect()
     }
-
-    /// 只修改样式，保留所有映射及显式默认样式的有无。
-    pub fn set_plot_style(&mut self, key: &str, style: Option<CurveStyle>) {
-        if self.curves.get(key) == style.as_ref() {
+    /// 属性控件以来源标识选择曲线，未绑定的本表项保留 book=0。
+    pub fn plot_sources(&self, include_derived: bool) -> Vec<DataRef> {
+        self.spec
+            .plots
+            .iter()
+            .filter(|p| p.active && (include_derived || p.line_order.is_none()))
+            .map(|p| resolved(&p.source, self.book_id).unwrap_or_else(|| p.source.clone()))
+            .collect()
+    }
+    pub fn source_style(&self, source: &DataRef) -> Option<&CurveStyle> {
+        self.spec
+            .plots
+            .iter()
+            .find(|p| resolved(&p.source, self.book_id).as_ref().unwrap_or(&p.source) == source)?
+            .style
+            .as_ref()
+    }
+    pub fn set_source_style(&mut self, source: &DataRef, style: Option<CurveStyle>) {
+        if self.source_style(source) == style.as_ref() {
             return;
         }
-        if let Some(style) = style {
-            self.curves.insert(key.to_string(), style);
+        let key = self
+            .spec
+            .plots
+            .iter()
+            .find(|p| resolved(&p.source, self.book_id).as_ref().unwrap_or(&p.source) == source)
+            .map(|p| raw_key(&p.source))
+            .unwrap_or_else(|| {
+                if source.book == 0 {
+                    source.col.clone()
+                } else {
+                    source.key(self.book_id)
+                }
+            });
+        self.set_plot_style(&key, style);
+    }
+    pub fn set_plot_selected(&mut self, source: &DataRef, on: bool) {
+        let key = if source.book == 0 {
+            source.col.clone()
         } else {
-            self.curves.remove(key);
+            source.key(self.book_id)
+        };
+        if on {
+            self.spec.entry_mut(&key).active = true;
+        } else {
+            let main = self.book_id;
+            for p in &mut self.spec.plots {
+                if resolved(&p.source, main).as_ref().unwrap_or(&p.source) == source {
+                    p.active = false;
+                }
+            }
         }
+        self.spec.normalize();
     }
-
-    /// 属性窗口沿用旧规则，也检查暂未勾选曲线的右轴设置。
+    pub fn edit_plot_keys(&mut self, edit: impl FnOnce(&mut Vec<String>)) {
+        let mut keys = self.plot_keys(true);
+        edit(&mut keys);
+        let mut old = std::mem::take(&mut self.spec.plots);
+        let mut next = Vec::with_capacity(old.len().max(keys.len()));
+        for key in keys {
+            let source = raw_ref(&key);
+            let mut p = old.iter().find(|p| p.source == source).cloned().unwrap_or(Plot {
+                source,
+                active: true,
+                x: None,
+                base: None,
+                rows: None,
+                line_order: None,
+                style: None,
+            });
+            p.active = true;
+            next.push(p);
+        }
+        for mut p in old.drain(..) {
+            if !next.iter().any(|n| n.source == p.source) {
+                p.active = false;
+                next.push(p);
+            }
+        }
+        self.spec.plots = next;
+        self.spec.normalize();
+    }
+    pub fn select_plot(&mut self, source: &DataRef, x: Option<&DataRef>) {
+        let key = source.key(self.book_id);
+        self.spec.entry_mut(&key).active = true;
+        if let Some(x) = x {
+            self.spec.entry_mut(&key).x = Some(raw_ref(&x.key(self.book_id)));
+        }
+        self.spec.normalize();
+    }
+    pub fn plot_base_key(&self, key: &str) -> Option<String> {
+        self.spec.entry(key)?.base.as_ref().map(raw_key)
+    }
+    pub fn set_plot_base_key(&mut self, key: &str, base: String) {
+        self.spec.entry_mut(key).base = Some(raw_ref(&base));
+        self.spec.normalize();
+    }
+    pub fn valid_plot_rows(&self) -> bool {
+        !self.rows.is_some_and(|(a, b)| a > b || b == usize::MAX)
+            && !self
+                .spec
+                .plots
+                .iter()
+                .filter_map(|p| p.rows.flatten())
+                .any(|(a, b)| a > b || b == usize::MAX)
+    }
+    pub fn references_plot_column(&self, book: &crate::Book, key: &str) -> bool {
+        let local = self.book_id == Some(book.id);
+        let matches = |r: &DataRef| r.col == key && (r.book == book.id || (local && r.book == 0));
+        (local && self.x_key.as_deref() == Some(key))
+            || (local && self.labels.column.as_deref() == Some(key))
+            || self.spec.plots.iter().any(|p| {
+                (p.active && matches(&p.source))
+                    || p.x.as_ref().is_some_and(matches)
+                    || p.base.as_ref().is_some_and(matches)
+                    || (!local
+                        && p.active
+                        && p.source.book == book.id
+                        && p.x.is_none()
+                        && default_x(book, &p.source.col).as_deref() == Some(key))
+            })
+    }
+    pub fn plot_style(&self, key: &str) -> Option<&CurveStyle> {
+        self.spec.entry(key)?.style.as_ref()
+    }
+    pub fn set_plot_style(&mut self, key: &str, style: Option<CurveStyle>) {
+        if self.plot_style(key) == style.as_ref() {
+            return;
+        }
+        let source = raw_ref(key);
+        for p in &mut self.spec.plots {
+            if p.source == source {
+                p.style = style.clone();
+            }
+        }
+        if style.is_some() {
+            self.spec.entry_mut(key).style = style;
+        }
+        self.spec.normalize();
+    }
     pub fn has_right_axis_style(&self) -> bool {
-        self.curves.values().any(|style| style.right_axis)
+        self.spec
+            .plots
+            .iter()
+            .any(|p| p.style.as_ref().is_some_and(|s| s.right_axis))
     }
-
-    /// 按现有曲线顺序返回只读描述快照；默认 X 的解析复用原逻辑。
-    pub fn plots(&self, books: BookLookup<'_, '_>) -> Vec<Plot> {
-        self.plots_in(books)
+    pub fn plots(&self, books: BookLookup<'_, '_>) -> Vec<Description> {
+        self.spec.plots_in(books)
     }
-
-    /// 按明确来源定位曲线，同名列不会跨表混淆，也不会生成未添加的曲线。
-    pub fn plot(&self, source: &DataRef, books: BookLookup<'_, '_>) -> Option<Plot> {
-        self.plot_in(self.plot_key(source)?, books)
+    pub fn plot(&self, source: &DataRef, books: BookLookup<'_, '_>) -> Option<Description> {
+        self.spec.plot_in(&self.plot_key(source)?, books)
     }
-
-    /// 在闭包中编辑完整描述，校验通过后一次写回；返回是否实际改变。
-    /// 来源和旧键保持不变，失败时原图层不变；不依赖临时对象的析构来提交。
     pub fn plot_mut(
         &mut self,
         source: &DataRef,
         books: BookLookup<'_, '_>,
-        edit: impl FnOnce(&mut Plot),
+        edit: impl FnOnce(&mut Description),
     ) -> Result<bool, String> {
         let before = self.plot(source, books).ok_or("找不到曲线")?;
         let mut after = before.clone();
@@ -134,95 +543,89 @@ impl Layer {
         self.store_plot(&after, Some(&before), books)?;
         Ok(self.plot(source, books).as_ref() != Some(&before))
     }
-
-    /// 按来源去重并追加，旧键由来源生成；不改绑主表或改变图层默认设置。
-    pub fn add_plot(&mut self, mut plot: Plot, books: BookLookup<'_, '_>) -> Result<bool, String> {
+    pub fn add_plot(&mut self, mut plot: Description, books: BookLookup<'_, '_>) -> Result<bool, String> {
         plot.mapping.validate()?;
         if self.plot_key(&plot.mapping.y).is_some() {
             return Ok(false);
         }
         plot.key = plot.mapping.y.key(self.book_id);
         self.store_plot(&plot, None, books)?;
-        self.spec.y_keys.push(plot.key);
+        self.spec.entry_mut(&plot.key).active = true;
+        self.spec.normalize();
         Ok(true)
     }
-
-    /// 移除该来源的曲线及六张表中的专属项，同时识别旧的限定键写法。
     pub fn remove_plot(&mut self, source: &DataRef) -> bool {
-        let mut removed = false;
-        while let Some(key) = self.plot_key(source).map(str::to_owned) {
-            self.remove_curve(&key);
-            removed = true;
-        }
-        removed
+        let main = self.book_id;
+        let before = self.spec.plots.len();
+        self.spec
+            .plots
+            .retain(|p| !p.active || resolved(&p.source, main).as_ref() != Some(source));
+        self.spec.normalize();
+        before != self.spec.plots.len()
     }
-
-    /// 按描述筛选，保留原顺序，返回移除数量。未绑定主表的旧裸键原样保留。
-    pub fn retain_plots(&mut self, books: BookLookup<'_, '_>, mut keep: impl FnMut(&Plot) -> bool) -> usize {
+    pub fn retain_plots(&mut self, books: BookLookup<'_, '_>, mut keep: impl FnMut(&Description) -> bool) -> usize {
         let gone: Vec<_> = self
             .plots(books)
             .into_iter()
             .filter(|p| !keep(p))
-            .map(|p| p.key)
+            .map(|p| raw_ref(&p.key))
             .collect();
-        let before = self.y_keys.len();
-        // ponytail: 旧平行表逐键清理，2.3 换存储后改为单次 retain。
-        for key in gone {
-            self.remove_curve(&key);
-        }
-        before - self.y_keys.len()
+        let before = self.plot_keys(true).len();
+        self.spec.plots.retain(|p| !gone.contains(&p.source));
+        self.spec.normalize();
+        before - self.plot_keys(true).len()
     }
-
-    /// 删列的过渡入口：在用曲线统一筛选，隐藏曲线的旧项也按原规则清理。
     pub(crate) fn remove_columns(&mut self, book: u64, keys: &[String], books: BookLookup<'_, '_>) {
         if self.book_id != Some(book) {
             self.drop_foreign(book, Some(keys));
             return;
         }
-        self.retain_plots(books, |plot| !keys.contains(&plot.key));
-        self.spec.line_only.retain(|k| !keys.contains(k));
-        self.spec.row_by_y.retain(|k, _| !keys.contains(k));
-        self.curves.retain(|k, _| !keys.contains(k));
-        self.spec.x_by_y.retain(|y, x| !keys.contains(y) && !keys.contains(x));
-        self.spec.base_by_y.retain(|y, _| !keys.contains(y));
+        self.retain_plots(books, |p| !keys.contains(&p.key));
+        self.spec
+            .plots
+            .retain(|p| !(p.source.book == 0 && keys.contains(&p.source.col)));
+        for p in &mut self.spec.plots {
+            if p.x.as_ref().is_some_and(|r| r.book == 0 && keys.contains(&r.col)) {
+                p.x = None;
+            }
+            if p.base.as_ref().is_some_and(|r| r.book == 0 && keys.contains(&r.col)) {
+                p.base = Some(raw_ref(""));
+            }
+        }
         if self.labels.column.as_ref().is_some_and(|k| keys.contains(k)) {
             self.labels.column = None;
         }
-        // 保留旧的缺失下端标记，避免把浮动柱静默改成从零开始。
-        for base in self.spec.base_by_y.values_mut() {
-            if keys.contains(base) {
-                base.clear();
-            }
-        }
         if self.x_key.as_ref().is_some_and(|k| keys.contains(k)) {
-            self.spec.x_key = None;
+            self.x_key = None;
         }
+        self.spec.normalize();
     }
-
-    /// 映射旧存储中的独立范围，包含隐藏曲线；保留显式覆盖与继承的区别。
     pub(crate) fn map_row_ranges(&mut self, book: u64, map: impl Fn(&mut Option<(usize, usize)>)) {
         let main = self.book_id;
         if main == Some(book) {
             map(&mut self.spec.rows);
         }
-        for (key, range) in &mut self.spec.row_by_y {
-            if DataRef::from_key(main, key).is_some_and(|r| r.book == book) {
-                map(range);
+        for p in &mut self.spec.plots {
+            if resolved(&p.source, main).is_some_and(|r| r.book == book) {
+                if let Some(rows) = &mut p.rows {
+                    map(rows);
+                }
             }
         }
     }
-
-    fn plot_key(&self, source: &DataRef) -> Option<&str> {
-        self.y_keys
+    fn plot_key(&self, source: &DataRef) -> Option<String> {
+        self.spec
+            .plots
             .iter()
-            .find(|key| {
-                let (col, book) = split_key(key);
-                col == source.col && book.or(self.book_id) == Some(source.book)
-            })
-            .map(String::as_str)
+            .find(|p| p.active && resolved(&p.source, self.book_id).as_ref() == Some(source))
+            .map(|p| raw_key(&p.source))
     }
-
-    fn store_plot(&mut self, plot: &Plot, before: Option<&Plot>, books: BookLookup<'_, '_>) -> Result<(), String> {
+    fn store_plot(
+        &mut self,
+        plot: &Description,
+        before: Option<&Description>,
+        books: BookLookup<'_, '_>,
+    ) -> Result<(), String> {
         let m = &plot.mapping;
         m.validate()?;
         let local = self.book_id == Some(m.y.book);
@@ -238,40 +641,226 @@ impl Layer {
         if change_x && m.x.is_none() && (inherited_x.is_some() || plot.x_override) {
             return Err("旧曲线存储无法把单条曲线的默认 X 覆盖为行号".into());
         }
-
-        // 未修改的项保留原始继承/覆盖关系，不把读出的默认值固化到旧表。
-        let key = &plot.key;
+        let main = self.book_id;
+        let inherited_rows = if local && !m.line_only { self.rows } else { None };
+        let next_line = self
+            .spec
+            .plots
+            .iter()
+            .filter_map(|p| p.line_order)
+            .max()
+            .map_or(0, |n| n + 1);
+        let entry = self.spec.entry_mut(&plot.key);
         if change_x {
-            if let Some(x) = m.x.as_ref().filter(|_| override_x) {
-                self.spec.x_by_y.insert(key.clone(), x.key(self.book_id));
-            } else {
-                self.spec.x_by_y.remove(key);
-            }
+            entry.x = m.x.as_ref().filter(|_| override_x).map(|r| raw_ref(&r.key(main)));
         }
         if before.is_none_or(|b| m.base != b.mapping.base) {
-            if let Some(base) = &m.base {
-                self.spec.base_by_y.insert(key.clone(), base.key(self.book_id));
-            } else {
-                self.spec.base_by_y.remove(key);
-            }
+            entry.base = m.base.as_ref().map(|r| raw_ref(&r.key(main)));
         }
         if before.is_none_or(|b| m.rows != b.mapping.rows || m.line_only != b.mapping.line_only) {
-            let inherited = if local && !m.line_only { self.rows } else { None };
-            if m.rows == inherited {
-                self.spec.row_by_y.remove(key);
-            } else {
-                self.spec.row_by_y.insert(key.clone(), m.rows);
-            }
+            entry.rows = if m.rows == inherited_rows { None } else { Some(m.rows) };
         }
         if before.is_none_or(|b| m.line_only != b.mapping.line_only) {
-            self.spec.line_only.retain(|k| k != key);
-            if m.line_only {
-                self.spec.line_only.push(key.clone());
-            }
+            entry.line_order = m.line_only.then_some(next_line);
         }
         if before.is_none_or(|b| plot.style != b.style) {
-            self.set_plot_style(key, plot.style.clone());
+            entry.style = plot.style.clone();
         }
+        self.spec.normalize();
         Ok(())
+    }
+}
+
+impl LayerSpec {
+    pub(crate) fn has_curve_kind(&self) -> bool {
+        self.plots
+            .iter()
+            .any(|p| p.style.as_ref().is_some_and(|s| s.kind.is_some()))
+    }
+    pub(crate) fn clear_plots(&mut self) {
+        self.plots.clear();
+    }
+    pub(crate) fn clear_plot_x(&mut self, key: &str) {
+        if let Some(p) = self.plots.iter_mut().find(|p| p.source == raw_ref(key)) {
+            p.x = None;
+        }
+        self.normalize();
+    }
+    pub(crate) fn explicit_plot_x(&self, key: &str) -> Option<String> {
+        self.entry(key)?.x.as_ref().map(raw_key)
+    }
+    pub(crate) fn import_mapping(&mut self, key: String, m: CurveMapping, style: Option<CurveStyle>, missing: bool) {
+        let main = self.book_id;
+        let order = self
+            .plots
+            .iter()
+            .filter_map(|p| p.line_order)
+            .max()
+            .map_or(0, |i| i + 1);
+        self.plots.push(Plot {
+            source: raw_ref(&key),
+            active: true,
+            x: m.x.map(|r| raw_ref(&r.key(main))),
+            base: m
+                .base
+                .map(|r| raw_ref(&r.key(main)))
+                .or_else(|| missing.then(|| raw_ref(""))),
+            rows: m.rows.map(Some),
+            line_order: m.line_only.then_some(order),
+            style,
+        });
+        self.normalize();
+    }
+    pub(crate) fn add_derived(&mut self, source: &str, key: &str, x: Option<String>) {
+        self.entry_mut(source).active = true;
+        let order = self
+            .plots
+            .iter()
+            .filter_map(|p| p.line_order)
+            .max()
+            .map_or(0, |i| i + 1);
+        let entry = self.entry_mut(key);
+        entry.active = true;
+        if entry.line_order.is_none() {
+            entry.line_order = Some(order);
+        }
+        if let Some(x) = x {
+            entry.x = Some(raw_ref(&x));
+        }
+        self.normalize();
+    }
+    pub(crate) fn drop_foreign(&mut self, book: u64, keys: Option<&[String]>) {
+        let hit = |r: &DataRef| r.book == book && keys.is_none_or(|keys| keys.contains(&r.col));
+        // 沿用既有删除语义：隐藏的编辑设置仍保留，下端缺失留下明确标记。
+        self.plots
+            .retain(|p| !p.active || !(hit(&p.source) || p.x.as_ref().is_some_and(hit)));
+        for p in &mut self.plots {
+            if p.base.as_ref().is_some_and(hit) {
+                p.base = Some(raw_ref(""));
+            }
+        }
+        self.normalize();
+    }
+}
+
+/// 项目 v11–v14 的原有曲线对象，字段与省略规则保持。
+#[cfg(feature = "serde")]
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct StoredCurve {
+    pub mapping: CurveMapping,
+    pub style: Option<CurveStyle>,
+    #[serde(default)]
+    pub x_override: bool,
+    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+    pub base_missing: bool,
+}
+#[cfg(feature = "serde")]
+impl serde::Serialize for LayerSpec {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::Error;
+        // 先只写公共图层设置；旧空图保留原有未绑定草稿的字段。
+        let mut value = serde_json::json!({
+            "book_id":self.book_id,"x_key":self.x_key,"plot_type":self.plot_type,
+            "rows":self.rows,"transform":self.transform,"color_map":self.color_map,
+        });
+        if self.book_id.is_none() {
+            value = serde_json::to_value(self.draft()).map_err(S::Error::custom)?;
+            let styles = self.styles();
+            if !styles.is_empty() {
+                value["curves"] = serde_json::to_value(styles).map_err(S::Error::custom)?;
+            }
+        } else {
+            let plots: Vec<_> = self
+                .plots_in(&|_| None)
+                .into_iter()
+                .map(|p| StoredCurve {
+                    base_missing: self
+                        .entry(&p.key)
+                        .and_then(|p| p.base.as_ref())
+                        .is_some_and(|r| r.col.is_empty()),
+                    mapping: p.mapping,
+                    style: p.style,
+                    x_override: p.x_override,
+                })
+                .collect();
+            value["plots"] = serde_json::to_value(plots).map_err(S::Error::custom)?;
+        }
+        value.serialize(serializer)
+    }
+}
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for LayerSpec {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use serde::de::Error;
+        let mut value = serde_json::Value::deserialize(deserializer)?;
+        let plots = value.get("plots").cloned();
+        if plots.is_some() {
+            // 与旧读取规则一致：plots 是权威数据，忽略同时存在的旧平行字段。
+            for key in ["y_keys", "x_by_y", "base_by_y", "row_by_y", "line_only", "curves"] {
+                value.as_object_mut().unwrap().remove(key);
+            }
+            value["y_keys"] = serde_json::json!([]);
+        }
+        let draft: PlotSpec = serde_json::from_value(value.clone()).map_err(D::Error::custom)?;
+        if let Some(plots) = plots {
+            let plots: Vec<StoredCurve> = serde_json::from_value(plots).map_err(D::Error::custom)?;
+            let mut result = Self::from(PlotSpec {
+                book_id: draft.book_id,
+                x_key: draft.x_key,
+                plot_type: draft.plot_type,
+                rows: draft.rows,
+                transform: draft.transform,
+                color_map: draft.color_map,
+                ..Default::default()
+            });
+            let mut seen = std::collections::BTreeSet::new();
+            for (order, p) in plots.into_iter().enumerate() {
+                p.mapping.validate().map_err(D::Error::custom)?;
+                if p.base_missing && p.mapping.base.is_some() {
+                    return Err(D::Error::custom("曲线下端不能同时为缺失和已指定"));
+                }
+                if !seen.insert(p.mapping.y.clone()) {
+                    return Err(D::Error::custom("曲线行范围无效或来源重复"));
+                }
+                let main = result.book_id;
+                let m = p.mapping;
+                let inherited_rows = if Some(m.y.book) == main && !m.line_only {
+                    result.rows
+                } else {
+                    None
+                };
+                let inherited_x = if Some(m.y.book) == main {
+                    result.x_key.as_ref().map(|x| DataRef::new(m.y.book, x))
+                } else {
+                    None
+                };
+                result.plots.push(Plot {
+                    source: raw_ref(&m.y.key(main)),
+                    active: true,
+                    x: m.x
+                        .filter(|x| p.x_override || Some(x) != inherited_x.as_ref())
+                        .map(|r| raw_ref(&r.key(main))),
+                    base: m
+                        .base
+                        .map(|r| raw_ref(&r.key(main)))
+                        .or_else(|| p.base_missing.then(|| raw_ref(""))),
+                    rows: if m.rows == inherited_rows { None } else { Some(m.rows) },
+                    line_order: m.line_only.then_some(order),
+                    style: p.style,
+                });
+            }
+            result.normalize();
+            Ok(result)
+        } else {
+            let styles = value
+                .get("curves")
+                .cloned()
+                .map(serde_json::from_value)
+                .transpose()
+                .map_err(D::Error::custom)?
+                .unwrap_or_default();
+            Ok(Self::from_draft(draft, styles))
+        }
     }
 }

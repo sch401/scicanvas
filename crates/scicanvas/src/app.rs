@@ -1070,11 +1070,7 @@ impl SciApp {
                 Err(e) => self.status = e,
             }
         } else if let Some(id) = self.active_graph_id() {
-            self.plot_draft = Some(
-                self.project.graph(id).unwrap().page.layers()[self.layer_index(id)]
-                    .spec
-                    .clone(),
-            );
+            self.plot_draft = Some(self.project.graph(id).unwrap().page.layers()[self.layer_index(id)].draft());
         }
     }
 

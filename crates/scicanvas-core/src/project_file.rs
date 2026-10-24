@@ -24,19 +24,9 @@ const MANIFEST_ENTRY: &str = "manifest.json";
 /// 解压单个条目的上限，防止损坏或恶意压缩包耗尽内存。
 const MAX_ENTRY_BYTES: u64 = 1 << 31;
 
-/// v11 保存独立曲线映射与样式；属性控件的旧键仅留在内存编辑视图中。
-#[derive(serde::Serialize, serde::Deserialize)]
-#[serde(deny_unknown_fields)]
-struct StoredCurve {
-    mapping: crate::plotspec::CurveMapping,
-    style: Option<crate::page::CurveStyle>,
-    #[serde(default)]
-    x_override: bool,
-    /// 下端已删除，区别于尚未指定下端，禁止自动重新配对。
-    #[serde(default, skip_serializing_if = "std::ops::Not::not")]
-    base_missing: bool,
-}
+use crate::page::plots::StoredCurve;
 
+/// 原有文件的显式/继承 X 规则在读取边界归一化，不再展开为平行表。
 fn decode_plots(
     layer: &mut Value,
     defaults: &std::collections::BTreeMap<(u64, String), Option<String>>,
@@ -44,19 +34,11 @@ fn decode_plots(
     let Some(plots) = layer.get("plots").cloned() else {
         return Ok(());
     };
-    let plots: Vec<StoredCurve> = serde_json::from_value(plots).map_err(|e| format!("曲线映射无效：{e}"))?;
+    let mut plots: Vec<StoredCurve> = serde_json::from_value(plots).map_err(|e| format!("曲线映射无效：{e}"))?;
     let main = layer.get("book_id").and_then(Value::as_u64);
-    let rows: Option<(usize, usize)> =
-        serde_json::from_value(layer.get("rows").cloned().unwrap_or(Value::Null)).map_err(|e| e.to_string())?;
-    let mut ys = Vec::new();
-    let mut xs = serde_json::Map::new();
-    let mut bases = serde_json::Map::new();
-    let mut lines = Vec::new();
-    let mut styles = serde_json::Map::new();
-    let mut ranges = serde_json::Map::new();
     let mut seen = BTreeSet::new();
-    for plot in plots {
-        let m = plot.mapping;
+    for plot in &mut plots {
+        let m = &plot.mapping;
         m.validate()?;
         if plot.base_missing && m.base.is_some() {
             return Err("曲线下端不能同时为缺失和已指定".into());
@@ -64,48 +46,23 @@ fn decode_plots(
         if !seen.insert(m.y.clone()) {
             return Err("曲线行范围无效或来源重复".into());
         }
-        let key = m.y.key(main);
-        ys.push(key.clone());
-        if let Some(x) = m.x {
+        if let Some(x) = &m.x {
             let default = if Some(m.y.book) == main {
                 layer.get("x_key").and_then(Value::as_str).map(str::to_string)
             } else {
                 defaults.get(&(m.y.book, m.y.col.clone())).cloned().flatten()
             };
             let inherited = x.book == m.y.book && default.as_deref() == Some(&x.col);
-            let x = x.key(main);
-            // 与图层默认 X 相同的本表映射无须重复存入编辑视图。
-            if plot.x_override || !inherited {
-                xs.insert(key.clone(), x.into());
+            if !inherited {
+                plot.x_override = true;
+            }
+            // 继承的其他表 X 仍在使用时解析，不固化旧的默认列。
+            if inherited && !plot.x_override && Some(m.y.book) != main {
+                plot.mapping.x = None;
             }
         }
-        if let Some(base) = m.base {
-            bases.insert(key.clone(), base.key(main).into());
-        } else if plot.base_missing {
-            bases.insert(key.clone(), "".into());
-        }
-        let inherited = if Some(m.y.book) == main && !m.line_only {
-            rows
-        } else {
-            None
-        };
-        if m.rows != inherited {
-            ranges.insert(key.clone(), serde_json::to_value(m.rows).map_err(|e| e.to_string())?);
-        }
-        if m.line_only {
-            lines.push(key.clone());
-        }
-        if let Some(style) = plot.style {
-            styles.insert(key, serde_json::to_value(style).map_err(|e| e.to_string())?);
-        }
     }
-    layer["y_keys"] = serde_json::to_value(ys).map_err(|e| e.to_string())?;
-    layer["x_by_y"] = xs.into();
-    layer["base_by_y"] = bases.into();
-    layer["line_only"] = serde_json::to_value(lines).map_err(|e| e.to_string())?;
-    layer["curves"] = styles.into();
-    layer["row_by_y"] = ranges.into();
-    layer.as_object_mut().unwrap().remove("plots");
+    layer["plots"] = serde_json::to_value(plots).map_err(|e| e.to_string())?;
     Ok(())
 }
 
@@ -248,16 +205,13 @@ pub fn to_json(project: &Project) -> Result<String, String> {
                 .plots(&|id| project.book(id))
                 .into_iter()
                 .map(|plot| StoredCurve {
-                    base_missing: layer.plot_base_key(&plot.key) == Some(""),
+                    base_missing: layer.plot_base_key(&plot.key).as_deref() == Some(""),
                     mapping: plot.mapping,
                     style: plot.style,
                     x_override: plot.x_override,
                 })
                 .collect();
             wire["plots"] = serde_json::to_value(plots).map_err(|e| e.to_string())?;
-            for key in ["y_keys", "x_by_y", "base_by_y", "line_only", "curves", "row_by_y"] {
-                wire.as_object_mut().unwrap().remove(key);
-            }
         }
     }
     value["version"] = CURRENT_VERSION.into();

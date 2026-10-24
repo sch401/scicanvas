@@ -18,13 +18,13 @@ fn deleting_a_primary_column_drops_its_style_before_the_key_is_reused() {
     };
     let layer = p.graph_mut(2).unwrap().first_layer_mut();
     for key in ["B", "C", &foreign_key] {
-        layer.curves.insert(key.into(), style.clone());
+        layer.edit_styles(|styles| styles.insert(key.into(), style.clone()));
     }
     p.delete_columns(1, &["C".into()]);
     let layer = p.graph(2).unwrap().first_layer();
-    assert!(!layer.curves.contains_key("C"));
-    assert_eq!(layer.curves["B"], style);
-    assert_eq!(layer.curves[&foreign_key], style);
+    assert!(!layer.styles().contains_key("C"));
+    assert_eq!(layer.styles()["B"], style);
+    assert_eq!(layer.styles()[&foreign_key], style);
     #[cfg(feature = "serde")]
     {
         use scicanvas_core::project_file;
@@ -34,9 +34,9 @@ fn deleting_a_primary_column_drops_its_style_before_the_key_is_reused() {
     assert_eq!(key, "C");
     p.add_curves(2, 0, 1, &[key]).unwrap();
     let layer = p.graph(2).unwrap().first_layer();
-    assert!(layer.y_keys.iter().any(|key| key == "C"));
+    assert!(layer.draft().y_keys.iter().any(|key| key == "C"));
     assert!(
-        !layer.curves.contains_key("C"),
+        !layer.styles().contains_key("C"),
         "the new column uses the default style and left axis"
     );
     #[cfg(feature = "serde")]
@@ -62,8 +62,8 @@ fn shared_curve_addition_handles_empty_graphs_duplicates_and_floating_pairs() {
     );
     assert_eq!(p.add_curves(gid, 0, book, &[d.clone(), e.clone()]).unwrap(), 0);
     let layer = p.graph(gid).unwrap().first_layer();
-    assert_eq!(layer.y_keys, vec![c.clone(), e.clone()]);
-    assert_eq!(layer.base_by_y[&e], d);
+    assert_eq!(layer.draft().y_keys, vec![c.clone(), e.clone()]);
+    assert_eq!(layer.draft().base_by_y[&e], d);
     let before = p.clone();
     assert!(p.add_curves(gid, 0, book, &["B".into(), e]).is_err());
     assert_eq!(p, before, "an invalid interval does not change existing curves");
@@ -75,7 +75,7 @@ fn shared_curve_addition_handles_empty_graphs_duplicates_and_floating_pairs() {
         1
     );
     assert_eq!(empty.book_id, Some(book));
-    assert_eq!(empty.y_keys, vec!["B"]);
+    assert_eq!(empty.draft().y_keys, vec!["B"]);
 }
 
 #[test]
@@ -89,29 +89,31 @@ fn an_emptied_layer_rebinds_to_the_new_book_without_stale_mappings() {
     column.data = (20..25).map(|i| i.to_string()).collect();
     let original = p.book(a).unwrap().clone();
     let layer = p.graph_mut(gid).unwrap().first_layer_mut();
-    for key in layer.y_keys.clone() {
+    for key in layer.draft().y_keys.clone() {
         layer.remove_curve(&key);
     }
     layer.rows = Some((1, 2));
-    layer.x_by_y.insert("stale".into(), "A".into());
-    layer.base_by_y.insert("stale".into(), "B".into());
-    layer.row_by_y.insert("stale".into(), Some((1, 2)));
-    layer.line_only.push("stale".into());
+    layer.edit_draft(|draft| draft.x_by_y.insert("stale".into(), "A".into()));
+    layer.edit_draft(|draft| draft.base_by_y.insert("stale".into(), "B".into()));
+    layer.edit_draft(|draft| draft.row_by_y.insert("stale".into(), Some((1, 2))));
+    layer.edit_draft(|draft| draft.line_only.push("stale".into()));
     layer.labels.column = Some("C".into());
-    layer.curves.insert(
-        "B".into(),
-        scicanvas_core::page::CurveStyle {
-            right_axis: true,
-            ..Default::default()
-        },
-    );
+    layer.edit_styles(|styles| {
+        styles.insert(
+            "B".into(),
+            scicanvas_core::page::CurveStyle {
+                right_axis: true,
+                ..Default::default()
+            },
+        )
+    });
     assert_eq!(p.add_curves(gid, 0, b, &["B".into()]).unwrap(), 1);
     let layer = p.graph(gid).unwrap().first_layer();
     assert_eq!(layer.book_id, Some(b));
-    assert_eq!(layer.y_keys, vec!["B"]);
+    assert_eq!(layer.draft().y_keys, vec!["B"]);
     assert_eq!(layer.x_key.as_deref(), Some(x.as_str()));
-    assert!(layer.x_by_y.is_empty() && layer.base_by_y.is_empty() && layer.row_by_y.is_empty());
-    assert!(layer.line_only.is_empty() && layer.curves.is_empty() && layer.rows.is_none());
+    assert!(layer.draft().x_by_y.is_empty() && layer.draft().base_by_y.is_empty() && layer.draft().row_by_y.is_empty());
+    assert!(layer.draft().line_only.is_empty() && layer.styles().is_empty() && layer.rows.is_none());
     assert!(
         layer.labels.column.is_none(),
         "a label key from the previous book must not bind to the new book"
@@ -137,7 +139,7 @@ fn readding_the_same_book_preserves_layer_x_rows_and_labels() {
             let x = book.push_column(Role::X);
             book.columns.iter_mut().find(|c| c.key == x).unwrap().data = (100..141).map(|i| i.to_string()).collect();
             let layer = p.graph_mut(2).unwrap().first_layer_mut();
-            for key in layer.y_keys.clone() {
+            for key in layer.draft().y_keys.clone() {
                 layer.remove_curve(&key);
             }
             layer.plot_type = plot_type;
@@ -227,8 +229,7 @@ fn per_curve_rows_are_shared_by_rendering_analysis_and_v11_files() {
     p.graph_mut(gid)
         .unwrap()
         .first_layer_mut()
-        .row_by_y
-        .insert(key, Some((1, 3)));
+        .edit_draft(|draft| draft.row_by_y.insert(key, Some((1, 3))));
     let source = Source::Curves {
         graph_id: gid,
         index: 0,
@@ -259,13 +260,15 @@ fn cross_book_analysis_writes_fits_residuals_and_bands_to_each_source() {
     let (mut p, a, b, gid) = project();
     p.add_curves(gid, 0, b, &["B".into()]).unwrap();
     let key = plotspec::foreign_key(b, "B");
-    p.graph_mut(gid).unwrap().first_layer_mut().curves.insert(
-        key,
-        scicanvas_core::page::CurveStyle {
-            right_axis: true,
-            ..Default::default()
-        },
-    );
+    p.graph_mut(gid).unwrap().first_layer_mut().edit_styles(|styles| {
+        styles.insert(
+            key,
+            scicanvas_core::page::CurveStyle {
+                right_axis: true,
+                ..Default::default()
+            },
+        )
+    });
     let resolved = p.resolve(&Source::Graph(gid)).unwrap();
     assert_eq!(resolved.items.iter().map(|i| i.book_id).collect::<Vec<_>>(), vec![a, b]);
     let (_, reports) = p.fit_poly(&Source::Graph(gid), 1).unwrap();
@@ -277,9 +280,9 @@ fn cross_book_analysis_writes_fits_residuals_and_bands_to_each_source() {
         assert!(p.book(book).unwrap().column(&report.residual_key).is_some());
         let key = plotspec::DataRef::new(book, &report.curve.1).key(Some(a));
         let layer = p.graph(gid).unwrap().first_layer();
-        assert!(layer.line_only.contains(&key));
+        assert!(layer.draft().line_only.contains(&key));
         if book == b {
-            assert!(layer.curves[&key].right_axis);
+            assert!(layer.styles()[&key].right_axis);
         }
     }
     let residual = p.residual_plot(&reports).unwrap();
@@ -287,7 +290,7 @@ fn cross_book_analysis_writes_fits_residuals_and_bands_to_each_source() {
     let bands = p.poly_bands(&reports[1], 0.95).unwrap();
     for key in bands {
         let key = plotspec::foreign_key(b, &key);
-        assert!(p.graph(gid).unwrap().first_layer().curves[&key].right_axis);
+        assert!(p.graph(gid).unwrap().first_layer().styles()[&key].right_axis);
     }
     #[cfg(feature = "serde")]
     {
@@ -353,8 +356,7 @@ fn v11_uses_typed_curve_objects_and_reads_v10_without_changing_svg() {
         .graph_mut(gid)
         .unwrap()
         .first_layer_mut()
-        .x_by_y
-        .remove(&plotspec::foreign_key(b, "B"));
+        .edit_draft(|draft| draft.x_by_y.remove(&plotspec::foreign_key(b, "B")));
     assert_eq!(
         project_file::from_json(&project_file::to_json(&inherited).unwrap()).unwrap(),
         inherited
@@ -440,8 +442,11 @@ fn curves_from_another_workbook_use_their_own_x_and_rows() {
     // 重复添加不会多出曲线
     assert_eq!(p.add_curves(gid, 0, b, &["B".into()]).unwrap(), 0);
     let layer = p.graph(gid).unwrap().first_layer();
-    assert_eq!(layer.y_keys, vec!["B".to_string(), format!("B@{b}"), format!("C@{b}")]);
-    assert_eq!(layer.x_by_y.get(&format!("B@{b}")), Some(&format!("A@{b}")));
+    assert_eq!(
+        layer.draft().y_keys,
+        vec!["B".to_string(), format!("B@{b}"), format!("C@{b}")]
+    );
+    assert_eq!(layer.draft().x_by_y.get(&format!("B@{b}")), Some(&format!("A@{b}")));
     assert_eq!(layer.foreign_books(), vec![b]);
 
     let lookup = |id: u64| p.book(id);
@@ -491,7 +496,7 @@ fn missing_x_mapping_falls_back_to_the_other_workbooks_x_column() {
     let (mut p, a, b, gid) = project();
     let key = plotspec::foreign_key(b, "B");
     let layer = p.graph_mut(gid).unwrap().first_layer_mut();
-    layer.y_keys.push(key.clone());
+    layer.edit_draft(|draft| draft.y_keys.push(key.clone()));
     let lookup = |id: u64| p.book(id);
     let layer = p.graph(gid).unwrap().first_layer();
     let (_, series) = layer.series_in(p.book(a).unwrap(), &lookup);
@@ -506,20 +511,19 @@ fn deleting_columns_or_the_workbook_drops_only_its_curves() {
     p.graph_mut(gid)
         .unwrap()
         .first_layer_mut()
-        .curves
-        .insert(key.clone(), Default::default());
+        .edit_styles(|styles| styles.insert(key.clone(), Default::default()));
     p.delete_columns(b, &["C".into()]);
     let layer = p.graph(gid).unwrap().first_layer();
-    assert_eq!(layer.y_keys, vec!["B".to_string(), format!("B@{b}")]);
-    assert!(!layer.curves.contains_key(&key));
+    assert_eq!(layer.draft().y_keys, vec!["B".to_string(), format!("B@{b}")]);
+    assert!(!layer.styles().contains_key(&key));
     // 删掉其他工作簿的 X 列：依赖它的曲线一起去掉
     p.delete_columns(b, &["A".into()]);
-    assert_eq!(p.graph(gid).unwrap().first_layer().y_keys, vec!["B"]);
+    assert_eq!(p.graph(gid).unwrap().first_layer().draft().y_keys, vec!["B"]);
     p.add_curves(gid, 0, b, &["B".into()]).unwrap();
     p.remove(b);
     let layer = p.graph(gid).unwrap().first_layer();
     assert_eq!(layer.book_id, Some(a));
-    assert_eq!(layer.y_keys, vec!["B"]);
+    assert_eq!(layer.draft().y_keys, vec!["B"]);
 }
 
 #[test]
@@ -527,12 +531,12 @@ fn adding_to_an_empty_layer_binds_it_to_the_workbook() {
     let (mut p, _, b, gid) = project();
     let layer = p.graph_mut(gid).unwrap().first_layer_mut();
     layer.book_id = None;
-    layer.y_keys.clear();
+    layer.edit_draft(|draft| draft.y_keys.clear());
     assert_eq!(p.add_curves(gid, 0, b, &["A".into(), "C".into()]).unwrap(), 1);
     let layer = p.graph(gid).unwrap().first_layer();
     assert_eq!(layer.book_id, Some(b));
     assert_eq!(layer.x_key.as_deref(), Some("A"));
-    assert_eq!(layer.y_keys, vec!["C"]);
+    assert_eq!(layer.draft().y_keys, vec!["C"]);
     assert!(p.add_curves(gid, 0, b, &["A".into()]).is_err());
 }
 
@@ -542,10 +546,10 @@ fn removing_a_curve_clears_its_mappings_and_style() {
     p.add_curves(gid, 0, b, &["B".into()]).unwrap();
     let key = format!("B@{b}");
     let layer = p.graph_mut(gid).unwrap().first_layer_mut();
-    layer.curves.insert(key.clone(), Default::default());
+    layer.edit_styles(|styles| styles.insert(key.clone(), Default::default()));
     layer.remove_curve(&key);
-    assert_eq!(layer.y_keys, vec!["B"]);
-    assert!(layer.x_by_y.is_empty() && layer.curves.is_empty());
+    assert_eq!(layer.draft().y_keys, vec!["B"]);
+    assert!(layer.draft().x_by_y.is_empty() && layer.styles().is_empty());
 }
 
 #[cfg(feature = "serde")]
@@ -564,22 +568,26 @@ fn runtime_plots_share_sources_order_and_history_with_analysis_and_files() {
     p.add_curves(gid, 0, b, &["B".into(), "C".into()]).unwrap();
     let foreign = plotspec::foreign_key(b, "B");
     let layer = p.graph_mut(gid).unwrap().first_layer_mut();
-    layer.curves.insert(
-        "B".into(),
-        CurveStyle {
-            kind: Some(PlotType::Bar),
-            ..Default::default()
-        },
-    );
-    layer.curves.insert(
-        foreign.clone(),
-        CurveStyle {
-            kind: Some(PlotType::SplineSymbol),
-            right_axis: true,
-            ..Default::default()
-        },
-    );
-    layer.row_by_y.insert(foreign.clone(), Some((1, 3)));
+    layer.edit_styles(|styles| {
+        styles.insert(
+            "B".into(),
+            CurveStyle {
+                kind: Some(PlotType::Bar),
+                ..Default::default()
+            },
+        )
+    });
+    layer.edit_styles(|styles| {
+        styles.insert(
+            foreign.clone(),
+            CurveStyle {
+                kind: Some(PlotType::SplineSymbol),
+                right_axis: true,
+                ..Default::default()
+            },
+        )
+    });
+    layer.edit_draft(|draft| draft.row_by_y.insert(foreign.clone(), Some((1, 3))));
     let layer = p.graph(gid).unwrap().first_layer();
     let descriptors = layer.plots_in(&|id| p.book(id));
     let (_, prepared) = layer.prepared_plots_in(p.book(a).unwrap(), &|id| p.book(id));
@@ -605,7 +613,7 @@ fn runtime_plots_share_sources_order_and_history_with_analysis_and_files() {
     let mut history = History::default();
     history.begin(&p, "reorder and remove curves");
     let layer = p.graph_mut(gid).unwrap().first_layer_mut();
-    layer.y_keys.reverse();
+    layer.edit_draft(|draft| draft.y_keys.reverse());
     layer.remove_curve("B");
     history.changed();
     history.commit(&p);
@@ -654,13 +662,15 @@ fn derived_lines_use_the_source_right_axis_in_the_actual_scene() {
     book.columns.iter_mut().find(|c| c.key == d).unwrap().derived_from = Some("C".into());
     let layer = p.graph_mut(2).unwrap().first_layer_mut();
     layer.plot_type = PlotType::Scatter;
-    layer.curves.insert(
-        "C".into(),
-        CurveStyle {
-            right_axis: true,
-            ..Default::default()
-        },
-    );
+    layer.edit_styles(|styles| {
+        styles.insert(
+            "C".into(),
+            CurveStyle {
+                right_axis: true,
+                ..Default::default()
+            },
+        )
+    });
     layer.add_analysis_result(1, "C", &d, Some("A"));
     let layer = p.graph(2).unwrap().first_layer();
     let (_, prepared) = layer.prepared_plots_in(p.book(1).unwrap(), &|id| p.book(id));

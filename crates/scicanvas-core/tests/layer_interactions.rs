@@ -17,7 +17,7 @@ fn project() -> (Project, u64) {
     book.columns[1].data = (0..11).map(|i| (3 * i + 7).to_string()).collect();
     let spec = PlotSpec::from_selection(book, &[], PlotType::Scatter).unwrap();
     p.graphs[0].page.add_layer(Layer {
-        spec,
+        spec: spec.into(),
         ..Default::default()
     });
     p.graphs[0].page.columns = 2;
@@ -39,7 +39,7 @@ fn fit_smooth_and_stats_use_selected_layer_book_and_write_back_to_it() {
     assert!((reports[0].fit.coef[1] - 3.0).abs() < 1e-10);
     let keys = p.smooth(&src, SmoothMethod::MovingAverage, 3).unwrap();
     let layer = &p.graphs[0].page.layers()[1];
-    assert!(layer.line_only.contains(&keys[0]));
+    assert!(layer.draft().line_only.contains(&keys[0]));
     assert!(p.book(id).unwrap().column(&keys[0]).is_some());
     assert_eq!(p.graphs[0].page.layers()[0], original_layer);
     assert_eq!(p.book(1).unwrap(), &original_book);

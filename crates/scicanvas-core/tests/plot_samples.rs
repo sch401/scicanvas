@@ -425,7 +425,7 @@ fn every_plot_type_has_a_sample_with_one_table_and_one_graph() {
             book.columns
                 .iter()
                 .filter(|c| c.role == Role::Y)
-                .all(|c| spec.y_keys.contains(&c.key) || spec.base_by_y.values().any(|b| *b == c.key)),
+                .all(|c| spec.draft().y_keys.contains(&c.key) || spec.draft().base_by_y.values().any(|b| *b == c.key)),
             "{name} plots every Y column"
         );
         assert!(readme.contains(name.as_str()), "samples/README.md lists {name}");

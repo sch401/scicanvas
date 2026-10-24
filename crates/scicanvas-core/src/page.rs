@@ -1,7 +1,8 @@
 //! 页面 → 图层 → 作图描述。图层样式和数据引用均可独立设置。
-mod plots;
+pub(crate) mod plots;
+pub use plots::LayerSpec;
 
-use crate::{plotspec::PlotSpec, Book};
+use crate::Book;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -220,7 +221,7 @@ pub struct Layer {
     #[cfg_attr(feature = "serde", serde(default))]
     pub transparent: bool,
     #[cfg_attr(feature = "serde", serde(flatten))]
-    pub spec: PlotSpec,
+    pub spec: LayerSpec,
     pub title: String,
     /// Opt-in scientific text; legacy project strings remain literal.
     #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "is_false"))]
@@ -253,12 +254,6 @@ pub struct Layer {
     pub frame: bool,
     #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "TickDir::is_out"))]
     pub tick_dir: TickDir,
-    /// 逐曲线样式（按 Y 列标识）：图型、颜色、符号、线宽、符号大小、右侧 Y 轴。
-    #[cfg_attr(
-        feature = "serde",
-        serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")
-    )]
-    pub curves: std::collections::BTreeMap<String, CurveStyle>,
     /// 右侧 Y 轴标题（空则用右轴第一条曲线的列名和单位）。
     #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "String::is_empty"))]
     pub y2_title: String,
@@ -412,7 +407,6 @@ impl Default for Layer {
             frame: false,
             tick_dir: TickDir::Out,
             connect: Connect::Straight,
-            curves: Default::default(),
             y2_title: String::new(),
             link_x: None,
             link_y: None,
@@ -509,7 +503,7 @@ impl LayerRect {
     }
 }
 impl std::ops::Deref for Layer {
-    type Target = PlotSpec;
+    type Target = LayerSpec;
     fn deref(&self) -> &Self::Target {
         &self.spec
     }
@@ -530,12 +524,10 @@ pub struct PreparedPlot {
 
 impl Layer {
     pub fn plot_in(&self, key: &str, books: crate::plotspec::BookLookup<'_, '_>) -> Option<crate::plotspec::Plot> {
-        let mut plot = self.spec.plot_in(key, books)?;
-        plot.style = self.curves.get(key).cloned();
-        Some(plot)
+        self.spec.plot_in(key, books)
     }
     pub fn plots_in(&self, books: crate::plotspec::BookLookup<'_, '_>) -> Vec<crate::plotspec::Plot> {
-        self.y_keys.iter().filter_map(|key| self.plot_in(key, books)).collect()
+        self.spec.plots_in(books)
     }
 
     pub fn prepared_plots_in<'a>(
@@ -609,7 +601,7 @@ impl Layer {
                 p.series.name = label.clone();
             }
         }
-        if self.curves.values().any(|c| c.kind.is_some()) {
+        if self.spec.has_curve_kind() {
             let count = prepared
                 .iter()
                 .filter(|p| p.style.kind.is_bar() && !p.series.line_only)
@@ -662,47 +654,43 @@ impl Layer {
                 }
             }
         }
-        let empty = self.y_keys.is_empty();
+        let empty = self.plot_keys(true).is_empty();
         let changed_book = self.book_id != Some(book.id);
         let rebind = !main_alive || (empty && changed_book);
         if rebind {
             if empty {
-                self.spec.x_by_y.clear();
-                self.spec.base_by_y.clear();
-                self.spec.row_by_y.clear();
-                self.spec.line_only.clear();
+                self.spec.clear_plots();
                 self.spec.rows = None;
-                self.curves.clear();
             }
             if changed_book {
                 self.labels.column = None;
             }
             self.spec.book_id = Some(book.id);
-            self.spec.y_keys.retain(|k| crate::plotspec::split_key(k).1.is_some());
+            self.edit_plot_keys(|keys| keys.retain(|k| crate::plotspec::split_key(k).1.is_some()));
             self.spec.x_key = crate::plotspec::default_x(book, keys[0]);
         }
         // 同表空图层沿用当前 X（包括行号），不自动套用列角色的默认 X。
         let keep_layer_x = empty && !rebind;
         if floating {
-            let before = self.y_keys.len();
+            let before = self.plot_keys(true).len();
             for pair in keys.as_chunks::<2>().0 {
                 let upper = self.spec.add_curve(book, pair[1])?;
                 if keep_layer_x {
-                    self.spec.x_by_y.remove(&upper);
+                    self.spec.clear_plot_x(&upper);
                 }
                 let lower = self.result_key(book.id, pair[0]);
-                self.spec.base_by_y.insert(upper, lower);
+                self.set_plot_base_key(&upper, lower);
             }
-            return Ok(self.y_keys.len() - before);
+            return Ok(self.plot_keys(true).len() - before);
         }
-        let before = self.y_keys.len();
+        let before = self.plot_keys(true).len();
         for key in keys {
             let key = self.spec.add_curve(book, key)?;
             if keep_layer_x {
-                self.spec.x_by_y.remove(&key);
+                self.spec.clear_plot_x(&key);
             }
         }
-        Ok(self.y_keys.len() - before)
+        Ok(self.plot_keys(true).len() - before)
     }
 
     /// 删除主表后，以仍存活的曲线为数据源，保留样式和各曲线映射。
@@ -716,7 +704,7 @@ impl Layer {
             .into_iter()
             .filter(|plot| plot.mapping.y.book != deleted && books(plot.mapping.y.book).is_some())
             .map(|plot| {
-                let missing_base = self.base_by_y.get(&plot.key).is_some_and(String::is_empty);
+                let missing_base = self.plot_base_key(&plot.key).as_deref() == Some("");
                 (plot.mapping, plot.style, missing_base)
             })
             .collect();
@@ -728,59 +716,27 @@ impl Layer {
         self.spec.book_id = main;
         self.spec.x_key = first.x.as_ref().map(|x| x.col.clone());
         self.spec.rows = None;
-        self.spec.y_keys.clear();
-        self.spec.x_by_y.clear();
-        self.spec.base_by_y.clear();
-        self.spec.row_by_y.clear();
-        self.spec.line_only.clear();
-        self.curves.clear();
+        self.spec.clear_plots();
         self.labels.column = None;
         for (mapping, style, missing_base) in remaining {
             let key = mapping.y.key(main);
-            self.spec.y_keys.push(key.clone());
-            if let Some(x) = mapping.x {
-                self.spec.x_by_y.insert(key.clone(), x.key(main));
-            }
-            if let Some(base) = mapping.base {
-                self.spec.base_by_y.insert(key.clone(), base.key(main));
-            } else if missing_base {
-                self.spec.base_by_y.insert(key.clone(), String::new());
-            }
-            if let Some(rows) = mapping.rows {
-                self.spec.row_by_y.insert(key.clone(), Some(rows));
-            }
-            if mapping.line_only {
-                self.spec.line_only.push(key.clone());
-            }
-            if let Some(style) = style {
-                self.curves.insert(key, style);
-            }
+            self.spec.import_mapping(key, mapping, style, missing_base);
         }
     }
 
     pub fn add_analysis_result(&mut self, book: u64, source: &str, result: &str, x: Option<&str>) {
         let source = self.result_key(book, source);
         let key = self.result_key(book, result);
-        if !self.y_keys.contains(&source) {
-            self.y_keys.push(source.clone());
-        }
-        if !self.y_keys.contains(&key) {
-            self.y_keys.push(key.clone());
-        }
-        if !self.line_only.contains(&key) {
-            self.line_only.push(key.clone());
-        }
-        if let Some(x) = x {
-            let x = self.result_key(book, x);
-            self.x_by_y.insert(key.clone(), x);
-        }
-        if self.curves.get(&source).is_some_and(|s| s.right_axis) {
-            self.curves.insert(
-                key,
-                CurveStyle {
+        let right = self.plot_style(&source).is_some_and(|s| s.right_axis);
+        self.spec
+            .add_derived(&source, &key, x.map(|x| self.result_key(book, x)));
+        if right {
+            self.set_plot_style(
+                &key,
+                Some(CurveStyle {
                     right_axis: true,
                     ..Default::default()
-                },
+                }),
             );
         }
     }
@@ -788,29 +744,11 @@ impl Layer {
     /// 从图层移除一条曲线，连同它的单独样式。
     pub fn remove_curve(&mut self, key: &str) {
         self.spec.remove_curve(key);
-        self.curves.remove(key);
     }
 
     /// 去掉引用另一工作簿 `book_id` 中列的曲线（`keys` 为 None 时去掉该表的全部曲线）。
     pub fn drop_foreign(&mut self, book_id: u64, keys: Option<&[String]>) {
-        let hit = |k: &str| match crate::plotspec::split_key(k) {
-            (col, Some(id)) => id == book_id && keys.is_none_or(|keys| keys.iter().any(|x| x == col)),
-            _ => false,
-        };
-        let gone: Vec<String> = self
-            .y_keys
-            .iter()
-            .filter(|k| hit(k) || self.x_by_y.get(*k).is_some_and(|x| hit(x)))
-            .cloned()
-            .collect();
-        for k in gone {
-            self.remove_curve(&k);
-        }
-        for base in self.base_by_y.values_mut() {
-            if hit(base) {
-                base.clear();
-            }
-        }
+        self.spec.drop_foreign(book_id, keys);
     }
 
     pub fn x_axis_title(&self, book: Option<&Book>) -> String {
@@ -838,7 +776,7 @@ impl Layer {
         }
         if self.plot_type == crate::PlotType::HorizontalBar {
             return self
-                .y_keys
+                .plot_keys(true)
                 .first()
                 .and_then(|k| self.curve_axis_label(book, others, k))
                 .unwrap_or_default();
@@ -847,8 +785,9 @@ impl Layer {
             .map(|c| c.axis_label())
             // 本表没有 X 列时用第一条曲线自己的 X 列
             .or_else(|| {
-                let first = self.y_keys.first()?;
-                self.curve_axis_label(book, others, self.x_by_y.get(first)?)
+                let first = self.plot_keys(true).into_iter().next()?;
+                let x = self.spec.explicit_plot_x(&first)?;
+                self.curve_axis_label(book, others, &x)
             })
             .unwrap_or_else(|| "行号".to_string())
     }
@@ -868,17 +807,17 @@ impl Layer {
         }
         if self.plot_type == crate::PlotType::FloatingBar {
             let range = book.and_then(|b| {
-                let top = self.y_keys.first()?;
-                Some(b.column(self.base_by_y.get(top)?)?.range_label(b.column(top)?))
+                let top = self.plot_keys(true).into_iter().next()?;
+                Some(b.column(&self.plot_base_key(&top)?)?.range_label(b.column(&top)?))
             });
             if let Some(range) = range {
                 return range;
             }
         }
         // 右侧 Y 轴的曲线不参与左轴标题
-        self.y_keys
+        self.plot_keys(true)
             .iter()
-            .find(|k| !self.curves.get(*k).is_some_and(|c| c.right_axis))
+            .find(|k| !self.plot_style(k).is_some_and(|c| c.right_axis))
             .and_then(|k| self.curve_axis_label(book, others, k))
             .unwrap_or_default()
     }
@@ -892,9 +831,9 @@ impl Layer {
         if !self.y2_title.trim().is_empty() {
             return self.y2_title.clone();
         }
-        self.y_keys
+        self.plot_keys(true)
             .iter()
-            .find(|k| self.curves.get(*k).is_some_and(|c| c.right_axis))
+            .find(|k| self.plot_style(k).is_some_and(|c| c.right_axis))
             .and_then(|k| self.curve_axis_label(book, others, k))
             .unwrap_or_default()
     }

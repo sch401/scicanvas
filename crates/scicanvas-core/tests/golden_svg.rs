@@ -16,7 +16,9 @@ fn cases() -> Vec<(String, String)> {
     let mut cases = Vec::new();
     for preset in presets::all() {
         let mut graph = Graph::new(20, preset.name);
-        graph.first_layer_mut().spec = PlotSpec::from_selection(&project.books[0], &[], preset.kind).unwrap();
+        graph.first_layer_mut().spec = PlotSpec::from_selection(&project.books[0], &[], preset.kind)
+            .unwrap()
+            .into();
         cases.push((preset.id.to_owned(), svg::render_page(&graph, &project)));
     }
 
@@ -30,8 +32,9 @@ fn cases() -> Vec<(String, String)> {
         project.books[0].columns.push(column);
     }
     let mut graph = Graph::new(20, "Errors & labels <baseline>");
-    graph.first_layer_mut().spec =
-        PlotSpec::from_selection(&project.books[0], &["B".into()], PlotType::LineSymbol).unwrap();
+    graph.first_layer_mut().spec = PlotSpec::from_selection(&project.books[0], &["B".into()], PlotType::LineSymbol)
+        .unwrap()
+        .into();
     cases.push(("xy-errors".into(), svg::render_page(&graph, &project)));
     graph.first_layer_mut().labels.visible = true;
     graph.first_layer_mut().labels.source = LabelSource::XY;

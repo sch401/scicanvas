@@ -163,7 +163,7 @@ fn grid_gaps_separate_panels_and_linked_axes_follow_their_target() {
     let mut p = Project::sample();
     // 两个网格图层：第 2 层只画 C 列（范围不同）
     let mut second = p.graphs[0].first_layer().clone();
-    second.y_keys = vec!["C".into()];
+    second.edit_draft(|draft| draft.y_keys = vec!["C".into()]);
     second.x_auto = false;
     second.x_min = 5.0;
     second.x_max = 12.0;

@@ -1,7 +1,7 @@
 //! 绘图属性窗口：保持各分区的绘制顺序与实时编辑事务。
 
 use super::*;
-use scicanvas_core::plotspec::{default_x, foreign_key, BookLookup, DataRef};
+use scicanvas_core::plotspec::{default_x, BookLookup, DataRef};
 
 impl SciApp {
     pub(super) fn props_window(&mut self, ctx: &egui::Context) {
@@ -87,7 +87,7 @@ struct SourceOptions {
     column_options: HashMap<u64, Vec<(String, String)>>,
     book_specs: Vec<(u64, String, Option<scicanvas_core::plotspec::PlotSpec>)>,
     curve_options: CurveOptions,
-    curve_names: HashMap<String, String>,
+    curve_names: HashMap<DataRef, String>,
 }
 
 fn source_options(project: &Project) -> SourceOptions {
@@ -122,10 +122,10 @@ fn source_options(project: &Project) -> SourceOptions {
         .collect();
     // 可加入图层的其他工作簿曲线：(列标识, 显示名, 默认 X 列)；以及带工作簿名的曲线显示名
     let mut curve_options: CurveOptions = HashMap::new();
-    let mut curve_names: HashMap<String, String> = HashMap::new();
+    let mut curve_names: HashMap<DataRef, String> = HashMap::new();
     for b in &project.books {
         for c in &b.columns {
-            curve_names.insert(foreign_key(b.id, &c.key), format!("{}：{}", b.name, c.display_name()));
+            curve_names.insert(DataRef::new(b.id, &c.key), format!("{}：{}", b.name, c.display_name()));
             if matches!(c.role, Role::Y | Role::Z) {
                 curve_options.entry(b.id).or_default().push((
                     c.key.clone(),
@@ -408,16 +408,13 @@ fn columns(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, cols: &[(Stri
     ui.end_row();
 
     ui.label("Y 列");
-    let keys = g.plot_keys(true);
+    let keys = g.plot_sources(true);
     ui.vertical(|ui| {
         for (k, l) in cols {
-            let mut on = keys.contains(k);
+            let source = DataRef::new(g.book_id.unwrap_or(0), k);
+            let mut on = keys.contains(&source);
             if ui.checkbox(&mut on, l.as_str()).changed() {
-                if on {
-                    g.edit_plot_keys(|keys| keys.push(k.clone()));
-                } else {
-                    g.edit_plot_keys(|keys| keys.retain(|x| x != k));
-                }
+                g.set_plot_selected(&source, on);
             }
         }
     });
@@ -429,7 +426,7 @@ fn foreign_curves(
     g: &mut scicanvas_core::page::Layer,
     book_specs: &[(u64, String, Option<scicanvas_core::plotspec::PlotSpec>)],
     curve_options: &CurveOptions,
-    curve_names: &HashMap<String, String>,
+    curve_names: &HashMap<DataRef, String>,
     books: BookLookup<'_, '_>,
 ) {
     // 其他工作簿的曲线：同一图层可以放不同工作簿的数据
@@ -444,7 +441,7 @@ fn foreign_curves(
             for plot in &foreign {
                 let k = &plot.key;
                 ui.horizontal_wrapped(|ui| {
-                    ui.label(curve_names.get(k).map_or(k.as_str(), String::as_str));
+                    ui.label(curve_names.get(&plot.mapping.y).map_or(k.as_str(), String::as_str));
                     if ui.small_button("✕").on_hover_text("移除").clicked() {
                         g.remove_plot(&plot.mapping.y);
                     }
@@ -460,10 +457,9 @@ fn foreign_curves(
                     };
                     ui.menu_button(name, |ui| {
                         for (key, label, x) in options {
-                            let q = foreign_key(*bid, key);
-                            let on = g.plot_keys(true).contains(&q);
+                            let source = DataRef::new(*bid, key);
+                            let on = g.plot_sources(true).contains(&source);
                             if ui.add_enabled(!on, egui::Button::new(label)).clicked() {
-                                let source = DataRef::new(*bid, key);
                                 let x = x.as_ref().map(|x| DataRef::new(*bid, x));
                                 g.select_plot(&source, x.as_ref());
                                 ui.close_menu();
@@ -678,11 +674,11 @@ fn curve_style(
     gid: u64,
     props_layer: usize,
     cols: &[(String, String)],
-    curve_names: &HashMap<String, String>,
+    curve_names: &HashMap<DataRef, String>,
     history_group: &mut Option<egui::Id>,
 ) {
     // 逐曲线样式：选一条数据曲线，单独设图型、颜色、符号、线宽、符号大小和右侧 Y 轴
-    let curve_keys = g.plot_keys(false);
+    let curve_keys = g.plot_sources(false);
     if !curve_keys.is_empty() {
         egui::CollapsingHeader::new("曲线样式")
             .id_salt(("props-curves", gid, props_layer))
@@ -690,15 +686,21 @@ fn curve_style(
                 use scicanvas_core::page::CurveStyle;
                 let pick_id = egui::Id::new(("props-curve-pick", gid, props_layer));
                 let mut key = ui
-                    .data(|d| d.get_temp::<String>(pick_id))
+                    .data(|d| d.get_temp::<DataRef>(pick_id))
                     .filter(|k| curve_keys.contains(k))
                     .unwrap_or_else(|| curve_keys[0].clone());
-                let name_of = |k: &str| {
+                let name_of = |source: &DataRef| {
                     cols.iter()
-                        .find(|(c, _)| c == k)
+                        .find(|(c, _)| Some(source.book) == g.book_id && c == &source.col)
                         .map(|(_, n)| n.clone())
-                        .or_else(|| curve_names.get(k).cloned())
-                        .unwrap_or_else(|| k.to_string())
+                        .or_else(|| curve_names.get(source).cloned())
+                        .unwrap_or_else(|| {
+                            if source.book == 0 {
+                                source.col.clone()
+                            } else {
+                                source.key(g.book_id)
+                            }
+                        })
                 };
                 egui::ComboBox::from_id_salt(("props-curve", gid))
                     .selected_text(name_of(&key))
@@ -708,7 +710,7 @@ fn curve_style(
                         }
                     });
                 ui.data_mut(|d| d.insert_temp(pick_id, key.clone()));
-                let mut style = g.plot_style(&key).cloned().unwrap_or_default();
+                let mut style = g.source_style(&key).cloned().unwrap_or_default();
                 egui::Grid::new(("props-curve-grid", gid, props_layer))
                     .num_columns(2)
                     .spacing([10.0, 6.0])
@@ -782,7 +784,7 @@ fn curve_style(
                         ui.checkbox(&mut style.right_axis, "右侧 Y 轴");
                         ui.end_row();
                     });
-                g.set_plot_style(&key, (!style.is_default()).then_some(style));
+                g.set_source_style(&key, (!style.is_default()).then_some(style));
                 if g.has_right_axis_style() {
                     ui.horizontal_wrapped(|ui| {
                         ui.label("右轴标题");

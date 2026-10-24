@@ -72,8 +72,8 @@ fn old_versions_preserve_data_and_all_four_plot_layouts() {
     let mut p = project_file::from_json(V0).unwrap();
     assert_eq!(p, project_file::from_json(V1).unwrap());
     assert_eq!(p.version, project_file::CURRENT_VERSION);
-    assert!(!p.graphs[0].first_layer().x_by_y.is_empty());
-    assert!(!p.graphs[0].first_layer().line_only.is_empty());
+    assert!(!p.graphs[0].first_layer().draft().x_by_y.is_empty());
+    assert!(!p.graphs[0].first_layer().draft().line_only.is_empty());
     assert_eq!(project_file::from_json(&project_file::to_json(&p).unwrap()).unwrap(), p);
     for (kind, expected) in [
         (PlotType::Line, include_str!("fixtures/legacy-line.svg")),
@@ -204,7 +204,7 @@ fn legacy_curve_projection(p: &Project) -> String {
             }
             let plots: Vec<_> = layer.plots_in(&|id| p.book(id)).into_iter().map(|plot| {
                 let mut curve = serde_json::json!({"mapping": plot.mapping, "style": plot.style, "x_override": plot.x_override});
-                if layer.base_by_y.get(&plot.key).is_some_and(String::is_empty) {
+                if layer.draft().base_by_y.get(&plot.key).is_some_and(String::is_empty) {
                     curve["base_missing"] = true.into();
                 }
                 curve
@@ -234,17 +234,20 @@ fn unified_export_preserves_v14_bytes_previews_and_legacy_projects() {
     original.add_curves(gid, 0, foreign, &keys).unwrap();
     let layer = original.graph_mut(gid).unwrap().first_layer_mut();
     layer.rows = Some((0, 1));
-    layer.row_by_y.insert("C".into(), Some((0, 1)));
-    layer.x_by_y.insert("C".into(), "A".into());
-    layer
-        .curves
-        .insert("C".into(), scicanvas_core::page::CurveStyle::default());
+    layer.edit_draft(|draft| draft.row_by_y.insert("C".into(), Some((0, 1))));
+    layer.edit_draft(|draft| draft.x_by_y.insert("C".into(), "A".into()));
+    layer.edit_styles(|styles| styles.insert("C".into(), scicanvas_core::page::CurveStyle::default()));
     for mode in ["bound", "missing-base", "unbound", "inactive"] {
         let mut p = original.clone();
         match mode {
             "missing-base" => p.delete_columns(1, &["B".into()]),
             "unbound" => p.graphs[0].first_layer_mut().book_id = None,
-            "inactive" => p.graph_mut(gid).unwrap().first_layer_mut().spec.y_keys.clear(),
+            "inactive" => p
+                .graph_mut(gid)
+                .unwrap()
+                .first_layer_mut()
+                .spec
+                .edit_draft(|draft| draft.y_keys.clear()),
             _ => {}
         }
         let json = project_file::to_json(&p).unwrap();
@@ -265,7 +268,7 @@ fn unified_export_preserves_v14_bytes_previews_and_legacy_projects() {
     let mut legacy_files = vec![V0.to_string(), V1.to_string()];
     for version in [10, 11, 13] {
         let mut wire = if version == 10 {
-            serde_json::to_value(&original).unwrap()
+            legacy_editor_projection(&original)
         } else {
             serde_json::from_str(&legacy_curve_projection(&original)).unwrap()
         };
@@ -296,8 +299,154 @@ fn export_still_rejects_inactive_ranges_and_preserves_validation_error_order() {
         ("B", (3, 1), "曲线行范围无效"),
     ] {
         let mut p = Project::sample();
-        p.graphs[0].first_layer_mut().row_by_y.insert(key.into(), Some(range));
+        p.graphs[0]
+            .first_layer_mut()
+            .edit_draft(|draft| draft.row_by_y.insert(key.into(), Some(range)));
         assert_eq!(project_file::to_json(&p).unwrap_err(), expected);
         assert_eq!(project_file::to_scv(&p).unwrap_err(), expected);
     }
+}
+
+fn vector_compat_fixture(mode: &str) -> Project {
+    use scicanvas_core::{page::CurveStyle, plotspec::DataRef, Role};
+    let mut p = Project::sample();
+    let foreign = p.new_book();
+    let book = p.book_mut(foreign).unwrap();
+    book.push_column(Role::Y);
+    for (i, c) in book.columns.iter_mut().enumerate() {
+        c.data = (0..6).map(|r| (r + i * 10).to_string()).collect();
+    }
+    p.add_curves(2, 0, foreign, &["B".into()]).unwrap();
+    {
+        let books = &p.books;
+        let lookup = |id| books.iter().find(|b| b.id == id);
+        let layer = p.graphs[0].first_layer_mut();
+        layer.rows = Some((1, 3));
+        layer.labels.column = Some("C".into());
+        layer
+            .plot_mut(&DataRef::new(foreign, "B"), &lookup, |plot| {
+                plot.mapping.rows = Some((0, 2));
+                plot.style = Some(CurveStyle {
+                    right_axis: true,
+                    legend_label: "β^{2}".into(),
+                    ..Default::default()
+                });
+            })
+            .unwrap();
+        layer.set_plot_style("C", Some(CurveStyle::default()));
+        layer.set_plot_style(
+            "hidden",
+            Some(CurveStyle {
+                right_axis: true,
+                ..Default::default()
+            }),
+        );
+    }
+    let (gid, _) = p
+        .plot_from_selection(1, &["B".into(), "C".into()], PlotType::FloatingBar)
+        .unwrap();
+    p.add_curves(gid, 0, foreign, &["B".into(), "C".into()]).unwrap();
+    match mode {
+        "missing" => p.delete_columns(1, &["B".into()]),
+        "unbound" => p.graphs[0].first_layer_mut().book_id = None,
+        "inactive" => p.graphs[0]
+            .first_layer_mut()
+            .edit_plot_keys(|keys| keys.retain(|k| k != "C")),
+        "deleted-main" => {
+            p.remove(1);
+        }
+        "analysis" => {
+            p.smooth(
+                &scicanvas_core::ops::Source::Graph(2),
+                scicanvas_core::analysis::SmoothMethod::MovingAverage,
+                3,
+            )
+            .unwrap();
+        }
+        "rows" => {
+            p.insert_rows(foreign, 1, 2);
+            p.delete_rows(1, 0, 1);
+        }
+        _ => {}
+    }
+    p
+}
+
+#[test]
+fn vec_storage_matches_pre_refactor_v14_json_and_svg_bytes() {
+    fixture_fonts();
+    let hash = |bytes: &[u8]| {
+        bytes.iter().fold(0xcbf29ce484222325_u64, |h, b| {
+            (h ^ u64::from(*b)).wrapping_mul(0x100000001b3)
+        })
+    };
+    // 基线由 a8665fd 的真实 release 核心库生成，使用内置字体。
+    for (mode, json_hash, svg_hash) in [
+        ("plain", 10388380240591533238, 14501551175884022413),
+        ("missing", 5903541544429849591, 6683444684052755176),
+        ("unbound", 14290394467229394458, 14193909908209621572),
+        ("inactive", 9382714990286152969, 120544546637645886),
+        ("deleted-main", 5278304510421783194, 1315333848789204538),
+        ("rows", 5101616968945152157, 15733227137332039755),
+        ("analysis", 13022549547118744312, 10274796173482420218),
+    ] {
+        let p = vector_compat_fixture(mode);
+        let json = project_file::to_json(&p).unwrap();
+        let svg = p
+            .graphs
+            .iter()
+            .map(|g| svg::render_page(g, &p))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert_eq!(hash(json.as_bytes()), json_hash, "{mode}: v14 JSON");
+        assert_eq!(hash(svg.as_bytes()), svg_hash, "{mode}: SVG");
+        let saved = project_file::from_json(&json).unwrap();
+        assert_eq!(project_file::to_json(&saved).unwrap(), json);
+        assert_eq!(
+            project_file::from_scv(&project_file::to_scv(&p).unwrap()).unwrap(),
+            saved
+        );
+    }
+}
+
+// 将测试输入明确投影为 v10 的旧字段，保持原有旧格式验收场景。
+fn legacy_editor_projection(p: &Project) -> serde_json::Value {
+    let mut value = serde_json::to_value(p).unwrap();
+    for (graph, wire) in p.graphs.iter().zip(value["graphs"].as_array_mut().unwrap()) {
+        for (layer, wire) in graph
+            .page
+            .layers()
+            .iter()
+            .zip(wire["page"]["layers"].as_array_mut().unwrap())
+        {
+            wire.as_object_mut().unwrap().remove("plots");
+            let draft = serde_json::to_value(layer.draft()).unwrap();
+            for (key, value) in draft.as_object().unwrap() {
+                wire[key] = value.clone();
+            }
+            if !layer.styles().is_empty() {
+                wire["curves"] = serde_json::to_value(layer.styles()).unwrap();
+            }
+        }
+    }
+    value
+}
+
+#[test]
+fn vector_wire_keeps_plots_authoritative_and_legacy_required_fields_checked() {
+    fixture_fonts();
+    let p = Project::sample();
+    let mut wire: serde_json::Value = serde_json::from_str(&project_file::to_json(&p).unwrap()).unwrap();
+    let layer = &mut wire["graphs"][0]["page"]["layers"][0];
+    for key in ["y_keys", "x_by_y", "base_by_y", "row_by_y", "line_only", "curves"] {
+        layer[key] = "obsolete".into();
+    }
+    assert_eq!(project_file::from_json(&wire.to_string()).unwrap(), p);
+    let mut legacy = legacy_editor_projection(&p);
+    legacy["version"] = 10.into();
+    legacy["graphs"][0]["page"]["layers"][0]
+        .as_object_mut()
+        .unwrap()
+        .remove("y_keys");
+    assert!(project_file::from_json(&legacy.to_string()).is_err());
 }

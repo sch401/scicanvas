@@ -238,7 +238,7 @@ fn fit_report_residual_plot_button_creates_scatter_and_undoes() {
     assert_eq!(app.active, Some(graph.id));
     assert_eq!(graph.first_layer().plot_type, PlotType::Scatter);
     let book = app.project.book(1).unwrap();
-    for key in &graph.first_layer().y_keys {
+    for key in &graph.first_layer().draft().y_keys {
         assert!(book.column(key).unwrap().long_name.ends_with("残差"));
     }
     // 对话框保留，可以继续保存或复制

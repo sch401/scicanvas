@@ -154,8 +154,9 @@ mod tests {
             let mut p = Project::default();
             let book = scicanvas_core::presets::example();
             let mut graph = scicanvas_core::Graph::new(2, preset.name);
-            graph.first_layer_mut().spec =
-                scicanvas_core::plotspec::PlotSpec::from_selection(&book, &[], preset.kind).unwrap();
+            graph.first_layer_mut().spec = scicanvas_core::plotspec::PlotSpec::from_selection(&book, &[], preset.kind)
+                .unwrap()
+                .into();
             p.books.push(book);
             p.graphs.push(graph);
             cases.push((preset.id.to_string(), p));
@@ -167,20 +168,24 @@ mod tests {
         layer.x_title = r"Time / s^{−1}".into();
         layer.y_title = r"\i{c} / mol L^{−1}".into();
         layer.y2_title = r"\b{R}_{0}".into();
-        layer.curves.insert(
-            "B".into(),
-            CurveStyle {
-                legend_label: r"\i{CO}_{2} β".into(),
-                ..Default::default()
-            },
-        );
-        layer.curves.insert(
-            "C".into(),
-            CurveStyle {
-                right_axis: true,
-                ..Default::default()
-            },
-        );
+        layer.edit_styles(|styles| {
+            styles.insert(
+                "B".into(),
+                CurveStyle {
+                    legend_label: r"\i{CO}_{2} β".into(),
+                    ..Default::default()
+                },
+            )
+        });
+        layer.edit_styles(|styles| {
+            styles.insert(
+                "C".into(),
+                CurveStyle {
+                    right_axis: true,
+                    ..Default::default()
+                },
+            )
+        });
         layer.labels.visible = true;
         layer.labels.source = LabelSource::Column;
         layer.labels.column = Some("E".into());

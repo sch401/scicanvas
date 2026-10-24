@@ -300,7 +300,10 @@ fn layer_contents_real_controls_apply_live_and_header_close_keeps_changes() {
     harness.click(&mut app, positions(&output, "添加 →")[0]);
     let key = scicanvas_core::plotspec::foreign_key(b, "B");
     assert_ne!(app.project, before, "controls update the project immediately");
-    assert!(app.preview_graph(gid).unwrap().page.layers()[1].y_keys.contains(&key));
+    assert!(app.preview_graph(gid).unwrap().page.layers()[1]
+        .draft()
+        .y_keys
+        .contains(&key));
     let output = harness.frame(&mut app, vec![]);
     assert!(!positions(&output, "Book2 / A").is_empty());
     assert!(!positions(&output, "Book2 / B").is_empty());
@@ -319,8 +322,8 @@ fn layer_contents_real_controls_apply_live_and_header_close_keeps_changes() {
     let Some(Dialog::LayerContents(edit)) = &app.dialog else {
         panic!()
     };
-    assert_eq!(edit.draft.y_keys[0], key);
-    assert!(edit.draft.curves[&key].right_axis);
+    assert_eq!(edit.draft.draft().y_keys[0], key);
+    assert!(edit.draft.styles()[&key].right_axis);
     assert_eq!(app.preview_graph(gid).unwrap().page.layers()[1], edit.draft);
     assert_ne!(app.project, before);
     let id = egui::Id::new(("scicanvas-dialog", "图层内容"));
@@ -332,8 +335,8 @@ fn layer_contents_real_controls_apply_live_and_header_close_keeps_changes() {
         before.graph(gid).unwrap().first_layer()
     );
     let layer = &app.project.graph(gid).unwrap().page.layers()[1];
-    assert_eq!(layer.y_keys, vec![key.clone(), "B".into()]);
-    assert!(layer.curves[&key].right_axis);
+    assert_eq!(layer.draft().y_keys, vec![key.clone(), "B".into()]);
+    assert!(layer.styles()[&key].right_axis);
     let saved = scicanvas_core::project_file::to_json(&app.project).unwrap();
     assert_eq!(scicanvas_core::project_file::from_json(&saved).unwrap(), app.project);
     let changed = app.project.clone();
@@ -401,11 +404,12 @@ fn layer_contents_rejects_stale_drafts_and_supports_removing_all_curves() {
         panic!()
     };
     let mut edit = edit.clone();
-    for key in edit.draft.y_keys.clone() {
+    for key in edit.draft.draft().y_keys.clone() {
         edit.draft.remove_curve(&key);
     }
     app.apply_layer_contents(&edit).unwrap();
     assert!(app.project.graph(gid).unwrap().page.layers()[edit.index]
+        .draft()
         .y_keys
         .is_empty());
     roundtrip(&mut app, &changed);
@@ -435,7 +439,7 @@ fn layer_changes_repaint_and_close_preserves_them_until_undo() {
     let Some(Dialog::LayerContents(edit)) = &mut app.dialog else {
         panic!()
     };
-    edit.draft.remove_curve(&edit.draft.y_keys[0].clone());
+    edit.draft.remove_curve(&edit.draft.draft().y_keys[0].clone());
     assert_ne!(
         render(&mut app),
         original,
@@ -558,12 +562,26 @@ fn columns_from_another_workbook_join_a_graph_and_leave_it_in_one_undo_step() {
     app.selection.insert(b, vec!["A".into(), "B".into()]);
     let before = app.project.clone();
     app.add_to_graph(b, 2);
-    assert!(app.project.graph(2).unwrap().first_layer().y_keys.contains(&key));
+    assert!(app
+        .project
+        .graph(2)
+        .unwrap()
+        .first_layer()
+        .draft()
+        .y_keys
+        .contains(&key));
     assert_eq!(app.status, "已添加 1 条曲线");
     roundtrip(&mut app, &before);
     let before = app.project.clone();
     app.remove_curve(2, 0, &key);
-    assert!(!app.project.graph(2).unwrap().first_layer().y_keys.contains(&key));
+    assert!(!app
+        .project
+        .graph(2)
+        .unwrap()
+        .first_layer()
+        .draft()
+        .y_keys
+        .contains(&key));
     roundtrip(&mut app, &before);
     // 已在图层里的列不再记一步
     app.add_to_graph(b, 2);
@@ -819,6 +837,7 @@ fn floating_baseline_dropdown_is_an_undoable_property_edit() {
             .graph(id)
             .unwrap()
             .first_layer()
+            .draft()
             .base_by_y
             .get("C")
             .map(String::as_str),
@@ -1082,17 +1101,19 @@ fn layer_placement_control_is_undoable() {
 fn properties_y_toggle_keeps_curve_configuration_and_undo_history() {
     let mut app = app();
     let layer = app.project.graph_mut(2).unwrap().first_layer_mut();
-    layer.x_by_y.insert("B".into(), "A".into());
-    layer.base_by_y.insert("B".into(), "C".into());
-    layer.row_by_y.insert("B".into(), Some((1, 3)));
-    layer.curves.insert(
-        "B".into(),
-        scicanvas_core::page::CurveStyle {
-            right_axis: true,
-            color: Some([80, 40, 120]),
-            ..Default::default()
-        },
-    );
+    layer.edit_draft(|draft| draft.x_by_y.insert("B".into(), "A".into()));
+    layer.edit_draft(|draft| draft.base_by_y.insert("B".into(), "C".into()));
+    layer.edit_draft(|draft| draft.row_by_y.insert("B".into(), Some((1, 3))));
+    layer.edit_styles(|styles| {
+        styles.insert(
+            "B".into(),
+            scicanvas_core::page::CurveStyle {
+                right_axis: true,
+                color: Some([80, 40, 120]),
+                ..Default::default()
+            },
+        )
+    });
     let before = app.project.clone();
     app.props_for = Some(2);
     let ctx = egui::Context::default();
@@ -1113,18 +1134,23 @@ fn properties_y_toggle_keeps_curve_configuration_and_undo_history() {
     let output = harness.frame(&mut app, vec![]);
     harness.click_text(&mut app, &output, "B · 电压 A");
     let off = app.project.clone();
-    assert!(!off.graph(2).unwrap().first_layer().y_keys.contains(&"B".into()));
+    assert!(!off.graph(2).unwrap().first_layer().draft().y_keys.contains(&"B".into()));
     let layer = off.graph(2).unwrap().first_layer();
     let original = before.graph(2).unwrap().first_layer();
-    assert_eq!(layer.curves, original.curves);
-    assert_eq!(layer.x_by_y, original.x_by_y);
-    assert_eq!(layer.base_by_y, original.base_by_y);
-    assert_eq!(layer.row_by_y, original.row_by_y);
+    assert_eq!(layer.styles(), original.styles());
+    assert_eq!(layer.draft().x_by_y, original.draft().x_by_y);
+    assert_eq!(layer.draft().base_by_y, original.draft().base_by_y);
+    assert_eq!(layer.draft().row_by_y, original.draft().row_by_y);
     let output = harness.frame(&mut app, vec![]);
     harness.click_text(&mut app, &output, "B · 电压 A");
     let after = app.project.clone();
     let mut expected = before.clone();
-    expected.graph_mut(2).unwrap().first_layer_mut().spec.y_keys = vec!["C".into(), "B".into()];
+    expected
+        .graph_mut(2)
+        .unwrap()
+        .first_layer_mut()
+        .spec
+        .edit_draft(|draft| draft.y_keys = vec!["C".into(), "B".into()]);
     assert_eq!(after, expected);
     let json = scicanvas_core::project_file::to_json(&after).unwrap();
     assert_eq!(scicanvas_core::project_file::from_json(&json).unwrap(), after);

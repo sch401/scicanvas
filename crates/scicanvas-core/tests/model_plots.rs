@@ -23,7 +23,9 @@ fn project() -> (Project, u64, u64, u64) {
         .unwrap();
     p.add_curves(gid, 0, b, &["B".into(), "C".into()]).unwrap();
     let mut other = Layer {
-        spec: PlotSpec::from_selection(p.book(b).unwrap(), &["B".into(), "C".into()], PlotType::FloatingBar).unwrap(),
+        spec: PlotSpec::from_selection(p.book(b).unwrap(), &["B".into(), "C".into()], PlotType::FloatingBar)
+            .unwrap()
+            .into(),
         ..Default::default()
     };
     other
@@ -35,35 +37,39 @@ fn project() -> (Project, u64, u64, u64) {
         layer.labels.column = Some("C".into());
         for id in [a, b] {
             let key = DataRef::new(id, "C").key(layer.book_id);
-            layer.curves.insert(
-                key,
-                CurveStyle {
-                    right_axis: id == b,
-                    color: Some([20, 60, 120]),
-                    ..Default::default()
-                },
-            );
+            layer.edit_styles(|styles| {
+                styles.insert(
+                    key,
+                    CurveStyle {
+                        right_axis: id == b,
+                        color: Some([20, 60, 120]),
+                        ..Default::default()
+                    },
+                )
+            });
             layer.add_analysis_result(id, "C", "D", Some("A"));
         }
         // 一条显式范围恰好等于默认范围，一条保持继承，派生线显式使用全行。
         if i == 0 {
-            layer.row_by_y.insert("C".into(), Some((2, 7)));
+            layer.edit_draft(|draft| draft.row_by_y.insert("C".into(), Some((2, 7))));
         }
         let foreign = if layer.book_id == Some(a) { b } else { a };
         let key = DataRef::new(foreign, "C").key(layer.book_id);
-        layer.row_by_y.insert(key, Some((1, 5)));
-        layer.row_by_y.insert("D".into(), None);
-        layer.row_by_y.insert("hidden".into(), Some((100, 105)));
-        layer.x_by_y.insert("hidden".into(), "A".into());
-        layer.base_by_y.insert("hidden".into(), "B".into());
-        layer.line_only.push("hidden".into());
-        layer.curves.insert(
-            "hidden".into(),
-            CurveStyle {
-                right_axis: true,
-                ..Default::default()
-            },
-        );
+        layer.edit_draft(|draft| draft.row_by_y.insert(key, Some((1, 5))));
+        layer.edit_draft(|draft| draft.row_by_y.insert("D".into(), None));
+        layer.edit_draft(|draft| draft.row_by_y.insert("hidden".into(), Some((100, 105))));
+        layer.edit_draft(|draft| draft.x_by_y.insert("hidden".into(), "A".into()));
+        layer.edit_draft(|draft| draft.base_by_y.insert("hidden".into(), "B".into()));
+        layer.edit_draft(|draft| draft.line_only.push("hidden".into()));
+        layer.edit_styles(|styles| {
+            styles.insert(
+                "hidden".into(),
+                CurveStyle {
+                    right_axis: true,
+                    ..Default::default()
+                },
+            )
+        });
     }
     (p, a, b, gid)
 }
@@ -73,20 +79,22 @@ fn legacy_delete(layer: &mut Layer, book: u64, keys: &[String]) {
         layer.drop_foreign(book, Some(keys));
         return;
     }
-    layer.y_keys.retain(|k| !keys.contains(k));
-    layer.line_only.retain(|k| !keys.contains(k));
-    layer.row_by_y.retain(|k, _| !keys.contains(k));
-    layer.curves.retain(|k, _| !keys.contains(k));
-    layer.x_by_y.retain(|y, x| !keys.contains(y) && !keys.contains(x));
-    layer.base_by_y.retain(|y, _| !keys.contains(y));
+    layer.edit_draft(|draft| draft.y_keys.retain(|k| !keys.contains(k)));
+    layer.edit_draft(|draft| draft.line_only.retain(|k| !keys.contains(k)));
+    layer.edit_draft(|draft| draft.row_by_y.retain(|k, _| !keys.contains(k)));
+    layer.edit_styles(|styles| styles.retain(|k, _| !keys.contains(k)));
+    layer.edit_draft(|draft| draft.x_by_y.retain(|y, x| !keys.contains(y) && !keys.contains(x)));
+    layer.edit_draft(|draft| draft.base_by_y.retain(|y, _| !keys.contains(y)));
     if layer.labels.column.as_ref().is_some_and(|k| keys.contains(k)) {
         layer.labels.column = None;
     }
-    for base in layer.base_by_y.values_mut() {
-        if keys.contains(base) {
-            base.clear();
+    layer.edit_draft(|draft| {
+        for base in draft.base_by_y.values_mut() {
+            if keys.contains(base) {
+                base.clear();
+            }
         }
-    }
+    });
     if layer.x_key.as_ref().is_some_and(|k| keys.contains(k)) {
         layer.x_key = None;
     }
@@ -210,11 +218,13 @@ fn row_edits_preserve_explicit_inherited_hidden_and_disabled_ranges() {
                     if main == Some(book) {
                         shift(&mut layer.rows, &map);
                     }
-                    for (key, range) in &mut layer.spec.row_by_y {
-                        if DataRef::from_key(main, key).is_some_and(|r| r.book == book) {
-                            shift(range, &map);
+                    layer.edit_draft(|draft| {
+                        for (key, range) in &mut draft.row_by_y {
+                            if DataRef::from_key(main, key).is_some_and(|r| r.book == book) {
+                                shift(range, &map);
+                            }
                         }
-                    }
+                    });
                 }
             }
             check_files_and_svg(&p, &legacy);
@@ -232,7 +242,7 @@ fn row_edits_preserve_explicit_inherited_hidden_and_disabled_ranges() {
 fn removing_books_preserves_survivor_descriptions_styles_and_empty_editor_state() {
     let (mut p, a, b, gid) = project();
     let layer = p.graph_mut(gid).unwrap().first_layer_mut();
-    layer.x_by_y.remove(&DataRef::new(b, "C").key(Some(a)));
+    layer.edit_draft(|draft| draft.x_by_y.remove(&DataRef::new(b, "C").key(Some(a))));
     let before = p.clone();
     let surviving: Vec<_> = before
         .graph(gid)
@@ -314,7 +324,8 @@ fn panel_grouping_messages_and_sample_match_the_legacy_construction() {
                     spec: PlotSpec {
                         y_keys: spec.y_keys[start..start + len].to_vec(),
                         ..spec.clone()
-                    },
+                    }
+                    .into(),
                     ..Default::default()
                 };
                 if i == 0 {
@@ -343,7 +354,8 @@ fn panel_grouping_messages_and_sample_match_the_legacy_construction() {
         x_key: Some("A".into()),
         y_keys: vec!["B".into(), "C".into()],
         ..Default::default()
-    };
+    }
+    .into();
     check_files_and_svg(&p, &legacy);
     let (gid, message) = p
         .plot_from_selection(1, &["C".into(), "A".into(), "B".into()], PlotType::LineSymbol)
@@ -377,7 +389,7 @@ fn floating_project() -> (Project, u64, u64, u64) {
 fn assert_missing_bar(p: &Project, gid: u64, source: u64) {
     let layer = p.graph(gid).unwrap().first_layer();
     let key = DataRef::new(source, "C").key(layer.book_id);
-    assert_eq!(layer.base_by_y[&key], "");
+    assert_eq!(layer.draft().base_by_y[&key], "");
     let plot = layer.plot(&DataRef::new(source, "C"), &|id| p.book(id)).unwrap();
     assert!(plot.mapping.base.is_none());
     plot.mapping.validate().unwrap();

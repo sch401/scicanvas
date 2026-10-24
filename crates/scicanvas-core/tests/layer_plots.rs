@@ -94,8 +94,8 @@ fn no_op_and_style_edits_keep_explicit_and_inherited_defaults_distinct() {
     let lookup = |id| books.iter().find(|b| b.id == id);
     let layer = p.graphs[0].first_layer_mut();
     layer.rows = Some((1, 3));
-    layer.x_by_y.insert("B".into(), "A".into());
-    layer.row_by_y.insert("B".into(), Some((1, 3)));
+    layer.edit_draft(|draft| draft.x_by_y.insert("B".into(), "A".into()));
+    layer.edit_draft(|draft| draft.row_by_y.insert("B".into(), Some((1, 3))));
     let before = layer.clone();
     assert!(!layer.plot_mut(&DataRef::new(1, "B"), &lookup, |_| {}).unwrap());
     assert_eq!(*layer, before);
@@ -108,8 +108,8 @@ fn no_op_and_style_edits_keep_explicit_and_inherited_defaults_distinct() {
             });
         })
         .unwrap());
-    assert_eq!(layer.x_by_y, before.x_by_y);
-    assert_eq!(layer.row_by_y, before.row_by_y);
+    assert_eq!(layer.draft().x_by_y, before.draft().x_by_y);
+    assert_eq!(layer.draft().row_by_y, before.draft().row_by_y);
     assert!(layer.plot(&DataRef::new(1, "C"), &lookup).unwrap().style.is_none());
     layer.rows = Some((2, 4));
     assert_eq!(
@@ -130,7 +130,9 @@ fn floating_and_derived_mapping_edits_write_through_all_old_tables() {
     let books = &p.books;
     let lookup = |id| books.iter().find(|b| b.id == id);
     let layer = p.graphs[0].first_layer_mut();
-    layer.spec = PlotSpec::from_selection(&books[0], &["B".into(), "C".into()], PlotType::FloatingBar).unwrap();
+    layer.spec = PlotSpec::from_selection(&books[0], &["B".into(), "C".into()], PlotType::FloatingBar)
+        .unwrap()
+        .into();
     layer.rows = Some((1, 3));
     let source = DataRef::new(1, "C");
     assert!(layer
@@ -144,10 +146,10 @@ fn floating_and_derived_mapping_edits_write_through_all_old_tables() {
             });
         })
         .unwrap());
-    assert_eq!(layer.x_by_y["C"], "B");
-    assert_eq!(layer.base_by_y["C"], "A");
-    assert_eq!(layer.row_by_y["C"], None);
-    assert!(layer.curves["C"].right_axis);
+    assert_eq!(layer.draft().x_by_y["C"], "B");
+    assert_eq!(layer.draft().base_by_y["C"], "A");
+    assert_eq!(layer.draft().row_by_y["C"], None);
+    assert!(layer.styles()["C"].right_axis);
     assert!(layer.plot(&source, &lookup).unwrap().x_override);
     assert!(layer
         .plot_mut(&source, &lookup, |plot| {
@@ -158,9 +160,9 @@ fn floating_and_derived_mapping_edits_write_through_all_old_tables() {
             plot.style = None;
         })
         .unwrap());
-    assert!(layer.x_by_y.is_empty() && layer.base_by_y.is_empty());
-    assert!(layer.row_by_y.is_empty() && layer.curves.is_empty());
-    assert_eq!(layer.line_only, ["C"]);
+    assert!(layer.draft().x_by_y.is_empty() && layer.draft().base_by_y.is_empty());
+    assert!(layer.draft().row_by_y.is_empty() && layer.styles().is_empty());
+    assert_eq!(layer.draft().line_only, ["C"]);
     assert_eq!(layer.rows, Some((1, 3)));
     let plot = layer.plot(&source, &lookup).unwrap();
     assert!(plot.mapping.line_only && plot.mapping.rows.is_none() && !plot.x_override);
@@ -177,7 +179,8 @@ fn additions_normalize_keys_deduplicate_sources_and_replace_stale_entries() {
             x_key: Some("A".into()),
             rows: Some((1, 3)),
             ..Default::default()
-        },
+        }
+        .into(),
         labels: scicanvas_core::page::DataLabels {
             column: Some("C".into()),
             ..Default::default()
@@ -185,21 +188,23 @@ fn additions_normalize_keys_deduplicate_sources_and_replace_stale_entries() {
         ..Default::default()
     };
     let key = DataRef::new(foreign, "B").key(layer.book_id);
-    layer.x_by_y.insert(key.clone(), format!("C@{foreign}"));
-    layer.base_by_y.insert(key.clone(), format!("C@{foreign}"));
-    layer.row_by_y.insert(key.clone(), Some((0, 1)));
-    layer.line_only.push(key.clone());
-    layer.curves.insert(
-        key.clone(),
-        CurveStyle {
-            right_axis: true,
-            ..Default::default()
-        },
-    );
+    layer.edit_draft(|draft| draft.x_by_y.insert(key.clone(), format!("C@{foreign}")));
+    layer.edit_draft(|draft| draft.base_by_y.insert(key.clone(), format!("C@{foreign}")));
+    layer.edit_draft(|draft| draft.row_by_y.insert(key.clone(), Some((0, 1))));
+    layer.edit_draft(|draft| draft.line_only.push(key.clone()));
+    layer.edit_styles(|styles| {
+        styles.insert(
+            key.clone(),
+            CurveStyle {
+                right_axis: true,
+                ..Default::default()
+            },
+        )
+    });
     assert!(layer.add_plot(descriptor(foreign, "B"), &lookup).unwrap());
-    assert_eq!(layer.y_keys, [key]);
-    assert!(layer.x_by_y.is_empty() && layer.base_by_y.is_empty() && layer.row_by_y.is_empty());
-    assert!(layer.line_only.is_empty() && layer.curves.is_empty());
+    assert_eq!(layer.draft().y_keys, [key]);
+    assert!(layer.draft().x_by_y.is_empty() && layer.draft().base_by_y.is_empty() && layer.draft().row_by_y.is_empty());
+    assert!(layer.draft().line_only.is_empty() && layer.styles().is_empty());
     let before = layer.clone();
     let mut duplicate = descriptor(foreign, "B");
     duplicate.key = "另一个旧键".into();
@@ -222,7 +227,8 @@ fn additions_normalize_keys_deduplicate_sources_and_replace_stale_entries() {
         spec: PlotSpec {
             book_id: Some(1),
             ..Default::default()
-        },
+        }
+        .into(),
         ..Default::default()
     };
     let mut plot = descriptor(1, "B");
@@ -238,7 +244,8 @@ fn additions_normalize_keys_deduplicate_sources_and_replace_stale_entries() {
         spec: PlotSpec {
             y_keys: vec!["B".into()],
             ..Default::default()
-        },
+        }
+        .into(),
         ..Default::default()
     };
     let before = unbound.clone();
@@ -253,41 +260,47 @@ fn removal_and_retention_clear_every_table_without_affecting_other_sources() {
     let books = &p.books;
     let lookup = |id| books.iter().find(|b| b.id == id);
     let layer = p.graphs[0].first_layer_mut();
-    layer.y_keys.insert(1, "B@1".into());
-    for key in layer.y_keys.clone() {
+    layer.edit_draft(|draft| draft.y_keys.insert(1, "B@1".into()));
+    for key in layer.draft().y_keys.clone() {
         let source = DataRef::from_key(layer.book_id, &key).unwrap();
         let x = DataRef::new(source.book, "A").key(layer.book_id);
-        layer.x_by_y.insert(key.clone(), x.clone());
-        layer.base_by_y.insert(key.clone(), x);
-        layer.row_by_y.insert(key.clone(), Some((0, 1)));
-        layer.line_only.push(key.clone());
-        layer.curves.insert(
-            key,
-            CurveStyle {
-                right_axis: true,
-                ..Default::default()
-            },
-        );
+        layer.edit_draft(|draft| draft.x_by_y.insert(key.clone(), x.clone()));
+        layer.edit_draft(|draft| draft.base_by_y.insert(key.clone(), x));
+        layer.edit_draft(|draft| draft.row_by_y.insert(key.clone(), Some((0, 1))));
+        layer.edit_draft(|draft| draft.line_only.push(key.clone()));
+        layer.edit_styles(|styles| {
+            styles.insert(
+                key,
+                CurveStyle {
+                    right_axis: true,
+                    ..Default::default()
+                },
+            )
+        });
     }
+    let mut keyed = layer.clone();
+    assert_eq!(keyed.retain_plots(&lookup, |p| p.key != "B"), 1);
+    assert!(!keyed.plot_keys(true).contains(&"B".to_string()));
+    assert!(keyed.plot_keys(true).contains(&"B@1".to_string()));
     let kept = layer.plot(&DataRef::new(foreign, "B"), &lookup).unwrap();
     assert!(layer.remove_plot(&DataRef::new(1, "B")));
     for key in ["B", "B@1"] {
-        assert!(!layer.y_keys.iter().any(|k| k == key));
-        assert!(!layer.line_only.iter().any(|k| k == key));
-        assert!(!layer.x_by_y.contains_key(key) && !layer.base_by_y.contains_key(key));
-        assert!(!layer.row_by_y.contains_key(key) && !layer.curves.contains_key(key));
+        assert!(!layer.draft().y_keys.iter().any(|k| k == key));
+        assert!(!layer.draft().line_only.iter().any(|k| k == key));
+        assert!(!layer.draft().x_by_y.contains_key(key) && !layer.draft().base_by_y.contains_key(key));
+        assert!(!layer.draft().row_by_y.contains_key(key) && !layer.styles().contains_key(key));
     }
     let before = layer.clone();
     assert!(!layer.remove_plot(&DataRef::new(1, "B")));
     assert_eq!(*layer, before);
     assert_eq!(layer.retain_plots(&lookup, |p| p.mapping.y.book == foreign), 1);
     assert_eq!(layer.plots(&lookup), [kept]);
-    assert_eq!(layer.y_keys.len(), 1);
-    assert_eq!(layer.line_only.len(), 1);
-    assert_eq!(layer.x_by_y.len(), 1);
-    assert_eq!(layer.base_by_y.len(), 1);
-    assert_eq!(layer.row_by_y.len(), 1);
-    assert_eq!(layer.curves.len(), 1);
+    assert_eq!(layer.draft().y_keys.len(), 1);
+    assert_eq!(layer.draft().line_only.len(), 1);
+    assert_eq!(layer.draft().x_by_y.len(), 1);
+    assert_eq!(layer.draft().base_by_y.len(), 1);
+    assert_eq!(layer.draft().row_by_y.len(), 1);
+    assert_eq!(layer.styles().len(), 1);
     roundtrip(&p);
 }
 
@@ -367,8 +380,8 @@ fn new_entries_match_legacy_rendering_history_and_current_persistence() {
     history.commit(&p);
     let layer = legacy.graphs[0].first_layer_mut();
     let key = DataRef::new(foreign, "B").key(layer.book_id);
-    layer.row_by_y.insert(key.clone(), Some((1, 3)));
-    layer.curves.insert(key, style);
+    layer.edit_draft(|draft| draft.row_by_y.insert(key.clone(), Some((1, 3))));
+    layer.edit_styles(|styles| styles.insert(key, style));
     layer.add_analysis_result(foreign, "B", "C", Some("A"));
     layer.remove_curve("C");
     assert_eq!(p, legacy);
@@ -426,17 +439,19 @@ fn editor_selection_and_order_preserve_inactive_unbound_and_missing_base_states(
             layer.book_id = None;
         }
         let key = format!("B@{foreign}");
-        layer.line_only.push(key.clone());
-        layer.base_by_y.insert("B".into(), String::new());
-        layer.x_by_y.insert("B".into(), "A".into());
-        layer.row_by_y.insert("B".into(), None);
-        layer.curves.insert(
-            "B".into(),
-            CurveStyle {
-                right_axis: true,
-                ..Default::default()
-            },
-        );
+        layer.edit_draft(|draft| draft.line_only.push(key.clone()));
+        layer.edit_draft(|draft| draft.base_by_y.insert("B".into(), String::new()));
+        layer.edit_draft(|draft| draft.x_by_y.insert("B".into(), "A".into()));
+        layer.edit_draft(|draft| draft.row_by_y.insert("B".into(), None));
+        layer.edit_styles(|styles| {
+            styles.insert(
+                "B".into(),
+                CurveStyle {
+                    right_axis: true,
+                    ..Default::default()
+                },
+            )
+        });
         let before = p.clone();
         let mut legacy = p.clone();
         let mut history = History::default();
@@ -444,7 +459,10 @@ fn editor_selection_and_order_preserve_inactive_unbound_and_missing_base_states(
         p.graphs[0]
             .first_layer_mut()
             .edit_plot_keys(|keys| keys.retain(|key| key != "B"));
-        legacy.graphs[0].first_layer_mut().spec.y_keys.retain(|key| key != "B");
+        legacy.graphs[0]
+            .first_layer_mut()
+            .spec
+            .edit_draft(|draft| draft.y_keys.retain(|key| key != "B"));
         compare_editor_state(&p, &legacy);
         assert!(p.graphs[0].first_layer().has_right_axis_style());
         p.graphs[0].first_layer_mut().edit_plot_keys(|keys| {
@@ -453,23 +471,24 @@ fn editor_selection_and_order_preserve_inactive_unbound_and_missing_base_states(
             keys.sort();
         });
         let old = legacy.graphs[0].first_layer_mut();
-        old.spec.y_keys.push("B".into());
-        old.spec.y_keys.swap(0, 1);
-        old.spec.y_keys.sort();
+        old.spec.edit_draft(|draft| draft.y_keys.push("B".into()));
+        old.spec.edit_draft(|draft| draft.y_keys.swap(0, 1));
+        old.spec.edit_draft(|draft| draft.y_keys.sort());
         compare_editor_state(&p, &legacy);
         let layer = p.graphs[0].first_layer();
-        assert_eq!(layer.plot_keys(true), layer.y_keys);
+        assert_eq!(layer.plot_keys(true), layer.draft().y_keys);
         assert_eq!(
             layer.plot_keys(false),
             layer
+                .draft()
                 .y_keys
                 .iter()
-                .filter(|key| !layer.line_only.contains(key))
+                .filter(|key| !layer.draft().line_only.contains(key))
                 .cloned()
                 .collect::<Vec<_>>()
         );
-        assert_eq!(layer.base_by_y["B"], "");
-        assert_eq!(layer.row_by_y["B"], None);
+        assert_eq!(layer.draft().base_by_y["B"], "");
+        assert_eq!(layer.draft().row_by_y["B"], None);
         history.changed();
         history.commit(&p);
         let undone = history.undo(&p).unwrap();
@@ -484,20 +503,21 @@ fn editor_foreign_addition_preserves_pending_mappings_and_explicit_defaults() {
         let (mut p, foreign) = project();
         let key = format!("C@{foreign}");
         let layer = p.graphs[0].first_layer_mut();
-        layer.x_by_y.insert(key.clone(), format!("A@{foreign}"));
-        layer.base_by_y.insert(key.clone(), String::new());
-        layer.row_by_y.insert(key.clone(), None);
-        layer.line_only.push(key.clone());
-        layer.curves.insert(key.clone(), CurveStyle::default());
+        layer.edit_draft(|draft| draft.x_by_y.insert(key.clone(), format!("A@{foreign}")));
+        layer.edit_draft(|draft| draft.base_by_y.insert(key.clone(), String::new()));
+        layer.edit_draft(|draft| draft.row_by_y.insert(key.clone(), None));
+        layer.edit_draft(|draft| draft.line_only.push(key.clone()));
+        layer.edit_styles(|styles| styles.insert(key.clone(), CurveStyle::default()));
         let mut legacy = p.clone();
         let x = with_x.then(|| DataRef::new(foreign, "B"));
         p.graphs[0]
             .first_layer_mut()
             .select_plot(&DataRef::new(foreign, "C"), x.as_ref());
         let old = legacy.graphs[0].first_layer_mut();
-        old.spec.y_keys.push(key.clone());
+        old.spec.edit_draft(|draft| draft.y_keys.push(key.clone()));
         if with_x {
-            old.spec.x_by_y.insert(key.clone(), format!("B@{foreign}"));
+            old.spec
+                .edit_draft(|draft| draft.x_by_y.insert(key.clone(), format!("B@{foreign}")));
         }
         compare_editor_state(&p, &legacy);
         let layer = p.graphs[0].first_layer();
@@ -505,7 +525,7 @@ fn editor_foreign_addition_preserves_pending_mappings_and_explicit_defaults() {
         assert!(plot.x_override && plot.mapping.line_only);
         assert_eq!(plot.mapping.rows, None);
         assert_eq!(plot.style, Some(CurveStyle::default()));
-        assert_eq!(layer.base_by_y[&key], "");
+        assert_eq!(layer.draft().base_by_y[&key], "");
     }
 }
 
@@ -516,8 +536,7 @@ fn editor_styles_share_storage_without_changing_pending_or_unbound_mappings() {
     // 未绑定的编辑条目及尚未完整的映射仍允许只改样式。
     p.graphs[0]
         .first_layer_mut()
-        .base_by_y
-        .insert("B".into(), String::new());
+        .edit_draft(|draft| draft.base_by_y.insert("B".into(), String::new()));
     for key in ["B", "hidden"] {
         for style in [
             Some(CurveStyle::default()),
@@ -532,9 +551,9 @@ fn editor_styles_share_storage_without_changing_pending_or_unbound_mappings() {
             p.graphs[0].first_layer_mut().set_plot_style(key, style.clone());
             let old = legacy.graphs[0].first_layer_mut();
             if let Some(style) = style.clone() {
-                old.curves.insert(key.into(), style);
+                old.edit_styles(|styles| styles.insert(key.into(), style));
             } else {
-                old.curves.remove(key);
+                old.edit_styles(|styles| styles.remove(key));
             }
             compare_editor_state(&p, &legacy);
             assert_eq!(p.graphs[0].first_layer().plot_style(key), style.as_ref());
@@ -550,21 +569,23 @@ fn builder_base_and_cache_references_preserve_hidden_and_foreign_editor_state() 
             let mut layer = p.graphs[0].first_layer().clone();
             layer.book_id = bound;
             layer.labels.column = Some("C".into());
-            layer.base_by_y.insert("C".into(), String::new());
-            layer.x_by_y.insert("hidden".into(), format!("C@{foreign}"));
-            layer.base_by_y.insert("hidden".into(), "B".into());
+            layer.edit_draft(|draft| draft.base_by_y.insert("C".into(), String::new()));
+            layer.edit_draft(|draft| draft.x_by_y.insert("hidden".into(), format!("C@{foreign}")));
+            layer.edit_draft(|draft| draft.base_by_y.insert("hidden".into(), "B".into()));
             let key = format!("B@{foreign}");
             if let Some(x) = explicit_x {
-                layer.x_by_y.insert(
-                    key,
-                    if x.is_empty() {
-                        String::new()
-                    } else {
-                        format!("{x}@{foreign}")
-                    },
-                );
+                layer.edit_draft(|draft| {
+                    draft.x_by_y.insert(
+                        key,
+                        if x.is_empty() {
+                            String::new()
+                        } else {
+                            format!("{x}@{foreign}")
+                        },
+                    )
+                });
             } else {
-                layer.x_by_y.remove(&key);
+                layer.edit_draft(|draft| draft.x_by_y.remove(&key));
             }
             for book in &p.books {
                 for col in &book.columns {
@@ -573,33 +594,73 @@ fn builder_base_and_cache_references_preserve_hidden_and_foreign_editor_state() 
                     let matches = |x: &str| x == qualified || (local && x == col.key);
                     let old_default =
                         layer
+                            .draft()
                             .y_keys
                             .iter()
                             .any(|raw_y| match scicanvas_core::plotspec::split_key(raw_y) {
-                                (y, Some(id)) if id == book.id && !layer.x_by_y.contains_key(raw_y) => {
+                                (y, Some(id)) if id == book.id && !layer.draft().x_by_y.contains_key(raw_y) => {
                                     scicanvas_core::plotspec::default_x(book, y).as_deref() == Some(&col.key)
                                 }
                                 _ => false,
                             });
                     let expected = (local && layer.x_key.as_deref() == Some(&col.key))
-                        || layer.y_keys.iter().any(|y| matches(y))
-                        || layer.x_by_y.values().any(|x| matches(x))
-                        || layer.base_by_y.values().any(|b| matches(b))
+                        || layer.draft().y_keys.iter().any(|y| matches(y))
+                        || layer.draft().x_by_y.values().any(|x| matches(x))
+                        || layer.draft().base_by_y.values().any(|b| matches(b))
                         || (local && layer.labels.column.as_deref() == Some(&col.key))
                         || (!local && old_default);
                     assert_eq!(layer.references_plot_column(book, &col.key), expected);
                 }
             }
             for key in ["C", "hidden", "not-selected"] {
-                assert_eq!(layer.plot_base_key(key), layer.base_by_y.get(key).map(String::as_str));
+                assert_eq!(
+                    layer.plot_base_key(key).as_deref(),
+                    layer.draft().base_by_y.get(key).map(String::as_str)
+                );
                 let mut legacy = layer.clone();
                 layer.set_plot_base_key(key, "A".into());
-                legacy.spec.base_by_y.insert(key.into(), "A".into());
+                legacy
+                    .spec
+                    .edit_draft(|draft| draft.base_by_y.insert(key.into(), "A".into()));
                 assert_eq!(layer, legacy);
                 layer.set_plot_base_key(key, String::new());
-                legacy.spec.base_by_y.insert(key.into(), String::new());
+                legacy
+                    .spec
+                    .edit_draft(|draft| draft.base_by_y.insert(key.into(), String::new()));
                 assert_eq!(layer, legacy);
             }
         }
     }
+}
+
+#[test]
+fn typed_property_selection_keeps_styles_and_distinguishes_same_named_sources() {
+    let (mut p, foreign) = project();
+    let layer = p.graphs[0].first_layer_mut();
+    let local = DataRef::new(1, "B");
+    let remote = DataRef::new(foreign, "B");
+    let style = CurveStyle {
+        right_axis: true,
+        color: Some([10, 20, 30]),
+        ..Default::default()
+    };
+    layer.set_source_style(&remote, Some(style.clone()));
+    let before = layer.clone();
+    assert!(layer.spec.same_mapping(&before.spec));
+    layer.set_plot_selected(&remote, false);
+    assert!(!layer.plot_sources(true).contains(&remote));
+    assert!(layer.plot_sources(true).contains(&local));
+    assert_eq!(layer.source_style(&remote), Some(&style));
+    assert!(!layer.spec.same_mapping(&before.spec));
+    layer.set_plot_selected(&remote, true);
+    assert_eq!(*layer, before);
+    layer.set_source_style(&local, Some(CurveStyle::default()));
+    assert_eq!(layer.source_style(&remote), Some(&style));
+    assert!(layer.spec.same_mapping(&before.spec));
+    layer.book_id = None;
+    let unbound = DataRef::new(0, "B");
+    assert!(layer.plot_sources(true).contains(&unbound));
+    layer.set_plot_selected(&unbound, false);
+    layer.set_plot_selected(&unbound, true);
+    assert_eq!(layer.source_style(&unbound), Some(&CurveStyle::default()));
 }

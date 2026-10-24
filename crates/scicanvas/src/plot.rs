@@ -20,7 +20,7 @@ use crate::fonts::plot_font;
 struct Saved {
     view: View,
     key: [f64; 8],
-    spec: scicanvas_core::plotspec::PlotSpec,
+    spec: scicanvas_core::page::LayerSpec,
 }
 
 /// 场景缓存：图形设置、视图和所引用的数据都没变时，复用上一帧的排版（百万点的图不必每帧重算）。
@@ -432,7 +432,7 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize, ob
     for (state, layer) in saved.iter_mut().zip(g.page.layers()) {
         if state
             .as_ref()
-            .is_some_and(|s| s.key != axis_key(layer) || s.spec != layer.spec)
+            .is_some_and(|s| s.key != axis_key(layer) || !s.spec.same_mapping(&layer.spec))
         {
             *state = None;
         }
@@ -758,7 +758,7 @@ mod tests {
     fn project() -> Project {
         let mut p = Project::sample();
         let mut layer = p.graphs[0].page.layers()[0].clone();
-        layer.y_keys = vec!["C".into()];
+        layer.edit_draft(|draft| draft.y_keys = vec!["C".into()]);
         p.graphs[0].page.add_layer(layer);
         p.graphs[0].page.columns = 2;
         p
@@ -1093,6 +1093,40 @@ mod tests {
     }
 
     #[test]
+    fn curve_style_edits_preserve_saved_zoom_but_mapping_edits_reset_it() {
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        let mut p = Project::sample();
+        frame(&ctx, &p, vec![]);
+        let layer = p.graphs[0].first_layer();
+        let view = View {
+            x: (2.0, 8.0),
+            y: (-2.0, 4.0),
+        };
+        let state = Saved {
+            view,
+            key: axis_key(layer),
+            spec: layer.spec.clone(),
+        };
+        ctx.data_mut(|d| d.insert_temp(view_id(2), vec![Some(state)]));
+        for key in ["B", "style-only"] {
+            p.graphs[0].first_layer_mut().set_plot_style(
+                key,
+                Some(scicanvas_core::page::CurveStyle {
+                    color: Some([90, 20, 30]),
+                    right_axis: true,
+                    ..Default::default()
+                }),
+            );
+            assert!(frame(&ctx, &p, vec![]).zoomed);
+            let state = ctx.data(|d| d.get_temp::<Vec<Option<Saved>>>(view_id(2))).unwrap();
+            assert_eq!(state[0].as_ref().unwrap().view, view);
+        }
+        p.graphs[0].first_layer_mut().x_key = None;
+        assert!(!frame(&ctx, &p, vec![]).zoomed);
+    }
+
+    #[test]
     fn pan_stays_on_press_layer_when_pointer_crosses_into_next_panel() {
         let ctx = egui::Context::default();
         crate::fonts::setup(&ctx);
@@ -1116,7 +1150,9 @@ mod tests {
             .first_layer_mut()
             .set_plot_type(scicanvas_core::PlotType::Area)
             .unwrap();
-        p.graphs[0].first_layer_mut().y_keys = vec!["B".into()];
+        p.graphs[0]
+            .first_layer_mut()
+            .edit_draft(|draft| draft.y_keys = vec!["B".into()]);
         p.graphs[0].first_layer_mut().area_opacity = 0.5;
         let sc = scene::layout_page(&p.graphs[0], &p, &[]);
         let pts = sc
