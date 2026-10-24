@@ -682,6 +682,29 @@ impl SciApp {
         }
     }
 
+    /// 一次性项目编辑：Some 返回结果，None 取消，Err 回滚并显示原因。
+    /// 实际改变才重算并记一步；重算诊断继续沿用既有 finish_edit 规则。
+    #[allow(dead_code)] // 3.1 先提供入口和回归，现有命令在 3.2 分批迁移。
+    fn edit<T>(&mut self, label: &str, f: impl FnOnce(&mut Project) -> Result<Option<T>, String>) -> Option<T> {
+        self.finish_edit();
+        self.history_group = None;
+        self.begin_edit(label);
+        match f(&mut self.project) {
+            Ok(Some(value)) => {
+                self.history.changed_if_different(&self.project);
+                self.finish_edit();
+                Some(value)
+            }
+            result => {
+                self.project = self.history.rollback().unwrap();
+                if let Err(error) = result {
+                    self.status = error;
+                }
+                None
+            }
+        }
+    }
+
     fn begin_edit(&mut self, label: &str) {
         self.pending_repaint = true;
         self.book_preview = None;

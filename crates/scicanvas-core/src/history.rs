@@ -67,6 +67,18 @@ impl History {
         self.pending.as_mut().expect("写入前应开启撤销事务").changed = true;
     }
 
+    /// 一次性编辑收尾时与起点比较；空闲帧和旧连续编辑仍使用 changed 标记。
+    pub fn changed_if_different(&mut self, current: &Project) -> bool {
+        let pending = self.pending.as_mut().expect("写入前应开启撤销事务");
+        pending.changed = pending.before.project != *current;
+        pending.changed
+    }
+
+    /// 放弃当前事务并移回原快照，不改动已提交的撤销/重做记录及预算。
+    pub fn rollback(&mut self) -> Option<Project> {
+        self.pending.take().map(|pending| pending.before.project)
+    }
+
     pub fn commit(&mut self, current: &Project) -> bool {
         let Some(pending) = self.pending.take() else {
             return false;
@@ -429,5 +441,70 @@ mod tests {
                 assert!(h.redo(&p).is_none());
             }
         }
+    }
+
+    #[test]
+    fn rollback_moves_pending_snapshot_and_preserves_history_budget_and_redo() {
+        let mut p = Project::sample();
+        let initial = p.clone();
+        let mut h = History::default();
+        h.begin(&p, "已提交");
+        p.new_book();
+        h.changed();
+        assert!(h.commit(&p));
+        let committed = p.clone();
+        p = h.undo(&p).unwrap();
+        assert_eq!(p, initial);
+        let bytes = h.bytes;
+        h.begin(&p, "放弃");
+        let crate::ColumnData::Num { values, .. } =
+            &h.pending.as_ref().unwrap().before.project.books[0].columns[0].data
+        else {
+            panic!("numeric");
+        };
+        let allocation = values.as_ptr();
+        p.books[0].columns[0].set(0, "临时文字".into());
+        p.new_book();
+        assert!(h.changed_if_different(&p));
+        assert!(h.has_changes());
+        p = h.rollback().unwrap();
+        assert_eq!(p, initial);
+        let crate::ColumnData::Num { values, .. } = &p.books[0].columns[0].data else {
+            panic!("numeric");
+        };
+        assert_eq!(values.as_ptr(), allocation, "回滚移动原快照而非再次克隆");
+        assert!(!h.is_pending());
+        assert_eq!(h.bytes, bytes);
+        assert!(h.undo_label().is_none());
+        assert_eq!(h.redo_label(), Some("已提交"));
+        assert!(h.rollback().is_none());
+        assert_eq!(h.bytes, bytes);
+        assert_eq!(h.redo(&p).unwrap(), committed);
+    }
+
+    #[test]
+    fn actual_change_detection_can_return_to_start_without_consuming_redo() {
+        let mut p = Project::sample();
+        let mut h = History::default();
+        h.begin(&p, "已提交");
+        p.new_book();
+        h.changed();
+        assert!(h.commit(&p));
+        p = h.undo(&p).unwrap();
+        let before = p.clone();
+        let bytes = h.bytes;
+        h.begin(&p, "无改动");
+        assert!(!h.changed_if_different(&p));
+        assert!(!h.has_changes());
+        p.books[0].name.push('!');
+        assert!(h.changed_if_different(&p));
+        p.books[0].name.pop();
+        assert!(!h.changed_if_different(&p));
+        assert!(!h.has_changes());
+        assert!(!h.commit(&p));
+        assert_eq!(p, before);
+        assert_eq!(h.bytes, bytes);
+        assert_eq!(h.redo_label(), Some("已提交"));
+        assert!(h.undo_label().is_none());
     }
 }

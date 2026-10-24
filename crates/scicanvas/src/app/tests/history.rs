@@ -203,3 +203,151 @@ fn idle_large_book_opens_no_history_transaction() {
     }
     assert!(app.history.undo_label().is_none());
 }
+
+#[test]
+fn unified_edit_returns_results_and_groups_project_changes_into_one_step() {
+    let mut app = app();
+    let before = app.project.clone();
+    let (book, graph) = app
+        .edit("建立表和图", |project| {
+            let book = project.new_book();
+            let b = project.book_mut(book).unwrap();
+            b.columns[0].data = vec!["1".into(), "2".into()].into();
+            b.columns[1].data = vec!["3".into(), "4".into()].into();
+            let (graph, _) = project.plot_from_selection(book, &[], PlotType::LineSymbol)?;
+            Ok(Some((book, graph)))
+        })
+        .unwrap();
+    assert!(app.project.book(book).is_some() && app.project.graph(graph).is_some());
+    assert_eq!(app.history.undo_label(), Some("建立表和图"));
+    assert!(!app.history.is_pending());
+    let saved = scicanvas_core::project_file::to_scv(&app.project).unwrap();
+    assert_eq!(scicanvas_core::project_file::from_scv(&saved).unwrap(), app.project);
+    roundtrip(&mut app, &before);
+    app.undo();
+    assert!(app.history.undo_label().is_none());
+}
+
+#[test]
+fn unified_edit_rolls_back_partial_errors_and_cancellation_without_losing_redo() {
+    for fail in [false, true] {
+        let mut app = app();
+        app.run_command("book.new");
+        let redo = app.project.clone();
+        app.undo();
+        let before = app.project.clone();
+        let label = app.history.redo_label().unwrap().to_string();
+        let result: Option<u64> = app.edit("放弃修改", |project| {
+            project.books[0].columns[1].set(0, "临时文字".into());
+            project.new_book();
+            project.delete_columns(1, &["C".into()]);
+            if fail {
+                Err("计算失败".into())
+            } else {
+                Ok(None)
+            }
+        });
+        assert_eq!(result, None);
+        assert_eq!(app.project, before);
+        assert!(!app.history.is_pending());
+        assert!(app.history.undo_label().is_none());
+        assert_eq!(app.history.redo_label(), Some(label.as_str()));
+        if fail {
+            assert_eq!(app.status, "计算失败");
+        }
+        app.redo();
+        assert_eq!(app.project, redo);
+    }
+}
+
+#[test]
+fn unified_edit_noops_preserve_redo_and_do_not_recalculate_stale_formulas() {
+    let mut app = app();
+    app.run_command("book.new");
+    app.undo();
+    // 用未重算的公式检测无改动入口是否错误触发重算。
+    app.project.books[0].columns[2].formula = Some("B * 2".into());
+    let before = app.project.clone();
+    let redo = app.history.redo_label().unwrap().to_string();
+    for returns_value in [false, true] {
+        let result = app.edit("无改动", |project| {
+            project.books[0].name.push('!');
+            project.books[0].name.pop();
+            Ok(returns_value.then_some(42))
+        });
+        assert_eq!(result, returns_value.then_some(42));
+        assert_eq!(app.project, before);
+        assert!(!app.history.is_pending());
+        assert!(app.history.undo_label().is_none());
+        assert_eq!(app.history.redo_label(), Some(redo.as_str()));
+    }
+}
+
+#[test]
+fn unified_edit_recalculates_dependencies_in_the_same_step_and_preserves_diagnostics() {
+    let mut app = app();
+    let derived = app.project.books[0].push_column(Role::Y);
+    app.project.set_column_formula(1, "C", "B * 2", true).unwrap();
+    app.project.set_column_formula(1, &derived, "C + 1", true).unwrap();
+    let before = app.project.clone();
+    assert_eq!(
+        app.edit("改源数据", |project| {
+            project.books[0].columns[1].set(0, "100".into());
+            Ok(Some(()))
+        }),
+        Some(())
+    );
+    let book = app.project.book(1).unwrap();
+    assert_eq!(book.column("C").unwrap().data.f64_at(0), Some(200.0));
+    assert_eq!(book.column(&derived).unwrap().data.f64_at(0), Some(201.0));
+    roundtrip(&mut app, &before);
+    let before = app.project.clone();
+    assert_eq!(
+        app.edit("删除公式来源", |project| {
+            project.delete_columns(1, &["B".into()]);
+            Ok(Some(()))
+        }),
+        Some(())
+    );
+    assert!(app.project.book(1).unwrap().column("B").is_none());
+    assert!(app.status.starts_with("公式重算出错："));
+    roundtrip(&mut app, &before);
+}
+
+#[test]
+fn unified_edit_closes_previous_continuous_edits_without_merging_or_undoing_them() {
+    for outcome in ["success", "cancel", "error"] {
+        let mut app = app();
+        let initial = app.project.clone();
+        let group = Some(egui::Id::new("连续编辑"));
+        app.begin_edit("连续名称");
+        app.project.books[0].name = "完成的名称".into();
+        app.history.changed();
+        app.history_group = group;
+        app.finish_frame_edit(group);
+        let first = app.project.clone();
+        assert!(app.history.is_pending());
+        let result = app.edit("下一步", |project| {
+            project.new_book();
+            match outcome {
+                "success" => Ok(Some(())),
+                "cancel" => Ok(None),
+                _ => Err("失败".into()),
+            }
+        });
+        assert_eq!(result, outcome.eq("success").then_some(()));
+        assert!(!app.history.is_pending());
+        assert!(app.history_group.is_none() && app.last_history_group.is_none());
+        if outcome == "success" {
+            assert_eq!(app.history.undo_label(), Some("下一步"));
+            app.undo();
+            assert_eq!(app.project, first);
+        } else {
+            assert_eq!(app.project, first);
+        }
+        assert_eq!(app.history.undo_label(), Some("连续名称"));
+        app.undo();
+        assert_eq!(app.project, initial);
+        assert!(app.history.undo_label().is_none());
+    }
+}
