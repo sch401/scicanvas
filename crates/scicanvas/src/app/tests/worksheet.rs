@@ -760,18 +760,22 @@ fn excel_block_paste_in_cell_editor_routes_to_grid_and_conflicts_keep_the_edit()
 }
 
 #[test]
-fn populated_a_b_c_columns_paste_identically_in_grid_and_numeric_editor() {
+fn populated_columns_including_aa_and_beyond_paste_identically_in_grid_and_numeric_editor() {
     let cases = [
         ("72933.03969", vec!["72933.03969"]),
         ("72933.03969\r\n", vec!["72933.03969"]),
         ("4-10\r\n", vec!["4-10"]),
         ("4-10\r\n10-40\r\n40-100\r\n", vec!["4-10", "10-40", "40-100"]),
     ];
-    for column in 0..3 {
+    for column in [0, 1, 2, 3, 25, 26, 51, 99] {
         for editing in [false, true] {
             for (text, expected) in &cases {
                 let mut app = app();
                 app.active = Some(1);
+                app.project.books[0].ensure_columns(100);
+                for c in &mut app.project.books[0].columns[3..] {
+                    c.data = vec!["100.25".into(); 12].into();
+                }
                 app.project.books[0].columns[2].role = Role::YError;
                 app.project.books[0].columns[2].error_for = Some("B".into());
                 let before = app.project.clone();
@@ -810,7 +814,7 @@ fn populated_a_b_c_columns_paste_identically_in_grid_and_numeric_editor() {
                 }
                 assert_eq!(after_col.role, before.books[0].columns[column].role);
                 assert_eq!(after_col.error_for, before.books[0].columns[column].error_for);
-                for other in (0..3).filter(|other| *other != column) {
+                for other in (0..before.books[0].columns.len()).filter(|other| *other != column) {
                     assert_eq!(app.project.books[0].columns[other], before.books[0].columns[other]);
                 }
                 roundtrip(&mut app, &before);
@@ -911,4 +915,61 @@ fn b_paste_replaces_pending_conversion_instead_of_leaving_a_stale_write() {
     assert!(app.dialog.is_none());
     assert_eq!(app.project.books[0].columns[1].data.f64_at(5), Some(72933.03969));
     roundtrip(&mut app, &before);
+}
+
+#[test]
+fn wide_paste_from_added_columns_expands_book_and_undoes_as_one_edit() {
+    for start in [3, 25, 26, 99] {
+        let mut app = app();
+        app.active = Some(1);
+        app.project.books[0].ensure_columns(start + 2);
+        for c in &mut app.project.books[0].columns[3..] {
+            c.data = vec!["100.25".into(); 12].into();
+        }
+        let before = app.project.clone();
+        app.sheets.insert(
+            1,
+            SheetState {
+                range: Some(Range::single(start, 5)),
+                ..Default::default()
+            },
+        );
+        let rows: Vec<Vec<String>> = (0..3)
+            .map(|r| {
+                (0..40)
+                    .map(|c| {
+                        if c % 2 == 0 {
+                            format!("group-{r}-{c}")
+                        } else {
+                            format!("{}", r * 100 + c)
+                        }
+                    })
+                    .collect()
+            })
+            .collect();
+        let text = rows.iter().map(|r| r.join("\t")).collect::<Vec<_>>().join("\r\n") + "\r\n";
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        ctx.memory_mut(|m| m.request_focus(egui::Id::new(("sheet-focus", 1_u64))));
+        editor_frame(&mut app, &ctx, vec![], false);
+        editor_frame(&mut app, &ctx, vec![egui::Event::Paste(text)], false);
+        app.finish_edit();
+        let book = &app.project.books[0];
+        assert_eq!(book.columns.len(), start + 40);
+        assert_eq!(&book.columns[..start], &before.books[0].columns[..start]);
+        for (r, row) in rows.iter().enumerate() {
+            for (c, value) in row.iter().enumerate() {
+                assert_eq!(book.columns[start + c].data.text_at(5 + r), *value);
+            }
+        }
+        for c in start..start + 2 {
+            assert_eq!(book.columns[c].data.text_at(0), "100.25");
+            assert_eq!(book.columns[c].data.text_at(11), "100.25");
+        }
+        assert_eq!(app.sheets[&1].range.unwrap().cols(), 40);
+        assert_eq!(app.sheets[&1].range.unwrap().rows(), 3);
+        roundtrip(&mut app, &before);
+        let scv = scicanvas_core::project_file::to_scv(&app.project).unwrap();
+        assert_eq!(scicanvas_core::project_file::from_scv(&scv).unwrap(), app.project);
+    }
 }
