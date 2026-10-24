@@ -450,3 +450,28 @@ fn vector_wire_keeps_plots_authoritative_and_legacy_required_fields_checked() {
         .remove("y_keys");
     assert!(project_file::from_json(&legacy.to_string()).is_err());
 }
+
+#[test]
+fn legacy_invalid_explicit_refs_remain_distinct_from_unbound_and_missing_base() {
+    fixture_fonts();
+    for field in ["y_keys", "x_by_y", "base_by_y"] {
+        for invalid in ["B@0", "@1"] {
+            let mut value = legacy_editor_projection(&Project::sample());
+            value["version"] = 10.into();
+            let layer = &mut value["graphs"][0]["page"]["layers"][0];
+            if field == "y_keys" {
+                layer[field] = serde_json::json!([invalid]);
+            } else {
+                layer[field] = serde_json::json!({"B":invalid});
+            }
+            assert!(
+                project_file::from_json(&value.to_string()).is_err(),
+                "{field}: {invalid}"
+            );
+        }
+    }
+    let mut p = Project::sample();
+    p.graphs[0].first_layer_mut().book_id = None;
+    let text = project_file::to_json(&p).unwrap();
+    assert_eq!(project_file::from_json(&text).unwrap(), p);
+}

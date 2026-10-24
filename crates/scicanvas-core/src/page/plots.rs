@@ -3,13 +3,20 @@ use super::{CurveStyle, Layer};
 use crate::plotspec::{default_x, split_key, BookLookup, CurveMapping, DataRef, Plot as Description, PlotSpec};
 use std::collections::BTreeMap;
 
-/// 一条曲线及其暂存设置。book=0 表示跟随图层主表，允许旧空图尚未绑定。
+/// None 跟随图层主表；Some 保留显式编号，包括待校验的损坏引用。
+#[derive(Clone, Debug, PartialEq)]
+pub(crate) struct ColumnRef {
+    book: Option<u64>,
+    pub(crate) col: String,
+}
+
+/// 一条曲线及其暂存设置。
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) struct Plot {
-    pub(crate) source: DataRef,
+    pub(crate) source: ColumnRef,
     pub(crate) active: bool,
-    pub(crate) x: Option<DataRef>,
-    pub(crate) base: Option<DataRef>,
+    pub(crate) x: Option<ColumnRef>,
+    pub(crate) base: Option<ColumnRef>,
     pub(crate) rows: Option<Option<(usize, usize)>>,
     pub(crate) line_order: Option<usize>,
     pub(crate) style: Option<CurveStyle>,
@@ -27,22 +34,21 @@ pub struct LayerSpec {
     pub(crate) plots: Vec<Plot>,
 }
 
-fn raw_ref(key: &str) -> DataRef {
+fn raw_ref(key: &str) -> ColumnRef {
     let (col, book) = split_key(key);
-    DataRef::new(book.unwrap_or(0), col)
+    ColumnRef { book, col: col.into() }
 }
-fn raw_key(source: &DataRef) -> String {
-    if source.book == 0 {
-        source.col.clone()
-    } else {
-        crate::plotspec::foreign_key(source.book, &source.col)
+fn raw_key(source: &ColumnRef) -> String {
+    match source.book {
+        None => source.col.clone(),
+        Some(book) => crate::plotspec::foreign_key(book, &source.col),
     }
 }
-fn resolved(source: &DataRef, main: Option<u64>) -> Option<DataRef> {
-    Some(DataRef::new(
-        if source.book == 0 { main? } else { source.book },
-        &source.col,
-    ))
+fn resolved(source: &ColumnRef, main: Option<u64>) -> Option<DataRef> {
+    Some(DataRef::new(source.book.or(main)?, &source.col))
+}
+fn source_is(stored: &ColumnRef, main: Option<u64>, source: &DataRef) -> bool {
+    stored.col == source.col && stored.book.or(main).unwrap_or(0) == source.book
 }
 
 impl Default for LayerSpec {
@@ -328,7 +334,7 @@ impl LayerSpec {
                 base: p
                     .base
                     .as_ref()
-                    .filter(|b| !b.col.is_empty())
+                    .filter(|b| b.book.is_some() || !b.col.is_empty())
                     .and_then(|b| resolved(b, self.book_id)),
                 rows: p.rows.unwrap_or(if local && p.line_order.is_none() {
                     self.rows
@@ -379,14 +385,14 @@ impl Layer {
             .plots
             .iter()
             .filter(|p| p.active && (include_derived || p.line_order.is_none()))
-            .map(|p| resolved(&p.source, self.book_id).unwrap_or_else(|| p.source.clone()))
+            .map(|p| resolved(&p.source, self.book_id).unwrap_or_else(|| DataRef::new(0, &p.source.col)))
             .collect()
     }
     pub fn source_style(&self, source: &DataRef) -> Option<&CurveStyle> {
         self.spec
             .plots
             .iter()
-            .find(|p| resolved(&p.source, self.book_id).as_ref().unwrap_or(&p.source) == source)?
+            .find(|p| source_is(&p.source, self.book_id, source))?
             .style
             .as_ref()
     }
@@ -398,7 +404,7 @@ impl Layer {
             .spec
             .plots
             .iter()
-            .find(|p| resolved(&p.source, self.book_id).as_ref().unwrap_or(&p.source) == source)
+            .find(|p| source_is(&p.source, self.book_id, source))
             .map(|p| raw_key(&p.source))
             .unwrap_or_else(|| {
                 if source.book == 0 {
@@ -420,7 +426,7 @@ impl Layer {
         } else {
             let main = self.book_id;
             for p in &mut self.spec.plots {
-                if resolved(&p.source, main).as_ref().unwrap_or(&p.source) == source {
+                if source_is(&p.source, main, source) {
                     p.active = false;
                 }
             }
@@ -481,7 +487,7 @@ impl Layer {
     }
     pub fn references_plot_column(&self, book: &crate::Book, key: &str) -> bool {
         let local = self.book_id == Some(book.id);
-        let matches = |r: &DataRef| r.col == key && (r.book == book.id || (local && r.book == 0));
+        let matches = |r: &ColumnRef| r.col == key && (r.book == Some(book.id) || (local && r.book.is_none()));
         (local && self.x_key.as_deref() == Some(key))
             || (local && self.labels.column.as_deref() == Some(key))
             || self.spec.plots.iter().any(|p| {
@@ -490,7 +496,7 @@ impl Layer {
                     || p.base.as_ref().is_some_and(matches)
                     || (!local
                         && p.active
-                        && p.source.book == book.id
+                        && p.source.book == Some(book.id)
                         && p.x.is_none()
                         && default_x(book, &p.source.col).as_deref() == Some(key))
             })
@@ -583,12 +589,15 @@ impl Layer {
         self.retain_plots(books, |p| !keys.contains(&p.key));
         self.spec
             .plots
-            .retain(|p| !(p.source.book == 0 && keys.contains(&p.source.col)));
+            .retain(|p| !(p.source.book.is_none() && keys.contains(&p.source.col)));
         for p in &mut self.spec.plots {
-            if p.x.as_ref().is_some_and(|r| r.book == 0 && keys.contains(&r.col)) {
+            if p.x.as_ref().is_some_and(|r| r.book.is_none() && keys.contains(&r.col)) {
                 p.x = None;
             }
-            if p.base.as_ref().is_some_and(|r| r.book == 0 && keys.contains(&r.col)) {
+            if p.base
+                .as_ref()
+                .is_some_and(|r| r.book.is_none() && keys.contains(&r.col))
+            {
                 p.base = Some(raw_ref(""));
             }
         }
@@ -730,7 +739,7 @@ impl LayerSpec {
         self.normalize();
     }
     pub(crate) fn drop_foreign(&mut self, book: u64, keys: Option<&[String]>) {
-        let hit = |r: &DataRef| r.book == book && keys.is_none_or(|keys| keys.contains(&r.col));
+        let hit = |r: &ColumnRef| r.book == Some(book) && keys.is_none_or(|keys| keys.contains(&r.col));
         // 沿用既有删除语义：隐藏的编辑设置仍保留，下端缺失留下明确标记。
         self.plots
             .retain(|p| !p.active || !(hit(&p.source) || p.x.as_ref().is_some_and(hit)));
@@ -778,7 +787,7 @@ impl serde::Serialize for LayerSpec {
                     base_missing: self
                         .entry(&p.key)
                         .and_then(|p| p.base.as_ref())
-                        .is_some_and(|r| r.col.is_empty()),
+                        .is_some_and(|r| r.book.is_none() && r.col.is_empty()),
                     mapping: p.mapping,
                     style: p.style,
                     x_override: p.x_override,
