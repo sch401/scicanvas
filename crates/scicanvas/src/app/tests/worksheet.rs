@@ -638,3 +638,105 @@ fn incompatible_grid_paste_leaves_typed_columns_and_headers_unchanged() {
     assert!(app.status.contains("转换为文本列"));
     assert!(app.history.undo_label().is_none());
 }
+
+#[test]
+fn excel_paste_after_column_header_selection_draws_text_x_and_undoes_both_steps() {
+    use scicanvas_core::{ColumnData, Role};
+    let mut app = app();
+    app.active = Some(1);
+    for c in &mut app.project.books[0].columns {
+        c.data = ColumnData::default();
+        c.long_name.clear();
+        c.units.clear();
+        c.comment.clear();
+    }
+    app.project.books[0].columns[2].role = Role::YError;
+    app.project.books[0].columns[2].error_for = Some("B".into());
+    let before = app.project.clone();
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    ctx.style_mut(|s| s.animation_time = 0.0);
+    editor_frame(&mut app, &ctx, vec![], false);
+    let output = editor_frame(&mut app, &ctx, vec![], false);
+    let pos = crate::test_ui::find_text(&output, "A(X)").unwrap() + egui::vec2(5.0, 5.0);
+    for pressed in [true, false] {
+        editor_frame(&mut app, &ctx, vec![crate::test_ui::button(pos, pressed)], false);
+    }
+    assert!(app.sheets[&1].range.is_none());
+    assert_eq!(app.selected_keys(1), ["A"]);
+    editor_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::Paste(
+            "4-10\t73000\t1500\r\n10-40\t76000\t11000\r\n40-100\t81000\t5400\r\n".into(),
+        )],
+        false,
+    );
+    assert_eq!(app.project.books[0].columns[0].data.text_at(0), "4-10");
+    assert_eq!(app.project.books[0].columns[0].data.text_at(2), "40-100");
+    assert_eq!(app.project.books[0].columns[1].data.f64_at(0), Some(73000.0));
+    assert!(app.selected_keys(1).is_empty());
+    assert_eq!(app.sheets[&1].range.unwrap().rows(), 3);
+    let pasted = app.project.clone();
+    app.run_command("plot.bar");
+    let graph = app.project.graphs.last().unwrap();
+    let series = graph.first_layer().series(app.project.book(1).unwrap()).1;
+    assert_eq!(series.len(), 1);
+    assert_eq!(series[0].points.len(), 3);
+    assert_eq!(series[0].errors[0][1], Some(1500.0));
+    let svg = scicanvas_core::svg::render_page(graph, &app.project);
+    assert!(svg.contains("4-10") && svg.contains("40-100"));
+    let after = app.project.clone();
+    app.run_command("edit.undo");
+    assert_eq!(app.project, pasted);
+    app.run_command("edit.undo");
+    assert_eq!(app.project, before);
+    app.run_command("edit.redo");
+    app.run_command("edit.redo");
+    assert_eq!(app.project, after);
+    let reopened =
+        scicanvas_core::project_file::from_scv(&scicanvas_core::project_file::to_scv(&app.project).unwrap()).unwrap();
+    assert_eq!(reopened, app.project);
+}
+
+#[test]
+fn excel_block_paste_in_cell_editor_routes_to_grid_and_conflicts_keep_the_edit() {
+    for valid in [true, false] {
+        let mut app = app();
+        app.active = Some(1);
+        let before = app.project.clone();
+        app.sheets.insert(
+            1,
+            SheetState {
+                range: Some(Range::single(0, 1)),
+                edit: Some(Edit {
+                    cell: Cell { c: 0, r: 1 },
+                    buf: "unfinished".into(),
+                    focused: false,
+                }),
+                ..Default::default()
+            },
+        );
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        editor_frame(&mut app, &ctx, vec![], false);
+        let text = if valid {
+            "1\t2\r\n3\t4\r\n"
+        } else {
+            "wrong\t2\r\nstill wrong\t4\r\n"
+        };
+        editor_frame(&mut app, &ctx, vec![egui::Event::Paste(text.into())], false);
+        app.finish_edit();
+        if valid {
+            assert!(app.sheets[&1].edit.is_none());
+            assert_eq!(app.project.books[0].columns[0].data.f64_at(1), Some(1.0));
+            assert_eq!(app.project.books[0].columns[1].data.f64_at(2), Some(4.0));
+            roundtrip(&mut app, &before);
+        } else {
+            assert_eq!(app.project, before);
+            assert_eq!(app.sheets[&1].edit.as_ref().unwrap().buf, "unfinished");
+            assert!(app.status.contains("转换为文本列"));
+            assert!(app.history.undo_label().is_none());
+        }
+    }
+}

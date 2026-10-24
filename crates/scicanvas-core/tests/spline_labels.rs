@@ -510,3 +510,75 @@ fn curve_styles_override_type_color_width_and_use_a_right_axis() {
         );
     }
 }
+
+#[test]
+fn text_interval_x_draws_categories_and_y_errors_without_changing_storage() {
+    for kind in [PlotType::Bar, PlotType::HorizontalBar, PlotType::LineSymbol] {
+        let (mut p, id) = project(kind);
+        let b = p.book_mut(1).unwrap();
+        b.columns[0].data =
+            scicanvas_core::ColumnData::Text(["4-10", "10-40", "40-100", "", "4-10"].map(str::to_string).to_vec());
+        b.columns[1].data = ["73000", "76000", "81000", "99999", "71000"]
+            .map(str::to_string)
+            .to_vec()
+            .into();
+        let key = b.push_column(Role::YError);
+        let error = b.columns.iter_mut().find(|c| c.key == key).unwrap();
+        error.data = ["1500", "11000", "5400", "1", "1000"]
+            .map(str::to_string)
+            .to_vec()
+            .into();
+        error.error_for = Some("B".into());
+        let before = p.clone();
+        let layer = p.graph(id).unwrap().first_layer();
+        let series = layer.series(p.book(1).unwrap()).1;
+        assert_eq!(
+            series[0].points,
+            [[1.0, 73000.0], [2.0, 76000.0], [3.0, 81000.0], [1.0, 71000.0]]
+        );
+        assert_eq!(series[0].rows, [0, 1, 2, 4]);
+        assert_eq!(
+            series[0].errors.iter().map(|e| e[1]).collect::<Vec<_>>(),
+            [Some(1500.0), Some(11000.0), Some(5400.0), Some(1000.0)]
+        );
+        let sc = scene::layout_page(p.graph(id).unwrap(), &p, &[]);
+        let axis = if kind == PlotType::HorizontalBar {
+            &sc.axes.left_y
+        } else {
+            &sc.axes.x
+        };
+        assert_eq!(axis.ticks, [1.0, 2.0, 3.0]);
+        let rendered = svg::render_page(p.graph(id).unwrap(), &p);
+        for label in ["4-10", "10-40", "40-100"] {
+            assert!(rendered.contains(label));
+        }
+        assert!(!rendered.contains("没有可绘制的数值数据"));
+        assert_eq!(p, before);
+        #[cfg(feature = "serde")]
+        {
+            let json = scicanvas_core::project_file::to_json(&p).unwrap();
+            assert_eq!(scicanvas_core::project_file::from_json(&json).unwrap(), p);
+        }
+    }
+}
+
+#[test]
+fn numeric_and_mixed_text_x_keep_numeric_coordinates_instead_of_category_positions() {
+    for (values, expected) in [
+        (["1", "10", "100"], vec![1.0, 10.0, 100.0]),
+        (["1", "bad", "100"], vec![1.0, 100.0]),
+    ] {
+        let (mut p, id) = project(PlotType::Line);
+        p.book_mut(1).unwrap().columns[0].data = scicanvas_core::ColumnData::Text(values.map(str::to_string).to_vec());
+        let b = p.book(1).unwrap();
+        assert!(b.columns[0].data.plot_category_levels().is_none());
+        assert_eq!(
+            p.graph(id).unwrap().first_layer().series(b).1[0]
+                .points
+                .iter()
+                .map(|pt| pt[0])
+                .collect::<Vec<_>>(),
+            expected
+        );
+    }
+}

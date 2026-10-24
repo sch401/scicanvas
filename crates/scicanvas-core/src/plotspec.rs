@@ -505,7 +505,7 @@ impl PlotSpec {
             let mut rows = Vec::with_capacity(pts.capacity());
             let mut bases = Vec::with_capacity(pts.capacity());
             // 分类列做 X：按类别显示顺序放在 1、2、3…
-            let categories = xv.and_then(|v| v.data.category_positions());
+            let categories = xv.and_then(|v| v.data.plot_category_positions());
             for i in i0..i1 {
                 let x = match (&categories, xv) {
                     (Some(c), _) => c.get(i).copied().unwrap_or(f64::NAN),

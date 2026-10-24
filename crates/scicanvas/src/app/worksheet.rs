@@ -415,11 +415,17 @@ impl SciApp {
                 },
             )
         });
+        let block_paste_in_editor = st.edit.is_some()
+            && ui.memory(|m| m.has_focus(edit_id))
+            && ui.input(|i| {
+                i.events
+                    .iter()
+                    .any(|e| matches!(e, egui::Event::Paste(text) if csv::is_block_paste(text)))
+            });
         if active
-            && st.edit.is_none()
             && self.dialog.is_none()
             && self.ui.palette.is_none()
-            && ui.memory(|m| m.has_focus(focus_id))
+            && ((st.edit.is_none() && ui.memory(|m| m.has_focus(focus_id))) || block_paste_in_editor)
         {
             self.sheet_keys(ui.ctx(), id, &mut st);
         }
@@ -603,6 +609,7 @@ impl SciApp {
                     want_focus = true;
                 }
                 Target::Col(c) => {
+                    want_focus = true;
                     st.drag = Some(Drag::Cols(c));
                     st.moved = false;
                 }
@@ -782,7 +789,25 @@ impl SciApp {
         if book.columns.is_empty() {
             return;
         }
-        let Some(mut g) = st.range else { return };
+        let has_paste = ctx.input(|i| i.events.iter().any(|e| matches!(e, Event::Paste(_))));
+        let anchor = st
+            .edit
+            .as_ref()
+            .filter(|_| has_paste)
+            .map(|e| Range::single(e.cell.c, e.cell.r))
+            .or(st.range)
+            .or_else(|| {
+                has_paste
+                    .then(|| {
+                        self.selected_keys(id)
+                            .iter()
+                            .filter_map(|key| book.column_index(key))
+                            .min()
+                            .map(|c| Range::single(c, 0))
+                    })
+                    .flatten()
+            });
+        let Some(mut g) = anchor else { return };
         let events = sheet_events(ctx);
         if events.is_empty() {
             return;
@@ -893,7 +918,7 @@ impl SciApp {
                     } else {
                         book.columns[g.c0()..=g.c1()]
                             .iter()
-                            .filter(|c| !c.data.accepts(text.trim()))
+                            .filter(|c| !c.data.accepts_paste(text.trim()))
                             .map(|c| c.key.clone())
                             .collect()
                     };
@@ -904,6 +929,9 @@ impl SciApp {
                         ));
                         continue;
                     }
+                    st.edit = None;
+                    self.selection.remove(&id);
+                    ctx.memory_mut(|m| m.request_focus(egui::Id::new(("sheet-focus", id))));
                     if csv::is_block_paste(&text) {
                         let (c0, r0) = (g.c0(), g.r0());
                         let (nr, nc) = csv::paste_into(book, c0, r0, &text);

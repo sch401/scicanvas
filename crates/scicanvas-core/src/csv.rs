@@ -212,17 +212,34 @@ pub fn is_block_paste(text: &str) -> bool {
     text.contains('\t') || text.trim_end().contains('\n')
 }
 
+// Excel 剪贴板按制表符分列；单列中的逗号和空格是内容，不能套用文件导入的分隔符推断。
+fn paste_table(text: &str) -> Vec<Vec<String>> {
+    let text = text.replace("\r\n", "\n").replace('\r', "\n");
+    table_lines(&text)
+        .iter()
+        .map(|line| split_line(line, Delim::Char('\t')))
+        .collect()
+}
+
+fn paste_has_header(rows: &[Vec<String>]) -> bool {
+    has_header(rows)
+        && rows[0]
+            .iter()
+            .all(|v| v.trim().is_empty() || !crate::ColumnData::default().accepts(v))
+        && rows[1..].iter().any(|row| row.iter().any(|v| looks_numeric(v)))
+}
+
 /// 从 (col, row) 开始粘贴一块数据，列不够时自动补列。
 pub fn paste_conflicts(book: &Book, col: usize, row: usize, text: &str) -> Vec<String> {
-    let mut rows = parse_table(text);
-    if row == 0 && has_header(&rows) {
+    let mut rows = paste_table(text);
+    if row == 0 && paste_has_header(&rows) {
         rows.remove(0);
     }
     let mut conflicts = std::collections::BTreeSet::new();
     for row in rows {
         for (j, value) in row.iter().enumerate() {
             if let Some(column) = book.columns.get(col + j) {
-                if !column.data.accepts(value) {
+                if !column.data.accepts_paste(value) {
                     conflicts.insert(column.key.clone());
                 }
             }
@@ -234,8 +251,8 @@ pub fn paste_conflicts(book: &Book, col: usize, row: usize, text: &str) -> Vec<S
 /// 从 (col, row) 开始粘贴一块数据，列不够时自动补列。
 /// 从第一行开始粘贴且首行是文字时，首行写入长名称。返回 (行数, 列数)。
 pub fn paste_into(book: &mut Book, col: usize, row: usize, text: &str) -> (usize, usize) {
-    let mut rows = parse_table(text);
-    if row == 0 && has_header(&rows) {
+    let mut rows = paste_table(text);
+    if row == 0 && paste_has_header(&rows) {
         let header = rows.remove(0);
         book.ensure_columns(col + header.len());
         for (j, h) in header.iter().enumerate() {
@@ -356,5 +373,41 @@ mod tests {
     #[test]
     fn decode_bom() {
         assert_eq!(decode(&[0xEF, 0xBB, 0xBF, b'a']), "a");
+    }
+
+    #[test]
+    fn excel_interval_data_keeps_first_row_and_adapts_empty_columns() {
+        let text = "4-10\t73000\t1500\r\n10-40\t76000\t11000\r\n40-100\t81000\t5400\r\n";
+        for row in [0, 2] {
+            let mut b = Book::new(1, "B");
+            b.ensure_columns(3);
+            assert!(paste_conflicts(&b, 0, row, text).is_empty());
+            assert_eq!(paste_into(&mut b, 0, row, text), (3, 3));
+            assert_eq!(b.columns[0].data.text_at(row), "4-10");
+            assert_eq!(b.columns[0].data.text_at(row + 2), "40-100");
+            assert_eq!(b.columns[1].data.f64_at(row), Some(73000.0));
+            assert!(b.columns.iter().all(|c| c.long_name.is_empty()));
+            assert_eq!(b.columns[0].data.kind(), crate::DataKind::Text);
+            let before = b.clone();
+            assert!(!paste_conflicts(&b, 1, row, "wrong\t1\r\nstill wrong\t2").is_empty());
+            assert_eq!(b, before);
+        }
+    }
+
+    #[test]
+    fn excel_single_columns_keep_thousands_separators_and_spaces() {
+        for (text, expected) in [
+            ("1,234.5\r\n2,345.75\r\n", vec!["1,234.5", "2,345.75"]),
+            ("very fine\r\ncoarse grain\r\n", vec!["very fine", "coarse grain"]),
+        ] {
+            let mut b = Book::new(1, "B");
+            b.ensure_columns(1);
+            assert!(paste_conflicts(&b, 0, 0, text).is_empty());
+            assert_eq!(paste_into(&mut b, 0, 0, text), (2, 1));
+            assert_eq!(b.columns.len(), 1);
+            for (i, value) in expected.iter().enumerate() {
+                assert_eq!(b.columns[0].data.text_at(i), *value);
+            }
+        }
     }
 }

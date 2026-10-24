@@ -181,6 +181,43 @@ impl ColumnData {
         )
     }
 
+    /// 纯文字 X 按首次出现顺序作为分类标签；含数值的旧文字列沿用数值轴，存储类型保持不变。
+    pub fn plot_category_levels(&self) -> Option<Vec<String>> {
+        let Self::Text(values) = self else {
+            return self.category_levels();
+        };
+        if values.iter().all(|v| v.trim().is_empty()) || values.iter().any(|v| number(v).is_some()) {
+            return None;
+        }
+        let mut seen = std::collections::HashSet::new();
+        Some(
+            values
+                .iter()
+                .filter(|v| !v.trim().is_empty() && seen.insert(v.as_str()))
+                .cloned()
+                .collect(),
+        )
+    }
+
+    /// 分类与文字 X 共用分类轴坐标；空标签不参与绘图。
+    pub fn plot_category_positions(&self) -> Option<Vec<f64>> {
+        let Self::Text(values) = self else {
+            return self.category_positions();
+        };
+        let levels = self.plot_category_levels()?;
+        let positions: std::collections::HashMap<_, _> = levels
+            .iter()
+            .enumerate()
+            .map(|(i, value)| (value.as_str(), i as f64 + 1.0))
+            .collect();
+        Some(
+            values
+                .iter()
+                .map(|v| positions.get(v.as_str()).copied().unwrap_or(f64::NAN))
+                .collect(),
+        )
+    }
+
     /// 设置类别顺序：`order` 必须正好是现有类别的一种排列。之后按此顺序显示、排序和作图。
     pub fn set_category_order(&mut self, order: &[String]) -> Result<(), String> {
         let Self::Category { codes, levels, ordered } = self else {
@@ -292,6 +329,11 @@ impl ColumnData {
                 _ => true,
             }
     }
+    /// 新建空数值列在粘贴时按内容推断；已有数据和明确的日期/分类列沿用原校验。
+    pub fn accepts_paste(&self, text: &str) -> bool {
+        self.accepts(text) || (self.kind() == DataKind::Num && self.is_empty())
+    }
+
     pub fn converted(&self, kind: DataKind) -> Result<Self, String> {
         if self.kind() == kind {
             return Ok(self.clone());

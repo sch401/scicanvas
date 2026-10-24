@@ -626,7 +626,7 @@ fn build_layer_full<'a>(
         None => (None, Vec::new()),
     };
     let x_date = !horizontal && !g.x_log && x_col.is_some_and(|c| c.data.kind() == crate::DataKind::DateTime);
-    let categories = x_col.and_then(|c| c.data.category_levels());
+    let categories = x_col.and_then(|c| c.data.plot_category_levels());
     for plot in &mut plots {
         if plot.style.kind.is_spline() && !plot.series.line_only {
             plot.paths = crate::stat::spline_paths(&plot.series);
