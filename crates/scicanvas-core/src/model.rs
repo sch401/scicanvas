@@ -873,10 +873,9 @@ impl Project {
             }
             b.columns.retain(|c| !keys.contains(&c.key));
         }
-        let books = &self.books;
         for g in &mut self.graphs {
             for layer in g.page.layers_mut() {
-                layer.remove_columns(book_id, keys, &|id| books.iter().find(|b| b.id == id));
+                layer.remove_columns(book_id, keys);
             }
         }
     }

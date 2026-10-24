@@ -523,3 +523,60 @@ fn missing_base_legacy_states_migrate_and_conflicting_references_are_rejected() 
     restored.version = p.version;
     assert_eq!(restored, p);
 }
+
+// 2.3 的旧草稿规则作为独立参考，核对新的 Vec 就地清理。
+fn previous_foreign_cleanup(layer: &mut Layer, book: u64, keys: Option<&[String]>) {
+    let hit = |key: &str| match scicanvas_core::plotspec::split_key(key) {
+        (col, Some(id)) => id == book && keys.is_none_or(|keys| keys.iter().any(|key| key == col)),
+        _ => false,
+    };
+    let mut draft = layer.draft();
+    let mut styles = layer.styles();
+    let gone: Vec<_> = draft
+        .y_keys
+        .iter()
+        .filter(|key| hit(key) || draft.x_by_y.get(*key).is_some_and(|x| hit(x)))
+        .cloned()
+        .collect();
+    for key in gone {
+        draft.remove_curve(&key);
+        styles.remove(&key);
+    }
+    for base in draft.base_by_y.values_mut() {
+        if hit(base) {
+            base.clear();
+        }
+    }
+    layer.replace_draft(draft);
+    layer.edit_styles(|current| *current = styles);
+}
+
+#[test]
+fn shared_foreign_cleanup_preserves_hidden_unbound_and_missing_base_rules() {
+    for bound in [false, true] {
+        for selected in [None, Some("A"), Some("B"), Some("C"), Some("D"), Some("absent")] {
+            let (mut p, _, book, gid) = project();
+            let layer = p.graph_mut(gid).unwrap().first_layer_mut();
+            layer.set_plot_selected(&DataRef::new(book, "C"), false);
+            let derived = DataRef::new(book, "D").key(layer.book_id);
+            let x = DataRef::new(book, "B").key(layer.book_id);
+            layer.edit_draft(|draft| draft.x_by_y.insert(derived, x));
+            if !bound {
+                layer.book_id = None;
+            }
+            let mut expected = layer.clone();
+            let keys = selected.map(|key| vec![key.to_string()]);
+            previous_foreign_cleanup(&mut expected, book, keys.as_deref());
+            layer.drop_foreign(book, keys.as_deref());
+            assert_eq!(*layer, expected, "bound={bound}, columns={selected:?}");
+            let after = layer.clone();
+            layer.drop_foreign(book, keys.as_deref());
+            assert_eq!(*layer, after, "重复清理保持不变");
+            let hidden = DataRef::new(book, "C").key(layer.book_id);
+            assert!(layer.plot_style(&hidden).unwrap().right_axis);
+            if selected.is_none() || selected == Some("B") {
+                assert_eq!(layer.plot_base_key(&hidden).as_deref(), Some(""));
+            }
+        }
+    }
+}

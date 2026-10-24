@@ -693,37 +693,6 @@ impl Layer {
         Ok(self.plot_keys(true).len() - before)
     }
 
-    /// 删除主表后，以仍存活的曲线为数据源，保留样式和各曲线映射。
-    pub fn remove_source_book<'a>(&mut self, deleted: u64, books: crate::plotspec::BookLookup<'a, '_>) {
-        if self.book_id != Some(deleted) {
-            self.drop_foreign(deleted, None);
-            return;
-        }
-        let remaining: Vec<_> = self
-            .plots(books)
-            .into_iter()
-            .filter(|plot| plot.mapping.y.book != deleted && books(plot.mapping.y.book).is_some())
-            .map(|plot| {
-                let missing_base = self.plot_base_key(&plot.key).as_deref() == Some("");
-                (plot.mapping, plot.style, missing_base)
-            })
-            .collect();
-        let Some((first, _, _)) = remaining.first() else {
-            self.book_id = None;
-            return;
-        };
-        let main = Some(first.y.book);
-        self.spec.book_id = main;
-        self.spec.x_key = first.x.as_ref().map(|x| x.col.clone());
-        self.spec.rows = None;
-        self.spec.clear_plots();
-        self.labels.column = None;
-        for (mapping, style, missing_base) in remaining {
-            let key = mapping.y.key(main);
-            self.spec.import_mapping(key, mapping, style, missing_base);
-        }
-    }
-
     pub fn add_analysis_result(&mut self, book: u64, source: &str, result: &str, x: Option<&str>) {
         let source = self.result_key(book, source);
         let key = self.result_key(book, result);

@@ -280,10 +280,17 @@ impl LayerSpec {
         self.replace_draft(draft);
         Ok(key)
     }
+    /// 所有删除共用的底层入口：整条移除或修复引用，最后统一整理派生线顺序。
+    /// 包含隐藏和未绑定项；返回移除的在用曲线数量。
+    fn retain_plots(&mut self, keep: impl FnMut(&mut Plot) -> bool) -> usize {
+        let before = self.plots.iter().filter(|p| p.active).count();
+        self.plots.retain_mut(keep);
+        self.normalize();
+        before - self.plots.iter().filter(|p| p.active).count()
+    }
     pub fn remove_curve(&mut self, key: &str) {
         let source = raw_ref(key);
-        self.plots.retain(|p| p.source != source);
-        self.normalize();
+        self.retain_plots(|p| p.source != source);
     }
     pub fn series<'a>(&self, book: &'a crate::Book) -> (Option<&'a crate::Column>, Vec<crate::Series>) {
         self.series_in(book, &|_| None)
@@ -562,12 +569,9 @@ impl Layer {
     }
     pub fn remove_plot(&mut self, source: &DataRef) -> bool {
         let main = self.book_id;
-        let before = self.spec.plots.len();
         self.spec
-            .plots
-            .retain(|p| !p.active || resolved(&p.source, main).as_ref() != Some(source));
-        self.spec.normalize();
-        before != self.spec.plots.len()
+            .retain_plots(|p| !p.active || resolved(&p.source, main).as_ref() != Some(source))
+            != 0
     }
     pub fn retain_plots(&mut self, books: BookLookup<'_, '_>, mut keep: impl FnMut(&Description) -> bool) -> usize {
         let gone: Vec<_> = self
@@ -576,21 +580,17 @@ impl Layer {
             .filter(|p| !keep(p))
             .map(|p| raw_ref(&p.key))
             .collect();
-        let before = self.plot_keys(true).len();
-        self.spec.plots.retain(|p| !gone.contains(&p.source));
-        self.spec.normalize();
-        before - self.plot_keys(true).len()
+        self.spec.retain_plots(|p| !gone.contains(&p.source))
     }
-    pub(crate) fn remove_columns(&mut self, book: u64, keys: &[String], books: BookLookup<'_, '_>) {
+    pub(crate) fn remove_columns(&mut self, book: u64, keys: &[String]) {
         if self.book_id != Some(book) {
             self.drop_foreign(book, Some(keys));
             return;
         }
-        self.retain_plots(books, |p| !keys.contains(&p.key));
-        self.spec
-            .plots
-            .retain(|p| !(p.source.book.is_none() && keys.contains(&p.source.col)));
-        for p in &mut self.spec.plots {
+        self.spec.retain_plots(|p| {
+            if (p.active || p.source.book.is_none()) && keys.contains(&raw_key(&p.source)) {
+                return false;
+            }
             if p.x.as_ref().is_some_and(|r| r.book.is_none() && keys.contains(&r.col)) {
                 p.x = None;
             }
@@ -600,14 +600,66 @@ impl Layer {
             {
                 p.base = Some(raw_ref(""));
             }
-        }
+            true
+        });
         if self.labels.column.as_ref().is_some_and(|k| keys.contains(k)) {
             self.labels.column = None;
         }
         if self.x_key.as_ref().is_some_and(|k| keys.contains(k)) {
             self.x_key = None;
         }
-        self.spec.normalize();
+    }
+
+    /// 删除主表后重绑到首条存活曲线，保留原有映射和样式语义。
+    pub fn remove_source_book<'a>(&mut self, deleted: u64, books: BookLookup<'a, '_>) {
+        if self.book_id != Some(deleted) {
+            self.drop_foreign(deleted, None);
+            return;
+        }
+        let remaining: Vec<_> = self
+            .plots(books)
+            .into_iter()
+            .filter(|plot| plot.mapping.y.book != deleted && books(plot.mapping.y.book).is_some())
+            .collect();
+        let Some(first) = remaining.first() else {
+            // 无存活曲线时仅解除绑定，沿用旧空图的编辑设置。
+            self.book_id = None;
+            return;
+        };
+        let main = Some(first.mapping.y.book);
+        let x_key = first.mapping.x.as_ref().map(|x| x.col.clone());
+        let mut remaining = remaining.into_iter().peekable();
+        let mut line_order = 0;
+        self.spec.retain_plots(|entry| {
+            let Some(plot) = remaining.next_if(|plot| entry.active && raw_ref(&plot.key) == entry.source) else {
+                return false;
+            };
+            let missing = entry
+                .base
+                .as_ref()
+                .is_some_and(|r| r.book.is_none() && r.col.is_empty());
+            let m = plot.mapping;
+            entry.source = raw_ref(&m.y.key(main));
+            entry.x = m.x.map(|r| raw_ref(&r.key(main)));
+            entry.base = m
+                .base
+                .map(|r| raw_ref(&r.key(main)))
+                .or_else(|| missing.then(|| raw_ref("")));
+            entry.rows = m.rows.map(Some);
+            entry.line_order = if m.line_only {
+                let at = line_order;
+                line_order += 1;
+                Some(at)
+            } else {
+                None
+            };
+            entry.style = plot.style;
+            true
+        });
+        self.spec.book_id = main;
+        self.spec.x_key = x_key;
+        self.spec.rows = None;
+        self.labels.column = None;
     }
     pub(crate) fn map_row_ranges(&mut self, book: u64, map: impl Fn(&mut Option<(usize, usize)>)) {
         let main = self.book_id;
@@ -687,7 +739,7 @@ impl LayerSpec {
             .any(|p| p.style.as_ref().is_some_and(|s| s.kind.is_some()))
     }
     pub(crate) fn clear_plots(&mut self) {
-        self.plots.clear();
+        self.retain_plots(|_| false);
     }
     pub(crate) fn clear_plot_x(&mut self, key: &str) {
         if let Some(p) = self.plots.iter_mut().find(|p| p.source == raw_ref(key)) {
@@ -697,28 +749,6 @@ impl LayerSpec {
     }
     pub(crate) fn explicit_plot_x(&self, key: &str) -> Option<String> {
         self.entry(key)?.x.as_ref().map(raw_key)
-    }
-    pub(crate) fn import_mapping(&mut self, key: String, m: CurveMapping, style: Option<CurveStyle>, missing: bool) {
-        let main = self.book_id;
-        let order = self
-            .plots
-            .iter()
-            .filter_map(|p| p.line_order)
-            .max()
-            .map_or(0, |i| i + 1);
-        self.plots.push(Plot {
-            source: raw_ref(&key),
-            active: true,
-            x: m.x.map(|r| raw_ref(&r.key(main))),
-            base: m
-                .base
-                .map(|r| raw_ref(&r.key(main)))
-                .or_else(|| missing.then(|| raw_ref(""))),
-            rows: m.rows.map(Some),
-            line_order: m.line_only.then_some(order),
-            style,
-        });
-        self.normalize();
     }
     pub(crate) fn add_derived(&mut self, source: &str, key: &str, x: Option<String>) {
         self.entry_mut(source).active = true;
@@ -741,14 +771,15 @@ impl LayerSpec {
     pub(crate) fn drop_foreign(&mut self, book: u64, keys: Option<&[String]>) {
         let hit = |r: &ColumnRef| r.book == Some(book) && keys.is_none_or(|keys| keys.contains(&r.col));
         // 沿用既有删除语义：隐藏的编辑设置仍保留，下端缺失留下明确标记。
-        self.plots
-            .retain(|p| !p.active || !(hit(&p.source) || p.x.as_ref().is_some_and(hit)));
-        for p in &mut self.plots {
+        self.retain_plots(|p| {
+            if p.active && (hit(&p.source) || p.x.as_ref().is_some_and(hit)) {
+                return false;
+            }
             if p.base.as_ref().is_some_and(hit) {
                 p.base = Some(raw_ref(""));
             }
-        }
-        self.normalize();
+            true
+        });
     }
 }
 

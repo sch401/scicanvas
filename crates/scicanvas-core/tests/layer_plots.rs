@@ -664,3 +664,54 @@ fn typed_property_selection_keeps_styles_and_distinguishes_same_named_sources() 
     layer.set_plot_selected(&unbound, true);
     assert_eq!(layer.source_style(&unbound), Some(&CurveStyle::default()));
 }
+
+#[test]
+fn shared_curve_cleanup_keeps_hidden_selection_distinct_from_explicit_removal() {
+    for bound in [false, true] {
+        for through_spec in [false, true] {
+            let mut layer = Layer {
+                spec: PlotSpec {
+                    book_id: bound.then_some(1),
+                    ..Default::default()
+                }
+                .into(),
+                ..Default::default()
+            };
+            layer.edit_draft(|draft| {
+                draft.x_by_y.insert("hidden".into(), "A".into());
+                draft.base_by_y.insert("hidden".into(), String::new());
+                draft.row_by_y.insert("hidden".into(), None);
+                draft.line_only.push("hidden".into());
+            });
+            layer.set_plot_style(
+                "hidden",
+                Some(CurveStyle {
+                    right_axis: true,
+                    ..Default::default()
+                }),
+            );
+            let before = layer.clone();
+            assert!(!layer.remove_plot(&DataRef::new(1, "hidden")));
+            assert_eq!(layer, before);
+            if through_spec {
+                layer.spec.remove_curve("hidden");
+            } else {
+                layer.remove_curve("hidden");
+            }
+            assert_eq!(
+                layer,
+                Layer {
+                    spec: PlotSpec {
+                        book_id: bound.then_some(1),
+                        ..Default::default()
+                    }
+                    .into(),
+                    ..Default::default()
+                }
+            );
+            let after = layer.clone();
+            layer.remove_curve("hidden");
+            assert_eq!(layer, after);
+        }
+    }
+}
