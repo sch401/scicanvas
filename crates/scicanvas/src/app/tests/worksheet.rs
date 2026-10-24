@@ -617,7 +617,7 @@ fn non_numeric_cell_requires_confirmation_and_can_cancel_or_undo_conversion() {
 }
 
 #[test]
-fn incompatible_grid_paste_leaves_typed_columns_and_headers_unchanged() {
+fn populated_numeric_grid_paste_adapts_and_preserves_existing_values() {
     let ctx = egui::Context::default();
     let mut app = app();
     app.active = Some(1);
@@ -634,9 +634,20 @@ fn incompatible_grid_paste_leaves_typed_columns_and_headers_unchanged() {
         |ctx| app.sheet_keys(ctx, 1, &mut state),
     );
     app.finish_edit();
-    assert_eq!(app.project, before);
-    assert!(app.status.contains("转换为文本列"));
-    assert!(app.history.undo_label().is_none());
+    assert_eq!(
+        app.project.books[0].columns[0].data.kind(),
+        scicanvas_core::DataKind::Text
+    );
+    assert_eq!(app.project.books[0].columns[0].data.text_at(1), "text");
+    assert_eq!(
+        app.project.books[0].columns[0].data.f64_at(3),
+        before.books[0].columns[0].data.f64_at(3)
+    );
+    assert_eq!(
+        app.project.books[0].columns[0].long_name,
+        before.books[0].columns[0].long_name
+    );
+    roundtrip(&mut app, &before);
 }
 
 #[test]
@@ -704,6 +715,13 @@ fn excel_block_paste_in_cell_editor_routes_to_grid_and_conflicts_keep_the_edit()
     for valid in [true, false] {
         let mut app = app();
         app.active = Some(1);
+        if !valid {
+            app.project.books[0].columns[0].data = vec!["2026-10-24".into(), "2026-10-25".into()].into();
+            app.project.books[0].columns[0].data = app.project.books[0].columns[0]
+                .data
+                .converted(scicanvas_core::DataKind::DateTime)
+                .unwrap();
+        }
         let before = app.project.clone();
         app.sheets.insert(
             1,
@@ -739,4 +757,158 @@ fn excel_block_paste_in_cell_editor_routes_to_grid_and_conflicts_keep_the_edit()
             assert!(app.history.undo_label().is_none());
         }
     }
+}
+
+#[test]
+fn populated_a_b_c_columns_paste_identically_in_grid_and_numeric_editor() {
+    let cases = [
+        ("72933.03969", vec!["72933.03969"]),
+        ("72933.03969\r\n", vec!["72933.03969"]),
+        ("4-10\r\n", vec!["4-10"]),
+        ("4-10\r\n10-40\r\n40-100\r\n", vec!["4-10", "10-40", "40-100"]),
+    ];
+    for column in 0..3 {
+        for editing in [false, true] {
+            for (text, expected) in &cases {
+                let mut app = app();
+                app.active = Some(1);
+                app.project.books[0].columns[2].role = Role::YError;
+                app.project.books[0].columns[2].error_for = Some("B".into());
+                let before = app.project.clone();
+                app.sheets.insert(
+                    1,
+                    SheetState {
+                        range: Some(Range::single(column, 5)),
+                        edit: editing.then(|| Edit {
+                            cell: Cell { c: column, r: 5 },
+                            buf: before.books[0].columns[column].data.text_at(5).into_owned(),
+                            focused: false,
+                        }),
+                        ..Default::default()
+                    },
+                );
+                let ctx = egui::Context::default();
+                crate::fonts::setup(&ctx);
+                ctx.memory_mut(|m| m.request_focus(egui::Id::new(("sheet-focus", 1_u64))));
+                editor_frame(&mut app, &ctx, vec![], false);
+                editor_frame(&mut app, &ctx, vec![egui::Event::Paste(text.to_string())], false);
+                app.finish_edit();
+                assert!(app.sheets[&1].edit.is_none(), "col {column}, edit {editing}, {text:?}");
+                let after_col = &app.project.books[0].columns[column];
+                for (i, value) in expected.iter().enumerate() {
+                    assert_eq!(after_col.data.text_at(5 + i), *value, "col {column}, edit {editing}");
+                }
+                for row in (0..5).chain(5 + expected.len()..before.books[0].columns[column].data.len()) {
+                    assert_eq!(
+                        after_col.data.text_at(row),
+                        before.books[0].columns[column].data.text_at(row)
+                    );
+                    assert_eq!(
+                        after_col.data.f64_at(row),
+                        before.books[0].columns[column].data.f64_at(row)
+                    );
+                }
+                assert_eq!(after_col.role, before.books[0].columns[column].role);
+                assert_eq!(after_col.error_for, before.books[0].columns[column].error_for);
+                for other in (0..3).filter(|other| *other != column) {
+                    assert_eq!(app.project.books[0].columns[other], before.books[0].columns[other]);
+                }
+                roundtrip(&mut app, &before);
+                let json = scicanvas_core::project_file::to_json(&app.project).unwrap();
+                assert_eq!(scicanvas_core::project_file::from_json(&json).unwrap(), app.project);
+            }
+        }
+    }
+}
+
+#[test]
+fn b_column_paste_works_with_nonmodal_column_properties_open() {
+    let mut app = app();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["B".into()]);
+    app.run_command("col.props");
+    assert!(matches!(app.dialog, Some(Dialog::ColumnProps { .. })));
+    app.selection.remove(&1);
+    app.sheets.insert(
+        1,
+        SheetState {
+            range: Some(Range::single(1, 5)),
+            ..Default::default()
+        },
+    );
+    let before = app.project.clone();
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    ctx.memory_mut(|m| m.request_focus(egui::Id::new(("sheet-focus", 1_u64))));
+    editor_frame(&mut app, &ctx, vec![], false);
+    editor_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::Paste("72933.03969\r\n".into())],
+        false,
+    );
+    app.finish_edit();
+    assert_eq!(app.project.books[0].columns[1].data.f64_at(5), Some(72933.03969));
+    roundtrip(&mut app, &before);
+}
+
+#[test]
+fn incompatible_date_grid_paste_keeps_types_headers_and_values() {
+    let mut app = app();
+    app.active = Some(1);
+    app.project.books[0].columns[0].data = vec!["2026-10-24".into(), "2026-10-25".into()].into();
+    app.project.books[0].columns[0].data = app.project.books[0].columns[0]
+        .data
+        .converted(scicanvas_core::DataKind::DateTime)
+        .unwrap();
+    let before = app.project.clone();
+    let ctx = egui::Context::default();
+    let mut state = SheetState {
+        range: Some(Range::single(0, 1)),
+        ..Default::default()
+    };
+    let _ = ctx.run(
+        egui::RawInput {
+            events: vec![egui::Event::Paste("wrong\t4\r\nwrong again\t6".into())],
+            ..Default::default()
+        },
+        |ctx| app.sheet_keys(ctx, 1, &mut state),
+    );
+    app.finish_edit();
+    assert_eq!(app.project, before);
+    assert!(app.history.undo_label().is_none());
+}
+
+#[test]
+fn b_paste_replaces_pending_conversion_instead_of_leaving_a_stale_write() {
+    let mut app = app();
+    app.active = Some(1);
+    let before = app.project.clone();
+    app.dialog = Some(Dialog::ConvertText {
+        book: 1,
+        key: "B".into(),
+        row: 5,
+        value: "older input".into(),
+    });
+    app.sheets.insert(
+        1,
+        SheetState {
+            range: Some(Range::single(1, 5)),
+            ..Default::default()
+        },
+    );
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    ctx.memory_mut(|m| m.request_focus(egui::Id::new(("sheet-focus", 1_u64))));
+    editor_frame(&mut app, &ctx, vec![], false);
+    editor_frame(
+        &mut app,
+        &ctx,
+        vec![egui::Event::Paste("72933.03969\r\n".into())],
+        false,
+    );
+    app.finish_edit();
+    assert!(app.dialog.is_none());
+    assert_eq!(app.project.books[0].columns[1].data.f64_at(5), Some(72933.03969));
+    roundtrip(&mut app, &before);
 }

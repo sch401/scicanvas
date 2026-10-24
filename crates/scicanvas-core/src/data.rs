@@ -329,9 +329,9 @@ impl ColumnData {
                 _ => true,
             }
     }
-    /// 新建空数值列在粘贴时按内容推断；已有数据和明确的日期/分类列沿用原校验。
+    /// 数值列粘贴文字时由原有自适应写入转为文本，已有内容保留；日期列沿用原校验。
     pub fn accepts_paste(&self, text: &str) -> bool {
-        self.accepts(text) || (self.kind() == DataKind::Num && self.is_empty())
+        self.accepts(text) || self.kind() == DataKind::Num
     }
 
     pub fn converted(&self, kind: DataKind) -> Result<Self, String> {

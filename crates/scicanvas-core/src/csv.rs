@@ -376,7 +376,7 @@ mod tests {
     }
 
     #[test]
-    fn excel_interval_data_keeps_first_row_and_adapts_empty_columns() {
+    fn excel_interval_data_keeps_first_row_and_adapts_numeric_columns() {
         let text = "4-10\t73000\t1500\r\n10-40\t76000\t11000\r\n40-100\t81000\t5400\r\n";
         for row in [0, 2] {
             let mut b = Book::new(1, "B");
@@ -388,9 +388,11 @@ mod tests {
             assert_eq!(b.columns[1].data.f64_at(row), Some(73000.0));
             assert!(b.columns.iter().all(|c| c.long_name.is_empty()));
             assert_eq!(b.columns[0].data.kind(), crate::DataKind::Text);
-            let before = b.clone();
-            assert!(!paste_conflicts(&b, 1, row, "wrong\t1\r\nstill wrong\t2").is_empty());
-            assert_eq!(b, before);
+            let old_number = b.columns[1].data.f64_at(row + 2);
+            assert!(paste_conflicts(&b, 1, row, "wrong\t1\r\nstill wrong\t2").is_empty());
+            paste_into(&mut b, 1, row, "wrong\t1\r\nstill wrong\t2");
+            assert_eq!(b.columns[1].data.text_at(row), "wrong");
+            assert_eq!(b.columns[1].data.f64_at(row + 2), old_number);
         }
     }
 

@@ -415,17 +415,24 @@ impl SciApp {
                 },
             )
         });
-        let block_paste_in_editor = st.edit.is_some()
+        let has_paste = ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Paste(_))));
+        let numeric_editor = st.edit.as_ref().is_some_and(|edit| {
+            self.project
+                .book(id)
+                .and_then(|book| book.columns.get(edit.cell.c))
+                .is_some_and(|column| column.data.kind() == scicanvas_core::DataKind::Num)
+        });
+        let paste_in_editor = st.edit.is_some()
             && ui.memory(|m| m.has_focus(edit_id))
             && ui.input(|i| {
-                i.events
-                    .iter()
-                    .any(|e| matches!(e, egui::Event::Paste(text) if csv::is_block_paste(text)))
+                i.events.iter().any(
+                    |e| matches!(e, egui::Event::Paste(text) if numeric_editor || text.contains(['\t', '\r', '\n'])),
+                )
             });
         if active
-            && self.dialog.is_none()
+            && (self.dialog.is_none() || has_paste)
             && self.ui.palette.is_none()
-            && ((st.edit.is_none() && ui.memory(|m| m.has_focus(focus_id))) || block_paste_in_editor)
+            && ((st.edit.is_none() && ui.memory(|m| m.has_focus(focus_id))) || paste_in_editor)
         {
             self.sheet_keys(ui.ctx(), id, &mut st);
         }
@@ -930,6 +937,9 @@ impl SciApp {
                         continue;
                     }
                     st.edit = None;
+                    if matches!(self.dialog, Some(Dialog::ConvertText { .. })) {
+                        self.dialog = None;
+                    }
                     self.selection.remove(&id);
                     ctx.memory_mut(|m| m.request_focus(egui::Id::new(("sheet-focus", id))));
                     if csv::is_block_paste(&text) {
