@@ -157,8 +157,8 @@ impl SciApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         crate::fonts::setup(&cc.egui_ctx);
         theme::install(&cc.egui_ctx);
-        // 功能区图标是 SVG，需要 egui_extras 的图片加载器
-        egui_extras::install_image_loaders(&cc.egui_ctx);
+        // 功能区图标经共用渲染栈加载。
+        crate::icons::install_loaders(&cc.egui_ctx);
         Self::initial(theme::palette(cc.egui_ctx.theme()))
     }
 

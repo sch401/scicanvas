@@ -64,3 +64,12 @@ PDF 使用 svg2pdf 0.13.0 及其锁定依赖。新增 0.45 系列 resvg/usvg 使
 4. `python tools/package_release.py` 重新构建并生成 `target/releases/SciCanvas-0.1.0-windows-x64.zip`。向他人分发完整包，保留 MPL_SOURCE.md、THIRD_PARTY_NOTICES.md、licenses 和构建信息。
 
 原文依据：[MPL 2.0 第 3 节](https://www.mozilla.org/en-US/MPL/2.0/)、[Mozilla FAQ 第 8–10 问](https://www.mozilla.org/en-US/MPL/2.0/FAQ/)、[OFL 原文](https://openfontlicense.org/open-font-license-official-text/)、[Ubuntu 字体许可](https://canonical.com/legal/font-licence)、[Microsoft 字体分发说明](https://learn.microsoft.com/en-us/typography/fonts/font-faq)、[SciPy v1.17.1 许可](https://github.com/scipy/scipy/blob/v1.17.1/LICENSE.txt)。
+
+
+## 依赖与图标栈升级补充（2026-10-25）
+
+PNG、PDF 与 SVG 图标现共用 resvg/usvg 0.45.1，rustybuzz 与 fontdb 各只有当前单一版本。Cargo.lock 不再包含 0.37 解析器，也不含 rustybuzz 0.12.1。该版渲染库声明为 MIT OR Apache-2.0，按原始包分别保留许可证与源码版权头，索引由 Cargo.lock 生成。
+
+更新后的 Windows 完整特性依赖索引中没有 MPL-2.0 包，MPL 源码归档不会打入本版发布包。仓库保留的 0.37 源码和声明是历史版本档案，说明见 MPL_SOURCE.md。发布脚本仅在当前锁定依赖含 MPL 包时才附源码说明和对应完整归档。
+
+图标 loader 保留 egui_extras 0.29.1 的 URI、尺寸提示、缓存和颜色换算行为，原 MIT 声明已随依赖记录；全套图标/缩略图逐像素比对一致。16份图型/科学文字/多面板PNG逐像素与升级前一致；屏幕字形位置和PDF矢量/字体子集回归均通过。

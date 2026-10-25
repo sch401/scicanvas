@@ -8,9 +8,9 @@
 
 ## 版权与分发
 
-应用自有部分沿用 **MIT OR Apache-2.0**，见 [LICENSE-MIT](LICENSE-MIT) / [LICENSE-APACHE](LICENSE-APACHE)；第三方材料保留各自许可，详见 [第三方版权声明](THIRD_PARTY_NOTICES.md)、[MPL 对应源码说明](MPL_SOURCE.md)和[代码/素材检查记录](docs/COPYRIGHT_AUDIT.md)。AI 生成来源说明、AS R94 算法核对及发行边界在检查记录中单独说明。
+应用自有部分沿用 **MIT OR Apache-2.0**，见 [LICENSE-MIT](LICENSE-MIT) / [LICENSE-APACHE](LICENSE-APACHE)；第三方材料保留各自许可，详见 [第三方版权声明](THIRD_PARTY_NOTICES.md)和[代码/素材检查记录](docs/COPYRIGHT_AUDIT.md)。0.37 版 MPL 源码获取说明保留为[历史记录](MPL_SOURCE.md)。AI 生成来源说明、AS R94 算法核对及发行边界在检查记录中单独说明。
 
-运行 `python tools/package_release.py` 生成包含 exe、许可证、版权声明和离线 MPL 源码的 Windows x64 发布候选 ZIP。向他人分发时保留完整包；`python tools/third_party.py --check` 检查声明与 Cargo.lock 是否一致。
+运行 `python tools/package_release.py` 生成包含 exe、许可证和版权声明的 Windows x64 发布候选 ZIP；当前依赖含 MPL 组件时，再附对应源码归档。向他人分发时保留完整包；`python tools/third_party.py --check` 检查声明与 Cargo.lock 是否一致。
 
 ## 运行
 
@@ -155,7 +155,8 @@ crates/
     mdi.rs          多文档子窗口（标题栏按钮、移动、改变大小、最小化 / 最大化）
     plot.rs         图形绘制与缩放平移
     dialogs/        按类型拆分的设置、分析对话框与结果报告
-    icons.rs        功能区图标（SVG，与网页原型共用）
+    icons.rs          图标和缩略图 SVG 加载
+        功能区图标（SVG，与网页原型共用）
     theme.rs        浅色 / 深色主题（控件样式、配色、字号、间距）
     fonts.rs        中文字体与图形字体（Arial）加载
 ```

@@ -4,7 +4,7 @@
 
 清单来自 Cargo.lock 和 Windows normal/build 完整特性依赖树，保守包含构建期工具；不是对每个包都被链接进 exe 的判断。原始版权、许可和 NOTICE 文本保存在对应目录，许可 OR/AND 表达式保留原样。
 
-MPL 对应版本完整源码及 SHA-256 见 [MPL 源码说明](MPL_SOURCE.md)。egui 内嵌字体另保留原始字体许可和字体 name 表声明，包含 Hack 的 Bitstream Vera 声明。
+第三方软件包的原始许可和版权声明按 Cargo.lock 一并提供。egui 内嵌字体另保留原始字体许可和字体 name 表声明，包含 Hack 的 Bitstream Vera 声明。
 
 Windows 系统字体通过用户电脑读取，本发行包不附加微软雅黑/Arial 字体文件；系统 DLL 同样不随包复制。Rust 标准库版权材料在发行包的 licenses/rust-runtime 中，按实际构建工具链附带。
 
@@ -61,7 +61,6 @@ Windows 系统字体通过用户电脑读取，本发行包不附加微软雅黑
 | flate2 1.1.10 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/flate2-1.1.10/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/flate2-1.1.10/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/flate2-1.1.10/SOURCE_COPYRIGHT_HEADERS.txt) |
 | float-cmp 0.9.0 | MIT | [LICENSE](licenses/third-party/float-cmp-0.9.0/LICENSE), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/float-cmp-0.9.0/SOURCE_COPYRIGHT_HEADERS.txt) |
 | font-types 0.11.3 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/font-types-0.11.3/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/font-types-0.11.3/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/font-types-0.11.3/SOURCE_COPYRIGHT_HEADERS.txt) |
-| fontdb 0.16.2 | MIT | [LICENSE](licenses/third-party/fontdb-0.16.2/LICENSE), [LICENSE.txt](licenses/third-party/fontdb-0.16.2/tests/fonts/LICENSE.txt) |
 | fontdb 0.23.0 | MIT | [LICENSE](licenses/third-party/fontdb-0.23.0/LICENSE), [LICENSE.txt](licenses/third-party/fontdb-0.23.0/tests/fonts/LICENSE.txt) |
 | form_urlencoded 1.2.2 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/form_urlencoded-1.2.2/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/form_urlencoded-1.2.2/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/form_urlencoded-1.2.2/SOURCE_COPYRIGHT_HEADERS.txt) |
 | gl_generator 0.14.0 | Apache-2.0 | [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/gl_generator-0.14.0/SOURCE_COPYRIGHT_HEADERS.txt), [LICENSE](licenses/third-party/gl_generator-0.14.0/upstream/LICENSE) |
@@ -81,7 +80,6 @@ Windows 系统字体通过用户电脑读取，本发行包不附加微软雅黑
 | idna 1.1.0 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/idna-1.1.0/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/idna-1.1.0/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/idna-1.1.0/SOURCE_COPYRIGHT_HEADERS.txt) |
 | idna_adapter 1.2.2 | Apache-2.0 OR MIT | [LICENSE-APACHE](licenses/third-party/idna_adapter-1.2.2/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/idna_adapter-1.2.2/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/idna_adapter-1.2.2/SOURCE_COPYRIGHT_HEADERS.txt) |
 | image 0.25.10 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/image-0.25.10/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/image-0.25.10/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/image-0.25.10/SOURCE_COPYRIGHT_HEADERS.txt) |
-| imagesize 0.12.0 | MIT | [LICENSE](licenses/third-party/imagesize-0.12.0/LICENSE) |
 | imagesize 0.13.0 | MIT | [LICENSE](licenses/third-party/imagesize-0.13.0/LICENSE) |
 | immutable-chunkmap 2.1.4 | Apache-2.0 OR MIT | [LICENSE-APACHE](licenses/third-party/immutable-chunkmap-2.1.4/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/immutable-chunkmap-2.1.4/LICENSE-MIT) |
 | indexmap 2.14.2 | Apache-2.0 OR MIT | [LICENSE-APACHE](licenses/third-party/indexmap-2.14.2/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/indexmap-2.14.2/LICENSE-MIT) |
@@ -89,7 +87,6 @@ Windows 系统字体通过用户电脑读取，本发行包不附加微软雅黑
 | khronos_api 3.1.0 | Apache-2.0 | [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/khronos_api-3.1.0/SOURCE_COPYRIGHT_HEADERS.txt), [LICENSE](licenses/third-party/khronos_api-3.1.0/upstream/LICENSE) |
 | kurbo 0.11.3 | Apache-2.0 OR MIT | [LICENSE-APACHE](licenses/third-party/kurbo-0.11.3/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/kurbo-0.11.3/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/kurbo-0.11.3/SOURCE_COPYRIGHT_HEADERS.txt) |
 | kurbo 0.13.1 | Apache-2.0 OR MIT | [LICENSE-APACHE](licenses/third-party/kurbo-0.13.1/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/kurbo-0.13.1/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/kurbo-0.13.1/SOURCE_COPYRIGHT_HEADERS.txt) |
-| kurbo 0.9.5 | MIT/Apache-2.0 | [LICENSE-APACHE](licenses/third-party/kurbo-0.9.5/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/kurbo-0.9.5/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/kurbo-0.9.5/SOURCE_COPYRIGHT_HEADERS.txt) |
 | libloading 0.8.9 | ISC | [LICENSE](licenses/third-party/libloading-0.8.9/LICENSE) |
 | libm 0.2.16 | MIT | [LICENSE.txt](licenses/third-party/libm-0.2.16/LICENSE.txt), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/libm-0.2.16/SOURCE_COPYRIGHT_HEADERS.txt) |
 | litemap 0.8.3 | Unicode-3.0 | [LICENSE](licenses/third-party/litemap-0.8.3/LICENSE) |
@@ -99,8 +96,6 @@ Windows 系统字体通过用户电脑读取，本发行包不附加微软雅黑
 | memchr 2.8.3 | Unlicense OR MIT | [COPYING](licenses/third-party/memchr-2.8.3/COPYING), [LICENSE-MIT](licenses/third-party/memchr-2.8.3/LICENSE-MIT), [UNLICENSE](licenses/third-party/memchr-2.8.3/UNLICENSE) |
 | memmap2 0.9.11 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/memmap2-0.9.11/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/memmap2-0.9.11/LICENSE-MIT) |
 | memoffset 0.9.1 | MIT | [LICENSE](licenses/third-party/memoffset-0.9.1/LICENSE), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/memoffset-0.9.1/SOURCE_COPYRIGHT_HEADERS.txt) |
-| mime 0.3.17 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/mime-0.3.17/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/mime-0.3.17/LICENSE-MIT) |
-| mime_guess2 2.3.1 | MIT | [LICENSE](licenses/third-party/mime_guess2-2.3.1/LICENSE) |
 | miniz_oxide 0.8.9 | MIT OR Zlib OR Apache-2.0 | [LICENSE](licenses/third-party/miniz_oxide-0.8.9/LICENSE), [LICENSE-APACHE.md](licenses/third-party/miniz_oxide-0.8.9/LICENSE-APACHE.md), [LICENSE-MIT.md](licenses/third-party/miniz_oxide-0.8.9/LICENSE-MIT.md), [LICENSE-ZLIB.md](licenses/third-party/miniz_oxide-0.8.9/LICENSE-ZLIB.md) |
 | miniz_oxide 0.9.1 | MIT OR Zlib OR Apache-2.0 | [LICENSE](licenses/third-party/miniz_oxide-0.9.1/LICENSE), [LICENSE-APACHE.md](licenses/third-party/miniz_oxide-0.9.1/LICENSE-APACHE.md), [LICENSE-MIT.md](licenses/third-party/miniz_oxide-0.9.1/LICENSE-MIT.md), [LICENSE-ZLIB.md](licenses/third-party/miniz_oxide-0.9.1/LICENSE-ZLIB.md) |
 | moxcms 0.8.1 | BSD-3-Clause OR Apache-2.0 | [LICENSE-APACHE.md](licenses/third-party/moxcms-0.8.1/LICENSE-APACHE.md), [LICENSE.md](licenses/third-party/moxcms-0.8.1/LICENSE.md), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/moxcms-0.8.1/SOURCE_COPYRIGHT_HEADERS.txt) |
@@ -114,8 +109,6 @@ Windows 系统字体通过用户电脑读取，本发行包不附加微软雅黑
 | paste 1.0.15 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/paste-1.0.15/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/paste-1.0.15/LICENSE-MIT) |
 | pdf-writer 0.12.1 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/pdf-writer-0.12.1/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/pdf-writer-0.12.1/LICENSE-MIT) |
 | percent-encoding 2.3.2 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/percent-encoding-2.3.2/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/percent-encoding-2.3.2/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/percent-encoding-2.3.2/SOURCE_COPYRIGHT_HEADERS.txt) |
-| phf 0.11.3 | MIT | [LICENSE](licenses/third-party/phf-0.11.3/LICENSE) |
-| phf_shared 0.11.3 | MIT | [LICENSE](licenses/third-party/phf_shared-0.11.3/LICENSE) |
 | pico-args 0.5.0 | MIT | [LICENSE](licenses/third-party/pico-args-0.5.0/LICENSE) |
 | pin-project-lite 0.2.17 | Apache-2.0 OR MIT | [LICENSE-APACHE](licenses/third-party/pin-project-lite-0.2.17/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/pin-project-lite-0.2.17/LICENSE-MIT) |
 | png 0.17.16 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/png-0.17.16/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/png-0.17.16/LICENSE-MIT) |
@@ -126,17 +119,13 @@ Windows 系统字体通过用户电脑读取，本发行包不附加微软雅黑
 | pxfm 0.1.30 | BSD-3-Clause OR Apache-2.0 | [LICENSE-APACHE.md](licenses/third-party/pxfm-0.1.30/LICENSE-APACHE.md), [LICENSE.md](licenses/third-party/pxfm-0.1.30/LICENSE.md), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/pxfm-0.1.30/SOURCE_COPYRIGHT_HEADERS.txt) |
 | quote 1.0.47 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/quote-1.0.47/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/quote-1.0.47/LICENSE-MIT) |
 | raw-window-handle 0.6.2 | MIT OR Apache-2.0 OR Zlib | [LICENSE-APACHE.md](licenses/third-party/raw-window-handle-0.6.2/LICENSE-APACHE.md), [LICENSE-MIT.md](licenses/third-party/raw-window-handle-0.6.2/LICENSE-MIT.md), [LICENSE-ZLIB.md](licenses/third-party/raw-window-handle-0.6.2/LICENSE-ZLIB.md) |
-| rctree 0.5.0 | MIT | [LICENSE](licenses/third-party/rctree-0.5.0/LICENSE) |
 | read-fonts 0.39.2 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/read-fonts-0.39.2/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/read-fonts-0.39.2/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/read-fonts-0.39.2/SOURCE_COPYRIGHT_HEADERS.txt) |
-| resvg 0.37.0 | MPL-2.0 | [LICENSE.txt](licenses/third-party/resvg-0.37.0/LICENSE.txt) |
 | resvg 0.45.1 | Apache-2.0 OR MIT | [LICENSE-APACHE](licenses/third-party/resvg-0.45.1/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/resvg-0.45.1/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/resvg-0.45.1/SOURCE_COPYRIGHT_HEADERS.txt) |
 | rfd 0.15.4 | MIT | [LICENSE](licenses/third-party/rfd-0.15.4/LICENSE) |
 | rgb 0.8.53 | MIT | [LICENSE](licenses/third-party/rgb-0.8.53/LICENSE) |
-| roxmltree 0.19.0 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/roxmltree-0.19.0/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/roxmltree-0.19.0/LICENSE-MIT) |
 | roxmltree 0.20.0 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/roxmltree-0.20.0/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/roxmltree-0.20.0/LICENSE-MIT) |
 | rustc-hash 2.1.3 | Apache-2.0 OR MIT | [LICENSE-APACHE](licenses/third-party/rustc-hash-2.1.3/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/rustc-hash-2.1.3/LICENSE-MIT) |
 | rustversion 1.0.23 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/rustversion-1.0.23/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/rustversion-1.0.23/LICENSE-MIT) |
-| rustybuzz 0.12.1 | MIT | [LICENSE](licenses/third-party/rustybuzz-0.12.1/LICENSE), [COPYING](licenses/third-party/rustybuzz-0.12.1/scripts/ms-use/COPYING) |
 | rustybuzz 0.20.1 | MIT | [LICENSE](licenses/third-party/rustybuzz-0.20.1/LICENSE), [COPYING](licenses/third-party/rustybuzz-0.20.1/scripts/ms-use/COPYING) |
 | ryu 1.0.23 | Apache-2.0 OR BSL-1.0 | [LICENSE-APACHE](licenses/third-party/ryu-1.0.23/LICENSE-APACHE), [LICENSE-BOOST](licenses/third-party/ryu-1.0.23/LICENSE-BOOST), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/ryu-1.0.23/SOURCE_COPYRIGHT_HEADERS.txt) |
 | scopeguard 1.2.0 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/scopeguard-1.2.0/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/scopeguard-1.2.0/LICENSE-MIT) |
@@ -147,7 +136,6 @@ Windows 系统字体通过用户电脑读取，本发行包不附加微软雅黑
 | simd-adler32 0.3.10 | MIT | [LICENSE.md](licenses/third-party/simd-adler32-0.3.10/LICENSE.md) |
 | simdutf8 0.1.5 | MIT OR Apache-2.0 | [LICENSE-Apache](licenses/third-party/simdutf8-0.1.5/LICENSE-Apache), [LICENSE-MIT](licenses/third-party/simdutf8-0.1.5/LICENSE-MIT) |
 | simplecss 0.2.2 | Apache-2.0 OR MIT | [LICENSE-APACHE](licenses/third-party/simplecss-0.2.2/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/simplecss-0.2.2/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/simplecss-0.2.2/SOURCE_COPYRIGHT_HEADERS.txt) |
-| siphasher 0.3.11 | MIT/Apache-2.0 | [COPYING](licenses/third-party/siphasher-0.3.11/COPYING), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/siphasher-0.3.11/SOURCE_COPYRIGHT_HEADERS.txt) |
 | siphasher 1.0.4 | MIT OR Apache-2.0 | [COPYING](licenses/third-party/siphasher-1.0.4/COPYING), [LICENSE-APACHE](licenses/third-party/siphasher-1.0.4/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/siphasher-1.0.4/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/siphasher-1.0.4/SOURCE_COPYRIGHT_HEADERS.txt) |
 | skrifa 0.42.1 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/skrifa-0.42.1/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/skrifa-0.42.1/LICENSE-MIT) |
 | slotmap 1.1.1 | Zlib | [LICENSE](licenses/third-party/slotmap-1.1.1/LICENSE) |
@@ -158,7 +146,6 @@ Windows 系统字体通过用户电脑读取，本发行包不附加微软雅黑
 | strict-num 0.1.1 | MIT | [LICENSE](licenses/third-party/strict-num-0.1.1/LICENSE) |
 | subsetter 0.2.6 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/subsetter-0.2.6/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/subsetter-0.2.6/LICENSE-MIT), [NOTICE](licenses/third-party/subsetter-0.2.6/NOTICE), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/subsetter-0.2.6/SOURCE_COPYRIGHT_HEADERS.txt) |
 | svg2pdf 0.13.0 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/svg2pdf-0.13.0/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/svg2pdf-0.13.0/LICENSE-MIT), [NOTICE](licenses/third-party/svg2pdf-0.13.0/NOTICE) |
-| svgtypes 0.13.0 | MIT/Apache-2.0 | [LICENSE-APACHE](licenses/third-party/svgtypes-0.13.0/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/svgtypes-0.13.0/LICENSE-MIT) |
 | svgtypes 0.15.3 | Apache-2.0 OR MIT | [LICENSE-APACHE](licenses/third-party/svgtypes-0.15.3/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/svgtypes-0.15.3/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/svgtypes-0.15.3/SOURCE_COPYRIGHT_HEADERS.txt) |
 | syn 2.0.119 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/syn-2.0.119/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/syn-2.0.119/LICENSE-MIT) |
 | syn 3.0.9 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/syn-3.0.9/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/syn-3.0.9/LICENSE-MIT) |
@@ -169,14 +156,10 @@ Windows 系统字体通过用户电脑读取，本发行包不附加微软雅黑
 | tinyvec 1.13.3 | Zlib OR Apache-2.0 OR MIT | [LICENSE-APACHE.md](licenses/third-party/tinyvec-1.13.3/LICENSE-APACHE.md), [LICENSE-MIT.md](licenses/third-party/tinyvec-1.13.3/LICENSE-MIT.md), [LICENSE-ZLIB.md](licenses/third-party/tinyvec-1.13.3/LICENSE-ZLIB.md) |
 | tracing 0.1.44 | MIT | [LICENSE](licenses/third-party/tracing-0.1.44/LICENSE) |
 | tracing-core 0.1.36 | MIT | [LICENSE](licenses/third-party/tracing-core-0.1.36/LICENSE), [LICENSE](licenses/third-party/tracing-core-0.1.36/src/spin/LICENSE) |
-| ttf-parser 0.20.0 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/ttf-parser-0.20.0/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/ttf-parser-0.20.0/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/ttf-parser-0.20.0/SOURCE_COPYRIGHT_HEADERS.txt) |
 | ttf-parser 0.25.1 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/ttf-parser-0.25.1/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/ttf-parser-0.25.1/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/ttf-parser-0.25.1/SOURCE_COPYRIGHT_HEADERS.txt), [colr_1_LICENSE](licenses/third-party/ttf-parser-0.25.1/tests/fonts/colr_1_LICENSE) |
 | typed-path 0.12.3 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/typed-path-0.12.3/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/typed-path-0.12.3/LICENSE-MIT) |
-| unicase 2.10.0 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/unicase-2.10.0/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/unicase-2.10.0/LICENSE-MIT) |
 | unicode-bidi 0.3.18 | MIT OR Apache-2.0 | [COPYRIGHT](licenses/third-party/unicode-bidi-0.3.18/COPYRIGHT), [LICENSE-APACHE](licenses/third-party/unicode-bidi-0.3.18/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/unicode-bidi-0.3.18/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/unicode-bidi-0.3.18/SOURCE_COPYRIGHT_HEADERS.txt) |
-| unicode-bidi-mirroring 0.1.0 | MIT/Apache-2.0 | [LICENSE-APACHE](licenses/third-party/unicode-bidi-mirroring-0.1.0/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/unicode-bidi-mirroring-0.1.0/LICENSE-MIT) |
 | unicode-bidi-mirroring 0.4.0 | MIT/Apache-2.0 | [LICENSE-APACHE](licenses/third-party/unicode-bidi-mirroring-0.4.0/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/unicode-bidi-mirroring-0.4.0/LICENSE-MIT) |
-| unicode-ccc 0.1.2 | MIT/Apache-2.0 | [LICENSE-APACHE](licenses/third-party/unicode-ccc-0.1.2/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/unicode-ccc-0.1.2/LICENSE-MIT) |
 | unicode-ccc 0.4.0 | MIT/Apache-2.0 | [LICENSE-APACHE](licenses/third-party/unicode-ccc-0.4.0/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/unicode-ccc-0.4.0/LICENSE-MIT) |
 | unicode-ident 1.0.27 | (MIT OR Apache-2.0) AND Unicode-3.0 | [LICENSE-APACHE](licenses/third-party/unicode-ident-1.0.27/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/unicode-ident-1.0.27/LICENSE-MIT), [LICENSE-UNICODE](licenses/third-party/unicode-ident-1.0.27/LICENSE-UNICODE) |
 | unicode-properties 0.1.4 | MIT/Apache-2.0 | [COPYRIGHT](licenses/third-party/unicode-properties-0.1.4/COPYRIGHT), [LICENSE-APACHE](licenses/third-party/unicode-properties-0.1.4/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/unicode-properties-0.1.4/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/unicode-properties-0.1.4/SOURCE_COPYRIGHT_HEADERS.txt) |
@@ -184,11 +167,7 @@ Windows 系统字体通过用户电脑读取，本发行包不附加微软雅黑
 | unicode-segmentation 1.13.3 | MIT OR Apache-2.0 | [COPYRIGHT](licenses/third-party/unicode-segmentation-1.13.3/COPYRIGHT), [LICENSE-APACHE](licenses/third-party/unicode-segmentation-1.13.3/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/unicode-segmentation-1.13.3/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/unicode-segmentation-1.13.3/SOURCE_COPYRIGHT_HEADERS.txt) |
 | unicode-vo 0.1.0 | MIT/Apache-2.0 | [LICENSE-APACHE](licenses/third-party/unicode-vo-0.1.0/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/unicode-vo-0.1.0/LICENSE-MIT) |
 | url 2.5.8 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/url-2.5.8/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/url-2.5.8/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/url-2.5.8/SOURCE_COPYRIGHT_HEADERS.txt) |
-| usvg 0.37.0 | MPL-2.0 | [LICENSE.txt](licenses/third-party/usvg-0.37.0/LICENSE.txt) |
 | usvg 0.45.1 | Apache-2.0 OR MIT | [LICENSE-APACHE](licenses/third-party/usvg-0.45.1/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/usvg-0.45.1/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/usvg-0.45.1/SOURCE_COPYRIGHT_HEADERS.txt) |
-| usvg-parser 0.37.0 | MPL-2.0 | [LICENSE.txt](licenses/third-party/usvg-parser-0.37.0/LICENSE.txt) |
-| usvg-text-layout 0.37.0 | MPL-2.0 | [LICENSE.txt](licenses/third-party/usvg-text-layout-0.37.0/LICENSE.txt) |
-| usvg-tree 0.37.0 | MPL-2.0 | [LICENSE.txt](licenses/third-party/usvg-tree-0.37.0/LICENSE.txt) |
 | utf8_iter 1.0.4 | Apache-2.0 OR MIT | [COPYRIGHT](licenses/third-party/utf8_iter-1.0.4/COPYRIGHT), [LICENSE-APACHE](licenses/third-party/utf8_iter-1.0.4/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/utf8_iter-1.0.4/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/utf8_iter-1.0.4/SOURCE_COPYRIGHT_HEADERS.txt) |
 | version_check 0.9.5 | MIT/Apache-2.0 | [LICENSE-APACHE](licenses/third-party/version_check-0.9.5/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/version_check-0.9.5/LICENSE-MIT) |
 | web-time 1.1.0 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/web-time-1.1.0/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/web-time-1.1.0/LICENSE-MIT) |

@@ -165,7 +165,7 @@ fn dialog_confirmation_is_recorded_and_cancellation_is_empty() {
 fn headless_frames_and_history_shortcuts() {
     let ctx = egui::Context::default();
     crate::fonts::setup(&ctx);
-    egui_extras::install_image_loaders(&ctx);
+    crate::icons::install_loaders(&ctx);
     theme::install(&ctx);
     let mut app = app();
     let before = app.project.clone();

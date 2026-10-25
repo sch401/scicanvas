@@ -927,7 +927,6 @@ mod tests {
 
     #[test]
     fn text_preserves_native_glyph_geometry_at_different_zoom_and_dpi() {
-        use resvg::usvg::{NodeExt, NodeKind, TreeParsing};
         let mut p = Project::sample();
         p.graphs[0].first_layer_mut().title = r"WWW iii μ ± 中文 CO_{2} R^{2} \b{normal} \i{italic}".into();
         p.graphs[0].first_layer_mut().rich_text = true;
@@ -937,22 +936,32 @@ mod tests {
         p.graphs[0].first_layer_mut().y_title = r"\i{c} / mol L^{−1}".into();
         let sc = scene::layout_page(&p.graphs[0], &p, &[]);
         let svg = scicanvas_core::svg::render_page(&p.graphs[0], &p);
-        let mut tree = resvg::usvg::Tree::from_str(&svg, &Default::default()).unwrap();
-        tree.calculate_abs_transforms();
+        use resvg::usvg::{Group, Node};
+        let tree = crate::export::svg_tree(&svg).unwrap();
         let mut svg_runs = Vec::new();
-        for node in tree.root.descendants() {
-            if let NodeKind::Text(t) = &*node.borrow() {
-                for chunk in &t.chunks {
-                    let mut point = resvg::tiny_skia::Point::from_xy(chunk.x.unwrap(), chunk.y.unwrap());
-                    node.abs_transform().map_point(&mut point);
-                    svg_runs.push((
-                        chunk.text.clone(),
-                        pos2(point.x, point.y),
-                        chunk.spans[0].font_size.get(),
-                    ));
+        fn collect(group: &Group, runs: &mut Vec<(String, Pos2, f32)>) {
+            for node in group.children() {
+                match node {
+                    Node::Group(g) => collect(g, runs),
+                    Node::Text(t) => {
+                        for chunk in t.chunks() {
+                            if !chunk.text().trim().is_empty() {
+                                let mut point =
+                                    resvg::tiny_skia::Point::from_xy(chunk.x().unwrap(), chunk.y().unwrap());
+                                t.abs_transform().map_point(&mut point);
+                                runs.push((
+                                    chunk.text().to_owned(),
+                                    pos2(point.x, point.y),
+                                    chunk.spans()[0].font_size().get(),
+                                ));
+                            }
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
+        collect(tree.root(), &mut svg_runs);
         let expected: Vec<_> = sc
             .items
             .iter()
@@ -964,6 +973,7 @@ mod tests {
                     scicanvas_core::text::layout_formatted(text, *size, *bold, *rich)
                         .runs
                         .into_iter()
+                        .filter(|run| !run.text.trim().is_empty())
                         .map(|run| (run.font, run.text, run.width, run.size))
                         .collect::<Vec<_>>()
                 } else {
@@ -988,6 +998,9 @@ mod tests {
             let mut checked = 0;
             for clipped in out.shapes {
                 if let Shape::Text(shape) = clipped.shape {
+                    if shape.galley.job.text.trim().is_empty() {
+                        continue;
+                    }
                     let id = &shape.galley.job.sections[0].format.font_id;
                     if let egui::FontFamily::Name(name) = &id.family {
                         if let Some(i) = name.strip_prefix("plot-").and_then(|s| s.parse::<usize>().ok()) {

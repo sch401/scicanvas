@@ -1,4 +1,4 @@
-"""Build a Windows x64 release candidate with notices, licenses and MPL sources."""
+"""Build a Windows x64 release candidate with dependency notices and licenses."""
 import hashlib
 import json
 from pathlib import Path
@@ -41,7 +41,11 @@ def main():
             path = stage / relative
             path.parent.mkdir(parents=True, exist_ok=True)
             path.write_bytes(data)
-        extras = ["LICENSE-MIT", "LICENSE-APACHE", "MPL_SOURCE.md", "docs/COPYRIGHT_AUDIT.md", "licenses/supplemental/sources.json"]
+        index = json.loads(generated["licenses/THIRD_PARTY_INDEX.json"])
+        extras = ["LICENSE-MIT", "LICENSE-APACHE", "docs/COPYRIGHT_AUDIT.md", "licenses/supplemental/sources.json"]
+        if index["mpl"]:
+            extras.append("MPL_SOURCE.md")
+            extras.extend(source["path"] for source in index["mpl"])
         supplements = json.loads((ROOT / "licenses/supplemental/sources.json").read_text(encoding="utf-8"))
         extras += [r["path"] for r in supplements]
         for relative in extras:
@@ -63,15 +67,16 @@ def main():
             cargo_lock_sha256=third_party.sha((ROOT / "Cargo.lock").read_bytes()),
         )
         (stage / "BUILD_INFO.json").write_text(json.dumps(info, ensure_ascii=False, indent=2)+"\n", encoding="utf-8")
-        (stage / "README.txt").write_text(
-            "SciCanvas Windows x64 发布候选包\n\n双击 SciCanvas.exe 运行。\n"
-            "第三方版权与许可：THIRD_PARTY_NOTICES.md、licenses/\n"
-            "MPL 对应源码离线获取：MPL_SOURCE.md、licenses/mpl-sources/*.crate\n"
-            "代码与素材来源检查、仍需确认的记录：docs/COPYRIGHT_AUDIT.md\n"
-            "本程序会读取系统字体，未在包中复制 Windows 字体或系统 DLL。\n"
+        readme = [
+            "SciCanvas Windows x64 发布候选包\n\n双击 SciCanvas.exe 运行。\n",
+            "第三方版权与许可：THIRD_PARTY_NOTICES.md、licenses/\n",
+            "代码与素材来源检查、仍需确认的记录：docs/COPYRIGHT_AUDIT.md\n",
+            "本程序会读取系统字体，未在包中复制 Windows 字体或系统 DLL。\n",
             "向他人分发时请保留整个包，附带的第三方声明与源码适用于对应组件。\n",
-            encoding="utf-8",
-        )
+        ]
+        if index["mpl"]:
+            readme.insert(2, "MPL 对应源码离线获取：MPL_SOURCE.md、licenses/mpl-sources/*.crate\n")
+        (stage / "README.txt").write_text("".join(readme), encoding="utf-8")
         with zipfile.ZipFile(archive, "w", compression=zipfile.ZIP_DEFLATED) as package:
             for path in sorted(stage.rglob("*")):
                 if path.is_file():

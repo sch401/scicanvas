@@ -10,7 +10,7 @@ unused-ignored-advisory = "deny"
 ignore = [
     { id = "RUSTSEC-2024-0436", reason = "paste 1.0.15 is required by accesskit_windows 0.23.2 for egui accessibility; revisit with eframe upgrade" },
     { id = "RUSTSEC-2026-0192", reason = "ttf-parser 0.25.1 is required by owned_ttf_parser 0.25.1 / ab_glyph; revisit during A6 font migration" },
-    { id = "RUSTSEC-2026-0206", reason = "rustybuzz 0.12.1 is required by usvg-text-layout 0.37 for PNG / clipboard text shaping; revisit with the T1.5/A6 font stack migration" },
+    { id = "RUSTSEC-2026-0206", reason = "rustybuzz 0.20.1 is required by the resvg/usvg 0.45.1 and svg2pdf 0.13 shared text stack; no safe upgrade is currently available, revisit with the next coordinated renderer release" },
 ]
 
 [licenses]

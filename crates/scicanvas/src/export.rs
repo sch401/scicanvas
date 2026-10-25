@@ -4,7 +4,7 @@
 use std::sync::OnceLock;
 
 use resvg::tiny_skia::{Pixmap, Transform};
-use resvg::usvg::{self, fontdb, TreeParsing, TreeTextToPath};
+use resvg::usvg::{self, fontdb};
 
 /// 复制到剪贴板时使用的分辨率。
 pub const CLIPBOARD_DPI: u32 = 300;
@@ -13,22 +13,8 @@ const MAX_SIDE: u32 = 20_000;
 
 /// Export the shared page SVG as vectors, with selectable text and embedded font subsets.
 pub fn pdf_bytes(svg: &str) -> Result<Vec<u8>, String> {
-    use svg2pdf::usvg as pdf_svg;
-    static FONTS: OnceLock<std::sync::Arc<pdf_svg::fontdb::Database>> = OnceLock::new();
-    let db = FONTS.get_or_init(|| {
-        let mut db = pdf_svg::fontdb::Database::new();
-        let shared = scicanvas_core::text::fonts();
-        for face in shared.faces() {
-            db.load_font_data(face.data().to_vec());
-        }
-        db.set_sans_serif_family(&shared.faces()[shared.primary(false)].family);
-        std::sync::Arc::new(db)
-    });
-    let options = pdf_svg::Options {
-        fontdb: db.clone(),
-        ..Default::default()
-    };
-    let tree = pdf_svg::Tree::from_str(svg, &options).map_err(|e| format!("解析 SVG 失败：{e}"))?;
+    use resvg::usvg as pdf_svg;
+    let tree = svg_tree(svg)?;
     fn used_fonts(group: &pdf_svg::Group, ids: &mut std::collections::BTreeSet<pdf_svg::fontdb::ID>) {
         for node in group.children() {
             match node {
@@ -65,8 +51,8 @@ pub fn pdf_bytes(svg: &str) -> Result<Vec<u8>, String> {
     .map_err(|e| format!("生成 PDF 失败：{e}"))
 }
 
-fn fonts() -> &'static fontdb::Database {
-    static DB: OnceLock<fontdb::Database> = OnceLock::new();
+fn fonts() -> &'static std::sync::Arc<fontdb::Database> {
+    static DB: OnceLock<std::sync::Arc<fontdb::Database>> = OnceLock::new();
     DB.get_or_init(|| {
         let mut db = fontdb::Database::new();
         let shared = scicanvas_core::text::fonts();
@@ -74,23 +60,31 @@ fn fonts() -> &'static fontdb::Database {
             db.load_font_data(face.data().to_vec());
         }
         db.set_sans_serif_family(&shared.faces()[shared.primary(false)].family);
-        db
+        std::sync::Arc::new(db)
     })
+}
+
+/// PNG 与 PDF 共用同一解析器和实际字体，避免两条导出路径各自选择字体。
+pub(crate) fn svg_tree(svg: &str) -> Result<usvg::Tree, String> {
+    let options = usvg::Options {
+        fontdb: fonts().clone(),
+        ..Default::default()
+    };
+    usvg::Tree::from_str(svg, &options).map_err(|e| format!("解析 SVG 失败：{e}"))
 }
 
 /// 按 `dpi` 栅格化 SVG。SVG 的宽高以毫米给出，usvg 按 96 dpi 换成像素。
 pub fn rasterize(svg: &str, dpi: u32) -> Result<Pixmap, String> {
-    let mut tree = usvg::Tree::from_str(svg, &usvg::Options::default()).map_err(|e| format!("解析 SVG 失败：{e}"))?;
-    tree.convert_text(fonts());
+    let tree = svg_tree(svg)?;
     let scale = f64::from(dpi) / 96.0;
     let side = |v: f32| (f64::from(v) * scale).round().max(1.0);
-    let (w, h) = (side(tree.size.width()), side(tree.size.height()));
+    let (w, h) = (side(tree.size().width()), side(tree.size().height()));
     if w > f64::from(MAX_SIDE) || h > f64::from(MAX_SIDE) {
         return Err(format!("图像过大（{w}×{h} 像素），请降低 DPI"));
     }
     let mut pixmap = Pixmap::new(w as u32, h as u32).ok_or("无法分配位图")?;
     let s = scale as f32;
-    resvg::Tree::from_usvg(&tree).render(Transform::from_scale(s, s), &mut pixmap.as_mut());
+    resvg::render(&tree, Transform::from_scale(s, s), &mut pixmap.as_mut());
     Ok(pixmap)
 }
 

@@ -57,7 +57,7 @@ def outputs():
     result, inventory, mpl = {}, [], []
     notices = ["# SciCanvas 第三方版权与许可证", "", "本文件随 Windows x64 发行包一起提供。应用自有部分沿用 MIT OR Apache-2.0；下列第三方代码与字体保留各自许可。", "",
         "清单来自 Cargo.lock 和 Windows normal/build 完整特性依赖树，保守包含构建期工具；不是对每个包都被链接进 exe 的判断。原始版权、许可和 NOTICE 文本保存在对应目录，许可 OR/AND 表达式保留原样。", "",
-        "MPL 对应版本完整源码及 SHA-256 见 [MPL 源码说明](MPL_SOURCE.md)。egui 内嵌字体另保留原始字体许可和字体 name 表声明，包含 Hack 的 Bitstream Vera 声明。", "",
+        "第三方软件包的原始许可和版权声明按 Cargo.lock 一并提供。egui 内嵌字体另保留原始字体许可和字体 name 表声明，包含 Hack 的 Bitstream Vera 声明。", "",
         "Windows 系统字体通过用户电脑读取，本发行包不附加微软雅黑/Arial 字体文件；系统 DLL 同样不随包复制。Rust 标准库版权材料在发行包的 licenses/rust-runtime 中，按实际构建工具链附带。", "",
         "## 包清单", "", "| 包 / 版本 | 声明许可 | 原始声明文件 |", "| --- | --- | --- |"]
     font_lines = ["# SciCanvas / egui 内嵌字体原始声明", "", "以下内容直接读取 epaint_default_fonts 包中四个字体的 name 表，保留版权、商标和许可文字；另附 fonts/*.txt 的原始完整声明。系统字体不在此清单中。", ""]

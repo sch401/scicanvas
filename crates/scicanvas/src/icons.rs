@@ -1,6 +1,6 @@
 //! 功能区图标和图类型缩略图。
 //!
-//! 与网页原型共用同一套 SVG，由 egui_extras 的 SVG 加载器渲染。
+//! 与网页原型共用同一套 SVG，由共用 resvg 渲染栈加载。
 //! SVG 里用占位色（--ic-b 等），按浅色 / 深色主题替换成实际颜色后缓存。
 //! 注意：egui 的 SVG 渲染器不带字体，图标里不能用 <text>。
 
@@ -8,6 +8,9 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use eframe::egui;
+
+mod loader;
+pub use loader::install_loaders;
 
 const AX: &str = r#"<path d="M4 3.5V20h16.5"/>"#;
 
@@ -515,4 +518,36 @@ pub fn thumb(kind: &str) -> egui::Image<'static> {
         .get(&(format!("thumb-{}", kind), false))
         .unwrap_or_else(|| cache().get(&("thumb-line".to_string(), false)).unwrap());
     egui::Image::from_bytes(format!("bytes://scicanvas/thumb/{}.svg", kind), bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn all_icons_and_thumbnails_render_at_multiple_sizes() {
+        for ((name, dark), bytes) in cache() {
+            for width in [16, 24, 48] {
+                let image = loader::load_svg(bytes, egui::load::SizeHint::Width(width)).unwrap();
+                assert_eq!(image.size[0], width as usize, "{name}");
+                assert!(image.pixels.iter().any(|p| p.a() > 0), "{name}");
+                if !name.starts_with("thumb-") {
+                    assert!(
+                        image.pixels.iter().any(|p| p.a() == 0),
+                        "{name}: transparent background"
+                    );
+                }
+                if let Ok(directory) = std::env::var("SCICANVAS_ICON_PROBE_DIR") {
+                    let dir = std::path::Path::new(&directory);
+                    std::fs::create_dir_all(dir).unwrap();
+                    let mut pixmap = resvg::tiny_skia::Pixmap::new(image.size[0] as u32, image.size[1] as u32).unwrap();
+                    for (pixel, color) in pixmap.pixels_mut().iter_mut().zip(&image.pixels) {
+                        let [r, g, b, a] = color.to_array();
+                        *pixel = resvg::tiny_skia::PremultipliedColorU8::from_rgba(r, g, b, a).unwrap();
+                    }
+                    pixmap.save_png(dir.join(format!("{name}-{dark}-{width}.png"))).unwrap();
+                }
+            }
+        }
+    }
 }

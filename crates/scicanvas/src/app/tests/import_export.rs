@@ -43,7 +43,7 @@ fn million_row_first_frame() {
     let plot = t.elapsed();
     let ctx = egui::Context::default();
     crate::fonts::setup(&ctx);
-    egui_extras::install_image_loaders(&ctx);
+    crate::icons::install_loaders(&ctx);
     let mut harness = crate::test_ui::Harness::new(ctx.clone(), Some(egui::vec2(1600.0, 900.0)), SciApp::ui_frame);
     let t = Instant::now();
     let out = harness.frame(&mut app, vec![]);

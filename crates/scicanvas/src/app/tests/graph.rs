@@ -180,7 +180,7 @@ fn docked_properties_and_layer_contents_share_sidebar_and_preserve_live_preview(
     app.run_command("graph.props");
     let ctx = egui::Context::default();
     crate::fonts::setup(&ctx);
-    egui_extras::install_image_loaders(&ctx);
+    crate::icons::install_loaders(&ctx);
     ctx.style_mut(|s| s.animation_time = 0.0);
     let mut harness = crate::test_ui::Harness::new(
         ctx.clone(),
@@ -694,7 +694,7 @@ fn layers_builder_and_saved_project_share_history_and_headless_ui() {
     let ctx = egui::Context::default();
     crate::fonts::setup(&ctx);
     theme::install(&ctx);
-    egui_extras::install_image_loaders(&ctx);
+    crate::icons::install_loaders(&ctx);
     let mut app = app();
     let before = app.project.clone();
     app.run_command("layer.add");
