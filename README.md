@@ -124,7 +124,17 @@ crates/
     colormap.rs     默认、Viridis 与色盲友好配色
     presets.rs      读取 presets/ 中的基础图预设与示例数据
     analysis.rs     多项式拟合（含标准误）、平滑、微分、积分、归一化、描述统计
-    ops.rs          在项目上执行分析：确定输入、写结果列、更新图形；排序
+    ops.rs          分析公共入口与类型重导出；保留原单元测试路径
+    ops/            按领域组织项目分析操作（数值内核仍在原模块）
+      resolve.rs    分析来源、数据提取与值域
+      fit.rs        拟合、置信/预测带、残差图、校准
+      smooth.rs     平滑、归一化、插值、曲线平均
+      calculus.rs   微分、SG 求导、积分
+      baseline.rs   基线结果写入与附图
+      fft.rs        FFT/IFFT、滤波、相关函数、寻峰
+      recalc.rs     公式、操作记录与依赖重算
+      columns.rs    结果列与附图辅助、列运算、填充、排序
+      stats.rs      行/列统计、频数统计
     csv.rs          CSV 解析、编码识别、Excel 粘贴
     ticks.rs        坐标轴范围与刻度（1/2/5 步长、对数轴、刻度标签）
     scene.rs        图形版面：坐标框、刻度、曲线、图例排成图元，界面绘制和 SVG 导出共用
