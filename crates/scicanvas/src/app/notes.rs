@@ -77,12 +77,12 @@ impl SciApp {
                 )
             })
             .inner;
-        if response.changed() {
-            self.begin_edit("编辑 Note");
-            self.project.notes.iter_mut().find(|n| n.id == id).unwrap().text = text;
-            self.history.changed();
-        }
         edit_group(&response, &mut self.history_group);
+        if response.changed() {
+            self.edit_grouped("编辑 Note", self.history_group, |project| {
+                project.notes.iter_mut().find(|n| n.id == id).unwrap().text = text;
+            });
+        }
     }
 }
 

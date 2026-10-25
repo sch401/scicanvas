@@ -187,10 +187,8 @@ fn manual_analysis_results_update_only_on_recalc_command() {
     assert_eq!(edit.recalc, Some(RecalcMode::Auto));
     let mut edit = edit;
     edit.recalc = Some(RecalcMode::Manual);
-    app.begin_edit("列属性");
     app.apply_column_props(1, edit).unwrap();
-    app.history.changed();
-    app.finish_edit();
+
     let smoothed = |app: &SciApp| app.project.book(1).unwrap().column(&key).unwrap().values();
     let old = smoothed(&app);
     app.begin_edit("编辑单元格");
@@ -209,10 +207,8 @@ fn saved_formula_recalculates_when_a_source_cell_changes_in_the_same_undo_step()
     let mut app = app();
     app.active = Some(1);
     app.selection.insert(1, vec!["C".into()]);
-    app.begin_edit("设置列值");
     assert!(app.set_column_values("B * 2", true));
-    app.history.changed();
-    app.finish_edit();
+
     app.open_set_values_dialog();
     assert!(matches!(&app.dialog, Some(Dialog::SetValues { formula, keep: true, .. }) if formula == "B * 2"));
     app.dialog = None;
@@ -237,10 +233,8 @@ fn set_values_keeps_the_dialog_open_on_errors_and_undoes_in_one_step() {
     assert!(!app.set_column_values("B *", false));
     assert!(matches!(&app.dialog, Some(Dialog::SetValues { error: Some(_), .. })));
     let before = app.project.book(1).unwrap().columns[2].data.clone();
-    app.begin_edit("设置列值");
     assert!(app.set_column_values("B * 2", false));
-    app.history.changed();
-    app.finish_edit();
+
     let book = app.project.book(1).unwrap();
     let b = book.column("B").unwrap().values();
     let c = book.column("C").unwrap().values();
@@ -470,10 +464,8 @@ fn column_properties_apply_in_one_step_and_failed_conversions_change_nothing() {
         ..Default::default()
     };
     app.dialog = None;
-    app.begin_edit("列属性");
     app.apply_column_props(1, edit.clone()).unwrap();
-    app.history.changed();
-    app.finish_edit();
+
     let col = app.project.book(1).unwrap().column("B").unwrap();
     assert_eq!(
         (col.long_name.as_str(), col.units.as_str(), col.comment.as_str()),
@@ -969,5 +961,243 @@ fn wide_paste_from_added_columns_expands_book_and_undoes_as_one_edit() {
         roundtrip(&mut app, &before);
         let scv = scicanvas_core::project_file::to_scv(&app.project).unwrap();
         assert_eq!(scicanvas_core::project_file::from_scv(&scv).unwrap(), app.project);
+    }
+}
+
+#[test]
+fn grouped_column_properties_reject_atomically_without_losing_valid_input_or_copying_data() {
+    let mut app = app();
+    let before = app.project.clone();
+    let group = Some(egui::Id::new("column-name"));
+    app.history_group = group;
+    let allocation = |app: &SciApp| match &app.project.books[0].columns[1].data {
+        scicanvas_core::ColumnData::Num { values, .. } => values.as_ptr(),
+        _ => panic!("numeric"),
+    };
+    let original = allocation(&app);
+    let mut edit = dialogs::ColumnEdit::from(&app.project.books[0].columns[1]);
+    edit.long_name = "typing".into();
+    app.apply_column_props(1, edit.clone()).unwrap();
+    let first = app.project.clone();
+    let mut invalid = edit.clone();
+    invalid.kind = scicanvas_core::DataKind::DateTime;
+    invalid.long_name = "rejected".into();
+    assert!(app.apply_column_props(1, invalid).unwrap_err().contains("无法转换"));
+    assert_eq!(app.project, first);
+    assert!(app.history.is_pending());
+    assert_eq!(allocation(&app), original);
+    edit.units = "V".into();
+    app.apply_column_props(1, edit).unwrap();
+    assert_eq!(allocation(&app), original);
+    app.finish_edit();
+    roundtrip(&mut app, &before);
+    app.undo();
+    assert!(app.history.undo_label().is_none());
+    let before = app.project.clone();
+    let redo = app.history.redo_label().unwrap().to_string();
+    let mut invalid = dialogs::ColumnEdit::from(&app.project.books[0].columns[1]);
+    invalid.kind = scicanvas_core::DataKind::DateTime;
+    assert!(app.apply_column_props(1, invalid).is_err());
+    assert_eq!(app.project, before);
+    assert!(!app.history.is_pending());
+    assert_eq!(app.history.redo_label(), Some(redo.as_str()));
+}
+
+#[test]
+fn worksheet_headers_group_real_typing_and_separate_fields_without_copying_columns() {
+    let mut app = app();
+    app.show_item(1);
+    app.project.books[0].columns[0].long_name = "HeaderOne".into();
+    app.project.books[0].columns[1].long_name = "HeaderTwo".into();
+    let before = app.project.clone();
+    let scicanvas_core::ColumnData::Num { values, .. } = &app.project.books[0].columns[0].data else {
+        panic!("numeric");
+    };
+    let allocation = values.as_ptr();
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    ctx.style_mut(|s| s.animation_time = 0.0);
+    let mut harness = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1600.0, 1100.0)),
+        |app: &mut SciApp, ctx: &egui::Context| app.ui_frame(ctx),
+    )
+    .with_step(0.02);
+    harness.frame(&mut app, vec![]);
+    harness.frame(&mut app, vec![]);
+    let output = harness.frame(&mut app, vec![]);
+    let at = crate::test_ui::text_rect(&output, "HeaderOne").unwrap().center();
+    harness.click(&mut app, at);
+    harness.frame(&mut app, vec![egui::Event::Text("a".into())]);
+    harness.frame(&mut app, vec![egui::Event::Text("b".into())]);
+    let first = app.project.clone();
+    assert_ne!(first, before);
+    assert!(app.history.is_pending());
+    let output = harness.frame(&mut app, vec![]);
+    let rect = app.geoms[&1].rect.translate(app.ws.min.to_vec2());
+    let at = crate::test_ui::text_positions(&output, "HeaderTwo")
+        .into_iter()
+        .rfind(|p| rect.contains(*p))
+        .unwrap()
+        + egui::vec2(3.0, 3.0);
+    harness.click(&mut app, at);
+    harness.frame(&mut app, vec![egui::Event::Text("c".into())]);
+    let second = app.project.clone();
+    assert_ne!(second, first);
+    let scicanvas_core::ColumnData::Num { values, .. } = &app.project.books[0].columns[0].data else {
+        panic!("numeric");
+    };
+    assert_eq!(values.as_ptr(), allocation);
+    app.finish_edit();
+    app.undo();
+    assert_eq!(app.project, first);
+    app.undo();
+    assert_eq!(app.project, before);
+    assert!(app.history.undo_label().is_none());
+    app.redo();
+    app.redo();
+    assert_eq!(app.project, second);
+}
+
+#[test]
+fn rejected_sheet_paste_preserves_redo_editor_selection_and_pending_conversion() {
+    let mut app = app();
+    app.project.books[0].columns[0].data = vec!["2026-10-25".into(), "2026-10-26".into()].into();
+    app.project.books[0].columns[0].data = app.project.books[0].columns[0]
+        .data
+        .converted(scicanvas_core::DataKind::DateTime)
+        .unwrap();
+    app.run_command("book.new");
+    app.undo();
+    let before = app.project.clone();
+    let redo = app.history.redo_label().unwrap().to_string();
+    app.selection.insert(1, vec!["A".into()]);
+    app.dialog = Some(Dialog::ConvertText {
+        book: 1,
+        key: "B".into(),
+        row: 0,
+        value: "older input".into(),
+    });
+    let mut state = SheetState {
+        range: Some(Range::single(0, 0)),
+        edit: Some(Edit {
+            cell: Cell { c: 0, r: 0 },
+            buf: "unfinished".into(),
+            focused: false,
+        }),
+        ..Default::default()
+    };
+    let ctx = egui::Context::default();
+    let _ = ctx.run(
+        egui::RawInput {
+            events: vec![egui::Event::Paste("bad\t9\r\n".into())],
+            ..Default::default()
+        },
+        |ctx| app.sheet_keys(ctx, 1, &mut state),
+    );
+    assert_eq!(app.project, before);
+    assert_eq!(state.edit.as_ref().unwrap().buf, "unfinished");
+    assert_eq!(app.selected_keys(1), ["A"]);
+    assert!(matches!(&app.dialog,Some(Dialog::ConvertText {value,..}) if value=="older input"));
+    assert!(!app.history.is_pending());
+    assert!(app.history.undo_label().is_none());
+    assert_eq!(app.history.redo_label(), Some(redo.as_str()));
+    state.edit = None;
+    let _ = ctx.run(
+        egui::RawInput {
+            events: vec![egui::Event::Copy],
+            ..Default::default()
+        },
+        |ctx| app.sheet_keys(ctx, 1, &mut state),
+    );
+    assert_eq!(app.project, before);
+    assert!(!app.history.is_pending());
+    assert_eq!(app.history.redo_label(), Some(redo.as_str()));
+}
+
+#[test]
+fn migrated_worksheet_dialogs_match_core_results_and_commit_one_step() {
+    use scicanvas_core::{project_file, stats::Sequence};
+    for case in 0..4 {
+        let mut app = app();
+        app.active = Some(1);
+        if case == 3 {
+            app.project.books[0].columns[0].data = vec!["b".into(), "a".into(), "b".into()].into();
+            app.project.books[0].columns[0].data = app.project.books[0].columns[0]
+                .data
+                .converted(scicanvas_core::DataKind::Category)
+                .unwrap();
+        }
+        let before = app.project.clone();
+        let mut expected = before.clone();
+        let label = match case {
+            0 => {
+                app.selection.insert(1, vec!["A".into()]);
+                app.open_sort_dialog();
+                if let Some(Dialog::Sort { keys, .. }) = &mut app.dialog {
+                    keys[0] = (Some(0), false);
+                } else {
+                    panic!("sort");
+                }
+                expected.sort_rows(1, &[("A".into(), false)], None).unwrap();
+                press_dialog_button(&mut app, "排序");
+                "排序"
+            }
+            1 => {
+                app.selection.insert(1, vec!["C".into()]);
+                app.open_set_values_dialog();
+                if let Some(Dialog::SetValues { formula, keep, .. }) = &mut app.dialog {
+                    *formula = "B * 2".into();
+                    *keep = true;
+                } else {
+                    panic!("formula");
+                }
+                expected.set_column_formula(1, "C", "B * 2", true).unwrap();
+                press_dialog_button(&mut app, "计算");
+                "设置列值"
+            }
+            2 => {
+                app.selection.insert(1, vec!["B".into()]);
+                app.open_fill_dialog();
+                if let Some(Dialog::Fill { a, b, rows, .. }) = &mut app.dialog {
+                    *a = 1.0;
+                    *b = 2.0;
+                    *rows = 4;
+                } else {
+                    panic!("fill");
+                }
+                expected
+                    .fill_sequence(1, "B", Sequence::Arithmetic { start: 1.0, step: 2.0 }, 4, 0)
+                    .unwrap();
+                press_dialog_button(&mut app, "填充");
+                "填充数据序列"
+            }
+            _ => {
+                app.selection.insert(1, vec!["A".into()]);
+                app.open_category_order_dialog();
+                if let Some(Dialog::CategoryOrder { levels, .. }) = &mut app.dialog {
+                    levels.reverse();
+                } else {
+                    panic!("categories");
+                }
+                let Some(Dialog::CategoryOrder { levels, .. }) = &app.dialog else {
+                    panic!("categories");
+                };
+                expected.books[0].columns[0].data.set_category_order(levels).unwrap();
+                app.refresh_book_preview();
+                press_dialog_button(&mut app, "×");
+                "类别顺序"
+            }
+        };
+        expected.recalc_computed(false);
+        assert_eq!(app.project, expected, "case {case}: {}", app.status);
+        assert_eq!(app.history.undo_label(), Some(label));
+        assert_eq!(
+            project_file::from_scv(&project_file::to_scv(&app.project).unwrap()).unwrap(),
+            app.project
+        );
+        roundtrip(&mut app, &before);
+        app.undo();
+        assert!(app.history.undo_label().is_none());
     }
 }

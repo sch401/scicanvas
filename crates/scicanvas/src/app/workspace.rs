@@ -162,22 +162,28 @@ impl SciApp {
     }
 
     pub(super) fn delete_item(&mut self, id: u64) {
-        self.begin_edit("删除对象");
-        self.active_layers.remove(&id);
-        let name = self.project.name_of(id).unwrap_or("").to_string();
-        self.project.remove(id);
-        self.explorer_selection.retain(|selected| *selected != id);
-        self.open.remove(&id);
-        self.selection.remove(&id);
-        if self.active == Some(id) {
-            self.active = None;
-        }
-        if self.props_for == Some(id) {
-            self.props_for = None;
-        }
-        self.sheets.remove(&id);
-        self.status = format!("已删除 {}", name);
-        self.history.changed();
+        self.edit_with(
+            "删除对象",
+            |project| {
+                let name = project.name_of(id).unwrap_or("").to_string();
+                project.remove(id);
+                Ok(Some(name))
+            },
+            |app, name| {
+                app.active_layers.remove(&id);
+                app.explorer_selection.retain(|selected| *selected != id);
+                app.open.remove(&id);
+                app.selection.remove(&id);
+                if app.active == Some(id) {
+                    app.active = None;
+                }
+                if app.props_for == Some(id) {
+                    app.props_for = None;
+                }
+                app.sheets.remove(&id);
+                app.status = format!("已删除 {}", name);
+            },
+        );
     }
 
     pub(crate) fn project_target(&self) -> Option<u64> {

@@ -530,3 +530,107 @@ fn transaction_success_presentation_precedes_formula_diagnostics_and_is_not_run_
     assert_eq!(app.project, before);
     assert_eq!(app.status, "计算失败");
 }
+
+#[test]
+fn all_marked_commands_use_the_unified_transaction_and_roundtrip_in_one_step() {
+    let mut changed = std::collections::HashSet::new();
+    for command in commands::commands()
+        .iter()
+        .filter(|c| c.modifies && c.id != "file.import")
+    {
+        for scope in 0..3 {
+            let mut app = app();
+            let folder = app.project.add_folder(None).unwrap();
+            app.active = Some(if scope == 1 { 2 } else { 1 });
+            app.explorer_target = Some(match scope {
+                0 => 1,
+                1 => 2,
+                _ => folder,
+            });
+            app.explorer_selection = vec![app.explorer_target.unwrap()];
+            app.project_name = "Renamed".into();
+            app.folder_destination = Some(folder);
+            app.selection.insert(1, vec!["B".into(), "C".into()]);
+            let before = app.project.clone();
+            app.run_command(command.id);
+            assert_eq!(app.edit_depth, 0, "{} scope {scope}", command.id);
+            assert!(app.edit_abort.is_none());
+            assert!(!app.history.is_pending(), "{} scope {scope}", command.id);
+            if app.project != before {
+                changed.insert(command.id);
+                roundtrip(&mut app, &before);
+                app.undo();
+                assert!(app.history.undo_label().is_none(), "{} scope {scope}", command.id);
+            } else {
+                assert!(app.history.undo_label().is_none(), "{} scope {scope}", command.id);
+            }
+        }
+    }
+    for id in [
+        "book.new",
+        "graph.new",
+        "note.new",
+        "col.delete",
+        "fit.linear",
+        "project.rename",
+        "project.move",
+        "project.folder.remove",
+        "example.line",
+    ] {
+        assert!(changed.contains(id), "command was not exercised: {id}");
+    }
+}
+
+#[test]
+fn nested_edit_reuses_the_outer_step_and_aborts_the_whole_command_on_failure_or_cancel() {
+    for outcome in ["success", "cancel", "error"] {
+        let mut app = app();
+        app.run_command("book.new");
+        app.undo();
+        let before = app.project.clone();
+        let redo = app.history.redo_label().unwrap().to_string();
+        let mut shown = false;
+        let result = app.edit_action_with(
+            "outer",
+            |app| {
+                assert_eq!(app.edit_depth, 1);
+                let id = app.edit("inner", |project| {
+                    let id = project.new_book();
+                    match outcome {
+                        "success" => Ok(Some(id)),
+                        "cancel" => Ok(None),
+                        _ => Err("nested failure".into()),
+                    }
+                });
+                if outcome != "success" {
+                    app.project.new_book();
+                }
+                Ok(Some(id))
+            },
+            |_, id| {
+                shown = true;
+                id
+            },
+        );
+        assert_eq!(app.edit_depth, 0);
+        assert!(app.edit_abort.is_none());
+        assert!(!app.history.is_pending());
+        if outcome == "success" {
+            assert!(result.flatten().is_some());
+            assert!(shown);
+            assert_eq!(app.history.undo_label(), Some("outer"));
+            roundtrip(&mut app, &before);
+            app.undo();
+            assert!(app.history.undo_label().is_none());
+        } else {
+            assert_eq!(result, None);
+            assert!(!shown);
+            assert_eq!(app.project, before);
+            assert_eq!(app.history.redo_label(), Some(redo.as_str()));
+            assert!(app.history.undo_label().is_none());
+            if outcome == "error" {
+                assert_eq!(app.status, "nested failure");
+            }
+        }
+    }
+}

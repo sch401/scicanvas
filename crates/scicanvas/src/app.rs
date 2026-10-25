@@ -57,12 +57,20 @@ enum ColAction {
     AddToGraph(u64),
 }
 
+// 嵌套操作共享最外层事务，内部取消或失败使整次命令回滚。
+enum EditAbort {
+    Cancelled,
+    Failed(String),
+}
+
 pub struct SciApp {
     analysis_curves: HashMap<(u64, usize), Vec<scicanvas_core::plotspec::DataRef>>,
     pub(crate) project: Project,
     pub(crate) history: History,
     history_group: Option<egui::Id>,
     last_history_group: Option<egui::Id>,
+    edit_depth: usize,
+    edit_abort: Option<EditAbort>,
     /// 每个工作簿/图形的窗口是否显示。
     pub(crate) open: HashMap<u64, bool>,
     /// 每个工作簿里选中的列（保持点击顺序）。
@@ -161,6 +169,8 @@ impl SciApp {
             history: History::default(),
             history_group: None,
             last_history_group: None,
+            edit_depth: 0,
+            edit_abort: None,
             adding_text: None,
             object_editor: None,
             plot_epoch: 0,
@@ -688,15 +698,17 @@ impl SciApp {
                 } else {
                     c.label.to_string()
                 };
-                // ponytail: 迁移期命令可能多建一次快照，旧调用迁完后移除外层 begin。
                 if c.modifies {
-                    self.begin_edit(&label);
-                }
-                (c.run)(self);
-                // 已迁移的操作自行提交或回滚，旧命令仍由外层收尾。
-                if c.modifies && self.history.is_pending() {
-                    self.history.changed();
-                    self.finish_edit();
+                    self.edit_action_with(
+                        &label,
+                        |app| {
+                            (c.run)(app);
+                            Ok(Some(()))
+                        },
+                        |_, ()| {},
+                    );
+                } else {
+                    (c.run)(self);
                 }
             }
             Err(why) => self.status = why.to_string(),
@@ -716,41 +728,108 @@ impl SciApp {
         f: impl FnOnce(&mut Project) -> Result<Option<T>, String>,
         show: impl FnOnce(&mut Self, T) -> R,
     ) -> Option<R> {
-        self.finish_edit();
-        self.history_group = None;
-        self.begin_edit(label);
-        match f(&mut self.project) {
-            Ok(Some(value)) => {
+        self.edit_action_with(label, |app| f(&mut app.project), show)
+    }
+
+    /// 旧命令包含界面副作用，适配到同一事务实现；嵌套入口复用原快照。
+    fn edit_action_with<T, R>(
+        &mut self,
+        label: &str,
+        f: impl FnOnce(&mut Self) -> Result<Option<T>, String>,
+        show: impl FnOnce(&mut Self, T) -> R,
+    ) -> Option<R> {
+        let outer = self.edit_depth == 0;
+        if outer {
+            self.finish_edit();
+            self.history_group = None;
+            self.edit_abort = None;
+            self.begin_edit(label);
+        } else if self.edit_abort.is_some() {
+            return None;
+        }
+        self.edit_depth += 1;
+        let outcome = f(self);
+        self.edit_depth -= 1;
+        let result = match outcome {
+            Ok(Some(value)) if self.edit_abort.is_none() => {
                 self.history.changed_if_different(&self.project);
-                let result = show(self, value);
-                self.finish_edit();
-                Some(result)
+                Some(show(self, value))
             }
-            result => {
-                self.project = self.history.rollback().unwrap();
-                if let Err(error) = result {
-                    self.status = error;
+            Ok(_) => {
+                if self.edit_abort.is_none() {
+                    self.edit_abort = Some(EditAbort::Cancelled);
                 }
                 None
             }
+            Err(error) => {
+                self.status = error.clone();
+                if self.edit_abort.is_none() {
+                    self.edit_abort = Some(EditAbort::Failed(error));
+                }
+                None
+            }
+        };
+        if outer {
+            if let Some(abort) = self.edit_abort.take() {
+                self.project = self.history.rollback().unwrap();
+                if let EditAbort::Failed(error) = abort {
+                    self.status = error;
+                }
+            } else {
+                self.finish_edit();
+            }
         }
+        result
     }
 
     /// 连续编辑只接收已验证的实际修改；同组复用快照，换组或离散操作分步。
     /// 校验留在原草稿/局部编辑视图中，避免每帧复制整个项目来处理失败。
     fn edit_grouped(&mut self, label: &str, group: Option<egui::Id>, f: impl FnOnce(&mut Project)) {
+        self.edit_grouped_with(
+            label,
+            group,
+            |project| {
+                f(project);
+                Ok(())
+            },
+            |_, ()| {},
+        )
+        .unwrap();
+    }
+
+    /// 原子校验失败不写项目，保留组内此前的有效输入；成功展示先于重算。
+    /// f 返回 Err 时须保持项目原样，适用于既有的原子列属性操作。
+    fn edit_grouped_with<T>(
+        &mut self,
+        label: &str,
+        group: Option<egui::Id>,
+        f: impl FnOnce(&mut Project) -> Result<T, String>,
+        show: impl FnOnce(&mut Self, T),
+    ) -> Result<(), String> {
         if self.history.is_pending() && (group.is_none() || self.last_history_group != group) {
             self.finish_edit();
         }
-        if !self.history.is_pending() {
+        let fresh = !self.history.is_pending();
+        if fresh {
             self.begin_edit(label);
         } else {
             self.pending_repaint = true;
         }
-        f(&mut self.project);
-        self.history.changed();
         self.history_group = group;
-        self.finish_frame_edit(group);
+        match f(&mut self.project) {
+            Ok(value) => {
+                self.history.changed();
+                show(self, value);
+                self.finish_frame_edit(group);
+                Ok(())
+            }
+            Err(error) => {
+                if fresh {
+                    self.project = self.history.rollback().unwrap();
+                }
+                Err(error)
+            }
+        }
     }
 
     fn begin_edit(&mut self, label: &str) {
@@ -2064,10 +2143,14 @@ impl SciApp {
             dialogs::Action::Close => self.dialog = None,
             dialogs::Action::ColumnProps(book, edit) => {
                 let mut preview = self.book_preview.take();
-                self.begin_edit("列属性");
+                let focus = ctx
+                    .memory(|m| m.focused())
+                    .filter(|id| egui::TextEdit::load_state(ctx, *id).is_some());
+                if focus.is_some() || ctx.input(|i| i.pointer.primary_down()) {
+                    self.history_group = Some(focus.unwrap_or_else(|| egui::Id::new("live-column-properties")));
+                }
                 match self.apply_column_props(book, edit) {
                     Ok(()) => {
-                        self.history.changed();
                         if let Some(Dialog::ColumnProps { before, edit, .. }) = &mut self.dialog {
                             *before = edit.clone();
                         }
@@ -2082,28 +2165,24 @@ impl SciApp {
                     }
                 }
                 self.book_preview = preview;
-                let focus = ctx
-                    .memory(|m| m.focused())
-                    .filter(|id| egui::TextEdit::load_state(ctx, *id).is_some());
-                if focus.is_some() || ctx.input(|i| i.pointer.primary_down()) {
-                    self.history_group = Some(focus.unwrap_or_else(|| egui::Id::new("live-column-properties")));
-                }
             }
             dialogs::Action::ConvertText(book, key, row, value) => {
-                self.finish_edit();
-                self.begin_edit("转换为文本列并写入");
-                if let Some(column) = self
-                    .project
-                    .book_mut(book)
-                    .and_then(|b| b.columns.iter_mut().find(|c| c.key == key))
-                {
-                    column.data = column.data.converted(scicanvas_core::DataKind::Text).unwrap();
-                    column.set(row, value);
-                    self.history.changed();
-                    self.status = format!("列 {key} 已转换为文本；已有内容保留");
-                }
+                self.edit_with(
+                    "转换为文本列并写入",
+                    |project| {
+                        let Some(column) = project
+                            .book_mut(book)
+                            .and_then(|b| b.columns.iter_mut().find(|c| c.key == key))
+                        else {
+                            return Ok(None);
+                        };
+                        column.data = column.data.converted(scicanvas_core::DataKind::Text).unwrap();
+                        column.set(row, value);
+                        Ok(Some(()))
+                    },
+                    |app, ()| app.status = format!("列 {key} 已转换为文本；已有内容保留"),
+                );
                 self.dialog = None;
-                self.finish_edit();
             }
             dialogs::Action::Fit(order) => {
                 self.finish_edit();
@@ -2124,42 +2203,35 @@ impl SciApp {
                 );
             }
             dialogs::Action::Sort(book, keys, within) => {
-                self.finish_edit();
-                self.begin_edit("排序");
-                match self.project.sort_rows(book, &keys, within.as_deref()) {
-                    Ok(()) => {
+                self.edit_with(
+                    "排序",
+                    |project| project.sort_rows(book, &keys, within.as_deref()).map(Some),
+                    |app, ()| {
                         let names: Vec<String> = keys
                             .iter()
                             .map(|(k, asc)| format!("{k}{}", if *asc { "升序" } else { "降序" }))
                             .collect();
-                        self.status = match &within {
+                        app.status = match &within {
                             Some(cols) => format!("已按 {} 排序 {} 列，其余列不动", names.join("、"), cols.join("、")),
                             None => format!("已按 {} 排序整张工作表", names.join("、")),
                         };
-                        self.dialog = None;
-                        self.history.changed();
-                    }
-                    Err(e) => self.status = e,
-                }
-                self.finish_edit();
+                        app.dialog = None;
+                    },
+                );
             }
             dialogs::Action::CategoryOrder(book, key, levels) => {
-                self.finish_edit();
-                self.begin_edit("类别顺序");
-                let result = self
-                    .project
-                    .book_mut(book)
-                    .and_then(|b| b.columns.iter_mut().find(|c| c.key == key))
-                    .ok_or_else(|| "找不到这一列".to_string())
-                    .and_then(|c| c.data.set_category_order(&levels));
-                match result {
-                    Ok(()) => {
-                        self.status = format!("已设置 {key} 列的类别顺序");
-                        self.history.changed();
-                    }
-                    Err(e) => self.status = e,
-                }
-                self.finish_edit();
+                self.edit_with(
+                    "类别顺序",
+                    |project| {
+                        project
+                            .book_mut(book)
+                            .and_then(|b| b.columns.iter_mut().find(|c| c.key == key))
+                            .ok_or_else(|| "找不到这一列".to_string())
+                            .and_then(|c| c.data.set_category_order(&levels))
+                            .map(Some)
+                    },
+                    |app, ()| app.status = format!("已设置 {key} 列的类别顺序"),
+                );
             }
             dialogs::Action::SgDiff(w, order, deriv) => {
                 self.finish_edit();
@@ -2200,20 +2272,14 @@ impl SciApp {
             }
             dialogs::Action::SetValues(formula, keep) => {
                 self.finish_edit();
-                self.begin_edit("设置列值");
                 if self.set_column_values(&formula, keep) {
                     self.dialog = None;
-                    self.history.changed();
                 }
-                self.finish_edit();
             }
             dialogs::Action::Fill(kind, rows) => {
                 self.finish_edit();
-                self.begin_edit("填充数据序列");
                 self.dialog = None;
                 self.fill_sequence(kind, rows);
-                self.history.changed();
-                self.finish_edit();
             }
             dialogs::Action::FftFilter(kind) => {
                 self.finish_edit();
@@ -2531,67 +2597,48 @@ impl SciApp {
             }
             _ => {}
         }
-        self.begin_edit(match action {
+        let label = match action {
             A::Move(..) => "移动图形对象",
             A::AddText(..) => "添加文字",
             A::Delete(..) => "删除图形对象",
             _ => "图例自动避让",
+        };
+        if let A::Move(target, position) = action {
+            let page = &self.project.graph(graph).unwrap().page;
+            let changed = match target {
+                T::Text(id) => page.text(id).is_some_and(|t| t.position != position),
+                T::Legend(index) => page
+                    .layers()
+                    .get(index)
+                    .is_some_and(|l| l.legend_position != Some(position)),
+            };
+            if changed {
+                self.edit_grouped(label, Some(egui::Id::new(("object-drag", graph))), |project| {
+                    let page = &mut project.graph_mut(graph).unwrap().page;
+                    match target {
+                        T::Text(id) => page.text_mut(id).unwrap().position = position,
+                        T::Legend(index) => page.layers_mut()[index].legend_position = Some(position),
+                    }
+                });
+            }
+            return;
+        }
+        self.edit_with(label,|project| {
+            let page=&mut project.graph_mut(graph).unwrap().page;
+            let text=match action {
+                A::AddText(position)=>Some(page.add_text(position)?),
+                A::Delete(T::Text(id))=>{page.annotations.retain(|t|t.id!=id);None},
+                A::Delete(T::Legend(index))=>{if let Some(l)=page.layers_mut().get_mut(index){l.legend=false;}None},
+                A::AutoLegend(index)=>{if let Some(l)=page.layers_mut().get_mut(index){l.legend=true;l.legend_position=None;}None},
+                _=>None,
+            };
+            Ok(Some(text))
+        },|app,text| {
+            if let Some(id)=text {
+                app.adding_text=None;app.object_editor=Some(ObjectEditor {graph,target:T::Text(id),focus:true});
+            }
+            if matches!(action,A::Delete(target) if app.object_editor.is_some_and(|e|e.graph==graph && e.target==target)) {app.object_editor=None;}
         });
-        let page = &mut self.project.graph_mut(graph).unwrap().page;
-        let mut changed = false;
-        match action {
-            A::AddText(position) => match page.add_text(position) {
-                Ok(id) => {
-                    changed = true;
-                    self.adding_text = None;
-                    self.object_editor = Some(ObjectEditor {
-                        graph,
-                        target: T::Text(id),
-                        focus: true,
-                    });
-                }
-                Err(e) => self.status = e,
-            },
-            A::Move(T::Text(id), position) => {
-                if let Some(text) = page.text_mut(id) {
-                    changed = text.position != position;
-                    text.position = position;
-                }
-            }
-            A::Move(T::Legend(index), position) => {
-                if let Some(layer) = page.layers_mut().get_mut(index) {
-                    changed = layer.legend_position != Some(position);
-                    layer.legend_position = Some(position);
-                }
-            }
-            A::Delete(T::Text(id)) => {
-                let n = page.annotations.len();
-                page.annotations.retain(|t| t.id != id);
-                changed = n != page.annotations.len();
-            }
-            A::Delete(T::Legend(index)) => {
-                if let Some(layer) = page.layers_mut().get_mut(index) {
-                    changed = layer.legend;
-                    layer.legend = false;
-                }
-            }
-            A::AutoLegend(index) => {
-                if let Some(layer) = page.layers_mut().get_mut(index) {
-                    changed = !layer.legend || layer.legend_position.is_some();
-                    layer.legend = true;
-                    layer.legend_position = None;
-                }
-            }
-            _ => {}
-        }
-        if matches!(action, A::Delete(target) if self.object_editor.is_some_and(|e| e.graph == graph && e.target == target))
-        {
-            self.object_editor = None;
-        }
-        if changed {
-            self.history.changed();
-            self.pending_repaint = true;
-        }
     }
 
     fn graph_ui(&mut self, ui: &mut egui::Ui, id: u64) {
@@ -2768,22 +2815,18 @@ impl SciApp {
     pub(crate) fn add_to_graph(&mut self, book_id: u64, gid: u64) {
         let keys = self.selected_keys(book_id);
         let layer = self.layer_index(gid);
-        self.begin_edit("添加曲线");
-        match self.project.add_curves(gid, layer, book_id, &keys) {
-            Ok(n) => {
-                if n > 0 {
-                    self.history.changed();
-                }
-                self.status = if n > 0 {
+        self.edit_with(
+            "添加曲线",
+            |project| project.add_curves(gid, layer, book_id, &keys).map(Some),
+            |app, n| {
+                app.status = if n > 0 {
                     format!("已添加 {n} 条曲线")
                 } else {
                     "这些列已在图层里".into()
                 };
-                self.show_item(gid);
-            }
-            Err(why) => self.status = why,
-        }
-        self.finish_edit();
+                app.show_item(gid);
+            },
+        );
     }
 
     /// 从图层移除一条曲线（一步撤销）。
