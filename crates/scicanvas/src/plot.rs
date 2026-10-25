@@ -412,6 +412,96 @@ fn paint_canvas(ui: &egui::Ui, canvas: Rect, page: Rect) {
     );
 }
 
+#[derive(Clone, Copy)]
+struct ViewInput<'a> {
+    response: &'a egui::Response,
+    transform: egui::emath::TSTransform,
+    hovered: Option<usize>,
+    dragging: Option<usize>,
+    block_pan: bool,
+}
+
+fn update_saved_view(
+    ui: &mut egui::Ui,
+    id: egui::Id,
+    g: &Graph,
+    project: &Project,
+    mut sc: std::sync::Arc<Scene>,
+    saved: &mut [Option<Saved>],
+    input: ViewInput<'_>,
+) -> std::sync::Arc<Scene> {
+    let mut changed = false;
+    if let Some(index) = input.dragging.or(input.hovered).filter(|_| !input.block_pan) {
+        let layer = &g.page.layers()[index];
+        let layout = &sc.layers[index];
+        if input.response.double_clicked() {
+            saved[index] = None;
+            changed = true;
+        } else {
+            let mut view = layout.view();
+            if input.dragging.is_some() {
+                let d = input.response.drag_delta();
+                if d != egui::Vec2::ZERO {
+                    view.x = adjust(
+                        view.x,
+                        layer.x_log,
+                        -d.x as f64 / f64::from(input.transform.scaling) / layout.plot[2],
+                        1.0,
+                        0.5,
+                    );
+                    view.y = adjust(
+                        view.y,
+                        layer.y_log,
+                        d.y as f64 / f64::from(input.transform.scaling) / layout.plot[3],
+                        1.0,
+                        0.5,
+                    );
+                    changed = true;
+                }
+            } else if let Some(p) = input.response.hover_pos() {
+                let (scroll, zoom_delta, alt) = ui.input(|i| (i.smooth_scroll_delta, i.zoom_delta(), i.modifiers.alt));
+                let (mut zx, mut zy) = (1.0, 1.0);
+                if scroll.y != 0.0 {
+                    let z = (-scroll.y as f64 * 0.0025).exp();
+                    zy = z;
+                    if !alt {
+                        zx = z;
+                    }
+                } else if scroll.x != 0.0 {
+                    zx = (-scroll.x as f64 * 0.0025).exp();
+                }
+                if zoom_delta != 1.0 {
+                    zx /= zoom_delta as f64;
+                    zy /= zoom_delta as f64;
+                }
+                if zx != 1.0 || zy != 1.0 {
+                    let (x, y) = {
+                        let point = input.transform.inverse() * p;
+                        (point.x as f64, point.y as f64)
+                    };
+                    let fx = ((x - layout.plot[0]) / layout.plot[2]).clamp(0.0, 1.0);
+                    let fy = ((layout.plot[1] + layout.plot[3] - y) / layout.plot[3]).clamp(0.0, 1.0);
+                    view.x = adjust(view.x, layer.x_log, 0.0, zx, fx);
+                    view.y = adjust(view.y, layer.y_log, 0.0, zy, fy);
+                    changed = true;
+                }
+            }
+            if changed {
+                saved[index] = Some(Saved {
+                    view,
+                    key: axis_key(layer),
+                    spec: layer.spec.clone(),
+                });
+            }
+        }
+    }
+    if changed {
+        let views = saved.iter().map(|s| s.as_ref().map(|s| s.view)).collect::<Vec<_>>();
+        sc = cached_layout(ui, id, g, project, views);
+    }
+    sc
+}
+
 pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize, objects: ObjectUi) -> PlotOutput {
     let id = view_id(g.id);
     let available = ui.available_size().max(vec2(120.0, 90.0));
@@ -438,7 +528,7 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize, ob
         }
     }
     let views = |saved: &[Option<Saved>]| saved.iter().map(|s| s.as_ref().map(|s| s.view)).collect::<Vec<_>>();
-    let mut sc = cached_layout(ui, id, g, project, views(&saved));
+    let sc = cached_layout(ui, id, g, project, views(&saved));
     let object = interact_objects(ui, &response, g, &sc, transform, objects);
     let hovered = response.hover_pos().and_then(|p| {
         let (x, y) = local(p);
@@ -466,71 +556,14 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize, ob
     } else {
         None
     };
-    let mut changed = false;
-    if let Some(index) = dragging.or(hovered).filter(|_| !object.block_pan) {
-        let layer = &g.page.layers()[index];
-        let layout = &sc.layers[index];
-        if response.double_clicked() {
-            saved[index] = None;
-            changed = true;
-        } else {
-            let mut view = layout.view();
-            if dragging.is_some() {
-                let d = response.drag_delta();
-                if d != egui::Vec2::ZERO {
-                    view.x = adjust(
-                        view.x,
-                        layer.x_log,
-                        -d.x as f64 / f64::from(transform.scaling) / layout.plot[2],
-                        1.0,
-                        0.5,
-                    );
-                    view.y = adjust(
-                        view.y,
-                        layer.y_log,
-                        d.y as f64 / f64::from(transform.scaling) / layout.plot[3],
-                        1.0,
-                        0.5,
-                    );
-                    changed = true;
-                }
-            } else if let Some(p) = response.hover_pos() {
-                let (scroll, zoom_delta, alt) = ui.input(|i| (i.smooth_scroll_delta, i.zoom_delta(), i.modifiers.alt));
-                let (mut zx, mut zy) = (1.0, 1.0);
-                if scroll.y != 0.0 {
-                    let z = (-scroll.y as f64 * 0.0025).exp();
-                    zy = z;
-                    if !alt {
-                        zx = z;
-                    }
-                } else if scroll.x != 0.0 {
-                    zx = (-scroll.x as f64 * 0.0025).exp();
-                }
-                if zoom_delta != 1.0 {
-                    zx /= zoom_delta as f64;
-                    zy /= zoom_delta as f64;
-                }
-                if zx != 1.0 || zy != 1.0 {
-                    let (x, y) = local(p);
-                    let fx = ((x - layout.plot[0]) / layout.plot[2]).clamp(0.0, 1.0);
-                    let fy = ((layout.plot[1] + layout.plot[3] - y) / layout.plot[3]).clamp(0.0, 1.0);
-                    view.x = adjust(view.x, layer.x_log, 0.0, zx, fx);
-                    view.y = adjust(view.y, layer.y_log, 0.0, zy, fy);
-                    changed = true;
-                }
-            }
-            if changed {
-                saved[index] = Some(Saved {
-                    view,
-                    key: axis_key(layer),
-                    spec: layer.spec.clone(),
-                });
-            }
-        }
-    }
-    if changed {
-        sc = cached_layout(ui, id, g, project, views(&saved));
-    }
+    let input = ViewInput {
+        response: &response,
+        transform,
+        hovered,
+        dragging,
+        block_pan: object.block_pan,
+    };
+    let sc = update_saved_view(ui, id, g, project, sc, &mut saved, input);
     paint(ui, rect, &sc);
     if let Some(layout) = object.selected.and_then(|t| sc.objects.iter().find(|o| o.target == t)) {
         let [x, y, w, h] = layout.bounds;
@@ -565,9 +598,6 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize, ob
                 sc.layers[index].data_at(x, y)
             })
         });
-    if hover.is_some() && !response.dragged() {
-        ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
-    }
     // 数据点提示：屏幕上 8 像素以内吸附到最近的数据点
     let point = match (hovered, response.hover_pos()) {
         (Some(index), Some(p))
@@ -603,16 +633,15 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize, ob
             ui.label(text);
         });
     }
-    if dragging.is_some() {
-        ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
-    }
-    if object.dragging {
-        ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
-    } else if objects.adding {
-        ui.ctx().set_cursor_icon(egui::CursorIcon::Text);
-    } else if object.hover.is_some() {
-        ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
-    }
+    update_cursor(
+        ui,
+        hover.is_some(),
+        response.dragged(),
+        dragging.is_some(),
+        object.dragging,
+        objects.adding,
+        object.hover.is_some(),
+    );
     let zoomed = saved.iter().any(Option::is_some);
     ui.data_mut(|d| d.insert_temp(id, saved));
     PlotOutput {
@@ -625,6 +654,27 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize, ob
         selected_layer,
         hover_layer: hovered,
         point,
+    }
+}
+
+fn update_cursor(
+    ui: &egui::Ui,
+    hovered: bool,
+    response_dragged: bool,
+    view_dragged: bool,
+    object_dragged: bool,
+    adding: bool,
+    object_hovered: bool,
+) {
+    if hovered && !response_dragged {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
+    }
+    if view_dragged || object_dragged {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
+    } else if adding {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Text);
+    } else if object_hovered {
+        ui.ctx().set_cursor_icon(egui::CursorIcon::Grab);
     }
 }
 

@@ -1,13 +1,19 @@
 use super::*;
 
-pub(super) fn compose<'a>(
-    g: &Graph,
-    book: impl Fn(u64) -> Option<&'a Book>,
-    w: f64,
-    h: f64,
-    views: &[Option<View>],
-) -> Scene {
-    let others: BookLookup<'a, '_> = &book;
+#[derive(Clone, Copy)]
+struct PageGrid {
+    grid_count: usize,
+    cols: usize,
+    ox: f64,
+    oy: f64,
+    gap_x: f64,
+    gap_y: f64,
+    cw: f64,
+    ch: f64,
+    paper: Rgb,
+}
+
+fn page_grid(g: &Graph, w: f64, h: f64) -> PageGrid {
     let [lw0, lh0] = g.page.logical_size();
     let [ox, oy, gw, gh] = g.page.content_rect();
     let (sx, sy) = (w / lw0, h / lh0);
@@ -31,6 +37,20 @@ pub(super) fn compose<'a>(
         (gw - gap_x * (cols - 1) as f64) / cols as f64,
         (gh - gap_y * (rows - 1) as f64) / rows as f64,
     );
+    PageGrid {
+        grid_count,
+        cols,
+        ox,
+        oy,
+        gap_x,
+        gap_y,
+        cw,
+        ch,
+        paper,
+    }
+}
+
+fn linked_views<'a>(g: &Graph, others: BookLookup<'a, '_>, views: &[Option<View>]) -> Vec<Option<View>> {
     let mut linked: Vec<Option<View>> = (0..g.page.layers().len())
         .map(|i| views.get(i).copied().flatten())
         .collect();
@@ -45,7 +65,7 @@ pub(super) fn compose<'a>(
             .iter()
             .enumerate()
             .map(|(i, layer)| {
-                build_layer(layer, layer.book_id.and_then(&book), others, 400.0, 300.0, linked[i]).layers[0].view()
+                build_layer(layer, layer.book_id.and_then(others), others, 400.0, 300.0, linked[i]).layers[0].view()
             })
             .collect();
         for (i, layer) in g.page.layers().iter().enumerate() {
@@ -61,18 +81,26 @@ pub(super) fn compose<'a>(
             });
         }
     }
-    let views = &linked[..];
-    let k = g.page.scale();
+    linked
+}
+
+fn aligned_margins<'a>(
+    g: &Graph,
+    others: BookLookup<'a, '_>,
+    views: &[Option<View>],
+    grid: &PageGrid,
+    k: f64,
+) -> Vec<[f64; 4]> {
     let mut cells = Vec::new();
     let mut aligned = vec![[0.0; 4]; g.page.layers().len()];
-    if grid_count > 1 {
+    if grid.grid_count > 1 {
         let mut natural = Vec::new();
         for (i, layer) in g.page.layers().iter().enumerate() {
             if layer.placement.is_none() {
-                let (rw, rh) = (cw / k, ch / k);
+                let (rw, rh) = (grid.cw / k, grid.ch / k);
                 let sc = build_layer(
                     layer,
-                    layer.book_id.and_then(&book),
+                    layer.book_id.and_then(others),
                     others,
                     rw,
                     rh,
@@ -80,7 +108,7 @@ pub(super) fn compose<'a>(
                 );
                 let [left, top, pw, ph] = sc.plot;
                 let index = cells.len();
-                cells.push((i, index / cols, index % cols));
+                cells.push((i, index / grid.cols, index % grid.cols));
                 natural.push([left, top, rw - left - pw, rh - top - ph]);
             }
         }
@@ -101,69 +129,105 @@ pub(super) fn compose<'a>(
             ];
         }
     }
+    aligned
+}
+
+pub(super) fn compose<'a>(
+    g: &Graph,
+    book: impl Fn(u64) -> Option<&'a Book>,
+    w: f64,
+    h: f64,
+    views: &[Option<View>],
+) -> Scene {
+    let grid = page_grid(g, w, h);
+    let paper = grid.paper;
+    let book = book;
+    let others: BookLookup<'a, '_> = &book;
+    let linked = linked_views(g, others, views);
+    let views = &linked[..];
+    let k = g.page.scale();
+    let aligned = aligned_margins(g, others, views, &grid, k);
     let mut grid_index = 0;
     let mut manual_legends = Vec::new();
-    let mut scenes = g.page.layers().iter().enumerate().map(|(i, layer)| {
-        let [dx, dy, lw, lh] = match layer.placement {
-            Some(rect) => [rect.x * w, rect.y * h, rect.width * w, rect.height * h],
-            None => {
-                let index = grid_index;
-                grid_index += 1;
-                [
-                    ox + (index % cols) as f64 * (cw + gap_x),
-                    oy + (index / cols) as f64 * (ch + gap_y),
-                    cw,
-                    ch,
-                ]
-            }
-        };
-        let mut scene = build_layer_min(
-            layer,
-            layer.book_id.and_then(&book),
-            others,
-            lw / k,
-            lh / k,
-            views.get(i).copied().flatten(),
-            aligned[i],
-        );
-        for item in &mut scene.items {
-            scale_prim(&mut item.prim, k);
-            translate(&mut item.prim, dx, dy);
-            if let Some(rect) = &mut item.clip {
-                *rect = rect.map(|value| value * k);
-                rect[0] += dx;
-                rect[1] += dy;
-            }
-        }
-        scene.plot = scene.plot.map(|value| value * k);
-        scene.plot[0] += dx;
-        scene.plot[1] += dy;
-        scene.layers[0].plot = scene.plot;
-        scene.layers[0].bounds = [dx, dy, lw, lh];
-        for object in &mut scene.objects {
-            object.target = ObjectTarget::Legend(i);
-            object.bounds = object.bounds.map(|v| v * k);
-            object.bounds[0] += dx;
-            object.bounds[1] += dy;
-        }
-        if let Some(position) = layer.legend_position {
-            if let Some(mut object) = scene.objects.pop() {
-                // Manual placement changes translation only: keep the automatic plot rectangle stable.
-                let x = (position[0] * w).clamp(0.0, (w - object.bounds[2]).max(0.0));
-                let y = (position[1] * h).clamp(0.0, (h - object.bounds[3]).max(0.0));
-                let mut items: Vec<_> = scene.items.drain(object.items.clone()).collect();
-                for item in &mut items {
-                    translate(&mut item.prim, x - object.bounds[0], y - object.bounds[1]);
-                    item.clip = Some([0.0, 0.0, w, h]);
+    let scenes = g
+        .page
+        .layers()
+        .iter()
+        .enumerate()
+        .map(|(i, layer)| {
+            let [dx, dy, lw, lh] = match layer.placement {
+                Some(rect) => [rect.x * w, rect.y * h, rect.width * w, rect.height * h],
+                None => {
+                    let index = grid_index;
+                    grid_index += 1;
+                    [
+                        grid.ox + (index % grid.cols) as f64 * (grid.cw + grid.gap_x),
+                        grid.oy + (index / grid.cols) as f64 * (grid.ch + grid.gap_y),
+                        grid.cw,
+                        grid.ch,
+                    ]
                 }
-                object.bounds[0] = x;
-                object.bounds[1] = y;
-                object.overlay = true;
-                manual_legends.push((object, items));
+            };
+            let mut scene = build_layer_min(
+                layer,
+                layer.book_id.and_then(others),
+                others,
+                lw / k,
+                lh / k,
+                views.get(i).copied().flatten(),
+                aligned[i],
+            );
+            for item in &mut scene.items {
+                scale_prim(&mut item.prim, k);
+                translate(&mut item.prim, dx, dy);
+                if let Some(rect) = &mut item.clip {
+                    *rect = rect.map(|value| value * k);
+                    rect[0] += dx;
+                    rect[1] += dy;
+                }
             }
-        }
-        scene
-    });
+            scene.plot = scene.plot.map(|value| value * k);
+            scene.plot[0] += dx;
+            scene.plot[1] += dy;
+            scene.layers[0].plot = scene.plot;
+            scene.layers[0].bounds = [dx, dy, lw, lh];
+            for object in &mut scene.objects {
+                object.target = ObjectTarget::Legend(i);
+                object.bounds = object.bounds.map(|v| v * k);
+                object.bounds[0] += dx;
+                object.bounds[1] += dy;
+            }
+            if let Some(position) = layer.legend_position {
+                if let Some(mut object) = scene.objects.pop() {
+                    // Manual placement changes translation only: keep the automatic plot rectangle stable.
+                    let x = (position[0] * w).clamp(0.0, (w - object.bounds[2]).max(0.0));
+                    let y = (position[1] * h).clamp(0.0, (h - object.bounds[3]).max(0.0));
+                    let mut items: Vec<_> = scene.items.drain(object.items.clone()).collect();
+                    for item in &mut items {
+                        translate(&mut item.prim, x - object.bounds[0], y - object.bounds[1]);
+                        item.clip = Some([0.0, 0.0, w, h]);
+                    }
+                    object.bounds[0] = x;
+                    object.bounds[1] = y;
+                    object.overlay = true;
+                    manual_legends.push((object, items));
+                }
+            }
+            scene
+        })
+        .collect();
+    compose_page(g, scenes, manual_legends, w, h, paper)
+}
+
+fn compose_page(
+    g: &Graph,
+    scenes: Vec<Scene>,
+    manual_legends: Vec<(ObjectLayout, Vec<Item>)>,
+    w: f64,
+    h: f64,
+    paper: Rgb,
+) -> Scene {
+    let mut scenes = scenes.into_iter();
     let mut page = scenes
         .next()
         .unwrap_or_else(|| build_layer(&Layer::default(), None, &|_| None, w, h, None));

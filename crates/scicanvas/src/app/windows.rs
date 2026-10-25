@@ -1,0 +1,624 @@
+use super::*;
+
+impl SciApp {
+    pub(super) fn dialogs(&mut self, ctx: &egui::Context) {
+        let Some(frame) = self.generate_dialog_action(ctx) else {
+            return;
+        };
+        if !self.apply_dialog_action(ctx, frame.action) {
+            return;
+        }
+        self.finish_dialog_frame(ctx, frame.closing, frame.layer_before);
+    }
+
+    // ---------------------------------------------------------------- 输入
+
+    pub(super) fn shortcuts(&mut self, ctx: &egui::Context) {
+        use egui::{Key, Modifiers};
+        // 正在输入文字时，Ctrl+Z 留给 TextEdit 自己的文字历史。
+        let text_focus = ctx
+            .memory(|m| m.focused())
+            .is_some_and(|id| egui::TextEdit::load_state(ctx, id).is_some());
+        if !text_focus {
+            let redo_mod = Modifiers {
+                shift: true,
+                ..Modifiers::COMMAND
+            };
+            let action = ctx.input_mut(|i| {
+                if i.consume_key(redo_mod, Key::Z) || i.consume_key(Modifiers::COMMAND, Key::Y) {
+                    Some("edit.redo")
+                } else if i.consume_key(Modifiers::COMMAND, Key::Z) {
+                    Some("edit.undo")
+                } else {
+                    None
+                }
+            });
+            if let Some(id) = action {
+                self.run_command(id);
+            }
+        }
+        // 命令面板打开时，方向键、回车由面板自己处理
+        let keys: [(Modifiers, Key, &str); 9] = [
+            (Modifiers::COMMAND, Key::N, "book.new"),
+            (Modifiers::COMMAND, Key::O, "file.open"),
+            (Modifiers::COMMAND, Key::S, "file.save"),
+            (Modifiers::COMMAND, Key::I, "file.import"),
+            (Modifiers::COMMAND, Key::E, "graph.export"),
+            (Modifiers::COMMAND, Key::J, "graph.copy"),
+            (Modifiers::COMMAND, Key::K, "palette.open"),
+            (Modifiers::COMMAND, Key::F1, "ribbon.toggle"),
+            (Modifiers::NONE, Key::F1, "help.show"),
+        ];
+        let hit: Vec<&str> = ctx.input_mut(|inp| {
+            keys.iter()
+                .filter(|(m, k, _)| inp.consume_key(*m, *k))
+                .map(|(_, _, id)| *id)
+                .collect()
+        });
+        for id in hit {
+            self.run_command(id);
+        }
+        if self.ui.backstage && ctx.input(|i| i.key_pressed(Key::Escape)) {
+            self.ui.backstage = false;
+        }
+    }
+
+    // ---------------------------------------------------------------- 界面
+
+    pub(super) fn stats_text(&self) -> String {
+        let Some(id) = self.active else { return String::new() };
+        let Some(b) = self.project.book(id) else {
+            return String::new();
+        };
+        let sel = self.selected_keys(id);
+        let v: Vec<f64> = match self.multi_range(id) {
+            Some(r) if sel.is_empty() && !b.columns.is_empty() => b.columns[r.c0()..=r.c1().min(b.columns.len() - 1)]
+                .iter()
+                .flat_map(|c| (r.r0()..=r.r1()).map(move |i| c.data.f64_at(i).unwrap_or(f64::NAN)))
+                .filter(|x| x.is_finite())
+                .collect(),
+            _ => b
+                .columns
+                .iter()
+                .filter(|c| sel.contains(&c.key))
+                .flat_map(|c| c.values())
+                .filter(|x| x.is_finite())
+                .collect(),
+        };
+        if v.is_empty() {
+            return String::new();
+        }
+        let sum: f64 = v.iter().sum();
+        let min = v.iter().copied().fold(f64::INFINITY, f64::min);
+        let max = v.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+        format!(
+            "平均值 = {}   总和 = {}   计数 = {}   最小 = {}   最大 = {}",
+            scicanvas_core::fmt_num(sum / v.len() as f64),
+            scicanvas_core::fmt_num(sum),
+            v.len(),
+            scicanvas_core::fmt_num(min),
+            scicanvas_core::fmt_num(max)
+        )
+    }
+
+    pub(super) fn status_bar(&mut self, ui: &mut egui::Ui) {
+        let stats = self.stats_text();
+        ui.horizontal(|ui| {
+            ui.label(self.status.as_str());
+            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
+                ui.label(RichText::new(stats).monospace().weak());
+            });
+        });
+    }
+
+    pub(super) fn refresh_book_preview(&mut self) -> bool {
+        let edit = match &self.dialog {
+            Some(Dialog::ColumnProps { book, edit, .. }) => BookPreviewEdit::Properties(*book, edit.clone()),
+            Some(Dialog::CategoryOrder { book, key, levels, .. }) => {
+                BookPreviewEdit::Categories(*book, key.clone(), levels.clone())
+            }
+            Some(Dialog::Sort {
+                book,
+                columns,
+                keys,
+                selected,
+                only_selected,
+                ..
+            }) => BookPreviewEdit::Sort(
+                *book,
+                keys.iter()
+                    .filter_map(|(i, asc)| i.map(|i| (columns[i].0.clone(), *asc)))
+                    .collect(),
+                (*only_selected && !selected.is_empty()).then(|| selected.clone()),
+            ),
+            _ => return self.book_preview.take().is_some(),
+        };
+        if self.book_preview.as_ref().is_some_and(|p| p.edit == edit) {
+            return false;
+        }
+        let id = match &edit {
+            BookPreviewEdit::Properties(id, _)
+            | BookPreviewEdit::Categories(id, ..)
+            | BookPreviewEdit::Sort(id, ..) => *id,
+        };
+        let reusable = matches!((&self.book_preview, &edit),
+            (Some(BookPreview { edit: BookPreviewEdit::Properties(old_id, old), result: Ok(_), .. }),
+             BookPreviewEdit::Properties(id, new))
+            if old_id == id && old.kind == new.kind && old.role == new.role
+                && old.format.utc_offset == new.format.utc_offset);
+        // ponytail: type/role/category/sort changes copy one table; shared column storage can reduce this for very large tables.
+        // Names, units and display formats reuse the cached data, including during continuous typing.
+        let base = if reusable {
+            self.book_preview.take().unwrap().result
+        } else {
+            self.project.book(id).cloned().ok_or_else(|| "找不到工作簿".to_string())
+        };
+        let result = base.and_then(|mut book| {
+            match &edit {
+                BookPreviewEdit::Properties(_, edit) => edit.apply(&mut book)?,
+                BookPreviewEdit::Categories(_, key, levels) => book
+                    .columns
+                    .iter_mut()
+                    .find(|c| &c.key == key)
+                    .ok_or("找不到列")?
+                    .data
+                    .set_category_order(levels)?,
+                BookPreviewEdit::Sort(_, keys, within) => {
+                    let mut project = Project::default();
+                    project.books.push(book);
+                    project.sort_rows(id, keys, within.as_deref())?;
+                    book = project.books.remove(0);
+                }
+            }
+            Ok(book)
+        });
+        if let Some(Dialog::ColumnProps {
+            error, sample, edit, ..
+        }) = &mut self.dialog
+        {
+            *error = result.as_ref().err().cloned();
+            if let Ok(book) = &result {
+                *sample = book
+                    .column(&edit.key)
+                    .and_then(|c| (0..c.data.len()).find_map(|r| c.data.f64_at(r).filter(|v| v.is_finite())));
+            }
+        }
+        if let Some(Dialog::CategoryOrder { error, .. } | Dialog::Sort { error, .. }) = &mut self.dialog {
+            *error = result.as_ref().err().cloned();
+        }
+        let applied = result.as_ref().is_ok_and(|book| self.project.book(id) == Some(book));
+        self.book_preview = Some(BookPreview { edit, result, applied });
+        true
+    }
+
+    pub(super) fn preview_graph(&self, id: u64) -> Option<std::borrow::Cow<'_, scicanvas_core::Graph>> {
+        use std::borrow::Cow;
+        let graph = self.project.graph(id)?;
+        if let Some(Dialog::LayerContents(edit)) = &self.dialog {
+            if edit.graph == id && graph.page.layers().get(edit.index) == Some(&edit.before) {
+                let valid = edit.draft.plot_keys(true).is_empty()
+                    || edit
+                        .draft
+                        .book_id
+                        .and_then(|id| self.project.book(id))
+                        .is_some_and(|book| edit.draft.validate_in(book, &|id| self.project.book(id)).is_ok());
+                if valid && edit.draft != edit.before {
+                    let mut graph = graph.clone();
+                    graph.page.layers_mut()[edit.index] = edit.draft.clone();
+                    return Some(Cow::Owned(graph));
+                }
+            }
+        }
+        Some(Cow::Borrowed(graph))
+    }
+
+    pub(crate) fn start_text_annotation(&mut self) {
+        if let Some(id) = self.target_graph() {
+            self.finish_edit();
+            self.show_item(id);
+            self.explorer_focus = false;
+            self.adding_text = Some(id);
+            self.object_editor = None;
+            self.status = "单击页面放置文字，Esc 取消".into();
+        }
+    }
+
+    pub(crate) fn manage_annotations(&mut self) {
+        if let Some(graph) = self.target_graph() {
+            if let Some(text) = self.project.graph(graph).and_then(|g| g.page.annotations.last()) {
+                self.object_editor = Some(ObjectEditor {
+                    graph,
+                    target: plot::ObjectTarget::Text(text.id),
+                    focus: true,
+                });
+            } else {
+                self.status = "当前图形没有文字标注".into();
+            }
+        }
+    }
+
+    pub(crate) fn auto_legend(&mut self) {
+        if let Some(graph) = self.target_graph() {
+            self.apply_object_action(graph, plot::ObjectAction::AutoLegend(self.layer_index(graph)));
+        }
+    }
+
+    pub(super) fn apply_object_action(&mut self, graph: u64, action: plot::ObjectAction) {
+        use plot::{ObjectAction as A, ObjectTarget as T};
+        if self.project.graph(graph).is_none() {
+            return;
+        }
+        match action {
+            A::CancelAdd => {
+                self.adding_text = None;
+                return;
+            }
+            A::Edit(target) => {
+                self.finish_edit();
+                self.object_editor = Some(ObjectEditor {
+                    graph,
+                    target,
+                    focus: true,
+                });
+                return;
+            }
+            _ => {}
+        }
+        let label = match action {
+            A::Move(..) => "移动图形对象",
+            A::AddText(..) => "添加文字",
+            A::Delete(..) => "删除图形对象",
+            _ => "图例自动避让",
+        };
+        if let A::Move(target, position) = action {
+            let page = &self.project.graph(graph).unwrap().page;
+            let changed = match target {
+                T::Text(id) => page.text(id).is_some_and(|t| t.position != position),
+                T::Legend(index) => page
+                    .layers()
+                    .get(index)
+                    .is_some_and(|l| l.legend_position != Some(position)),
+            };
+            if changed {
+                self.edit_grouped(label, Some(egui::Id::new(("object-drag", graph))), |project| {
+                    let page = &mut project.graph_mut(graph).unwrap().page;
+                    match target {
+                        T::Text(id) => page.text_mut(id).unwrap().position = position,
+                        T::Legend(index) => page.layers_mut()[index].legend_position = Some(position),
+                    }
+                });
+            }
+            return;
+        }
+        self.edit_with(label,|project| {
+            let page=&mut project.graph_mut(graph).unwrap().page;
+            let text=match action {
+                A::AddText(position)=>Some(page.add_text(position)?),
+                A::Delete(T::Text(id))=>{page.annotations.retain(|t|t.id!=id);None},
+                A::Delete(T::Legend(index))=>{if let Some(l)=page.layers_mut().get_mut(index){l.legend=false;}None},
+                A::AutoLegend(index)=>{if let Some(l)=page.layers_mut().get_mut(index){l.legend=true;l.legend_position=None;}None},
+                _=>None,
+            };
+            Ok(Some(text))
+        },|app,text| {
+            if let Some(id)=text {
+                app.adding_text=None;app.object_editor=Some(ObjectEditor {graph,target:T::Text(id),focus:true});
+            }
+            if matches!(action,A::Delete(target) if app.object_editor.is_some_and(|e|e.graph==graph && e.target==target)) {app.object_editor=None;}
+        });
+    }
+
+    pub(super) fn graph_ui(&mut self, ui: &mut egui::Ui, id: u64) {
+        // The plot call is read-only. Temporarily supply the preview table to the shared scene builder,
+        // then restore it before processing any commands, exports or history operations.
+        let mut preview = self.book_preview.take();
+        let preview_book = preview.as_mut().and_then(|p| p.result.as_mut().ok());
+        let at = preview_book
+            .as_ref()
+            .and_then(|b| self.project.books.iter().position(|source| source.id == b.id));
+        if let (Some(at), Some(book)) = (at, preview_book) {
+            std::mem::swap(&mut self.project.books[at], book);
+        }
+        let out = self.preview_graph(id).map(|g| {
+            plot::show(
+                ui,
+                &g,
+                &self.project,
+                self.layer_index(id),
+                plot::ObjectUi {
+                    adding: self.adding_text == Some(id),
+                    epoch: self.plot_epoch,
+                    keyboard: self.active == Some(id) && !self.explorer_focus,
+                },
+            )
+        });
+        if let Some(at) = at {
+            std::mem::swap(
+                &mut self.project.books[at],
+                preview.as_mut().unwrap().result.as_mut().unwrap(),
+            );
+        }
+        self.book_preview = preview;
+        let Some(out) = out else { return };
+        if let Some(action) = out.action {
+            self.apply_object_action(id, action);
+        }
+        if out.object_dragging {
+            self.history_group = Some(egui::Id::new(("object-drag", id)));
+        }
+        if out.response.contains_pointer() && ui.input(|i| i.pointer.any_pressed()) {
+            self.explorer_focus = false;
+        }
+        if let Some(index) = out.selected_layer {
+            self.select_layer(id, index);
+        }
+        let rect = out.response.rect;
+
+        // 右下角显示鼠标处的坐标
+        if let Some((x, y)) = out.hover {
+            // 吸附到数据点时显示该点的值，否则显示鼠标处坐标
+            let text = match &out.point {
+                Some(hit) => format!(
+                    "图层 {} · {} · x = {}   y = {}",
+                    out.hover_layer.unwrap_or(0) + 1,
+                    hit.series,
+                    scicanvas_core::fmt_num(hit.x),
+                    scicanvas_core::fmt_num(hit.y)
+                ),
+                None => format!(
+                    "图层 {} · x = {}   y = {}",
+                    out.hover_layer.unwrap_or(0) + 1,
+                    round_sig(x, 4),
+                    round_sig(y, 4)
+                ),
+            };
+            ui.painter().text(
+                rect.right_bottom() + egui::vec2(-8.0, -6.0),
+                egui::Align2::RIGHT_BOTTOM,
+                text,
+                egui::FontId::proportional(11.5),
+                egui::Color32::from_gray(110),
+            );
+        } else if out.zoomed {
+            ui.painter().text(
+                rect.right_bottom() + egui::vec2(-8.0, -6.0),
+                egui::Align2::RIGHT_BOTTOM,
+                "双击恢复原始范围",
+                egui::FontId::proportional(11.5),
+                egui::Color32::from_gray(140),
+            );
+        }
+
+        let (act, remove, object_action) =
+            self.graph_context_menu(ui, id, &out.response, out.object, out.point.as_ref(), out.hover_layer);
+        if let Some(action) = object_action {
+            self.apply_object_action(id, action);
+        }
+        if let Some((layer, key)) = remove {
+            self.remove_curve(id, layer, &key);
+        }
+        if let Some(cid) = act {
+            self.active = Some(id);
+            self.run_command(cid);
+        }
+    }
+
+    fn graph_context_menu(
+        &mut self,
+        ui: &mut egui::Ui,
+        id: u64,
+        response: &egui::Response,
+        object: Option<plot::ObjectTarget>,
+        point: Option<&scicanvas_core::scene::PointHit>,
+        hover_layer: Option<usize>,
+    ) -> (
+        Option<&'static str>,
+        Option<(usize, String)>,
+        Option<plot::ObjectAction>,
+    ) {
+        let mut act: Option<&'static str> = None;
+
+        // 右键时吸附到的曲线（菜单打开期间保持）
+        let curve_id = egui::Id::new(("graph-curve-menu", id));
+        let object_id = curve_id.with("object");
+        if response.secondary_clicked() {
+            ui.data_mut(|d| d.insert_temp(object_id, object));
+            let hit = point.map(|p| (hover_layer.unwrap_or(0), p.key.clone(), p.series.clone()));
+            ui.data_mut(|d| d.insert_temp(curve_id, hit));
+        }
+        let menu_curve = ui
+            .data(|d| d.get_temp::<Option<(usize, String, String)>>(curve_id))
+            .flatten();
+        let mut remove: Option<(usize, String)> = None;
+        let menu_object = ui
+            .data(|d| d.get_temp::<Option<plot::ObjectTarget>>(object_id))
+            .flatten();
+        let mut object_action = None;
+        response.context_menu(|ui| {
+            if let Some(target) = menu_object {
+                if ui.button("编辑文字/图例…").clicked() {
+                    object_action = Some(plot::ObjectAction::Edit(target));
+                    ui.close_menu();
+                }
+                if ui.button("删除对象").clicked() {
+                    object_action = Some(plot::ObjectAction::Delete(target));
+                    ui.close_menu();
+                }
+                if let plot::ObjectTarget::Legend(index) = target {
+                    if ui.button("恢复自动避让").clicked() {
+                        object_action = Some(plot::ObjectAction::AutoLegend(index));
+                        ui.close_menu();
+                    }
+                }
+                ui.separator();
+            }
+            if let Some((layer, key, name)) = &menu_curve {
+                if ui.button(format!("移除曲线 {name}")).clicked() {
+                    remove = Some((*layer, key.clone()));
+                    ui.close_menu();
+                }
+                ui.separator();
+            }
+            for (cid, label) in [
+                ("layer.contents", "图层内容…"),
+                ("graph.props", "绘图属性…"),
+                ("graph.text.add", "添加文字标注"),
+                ("graph.text.manage", "管理文字标注…"),
+                ("graph.legend.auto", "图例自动避让"),
+                ("graph.copy", "复制图形"),
+                ("graph.export", "导出 SVG…"),
+                ("graph.export_pdf", "导出 PDF…"),
+                ("graph.export_png", "导出 PNG…"),
+                ("", ""),
+                ("graph.legend", "图例"),
+                ("graph.grid", "网格线"),
+                ("graph.logx", "X 对数刻度"),
+                ("graph.logy", "Y 对数刻度"),
+            ] {
+                if cid.is_empty() {
+                    ui.separator();
+                    continue;
+                }
+                if ui.button(label).clicked() {
+                    act = Some(cid);
+                    ui.close_menu();
+                }
+            }
+            ui.separator();
+            if ui.button("恢复原始范围").clicked() {
+                plot::reset_view(ui.ctx(), id, self.layer_index(id));
+                ui.close_menu();
+            }
+        });
+        (act, remove, object_action)
+    }
+
+    /// 把工作簿 `book_id` 里选中的列加到图形当前图层（一步撤销）。
+    pub(crate) fn add_to_graph(&mut self, book_id: u64, gid: u64) {
+        let keys = self.selected_keys(book_id);
+        let layer = self.layer_index(gid);
+        self.edit_with(
+            "添加曲线",
+            |project| project.add_curves(gid, layer, book_id, &keys).map(Some),
+            |app, n| {
+                app.status = if n > 0 {
+                    format!("已添加 {n} 条曲线")
+                } else {
+                    "这些列已在图层里".into()
+                };
+                app.show_item(gid);
+            },
+        );
+    }
+
+    /// 从图层移除一条曲线（一步撤销）。
+    pub(crate) fn remove_curve(&mut self, gid: u64, layer: usize, key: &str) {
+        let present = self
+            .project
+            .graph(gid)
+            .and_then(|g| g.page.layers().get(layer))
+            .is_some_and(|l| l.plot_keys(true).iter().any(|k| k == key));
+        if !present {
+            self.finish_edit();
+            return;
+        }
+        self.status = "已移除曲线".into();
+        self.edit("移除曲线", |project| {
+            project.graph_mut(gid).unwrap().page.layers_mut()[layer].remove_curve(key);
+            Ok(Some(()))
+        });
+    }
+
+    pub(super) fn object_window(&mut self, ctx: &egui::Context) {
+        use plot::ObjectTarget as T;
+        let Some(mut edit) = self.object_editor else { return };
+        let Some(before) = self.project.graph(edit.graph).cloned() else {
+            self.object_editor = None;
+            return;
+        };
+        let valid = match edit.target {
+            T::Text(id) => before.page.text(id).is_some(),
+            T::Legend(i) => before.page.layers().get(i).is_some_and(|l| l.legend),
+        };
+        if !valid {
+            self.object_editor = None;
+            return;
+        }
+        let (open, action) = edit.show(
+            ctx,
+            self.project.graph_mut(edit.graph).unwrap(),
+            &mut self.history_group,
+        );
+        if self.project.graph(edit.graph) != Some(&before) {
+            let after = std::mem::replace(self.project.graph_mut(edit.graph).unwrap(), before);
+            self.edit_grouped("编辑图形对象", self.history_group, |project| {
+                *project.graph_mut(edit.graph).unwrap() = after;
+            });
+            ctx.request_repaint();
+        }
+        self.object_editor = open.then_some(edit);
+        if let Some(action) = action {
+            self.finish_edit();
+            self.apply_object_action(edit.graph, action);
+        }
+    }
+
+    pub(super) fn help_window(&mut self, ctx: &egui::Context) {
+        egui::Window::new("快速上手")
+            .id(egui::Id::new("scicanvas-help"))
+            .constrain_to(dialogs::floating_bounds(ctx))
+            .open(&mut self.show_help)
+            .collapsible(false)
+            .default_width(460.0)
+            .show(ctx, |ui| {
+                ui.label("1. 功能区：顶部选项卡按任务分组。激活工作簿时出现紫色的“工作表”选项卡，激活图形时出现“图形”选项卡。双击选项卡或按 Ctrl+F1 折叠功能区；Ctrl+K 搜索任何命令。");
+                ui.label("2. 输入数据：在工作簿里直接键入；或从 Excel 复制一块区域，单击单元格后 Ctrl+V，首行是文字时自动作为长名称。也可以 文件 → 导入数据。");
+                ui.label("3. 选列与绘图：单击列标题，Ctrl 或 Shift 多选；再点“绘图”选项卡里的图类型。没有选列时使用全部 Y 列。");
+                ui.label("4. 分析：“分析”选项卡里有线性 / 多项式拟合、平滑、微分、积分、归一化，“统计”选项卡里有列统计。对当前图形的曲线，或工作簿里选中的 Y 列计算，结果写进紧挨原列的新列。");
+                ui.label("5. 导出与保存：文件 → 导出图形（SVG）；文件 → 保存项目（.scv，可用解压软件查看其中的表格和图）。");
+            });
+    }
+
+    pub(super) fn confirm_window(&mut self, ctx: &egui::Context) {
+        let Some(id) = self.confirm_delete else { return };
+        let name = self.project.name_of(id).unwrap_or("").to_string();
+        let mut decision: Option<bool> = None;
+        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+            decision = Some(false);
+        }
+        let weak = self.pal.weak;
+        dialogs::window(ctx, "删除").show(ctx, |ui| {
+            ui.vertical_centered(|ui| {
+                ui.add_space(4.0);
+                ui.label(RichText::new(format!("确定删除“{name}”吗？")).size(14.0).strong());
+                ui.add_space(4.0);
+                ui.label(RichText::new("删除后可以用“撤销”（Ctrl+Z）恢复。").color(weak));
+            });
+            ui.add_space(10.0);
+            ui.separator();
+            ui.add_space(4.0);
+            ui.horizontal(|ui| {
+                dialogs::center_buttons(ui, 2);
+                let danger = egui::Button::new(RichText::new("删除").color(egui::Color32::WHITE).strong())
+                    .fill(egui::Color32::from_rgb(0xC4, 0x2B, 0x1C))
+                    .min_size(dialogs::BUTTON);
+                if ui.add(danger).clicked() {
+                    decision = Some(true);
+                }
+                if ui.add(dialogs::plain("取消")).clicked() {
+                    decision = Some(false);
+                }
+            });
+        });
+        match decision {
+            Some(true) => {
+                self.finish_edit();
+                self.confirm_delete = None;
+                self.delete_item(id);
+                self.finish_edit();
+            }
+            Some(false) => self.confirm_delete = None,
+            None => {}
+        }
+    }
+}

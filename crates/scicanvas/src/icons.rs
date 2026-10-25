@@ -23,6 +23,10 @@ fn wrap(body: &str) -> String {
 
 /// (名称, SVG 主体)
 fn sources() -> Vec<(&'static str, String)> {
+    [source_group_1(), source_group_2(), source_group_3()].concat()
+}
+
+fn source_group_1() -> Vec<(&'static str, String)> {
     vec![
         ("note", wrap(r#"<path d="M6 3h9l4 4v14H6zM15 3v5h4M9 12h7M9 16h7"/>"#)),
         (
@@ -135,6 +139,11 @@ fn sources() -> Vec<(&'static str, String)> {
                 r##"<rect x="3" y="4" width="18" height="11" rx="1.5" opacity=".5"/><rect x="3" y="17" width="7" height="3" rx="1" fill="IC_B" stroke="IC_B"/><rect x="12" y="17" width="7" height="3" rx="1" fill="IC_B" stroke="IC_B"/>"##,
             ),
         ),
+    ]
+}
+
+fn source_group_2() -> Vec<(&'static str, String)> {
+    vec![
         (
             "hideall",
             wrap(
@@ -247,6 +256,11 @@ fn sources() -> Vec<(&'static str, String)> {
                 r##"<path d="M7 4v16M3.5 7.5L7 4l3.5 3.5" stroke="IC_B" stroke-width="1.8"/><path d="M13 6h3M13 11h5M13 16h7"/>"##,
             ),
         ),
+    ]
+}
+
+fn source_group_3() -> Vec<(&'static str, String)> {
+    vec![
         (
             "sortdesc",
             wrap(

@@ -1,3 +1,4 @@
+#![cfg_attr(not(test), warn(clippy::too_many_lines))]
 //! SciCanvas 核心库。
 //!
 //! 这里只放与界面无关的逻辑：数据模型、CSV/剪贴板解析、坐标轴刻度、SVG 导出。

@@ -254,16 +254,22 @@ fn error_text(code: u8) -> String {
     .into()
 }
 
-/// 读取 .xls 里的全部工作表（只取普通工作表，顺序与 Excel 中的标签相同）。
-pub fn read(bytes: &[u8]) -> Result<Vec<Sheet>, String> {
-    let stream = cfb_stream(bytes, &["Workbook"])?;
+struct WorkbookGlobals {
+    sheets: Vec<(String, usize)>,
+    sst: Vec<String>,
+    formats: std::collections::HashMap<u16, String>,
+    xf_format: Vec<u16>,
+    date1904: bool,
+}
+
+fn workbook_globals(stream: &[u8]) -> Result<WorkbookGlobals, String> {
     let mut sheets: Vec<(String, usize)> = vec![];
     let mut sst: Vec<String> = vec![];
     let mut formats: std::collections::HashMap<u16, String> = Default::default();
     let mut xf_format: Vec<u16> = vec![];
     let mut date1904 = false;
     // 工作簿全局区：直到第一个 EOF
-    let mut globals = records(&stream, 0).peekable();
+    let mut globals = records(stream, 0).peekable();
     let Some((0x0809, bof)) = globals.next() else {
         return Err("不是有效的 .xls 文件（缺少 BOF）".into());
     };
@@ -301,18 +307,25 @@ pub fn read(bytes: &[u8]) -> Result<Vec<Sheet>, String> {
             _ => {}
         }
     }
-    let is_date = |ixfe: u16| {
-        xf_format
-            .get(ixfe as usize)
-            .is_some_and(|&f| is_date_format(f, formats.get(&f).map(String::as_str)))
-    };
-    let number = |v: f64, ixfe: u16| {
-        if is_date(ixfe) {
-            excel_date_text(v, date1904).unwrap_or_else(|| excel_number(v))
-        } else {
-            excel_number(v)
-        }
-    };
+    Ok(WorkbookGlobals {
+        sheets,
+        sst,
+        formats,
+        xf_format,
+        date1904,
+    })
+}
+
+/// 读取 .xls 里的全部工作表（只取普通工作表，顺序与 Excel 中的标签相同）。
+pub fn read(bytes: &[u8]) -> Result<Vec<Sheet>, String> {
+    let stream = cfb_stream(bytes, &["Workbook"])?;
+    let WorkbookGlobals {
+        sheets,
+        sst,
+        formats,
+        xf_format,
+        date1904,
+    } = workbook_globals(&stream)?;
     let mut out = vec![];
     for (name, at) in sheets {
         let mut cells: Vec<(usize, usize, String)> = vec![];
@@ -330,11 +343,19 @@ pub fn read(bytes: &[u8]) -> Result<Vec<Sheet>, String> {
                 0x000A => break,
                 0x0203 => {
                     let (r, c, x) = cell()?;
-                    cells.push((r, c, number(f64_at(data, 6)?, x)));
+                    cells.push((
+                        r,
+                        c,
+                        formatted_number(f64_at(data, 6)?, x, date1904, &xf_format, &formats),
+                    ));
                 }
                 0x027E => {
                     let (r, c, x) = cell()?;
-                    cells.push((r, c, number(rk(u32_at(data, 6)?), x)));
+                    cells.push((
+                        r,
+                        c,
+                        formatted_number(rk(u32_at(data, 6)?), x, date1904, &xf_format, &formats),
+                    ));
                 }
                 0x00BD => {
                     let r = u16_at(data, 0)? as usize;
@@ -342,7 +363,11 @@ pub fn read(bytes: &[u8]) -> Result<Vec<Sheet>, String> {
                     let n = (data.len().saturating_sub(6)) / 6;
                     for k in 0..n {
                         let x = u16_at(data, 4 + 6 * k)?;
-                        cells.push((r, first + k, number(rk(u32_at(data, 6 + 6 * k)?), x)));
+                        cells.push((
+                            r,
+                            first + k,
+                            formatted_number(rk(u32_at(data, 6 + 6 * k)?), x, date1904, &xf_format, &formats),
+                        ));
                     }
                 }
                 0x00FD => {
@@ -381,7 +406,11 @@ pub fn read(bytes: &[u8]) -> Result<Vec<Sheet>, String> {
                             _ => {}
                         }
                     } else {
-                        cells.push((r, c, number(f64_at(data, 6)?, x)));
+                        cells.push((
+                            r,
+                            c,
+                            formatted_number(f64_at(data, 6)?, x, date1904, &xf_format, &formats),
+                        ));
                     }
                 }
                 0x0207 => {
@@ -404,20 +433,41 @@ pub fn read(bytes: &[u8]) -> Result<Vec<Sheet>, String> {
                 _ => {}
             }
         }
-        cells.retain(|c| !c.2.is_empty());
-        let nrows = cells.iter().map(|c| c.0 + 1).max().unwrap_or(0);
-        let ncols = cells.iter().map(|c| c.1 + 1).max().unwrap_or(0);
-        let mut rows = vec![vec![String::new(); ncols]; nrows];
-        for (r, c, text) in cells {
-            rows[r][c] = text;
-        }
-        fill_merged(&mut rows, &merged);
-        out.push(Sheet { name, rows });
+        out.push(sheet(name, cells, merged));
     }
     if out.is_empty() {
         return Err("工作簿里没有工作表".into());
     }
     Ok(out)
+}
+
+fn formatted_number(
+    value: f64,
+    ixfe: u16,
+    date1904: bool,
+    xf_format: &[u16],
+    formats: &std::collections::HashMap<u16, String>,
+) -> String {
+    let date = xf_format
+        .get(ixfe as usize)
+        .is_some_and(|&f| is_date_format(f, formats.get(&f).map(String::as_str)));
+    if date {
+        excel_date_text(value, date1904).unwrap_or_else(|| excel_number(value))
+    } else {
+        excel_number(value)
+    }
+}
+
+fn sheet(name: String, mut cells: Vec<(usize, usize, String)>, merged: Vec<[usize; 4]>) -> Sheet {
+    cells.retain(|c| !c.2.is_empty());
+    let nrows = cells.iter().map(|c| c.0 + 1).max().unwrap_or(0);
+    let ncols = cells.iter().map(|c| c.1 + 1).max().unwrap_or(0);
+    let mut rows = vec![vec![String::new(); ncols]; nrows];
+    for (r, c, text) in cells {
+        rows[r][c] = text;
+    }
+    fill_merged(&mut rows, &merged);
+    Sheet { name, rows }
 }
 
 #[cfg(test)]

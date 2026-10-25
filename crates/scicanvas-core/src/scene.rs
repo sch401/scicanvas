@@ -10,6 +10,7 @@ use crate::page::Layer;
 use crate::plotspec::BookLookup;
 use crate::ticks::{axis, Axis, TickLabel};
 mod layout;
+mod legend;
 
 pub type Rgb = (u8, u8, u8);
 
@@ -604,21 +605,46 @@ fn build_layer_min<'a>(
     view: Option<View>,
     min: [f64; 4],
 ) -> Scene {
-    build_layer_full(g, book, others, w, h, view, min, false)
+    build_layer_full(LayerContext {
+        layer: g,
+        book,
+        others,
+        w,
+        h,
+        view,
+        min,
+        legend_outside: false,
+    })
 }
 
 /// `legend_outside` 为真时，图例放在坐标框右侧（右边距已按图例宽度留出）。
-#[allow(clippy::too_many_arguments)]
-fn build_layer_full<'a>(
-    g: &Layer,
+#[derive(Clone, Copy)]
+struct LayerContext<'g, 'a, 'b> {
+    layer: &'g Layer,
     book: Option<&'a Book>,
-    others: BookLookup<'a, '_>,
+    others: BookLookup<'a, 'b>,
     w: f64,
     h: f64,
     view: Option<View>,
     min: [f64; 4],
     legend_outside: bool,
-) -> Scene {
+}
+struct LayerData {
+    plots: Vec<crate::page::PreparedPlot>,
+    all_x: Vec<f64>,
+    all_y: Vec<f64>,
+    all_y2: Vec<f64>,
+    horizontal: bool,
+    is_bar: bool,
+    x_date: bool,
+    date_offset: f64,
+    categories: Option<Vec<String>>,
+    dx: f64,
+}
+fn prepare_layer_data(ctx: &LayerContext<'_, '_, '_>) -> LayerData {
+    let g = ctx.layer;
+    let book = ctx.book;
+    let others = ctx.others;
     let recipe = crate::presets::recipe(g.plot_type);
     let horizontal = recipe.orientation == crate::coord::Orientation::Horizontal;
     let (x_col, mut plots) = match book {
@@ -626,6 +652,7 @@ fn build_layer_full<'a>(
         None => (None, Vec::new()),
     };
     let x_date = !horizontal && !g.x_log && x_col.is_some_and(|c| c.data.kind() == crate::DataKind::DateTime);
+    let date_offset = x_col.map_or(0.0, |c| f64::from(c.format.utc_offset) * 60_000.0);
     let categories = x_col.and_then(|c| c.data.plot_category_levels());
     for plot in &mut plots {
         if plot.style.kind.is_spline() && !plot.series.line_only {
@@ -698,6 +725,41 @@ fn build_layer_full<'a>(
         .collect();
     let dx = min_spacing(&data_x);
 
+    LayerData {
+        plots,
+        all_x,
+        all_y,
+        all_y2,
+        horizontal,
+        is_bar,
+        x_date,
+        date_offset,
+        categories,
+        dx,
+    }
+}
+
+struct AxisRanges {
+    xa: Axis,
+    ya: Axis,
+    ya2: Option<Axis>,
+    x_label: TickLabel,
+    y_label: TickLabel,
+    y2_label: TickLabel,
+    ylab2_w: f64,
+}
+fn axis_ranges(ctx: &LayerContext<'_, '_, '_>, data: &LayerData) -> AxisRanges {
+    let g = ctx.layer;
+    let view = ctx.view;
+    let plots = &data.plots;
+    let all_x = &data.all_x;
+    let all_y = &data.all_y;
+    let all_y2 = &data.all_y2;
+    let horizontal = data.horizontal;
+    let is_bar = data.is_bar;
+    let dx = data.dx;
+    let x_date = data.x_date;
+    let categories = &data.categories;
     let (xa, ya): (Axis, Axis) = match view {
         Some(v) => (
             axis(&[], false, v.x.0, v.x.1, g.x_log, false),
@@ -709,7 +771,7 @@ fn build_layer_full<'a>(
                 let hi = all_x.iter().copied().fold(f64::NEG_INFINITY, f64::max);
                 axis(&[lo - dx * 0.6, hi + dx * 0.6], true, 0.0, 0.0, false, false)
             } else {
-                axis(&all_x, g.x_auto, g.x_min, g.x_max, g.x_log, horizontal)
+                axis(all_x, g.x_auto, g.x_min, g.x_max, g.x_log, horizontal)
             };
             let ya = if horizontal && g.y_auto && !g.y_log && !all_y.is_empty() {
                 let lo = all_y.iter().copied().fold(f64::INFINITY, f64::min);
@@ -717,7 +779,7 @@ fn build_layer_full<'a>(
                 axis(&[lo - dx * 0.6, hi + dx * 0.6], true, 0.0, 0.0, false, false)
             } else {
                 axis(
-                    &all_y,
+                    all_y,
                     g.y_auto,
                     g.y_min,
                     g.y_max,
@@ -771,7 +833,7 @@ fn build_layer_full<'a>(
         (xa, TickLabel::Category(names))
     } else if x_date {
         // 在当地时间上取整刻度，再换回 UTC 坐标
-        let off = x_col.map_or(0.0, |c| f64::from(c.format.utc_offset) * 60_000.0);
+        let off = data.date_offset;
         let (mut axis, unit) = match view {
             Some(v) => crate::ticks::date_axis(v.x.0 + off, v.x.1 + off, false),
             None if g.x_auto && !all_x.is_empty() => {
@@ -797,7 +859,7 @@ fn build_layer_full<'a>(
     };
     // 右侧 Y 轴：自动范围；带符号的点落在端点时同样留 4%
     let ya2 = (!all_y2.is_empty()).then(|| {
-        let mut a = axis(&all_y2, true, 0.0, 0.0, g.y_log, false);
+        let mut a = axis(all_y2, true, 0.0, 0.0, g.y_log, false);
         let marks: Vec<f64> = plots
             .iter()
             .map(|p| (&p.series, &p.style))
@@ -815,6 +877,52 @@ fn build_layer_full<'a>(
             .fold(8.0, f64::max)
     });
 
+    AxisRanges {
+        xa,
+        ya,
+        ya2,
+        x_label,
+        y_label,
+        y2_label,
+        ylab2_w,
+    }
+}
+
+struct AxisLayout {
+    axes: crate::coord::AxisSet,
+    x_label: TickLabel,
+    y_label: TickLabel,
+    y2_label: TickLabel,
+    x_title: String,
+    y_title: String,
+    y2_title: String,
+    title: String,
+    title_height: f64,
+    has_title: bool,
+    rect: [f64; 4],
+    tick_in: f64,
+    tick_out: f64,
+    ylab_w: f64,
+    ylab2_w: f64,
+    tick_height: f64,
+    axis_height: f64,
+}
+fn axis_layout(ctx: &LayerContext<'_, '_, '_>, ranges: AxisRanges) -> AxisLayout {
+    let g = ctx.layer;
+    let book = ctx.book;
+    let others = ctx.others;
+    let w = ctx.w;
+    let h = ctx.h;
+    let min = ctx.min;
+    let AxisRanges {
+        xa,
+        ya,
+        ya2,
+        x_label,
+        y_label,
+        y2_label,
+        ylab2_w,
+    } = ranges;
     // 版面：刻度朝外，刻度标签和轴标题依次排在左轴、下轴外侧
     let ylab_w = ya
         .ticks
@@ -860,25 +968,54 @@ fn build_layer_full<'a>(
         .max(min[3]);
     let pw = (w - left - right).max(20.0);
     let ph = (h - top - bottom).max(20.0);
-    let axes = crate::coord::AxisSet {
-        x: xa,
-        left_y: ya,
-        right_y: ya2,
-    };
+    AxisLayout {
+        axes: crate::coord::AxisSet {
+            x: xa,
+            left_y: ya,
+            right_y: ya2,
+        },
+        x_label,
+        y_label,
+        y2_label,
+        x_title,
+        y_title,
+        y2_title,
+        title,
+        title_height,
+        has_title,
+        rect: [left, top, pw, ph],
+        tick_in: fin,
+        tick_out: fout,
+        ylab_w,
+        ylab2_w,
+        tick_height,
+        axis_height,
+    }
+}
+
+fn draw_layer_data(
+    ctx: &LayerContext<'_, '_, '_>,
+    data: &LayerData,
+    layout: &AxisLayout,
+) -> (Vec<Item>, Vec<ObjectLayout>, usize) {
+    let g = ctx.layer;
+    let book = ctx.book;
+    let others = ctx.others;
+    let w = ctx.w;
+    let h = ctx.h;
+    let plots = &data.plots;
+    let all_x = &data.all_x;
+    let horizontal = data.horizontal;
+    let dx = data.dx;
+    let axes = &layout.axes;
+    let [left, top, pw, ph] = layout.rect;
     let xa = &axes.x;
     let ya = &axes.left_y;
-    let ya2 = &axes.right_y;
     let coord = axes.cartesian([left, top, pw, ph], crate::coord::YAxis::Left);
     let px = |v: f64| coord.project([v, ya.lo])[0];
     let py = |v: f64| coord.project([xa.lo, v])[1];
-    // 右侧 Y 轴的映射；曲线按自己的轴选用
-    let coord2 = axes.cartesian([left, top, pw, ph], crate::coord::YAxis::Right);
-    let py2 = |v: f64| coord2.project([xa.lo, v])[1];
-    let inside_x = |x: f64| x >= left - 0.5 && x <= left + pw + 0.5;
-    let inside_y = |y: f64| y >= top - 0.5 && y <= top + ph + 0.5;
-
     let mut items: Vec<Item> = Vec::new();
-    let mut objects = Vec::new();
+    let objects = Vec::new();
     let data_start;
     {
         // 记录本图层数据图元范围，供图例避让。
@@ -956,13 +1093,33 @@ fn build_layer_full<'a>(
             layer: g,
             book,
             others,
-            axes: &axes,
+            axes,
             rect: [left, top, pw, ph],
             horizontal,
             dx,
         };
-        crate::mark::draw(&context, &plots, &mut items);
+        crate::mark::draw(&context, plots, &mut items);
     }
+    (items, objects, data_start)
+}
+
+fn draw_axis_ticks(ctx: &LayerContext<'_, '_, '_>, layout: &AxisLayout, items: &mut Vec<Item>) -> usize {
+    let g = ctx.layer;
+    let [left, top, pw, ph] = layout.rect;
+    let axes = &layout.axes;
+    let xa = &axes.x;
+    let ya = &axes.left_y;
+    let ya2 = &axes.right_y;
+    let x_label = &layout.x_label;
+    let y_label = &layout.y_label;
+    let (fin, fout) = (layout.tick_in, layout.tick_out);
+    let out = MAJOR_TICK * fout;
+    let tick_height = layout.tick_height;
+    let coord = axes.cartesian([left, top, pw, ph], crate::coord::YAxis::Left);
+    let px = |v: f64| coord.project([v, ya.lo])[0];
+    let py = |v: f64| coord.project([xa.lo, v])[1];
+    let inside_x = |x: f64| x >= left - 0.5 && x <= left + pw + 0.5;
+    let inside_y = |y: f64| y >= top - 0.5 && y <= top + ph + 0.5;
     let mut push = |prim: Prim, clip: bool| {
         items.push(Item {
             prim,
@@ -1054,13 +1211,41 @@ fn build_layer_full<'a>(
         false,
     );
 
+    data_end
+}
+
+fn draw_axis_titles(ctx: &LayerContext<'_, '_, '_>, layout: &AxisLayout, items: &mut Vec<Item>) {
+    let g = ctx.layer;
+    let [left, top, pw, ph] = layout.rect;
+    let out = MAJOR_TICK * layout.tick_out;
+    let tick_height = layout.tick_height;
+    let axis_height = layout.axis_height;
+    let ylab_w = layout.ylab_w;
+    let ylab2_w = layout.ylab2_w;
+    let (x_title, y_title, y2_title) = (&layout.x_title, &layout.y_title, &layout.y2_title);
+    let axes = &layout.axes;
+    let ya2 = &axes.right_y;
+    let y2_label = &layout.y2_label;
+    let (fin, fout) = (layout.tick_in, layout.tick_out);
+    let coord2 = axes.cartesian([left, top, pw, ph], crate::coord::YAxis::Right);
+    let py2 = |v: f64| coord2.project([axes.x.lo, v])[1];
+    let inside_y = |y: f64| y >= top - 0.5 && y <= top + ph + 0.5;
+    let has_title = layout.has_title;
+    let title_height = layout.title_height;
+    let title = layout.title.clone();
+    let mut push = |prim: Prim, clip: bool| {
+        items.push(Item {
+            prim,
+            clip: clip.then_some([left, top, pw, ph]),
+        })
+    };
     // 轴标题与图标题
     push(
         formatted_text(
             left + pw / 2.0,
             top + ph + out + TICK_GAP + tick_height + 5.0 + axis_height / 2.0,
             x_title.clone(),
-            crate::text::fit_size_formatted(&x_title, LABEL_FONT, false, pw, g.rich_text),
+            crate::text::fit_size_formatted(x_title, LABEL_FONT, false, pw, g.rich_text),
             Anchor::Middle,
             g.rich_text,
         ),
@@ -1109,7 +1294,7 @@ fn build_layer_full<'a>(
                 x: left + pw + out + TICK_GAP + ylab2_w + 5.0 + LABEL_FONT / 2.0,
                 y: top + ph / 2.0,
                 text: y2_title.clone(),
-                size: crate::text::fit_size_formatted(&y2_title, LABEL_FONT, false, ph, g.rich_text),
+                size: crate::text::fit_size_formatted(y2_title, LABEL_FONT, false, ph, g.rich_text),
                 anchor: Anchor::Middle,
                 vertical: true,
                 bold: false,
@@ -1124,7 +1309,7 @@ fn build_layer_full<'a>(
             x: left - out - TICK_GAP - ylab_w - 5.0 - LABEL_FONT / 2.0,
             y: top + ph / 2.0,
             text: y_title.clone(),
-            size: crate::text::fit_size_formatted(&y_title, LABEL_FONT, false, ph, g.rich_text),
+            size: crate::text::fit_size_formatted(y_title, LABEL_FONT, false, ph, g.rich_text),
             anchor: Anchor::Middle,
             vertical: true,
             bold: false,
@@ -1149,131 +1334,35 @@ fn build_layer_full<'a>(
             false,
         );
     }
+}
 
-    // 图例：坐标框内，白底无边框
-    if g.legend && !plots.is_empty() {
-        let sw = 18.0;
-        let names: Vec<_> = plots
-            .iter()
-            .map(|p| {
-                crate::text::fonts().wrap_formatted(
-                    &p.series.name,
-                    LEGEND_FONT,
-                    false,
-                    (pw - sw - 16.0).max(20.0),
-                    g.rich_text,
-                )
-            })
-            .collect();
-        let layouts: Vec<_> = names
-            .iter()
-            .map(|name| crate::text::layout_formatted(name, LEGEND_FONT, false, g.rich_text))
-            .collect();
-        let lw = layouts.iter().map(|l| l.width).fold(0.0, f64::max) + sw + 16.0;
-        let lhh = layouts.iter().map(|l| l.height + 4.0).sum::<f64>() + 4.0;
-        // 自动放在四个角里数据最少的一个，尽量不遮挡曲线
-        let pad_x = MAJOR_TICK + 6.0;
-        let pad_y = MAJOR_TICK + 4.0;
-        let corners = [
-            (left + pad_x, top + pad_y),
-            (left + pw - pad_x - lw, top + pad_y),
-            (left + pw - pad_x - lw, top + ph - pad_y - lhh),
-            (left + pad_x, top + ph - pad_y - lhh),
-        ];
-        // 按本图层实际画出的几何（柱、线、面积、误差棒、符号、标签）给四个角打分
-        let obstacles = obstacles(&items[data_start..data_end]);
-        let score = |(x, y): (f64, f64)| coverage(&obstacles, [x - 4.0, y - 4.0, lw + 8.0, lhh + 8.0]);
-        let (mut lx, mut ly) = corners.iter().copied().min_by_key(|c| score(*c)).unwrap_or(corners[0]);
-        // 四个角都会压住数据（如百分比堆叠柱占满整个高度）：重排，图例放到坐标框右侧
-        let gap = 10.0;
-        if legend_outside {
-            (lx, ly) = (left + pw + gap, top);
-        } else if score((lx, ly)) > 0 && lw + gap + 14.0 < w * 0.35 {
-            let mut wider = min;
-            wider[2] = wider[2].max(lw + gap + 14.0);
-            return build_layer_full(g, book, others, w, h, view, wider, true);
-        }
-        // 上面借用过 items，图例图元（都不裁剪）改用新的 push 推入
-        let start = items.len();
-        let mut push = |prim: Prim| items.push(Item { prim, clip: None });
-        push(Prim::Rect {
-            x: lx,
-            y: ly,
-            w: lw,
-            h: lhh,
-            fill: Some((PAPER, 1.0)),
-            stroke: None,
-        });
-        let mut row_y = ly + 2.0;
-        for (i, st) in plots.iter().map(|p| &p.style).enumerate() {
-            let color = st.color.rgb();
-            let row_height = layouts[i].height + 4.0;
-            let cy = row_y + row_height / 2.0;
-            row_y += row_height;
-            let x0 = lx + 4.0;
-            if st.kind.is_bar() || st.kind == PlotType::Area {
-                push(Prim::Rect {
-                    x: x0 + 4.0,
-                    y: cy - 3.5,
-                    w: sw - 8.0,
-                    h: 7.0,
-                    fill: Some((
-                        color,
-                        if st.kind == PlotType::Area {
-                            f64::from(g.area_opacity)
-                        } else {
-                            1.0
-                        },
-                    )),
-                    stroke: Some((INK, 0.5)),
-                });
-            } else {
-                if st.kind.has_line() {
-                    push(Prim::Polyline {
-                        pts: vec![[x0, cy], [x0 + sw, cy]],
-                        color,
-                        width: f64::from(st.line_width),
-                    });
-                }
-                if st.kind.has_symbol() {
-                    push(Prim::Symbols {
-                        sym: st.symbol,
-                        pts: vec![[x0 + sw / 2.0, cy]],
-                        r: f64::from(st.symbol_size) / 2.0,
-                        color,
-                    });
-                }
-            }
-            push(formatted_text(
-                x0 + sw + 4.0,
-                cy,
-                names[i].clone(),
-                LEGEND_FONT,
-                Anchor::Start,
-                g.rich_text,
-            ));
-        }
-        objects.push(ObjectLayout {
-            target: ObjectTarget::Legend(0),
-            bounds: [lx, ly, lw, lhh],
-            items: start..items.len(),
-            overlay: false,
-        });
+fn build_layer_full(ctx: LayerContext<'_, '_, '_>) -> Scene {
+    let g = ctx.layer;
+    let w = ctx.w;
+    let h = ctx.h;
+    let data = prepare_layer_data(&ctx);
+    let ranges = axis_ranges(&ctx, &data);
+    let layout = axis_layout(&ctx, ranges);
+    let (mut items, mut objects, data_start) = draw_layer_data(&ctx, &data, &layout);
+    let data_end = draw_axis_ticks(&ctx, &layout, &mut items);
+    draw_axis_titles(&ctx, &layout, &mut items);
+    if let Some(scene) = legend::draw_layer_legend(&ctx, &data, &layout, &mut items, &mut objects, data_start, data_end)
+    {
+        return scene;
     }
-
     Scene {
         w,
         h,
-        plot: [left, top, pw, ph],
+        plot: layout.rect,
         layers: vec![LayerView {
             bounds: [0.0, 0.0, w, h],
-            plot: [left, top, pw, ph],
-            axes: axes.clone(),
+            plot: layout.rect,
+            axes: layout.axes.clone(),
             opaque: !g.transparent,
         }],
-        axes,
+        axes: layout.axes,
         items,
-        layer_plots: vec![[left, top, pw, ph]],
+        layer_plots: vec![layout.rect],
         objects,
     }
 }

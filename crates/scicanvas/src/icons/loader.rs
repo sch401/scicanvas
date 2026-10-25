@@ -1,6 +1,6 @@
 //! SVG 图标加载与尺寸缓存，使用导出共用的 resvg。
-// 尺寸提示与缓存协议适配自 egui_extras 0.29.1 的 SVG loader/image.rs。
-// Copyright (c) 2018-2021 Emil Ernerfeldt <emil.ernerfeldt@gmail.com>
+// 尺寸提示与缓存协议参考 egui_extras 0.29.1 的 SVG 加载器实现。
+// 上游版权声明依 MIT 许可保留原文：Copyright (c) 2018-2021 Emil Ernerfeldt <emil.ernerfeldt@gmail.com>
 // MIT 许可全文随包保存在 licenses/third-party/egui_extras-0.29.1/upstream/LICENSE-MIT。
 use eframe::egui::{
     self,

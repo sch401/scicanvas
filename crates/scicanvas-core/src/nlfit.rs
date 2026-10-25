@@ -332,9 +332,511 @@ pub fn fit_with(
     fit_constrained(model, xs, ys, initial, limits, &[])
 }
 
-/// 带参数限制与线性约束的拟合。等式约束和“贴边且下降方向朝外”的不等式在零空间里求步长，
-/// 其余不等式与上下界按步长截断，保持每一步可行；标准误按停止点的约束零空间计算，
-/// 自由度扣除约束个数（与代入消元后的拟合相同）。
+/// 拟合过程的输入与迭代状态集中保存，独立步骤负责投影、迭代和统计。
+struct FitSession<'a> {
+    model: Model,
+    xs: Vec<f64>,
+    ys: Vec<f64>,
+    limits: &'a [ParamLimits],
+    fixed: Vec<Option<f64>>,
+    free: Vec<usize>,
+    rows: Vec<(Vec<f64>, Rel, f64)>,
+    params: Vec<f64>,
+    cost: f64,
+    lambda: f64,
+    converged: bool,
+    iterations: usize,
+    constraint_text: Vec<String>,
+}
+
+impl<'a> FitSession<'a> {
+    fn new(
+        model: Model,
+        xs: &[f64],
+        ys: &[f64],
+        initial: Option<&[f64]>,
+        limits: &'a [ParamLimits],
+        constraints: &[LinearConstraint],
+    ) -> Result<Self, String> {
+        let fixed_values: Vec<Option<f64>> = limits.iter().map(|l| l.fixed).collect();
+        let fixed = fixed_values.as_slice();
+        let limit = |k: usize| limits.get(k).copied().unwrap_or_default();
+        for (k, l) in limits.iter().enumerate() {
+            if let (Some(lo), Some(hi)) = (l.lower, l.upper) {
+                if lo >= hi || lo.is_nan() || hi.is_nan() {
+                    return Err(format!(
+                        "参数 {} 的下限必须小于上限",
+                        model.params().get(k).unwrap_or(&"?")
+                    ));
+                }
+            }
+            if l.lower.is_some_and(|v| !v.is_finite()) || l.upper.is_some_and(|v| !v.is_finite()) {
+                return Err("上下限必须是有限数".into());
+            }
+        }
+        let mut pts: Vec<(f64, f64)> = xs
+            .iter()
+            .zip(ys)
+            .filter(|(x, y)| x.is_finite() && y.is_finite())
+            .map(|(x, y)| (*x, *y))
+            .collect();
+        pts.sort_by(|a, b| a.0.total_cmp(&b.0));
+        let (xs, ys): (Vec<f64>, Vec<f64>) = pts.into_iter().unzip();
+        let all = model.params().len();
+        let is_fixed = |k: usize| fixed.get(k).is_some_and(|v| v.is_some());
+        let free: Vec<usize> = (0..all).filter(|k| !is_fixed(*k)).collect();
+        let m = free.len();
+        if m == 0 {
+            return Err("至少要有一个参数不固定".into());
+        }
+        if fixed.iter().flatten().any(|v| !v.is_finite()) {
+            return Err("固定参数的值必须是有限数".into());
+        }
+        let n = xs.len();
+        // 约束只作用在自由参数上：固定参数的贡献移到右边
+        let rows: Vec<(Vec<f64>, Rel, f64)> = constraints
+            .iter()
+            .map(|c| {
+                let a: Vec<f64> = free.iter().map(|&k| c.coef.get(k).copied().unwrap_or(0.0)).collect();
+                let b = c.rhs
+                    - (0..all)
+                        .filter(|&k| is_fixed(k))
+                        .map(|k| c.coef.get(k).copied().unwrap_or(0.0) * fixed[k].unwrap())
+                        .sum::<f64>();
+                (a, c.rel, b)
+            })
+            .collect();
+        if rows.iter().any(|(a, _, _)| a.iter().all(|v| *v == 0.0)) {
+            return Err("约束只涉及固定参数，请去掉或改为固定值".into());
+        }
+        let n_eq = null_space(
+            &rows
+                .iter()
+                .filter(|r| r.1 == Rel::Eq)
+                .map(|r| r.0.clone())
+                .collect::<Vec<_>>(),
+            m,
+        )
+        .len();
+        if n <= n_eq {
+            return Err(format!(
+                "{} 有 {} 个参数，至少需要 {} 个有效数据点",
+                model.name(),
+                n_eq,
+                n_eq + 1
+            ));
+        }
+        let mut params = match initial {
+            Some(v) => v.to_vec(),
+            None => model.guess(&xs, &ys),
+        };
+        for (k, v) in fixed.iter().enumerate() {
+            if let Some(v) = v {
+                params[k] = *v;
+            }
+        }
+        for &k in &free {
+            params[k] = limit(k).clamp(params[k]);
+        }
+        let lhs = |params: &[f64], a: &[f64]| free.iter().zip(a).map(|(&k, c)| c * params[k]).sum::<f64>();
+        let violation = |params: &[f64], (a, rel, b): &(Vec<f64>, Rel, f64)| {
+            let d = lhs(params, a) - b;
+            match rel {
+                Rel::Eq => d,
+                Rel::Le => d.max(0.0),
+                Rel::Ge => d.min(0.0),
+            }
+        };
+        if !rows.is_empty() {
+            // 初值投影到可行域：交替投影到各约束（超平面/半空间）并截到上下界
+            let tol = |params: &[f64]| 1e-9 * free.iter().map(|&k| params[k].abs()).fold(1.0, f64::max);
+            for _ in 0..500 {
+                for row in &rows {
+                    let d = violation(&params, row);
+                    let norm2: f64 = row.0.iter().map(|c| c * c).sum();
+                    if d != 0.0 {
+                        for (&k, c) in free.iter().zip(&row.0) {
+                            params[k] -= d * c / norm2;
+                        }
+                    }
+                }
+                for &k in &free {
+                    params[k] = limit(k).clamp(params[k]);
+                }
+                if rows.iter().all(|r| violation(&params, r).abs() <= tol(&params)) {
+                    break;
+                }
+            }
+            if rows
+                .iter()
+                .any(|r| violation(&params, r).abs() > 1e-6 * free.iter().map(|&k| params[k].abs()).fold(1.0, f64::max))
+            {
+                return Err("约束之间（或与上下限、固定值）互相矛盾，找不到满足全部约束的参数".into());
+            }
+        }
+
+        let cost = rss(model, &xs, &ys, &params);
+        if !cost.is_finite() {
+            return Err("初值处函数值无效，请检查数据是否适合该函数".into());
+        }
+        Ok(Self {
+            model,
+            xs,
+            ys,
+            limits,
+            fixed: fixed_values,
+            free,
+            rows,
+            params,
+            cost,
+            lambda: 1e-3,
+            converged: false,
+            iterations: 0,
+            constraint_text: constraints.iter().map(|c| c.text.clone()).collect(),
+        })
+    }
+
+    fn limit(&self, k: usize) -> ParamLimits {
+        self.limits.get(k).copied().unwrap_or_default()
+    }
+
+    fn lhs(&self, p: &[f64], a: &[f64]) -> f64 {
+        self.free.iter().zip(a).map(|(&k, c)| c * p[k]).sum()
+    }
+
+    fn active_tol(&self, p: &[f64]) -> f64 {
+        1e-8 * self.free.iter().map(|&k| p[k].abs()).fold(1.0, f64::max)
+    }
+
+    fn optimize(&mut self) {
+        while self.iterations < 500 {
+            self.iterations += 1;
+            let n = self.xs.len();
+            let m = self.free.len();
+            let j = jacobian(self.model, &self.xs, &self.params, &self.free);
+            let residuals: Vec<f64> = self
+                .xs
+                .iter()
+                .zip(&self.ys)
+                .map(|(x, y)| y - self.model.eval(*x, &self.params))
+                .collect();
+            let mut a = vec![vec![0.0; m]; m];
+            let mut g = vec![0.0; m];
+            for i in 0..n {
+                for u in 0..m {
+                    g[u] += j[i][u] * residuals[i];
+                    for v in 0..m {
+                        a[u][v] += j[i][u] * j[i][v];
+                    }
+                }
+            }
+            let open: Vec<usize> = (0..m)
+                .filter(|&u| {
+                    let (k, l) = (self.free[u], self.limit(self.free[u]));
+                    !(l.lower == Some(self.params[k]) && g[u] < 0.0 || l.upper == Some(self.params[k]) && g[u] > 0.0)
+                })
+                .collect();
+            let stepped = if self.rows.is_empty() {
+                self.unconstrained_step(&a, &g, &open)
+            } else {
+                self.constrained_step(&a, &g, &open)
+            };
+            if !stepped {
+                self.converged = true;
+            }
+            if self.converged {
+                break;
+            }
+        }
+    }
+
+    fn constrained_step(&mut self, a: &[Vec<f64>], g: &[f64], open: &[usize]) -> bool {
+        let m = self.free.len();
+        let mut stepped = false;
+        let mut active: Vec<usize> = (0..self.rows.len())
+            .filter(|&i| {
+                let r = &self.rows[i];
+                let ag: f64 = r.0.iter().zip(g).map(|(a, g)| a * g).sum();
+                let tight = (self.lhs(&self.params, &r.0) - r.2).abs() <= self.active_tol(&self.params);
+                match r.1 {
+                    Rel::Eq => true,
+                    Rel::Le => tight && ag > 0.0,
+                    Rel::Ge => tight && ag < 0.0,
+                }
+            })
+            .collect();
+        let mut held: Vec<usize> = vec![];
+        'solve: loop {
+            let open_now: Vec<usize> = open.iter().copied().filter(|u| !held.contains(u)).collect();
+            let c_open: Vec<Vec<f64>> = active
+                .iter()
+                .map(|&i| open_now.iter().map(|&u| self.rows[i].0[u]).collect())
+                .collect();
+            let basis = null_space(&c_open, open_now.len());
+            if basis.is_empty() {
+                break 'solve;
+            }
+            let r = basis.len();
+            // H = Nᵀ A N，b = Nᵀ g
+            let an: Vec<Vec<f64>> = open_now
+                .iter()
+                .map(|&u| {
+                    (0..r)
+                        .map(|q| open_now.iter().enumerate().map(|(j, &v)| a[u][v] * basis[q][j]).sum())
+                        .collect()
+                })
+                .collect();
+            let h0: Vec<Vec<f64>> = (0..r)
+                .map(|q1| {
+                    (0..r)
+                        .map(|q2| (0..open_now.len()).map(|i| basis[q1][i] * an[i][q2]).sum())
+                        .collect()
+                })
+                .collect();
+            let nb: Vec<f64> = (0..r)
+                .map(|q| open_now.iter().enumerate().map(|(i, &u)| basis[q][i] * g[u]).sum())
+                .collect();
+            while self.lambda < 1e16 {
+                let mut h = h0.clone();
+                for (q, row) in h.iter_mut().enumerate() {
+                    row[q] += self.lambda * row[q].max(1e-12);
+                }
+                let Some(inv) = mat_inv(&h) else {
+                    self.lambda *= 10.0;
+                    continue;
+                };
+                let z: Vec<f64> = (0..r).map(|q| (0..r).map(|q2| inv[q][q2] * nb[q2]).sum()).collect();
+                let mut delta = vec![0.0; m];
+                for (i, &u) in open_now.iter().enumerate() {
+                    delta[u] = (0..r).map(|q| basis[q][i] * z[q]).sum();
+                }
+                // 不越过不在活动集里的不等式和上下界；记下最先挡住的那个
+                let mut alpha: f64 = 1.0;
+                let mut blocker: Option<(bool, usize)> = None;
+                for (i, row) in self.rows.iter().enumerate() {
+                    if active.contains(&i) {
+                        continue;
+                    }
+                    let ad: f64 = row.0.iter().zip(&delta).map(|(a, d)| a * d).sum();
+                    let slack = row.2 - self.lhs(&self.params, &row.0);
+                    let limit_here = match row.1 {
+                        Rel::Le if ad > 0.0 => slack.max(0.0) / ad,
+                        Rel::Ge if ad < 0.0 => slack.min(0.0) / ad,
+                        _ => continue,
+                    };
+                    if limit_here < alpha {
+                        alpha = limit_here;
+                        blocker = Some((true, i));
+                    }
+                }
+                for (u, &k) in self.free.iter().enumerate() {
+                    let l = self.limit(k);
+                    let limit_here = match (l.lower, l.upper) {
+                        (_, Some(hi)) if delta[u] > 0.0 => (hi - self.params[k]).max(0.0) / delta[u],
+                        (Some(lo), _) if delta[u] < 0.0 => (lo - self.params[k]).min(0.0) / delta[u],
+                        _ => continue,
+                    };
+                    if limit_here < alpha {
+                        alpha = limit_here;
+                        blocker = Some((false, u));
+                    }
+                }
+                if alpha <= 1e-12 {
+                    match blocker {
+                        Some((true, i)) => active.push(i),
+                        Some((false, u)) => held.push(u),
+                        None => {}
+                    }
+                    continue 'solve;
+                }
+                let mut trial = self.params.clone();
+                for (u, &k) in self.free.iter().enumerate() {
+                    trial[k] = self.limit(k).clamp(self.params[k] + alpha * delta[u]);
+                }
+                let new_cost = rss(self.model, &self.xs, &self.ys, &trial);
+                if new_cost < self.cost {
+                    let small_step = self
+                        .free
+                        .iter()
+                        .all(|&k| (trial[k] - self.params[k]).abs() <= 1e-10 * self.params[k].abs().max(1e-10));
+                    let small_gain = self.cost - new_cost <= 1e-14 * self.cost.max(1e-300);
+                    self.params = trial;
+                    self.cost = new_cost;
+                    self.lambda = (self.lambda / 10.0).max(1e-12);
+                    stepped = true;
+                    // 被约束截短的一步不算收敛：下一步会把挡路的约束纳入活动集
+                    self.converged = small_gain || (small_step && alpha >= 1.0);
+                    break 'solve;
+                }
+                self.lambda *= 10.0;
+            }
+            break 'solve;
+        }
+        stepped
+    }
+
+    fn unconstrained_step(&mut self, a: &[Vec<f64>], g: &[f64], open: &[usize]) -> bool {
+        let m = self.free.len();
+        let mut stepped = false;
+        while self.lambda < 1e16 && !open.is_empty() {
+            let mut damped: Vec<Vec<f64>> = open.iter().map(|&u| open.iter().map(|&v| a[u][v]).collect()).collect();
+            for (i, row) in damped.iter_mut().enumerate() {
+                row[i] += self.lambda * a[open[i]][open[i]].max(1e-12);
+            }
+            let Some(inv) = mat_inv(&damped) else {
+                self.lambda *= 10.0;
+                continue;
+            };
+            let mut delta = vec![0.0; m];
+            for (i, &u) in open.iter().enumerate() {
+                delta[u] = open.iter().enumerate().map(|(j, &v)| inv[i][j] * g[v]).sum();
+            }
+            let mut trial = self.params.clone();
+            for (d, &k) in delta.iter().zip(&self.free) {
+                trial[k] = self.limit(k).clamp(trial[k] + d);
+            }
+            let new_cost = rss(self.model, &self.xs, &self.ys, &trial);
+            if new_cost < self.cost {
+                let small_step = self
+                    .free
+                    .iter()
+                    .all(|&k| (trial[k] - self.params[k]).abs() <= 1e-10 * self.params[k].abs().max(1e-10));
+                let small_gain = self.cost - new_cost <= 1e-14 * self.cost.max(1e-300);
+                self.params = trial;
+                self.cost = new_cost;
+                self.lambda = (self.lambda / 10.0).max(1e-12);
+                stepped = true;
+                self.converged = small_step || small_gain;
+                break;
+            }
+            self.lambda *= 10.0;
+        }
+        if !stepped {
+            self.converged = true;
+        }
+        stepped
+    }
+
+    fn finish(self) -> Result<NlFit, String> {
+        let model = self.model;
+        let xs = &self.xs;
+        let free = &self.free;
+        let n = xs.len();
+        let m = free.len();
+        let all = model.params().len();
+        let is_fixed = |k: usize| self.fixed.get(k).is_some_and(|v| v.is_some());
+        let active_tol = |p: &[f64]| self.active_tol(p);
+        let lhs = |p: &[f64], a: &[f64]| self.lhs(p, a);
+        let cost = self.cost;
+        let j = jacobian(self.model, &self.xs, &self.params, &self.free);
+        let mut a = vec![vec![0.0; m]; m];
+        for row in &j {
+            for u in 0..m {
+                for v in 0..m {
+                    a[u][v] += row[u] * row[v];
+                }
+            }
+        }
+        // 约束：在停止点的等式与贴边不等式零空间里算协方差，自由度扣除约束个数
+        let tight: Vec<Vec<f64>> = self
+            .rows
+            .iter()
+            .filter(|r| r.1 == Rel::Eq || (lhs(&self.params, &r.0) - r.2).abs() <= active_tol(&self.params))
+            .map(|r| r.0.clone())
+            .collect();
+        let basis = null_space(&tight, m);
+        let dof_n = n - basis.len();
+        let dof = dof_n as f64;
+        let reduced = self.cost / dof;
+        let mut se = vec![0.0; all];
+        let mut cov = vec![vec![0.0; all]; all];
+        if !self.rows.is_empty() {
+            let r = basis.len();
+            let h: Vec<Vec<f64>> = (0..r)
+                .map(|q1| {
+                    (0..r)
+                        .map(|q2| {
+                            (0..m)
+                                .map(|u| (0..m).map(|v| basis[q1][u] * a[u][v] * basis[q2][v]).sum::<f64>())
+                                .sum()
+                        })
+                        .collect()
+                })
+                .collect();
+            match mat_inv(&h) {
+                Some(inv) => {
+                    for (u, &k) in self.free.iter().enumerate() {
+                        for (v, &l) in self.free.iter().enumerate() {
+                            cov[k][l] = (0..r)
+                                .map(|q1| (0..r).map(|q2| basis[q1][u] * inv[q1][q2] * basis[q2][v]).sum::<f64>())
+                                .sum::<f64>()
+                                * reduced;
+                        }
+                        se[k] = cov[k][k].max(0.0).sqrt();
+                    }
+                }
+                None => {
+                    for &k in &self.free {
+                        se[k] = f64::NAN;
+                    }
+                }
+            }
+        } else {
+            match mat_inv(&a) {
+                Some(inv) => {
+                    for (u, &k) in self.free.iter().enumerate() {
+                        se[k] = (inv[u][u] * reduced).max(0.0).sqrt();
+                        for (v, &l) in self.free.iter().enumerate() {
+                            cov[k][l] = inv[u][v] * reduced;
+                        }
+                    }
+                }
+                None => {
+                    for &k in &self.free {
+                        se[k] = f64::NAN;
+                    }
+                }
+            }
+        }
+        let at_bound: Vec<bool> = (0..all)
+            .map(|k| {
+                let l = self.limit(k);
+                !is_fixed(k) && (l.lower == Some(self.params[k]) || l.upper == Some(self.params[k]))
+            })
+            .collect();
+        let fixed_flags: Vec<bool> = (0..all).map(is_fixed).collect();
+        let constraint_text = self.constraint_text;
+        let params = self.params;
+        let iterations = self.iterations;
+        let converged = self.converged;
+        let x_min = self.xs[0];
+        let x_max = self.xs[n - 1];
+        let mean = self.ys.iter().sum::<f64>() / n as f64;
+        let tss: f64 = self.ys.iter().map(|y| (y - mean).powi(2)).sum();
+        let r2 = if tss > 0.0 { 1.0 - self.cost / tss } else { f64::NAN };
+        Ok(NlFit {
+            model,
+            params,
+            se,
+            rss: cost,
+            r2,
+            adj_r2: 1.0 - (1.0 - r2) * (n as f64 - 1.0) / dof,
+            reduced_chi2: reduced,
+            n,
+            iterations,
+            converged,
+            fixed: fixed_flags,
+            at_bound,
+            dof: dof_n,
+            cov,
+            constraints: constraint_text,
+            x_min,
+            x_max,
+        })
+    }
+}
+
+/// 带参数限制与线性约束的拟合。
 pub fn fit_constrained(
     model: Model,
     xs: &[f64],
@@ -343,420 +845,10 @@ pub fn fit_constrained(
     limits: &[ParamLimits],
     constraints: &[LinearConstraint],
 ) -> Result<NlFit, String> {
-    let fixed: Vec<Option<f64>> = limits.iter().map(|l| l.fixed).collect();
-    let fixed = fixed.as_slice();
-    let limit = |k: usize| limits.get(k).copied().unwrap_or_default();
-    for (k, l) in limits.iter().enumerate() {
-        if let (Some(lo), Some(hi)) = (l.lower, l.upper) {
-            if lo >= hi || lo.is_nan() || hi.is_nan() {
-                return Err(format!(
-                    "参数 {} 的下限必须小于上限",
-                    model.params().get(k).unwrap_or(&"?")
-                ));
-            }
-        }
-        if l.lower.is_some_and(|v| !v.is_finite()) || l.upper.is_some_and(|v| !v.is_finite()) {
-            return Err("上下限必须是有限数".into());
-        }
-    }
-    let mut pts: Vec<(f64, f64)> = xs
-        .iter()
-        .zip(ys)
-        .filter(|(x, y)| x.is_finite() && y.is_finite())
-        .map(|(x, y)| (*x, *y))
-        .collect();
-    pts.sort_by(|a, b| a.0.total_cmp(&b.0));
-    let (xs, ys): (Vec<f64>, Vec<f64>) = pts.into_iter().unzip();
-    let all = model.params().len();
-    let is_fixed = |k: usize| fixed.get(k).is_some_and(|v| v.is_some());
-    let free: Vec<usize> = (0..all).filter(|k| !is_fixed(*k)).collect();
-    let m = free.len();
-    if m == 0 {
-        return Err("至少要有一个参数不固定".into());
-    }
-    if fixed.iter().flatten().any(|v| !v.is_finite()) {
-        return Err("固定参数的值必须是有限数".into());
-    }
-    let n = xs.len();
-    // 约束只作用在自由参数上：固定参数的贡献移到右边
-    let rows: Vec<(Vec<f64>, Rel, f64)> = constraints
-        .iter()
-        .map(|c| {
-            let a: Vec<f64> = free.iter().map(|&k| c.coef.get(k).copied().unwrap_or(0.0)).collect();
-            let b = c.rhs
-                - (0..all)
-                    .filter(|&k| is_fixed(k))
-                    .map(|k| c.coef.get(k).copied().unwrap_or(0.0) * fixed[k].unwrap())
-                    .sum::<f64>();
-            (a, c.rel, b)
-        })
-        .collect();
-    if rows.iter().any(|(a, _, _)| a.iter().all(|v| *v == 0.0)) {
-        return Err("约束只涉及固定参数，请去掉或改为固定值".into());
-    }
-    let n_eq = null_space(
-        &rows
-            .iter()
-            .filter(|r| r.1 == Rel::Eq)
-            .map(|r| r.0.clone())
-            .collect::<Vec<_>>(),
-        m,
-    )
-    .len();
-    if n <= n_eq {
-        return Err(format!(
-            "{} 有 {} 个参数，至少需要 {} 个有效数据点",
-            model.name(),
-            n_eq,
-            n_eq + 1
-        ));
-    }
-    let mut p = match initial {
-        Some(v) => v.to_vec(),
-        None => model.guess(&xs, &ys),
-    };
-    for (k, v) in fixed.iter().enumerate() {
-        if let Some(v) = v {
-            p[k] = *v;
-        }
-    }
-    for &k in &free {
-        p[k] = limit(k).clamp(p[k]);
-    }
-    let lhs = |p: &[f64], a: &[f64]| free.iter().zip(a).map(|(&k, c)| c * p[k]).sum::<f64>();
-    let violation = |p: &[f64], (a, rel, b): &(Vec<f64>, Rel, f64)| {
-        let d = lhs(p, a) - b;
-        match rel {
-            Rel::Eq => d,
-            Rel::Le => d.max(0.0),
-            Rel::Ge => d.min(0.0),
-        }
-    };
-    if !rows.is_empty() {
-        // 初值投影到可行域：交替投影到各约束（超平面/半空间）并截到上下界
-        let tol = |p: &[f64]| 1e-9 * free.iter().map(|&k| p[k].abs()).fold(1.0, f64::max);
-        for _ in 0..500 {
-            for row in &rows {
-                let d = violation(&p, row);
-                let norm2: f64 = row.0.iter().map(|c| c * c).sum();
-                if d != 0.0 {
-                    for (&k, c) in free.iter().zip(&row.0) {
-                        p[k] -= d * c / norm2;
-                    }
-                }
-            }
-            for &k in &free {
-                p[k] = limit(k).clamp(p[k]);
-            }
-            if rows.iter().all(|r| violation(&p, r).abs() <= tol(&p)) {
-                break;
-            }
-        }
-        if rows
-            .iter()
-            .any(|r| violation(&p, r).abs() > 1e-6 * free.iter().map(|&k| p[k].abs()).fold(1.0, f64::max))
-        {
-            return Err("约束之间（或与上下限、固定值）互相矛盾，找不到满足全部约束的参数".into());
-        }
-    }
-    let active_tol = |p: &[f64]| 1e-8 * free.iter().map(|&k| p[k].abs()).fold(1.0, f64::max);
-    let mut cost = rss(model, &xs, &ys, &p);
-    if !cost.is_finite() {
-        return Err("初值处函数值无效，请检查数据是否适合该函数".into());
-    }
-    let mut lambda = 1e-3;
-    let mut converged = false;
-    let mut iterations = 0;
-    while iterations < 500 {
-        iterations += 1;
-        let j = jacobian(model, &xs, &p, &free);
-        let r: Vec<f64> = xs.iter().zip(&ys).map(|(x, y)| y - model.eval(*x, &p)).collect();
-        let mut a = vec![vec![0.0; m]; m];
-        let mut g = vec![0.0; m];
-        for i in 0..n {
-            for u in 0..m {
-                g[u] += j[i][u] * r[i];
-                for v in 0..m {
-                    a[u][v] += j[i][u] * j[i][v];
-                }
-            }
-        }
-        // 活动集：贴着边界、且下降方向还往界外推的参数，本步不动，只解其余参数
-        let open: Vec<usize> = (0..m)
-            .filter(|&u| {
-                let (k, l) = (free[u], limit(free[u]));
-                !(l.lower == Some(p[k]) && g[u] < 0.0 || l.upper == Some(p[k]) && g[u] > 0.0)
-            })
-            .collect();
-        let mut stepped = false;
-        if !rows.is_empty() {
-            // 约束：等式与“贴边且朝外”的不等式进入零空间，其余不等式与上下界截断步长。
-            // 截断到 0 的那条约束（或上下界）说明它在挡路：加入活动集后重新求步。
-            let mut active: Vec<usize> = (0..rows.len())
-                .filter(|&i| {
-                    let r = &rows[i];
-                    let ag: f64 = r.0.iter().zip(&g).map(|(a, g)| a * g).sum();
-                    let tight = (lhs(&p, &r.0) - r.2).abs() <= active_tol(&p);
-                    match r.1 {
-                        Rel::Eq => true,
-                        Rel::Le => tight && ag > 0.0,
-                        Rel::Ge => tight && ag < 0.0,
-                    }
-                })
-                .collect();
-            let mut held: Vec<usize> = vec![];
-            'solve: loop {
-                let open_now: Vec<usize> = open.iter().copied().filter(|u| !held.contains(u)).collect();
-                let c_open: Vec<Vec<f64>> = active
-                    .iter()
-                    .map(|&i| open_now.iter().map(|&u| rows[i].0[u]).collect())
-                    .collect();
-                let basis = null_space(&c_open, open_now.len());
-                if basis.is_empty() {
-                    break 'solve;
-                }
-                let r = basis.len();
-                // H = Nᵀ A N，b = Nᵀ g
-                let an: Vec<Vec<f64>> = open_now
-                    .iter()
-                    .map(|&u| {
-                        (0..r)
-                            .map(|q| open_now.iter().enumerate().map(|(j, &v)| a[u][v] * basis[q][j]).sum())
-                            .collect()
-                    })
-                    .collect();
-                let h0: Vec<Vec<f64>> = (0..r)
-                    .map(|q1| {
-                        (0..r)
-                            .map(|q2| (0..open_now.len()).map(|i| basis[q1][i] * an[i][q2]).sum())
-                            .collect()
-                    })
-                    .collect();
-                let nb: Vec<f64> = (0..r)
-                    .map(|q| open_now.iter().enumerate().map(|(i, &u)| basis[q][i] * g[u]).sum())
-                    .collect();
-                while lambda < 1e16 {
-                    let mut h = h0.clone();
-                    for (q, row) in h.iter_mut().enumerate() {
-                        row[q] += lambda * row[q].max(1e-12);
-                    }
-                    let Some(inv) = mat_inv(&h) else {
-                        lambda *= 10.0;
-                        continue;
-                    };
-                    let z: Vec<f64> = (0..r).map(|q| (0..r).map(|q2| inv[q][q2] * nb[q2]).sum()).collect();
-                    let mut delta = vec![0.0; m];
-                    for (i, &u) in open_now.iter().enumerate() {
-                        delta[u] = (0..r).map(|q| basis[q][i] * z[q]).sum();
-                    }
-                    // 不越过不在活动集里的不等式和上下界；记下最先挡住的那个
-                    let mut alpha: f64 = 1.0;
-                    let mut blocker: Option<(bool, usize)> = None;
-                    for (i, row) in rows.iter().enumerate() {
-                        if active.contains(&i) {
-                            continue;
-                        }
-                        let ad: f64 = row.0.iter().zip(&delta).map(|(a, d)| a * d).sum();
-                        let slack = row.2 - lhs(&p, &row.0);
-                        let limit_here = match row.1 {
-                            Rel::Le if ad > 0.0 => slack.max(0.0) / ad,
-                            Rel::Ge if ad < 0.0 => slack.min(0.0) / ad,
-                            _ => continue,
-                        };
-                        if limit_here < alpha {
-                            alpha = limit_here;
-                            blocker = Some((true, i));
-                        }
-                    }
-                    for (u, &k) in free.iter().enumerate() {
-                        let l = limit(k);
-                        let limit_here = match (l.lower, l.upper) {
-                            (_, Some(hi)) if delta[u] > 0.0 => (hi - p[k]).max(0.0) / delta[u],
-                            (Some(lo), _) if delta[u] < 0.0 => (lo - p[k]).min(0.0) / delta[u],
-                            _ => continue,
-                        };
-                        if limit_here < alpha {
-                            alpha = limit_here;
-                            blocker = Some((false, u));
-                        }
-                    }
-                    if alpha <= 1e-12 {
-                        match blocker {
-                            Some((true, i)) => active.push(i),
-                            Some((false, u)) => held.push(u),
-                            None => {}
-                        }
-                        continue 'solve;
-                    }
-                    let mut trial = p.clone();
-                    for (u, &k) in free.iter().enumerate() {
-                        trial[k] = limit(k).clamp(p[k] + alpha * delta[u]);
-                    }
-                    let new_cost = rss(model, &xs, &ys, &trial);
-                    if new_cost < cost {
-                        let small_step = free
-                            .iter()
-                            .all(|&k| (trial[k] - p[k]).abs() <= 1e-10 * p[k].abs().max(1e-10));
-                        let small_gain = cost - new_cost <= 1e-14 * cost.max(1e-300);
-                        p = trial;
-                        cost = new_cost;
-                        lambda = (lambda / 10.0).max(1e-12);
-                        stepped = true;
-                        // 被约束截短的一步不算收敛：下一步会把挡路的约束纳入活动集
-                        converged = small_gain || (small_step && alpha >= 1.0);
-                        break 'solve;
-                    }
-                    lambda *= 10.0;
-                }
-                break 'solve;
-            }
-            if !stepped {
-                converged = true;
-            }
-            if converged {
-                break;
-            }
-            continue;
-        }
-        while lambda < 1e16 && !open.is_empty() {
-            let mut damped: Vec<Vec<f64>> = open.iter().map(|&u| open.iter().map(|&v| a[u][v]).collect()).collect();
-            for (i, row) in damped.iter_mut().enumerate() {
-                row[i] += lambda * a[open[i]][open[i]].max(1e-12);
-            }
-            let Some(inv) = mat_inv(&damped) else {
-                lambda *= 10.0;
-                continue;
-            };
-            let mut delta = vec![0.0; m];
-            for (i, &u) in open.iter().enumerate() {
-                delta[u] = open.iter().enumerate().map(|(j, &v)| inv[i][j] * g[v]).sum();
-            }
-            let mut trial = p.clone();
-            for (d, &k) in delta.iter().zip(&free) {
-                trial[k] = limit(k).clamp(trial[k] + d);
-            }
-            let new_cost = rss(model, &xs, &ys, &trial);
-            if new_cost < cost {
-                let small_step = free
-                    .iter()
-                    .all(|&k| (trial[k] - p[k]).abs() <= 1e-10 * p[k].abs().max(1e-10));
-                let small_gain = cost - new_cost <= 1e-14 * cost.max(1e-300);
-                p = trial;
-                cost = new_cost;
-                lambda = (lambda / 10.0).max(1e-12);
-                stepped = true;
-                converged = small_step || small_gain;
-                break;
-            }
-            lambda *= 10.0;
-        }
-        if !stepped {
-            // 任何阻尼都无法再降低残差：已到极小点
-            converged = true;
-        }
-        if converged {
-            break;
-        }
-    }
-    let j = jacobian(model, &xs, &p, &free);
-    let mut a = vec![vec![0.0; m]; m];
-    for row in &j {
-        for u in 0..m {
-            for v in 0..m {
-                a[u][v] += row[u] * row[v];
-            }
-        }
-    }
-    // 约束：在停止点的等式与贴边不等式零空间里算协方差，自由度扣除约束个数
-    let tight: Vec<Vec<f64>> = rows
-        .iter()
-        .filter(|r| r.1 == Rel::Eq || (lhs(&p, &r.0) - r.2).abs() <= active_tol(&p))
-        .map(|r| r.0.clone())
-        .collect();
-    let basis = null_space(&tight, m);
-    let dof_n = n - basis.len();
-    let dof = dof_n as f64;
-    let reduced = cost / dof;
-    let mut se = vec![0.0; all];
-    let mut cov = vec![vec![0.0; all]; all];
-    if !rows.is_empty() {
-        let r = basis.len();
-        let h: Vec<Vec<f64>> = (0..r)
-            .map(|q1| {
-                (0..r)
-                    .map(|q2| {
-                        (0..m)
-                            .map(|u| (0..m).map(|v| basis[q1][u] * a[u][v] * basis[q2][v]).sum::<f64>())
-                            .sum()
-                    })
-                    .collect()
-            })
-            .collect();
-        match mat_inv(&h) {
-            Some(inv) => {
-                for (u, &k) in free.iter().enumerate() {
-                    for (v, &l) in free.iter().enumerate() {
-                        cov[k][l] = (0..r)
-                            .map(|q1| (0..r).map(|q2| basis[q1][u] * inv[q1][q2] * basis[q2][v]).sum::<f64>())
-                            .sum::<f64>()
-                            * reduced;
-                    }
-                    se[k] = cov[k][k].max(0.0).sqrt();
-                }
-            }
-            None => {
-                for &k in &free {
-                    se[k] = f64::NAN;
-                }
-            }
-        }
-    } else {
-        match mat_inv(&a) {
-            Some(inv) => {
-                for (u, &k) in free.iter().enumerate() {
-                    se[k] = (inv[u][u] * reduced).max(0.0).sqrt();
-                    for (v, &l) in free.iter().enumerate() {
-                        cov[k][l] = inv[u][v] * reduced;
-                    }
-                }
-            }
-            None => {
-                for &k in &free {
-                    se[k] = f64::NAN;
-                }
-            }
-        }
-    }
-    let at_bound: Vec<bool> = (0..all)
-        .map(|k| {
-            let l = limit(k);
-            !is_fixed(k) && (l.lower == Some(p[k]) || l.upper == Some(p[k]))
-        })
-        .collect();
-    let mean = ys.iter().sum::<f64>() / n as f64;
-    let tss: f64 = ys.iter().map(|y| (y - mean).powi(2)).sum();
-    let r2 = if tss > 0.0 { 1.0 - cost / tss } else { f64::NAN };
-    Ok(NlFit {
-        model,
-        params: p,
-        se,
-        rss: cost,
-        r2,
-        adj_r2: 1.0 - (1.0 - r2) * (n as f64 - 1.0) / dof,
-        reduced_chi2: reduced,
-        n,
-        iterations,
-        converged,
-        fixed: (0..all).map(is_fixed).collect(),
-        at_bound,
-        dof: dof_n,
-        cov,
-        constraints: constraints.iter().map(|c| c.text.clone()).collect(),
-        x_min: xs[0],
-        x_max: xs[n - 1],
-    })
+    let mut session = FitSession::new(model, xs, ys, initial, limits, constraints)?;
+    session.optimize();
+    session.finish()
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -783,235 +875,237 @@ mod tests {
         assert!((got - want).abs() <= rel * want.abs().max(1e-9), "{got} vs {want}");
     }
 
+    const AUTO_START_CASES: [Case<'static>; 13] = [
+        (
+            Model::Voigt,
+            0.0,
+            10.0,
+            &[0.5, 5.0, 8.0, 1.2, 0.8],
+            0.03,
+            &[
+                0.502987389692305,
+                4.9994087742597,
+                7.98905574485161,
+                1.212719629821541,
+                0.790032894133966,
+            ],
+            &[
+                0.006207464376162809,
+                0.0022433759402392768,
+                0.07572102365167718,
+                0.025374812557617577,
+                0.03208450677549791,
+            ],
+            0.01072010972019333,
+        ),
+        (
+            Model::PsdVoigt1,
+            0.0,
+            10.0,
+            &[0.3, 4.5, 6.0, 1.5, 0.4],
+            0.03,
+            &[
+                0.3009534141880661,
+                4.499172087721348,
+                6.021337487717337,
+                1.4959212882150772,
+                0.4103596138827938,
+            ],
+            &[
+                0.005587425411888454,
+                0.0023442627654601854,
+                0.06509666834675183,
+                0.0071941672597614845,
+                0.024730834968163404,
+            ],
+            0.010758003239766188,
+        ),
+        (
+            Model::LogNormal,
+            0.2,
+            10.0,
+            &[0.2, 3.0, 0.4, 10.0],
+            0.03,
+            &[
+                0.20191298275817007,
+                3.000019482867363,
+                0.40007606359111575,
+                10.005413179919492,
+            ],
+            &[
+                0.004615721739269777,
+                0.0036396418783872795,
+                0.0012550820665772344,
+                0.038148829178791185,
+            ],
+            0.010908537439269561,
+        ),
+        (
+            Model::ExpDec2,
+            0.0,
+            10.0,
+            &[0.5, 4.0, 0.8, 2.0, 4.0],
+            0.02,
+            &[
+                0.4937960013006856,
+                4.01551121614994,
+                0.7974110921387975,
+                2.002545767816202,
+                4.046387326181638,
+            ],
+            &[
+                0.019735941188441294,
+                0.06279795003108511,
+                0.012293474333771807,
+                0.048313578591315055,
+                0.1865327482325991,
+            ],
+            0.00466318079317071,
+        ),
+        (
+            Model::ExpDec3,
+            0.0,
+            20.0,
+            &[0.2, 3.0, 0.5, 2.0, 2.5, 1.5, 9.0],
+            0.01,
+            &[
+                0.1559698425034319,
+                3.0833964991005396,
+                0.5123124336847743,
+                2.1498771149859217,
+                2.7657495595984742,
+                1.3151952150003738,
+                10.713480339384695,
+            ],
+            &[
+                0.04963758730807458,
+                0.05390947691399579,
+                0.008111631918091625,
+                0.16100156150396602,
+                0.22126250699496686,
+                0.15655332356926485,
+                1.9724746003585718,
+            ],
+            0.001095159831052157,
+        ),
+        (
+            Model::ExpGro1,
+            0.0,
+            5.0,
+            &[1.0, 0.5, 1.5],
+            0.05,
+            &[1.0036677407365988, 0.5015354665130808, 1.5017889664546158],
+            &[0.013547135634189463, 0.005649400152885607, 0.005030990698243008],
+            0.02974095858852069,
+        ),
+        (
+            Model::ExpAssoc,
+            0.0,
+            10.0,
+            &[0.5, 3.0, 0.7, 2.0, 4.0],
+            0.02,
+            &[
+                0.5121172136536161,
+                2.982998017016836,
+                0.7024269163748263,
+                1.9988689165175193,
+                3.9534873311285605,
+            ],
+            &[
+                0.010467899233794022,
+                0.049455331835194315,
+                0.012954363639320485,
+                0.03733528622375226,
+                0.15270653325894512,
+            ],
+            0.0046612916151662015,
+        ),
+        (
+            Model::DoseResp,
+            -3.0,
+            3.0,
+            &[1.0, 9.0, 0.3, 1.2],
+            0.05,
+            &[
+                1.0074086343720887,
+                8.998715240450007,
+                0.29953788120668495,
+                1.203679123501137,
+            ],
+            &[
+                0.007757719078944026,
+                0.009197507525541885,
+                0.0025321707989441815,
+                0.00744571058800078,
+            ],
+            0.029938095567038366,
+        ),
+        (
+            Model::Hill,
+            0.1,
+            10.0,
+            &[1.0, 8.0, 2.5, 2.2],
+            0.05,
+            &[
+                1.0189718518346893,
+                7.98959662778498,
+                2.500333429637884,
+                2.217168150144736,
+            ],
+            &[
+                0.01797666302307224,
+                0.017193247431952313,
+                0.009893466179771038,
+                0.020345891202554135,
+            ],
+            0.02953457394949384,
+        ),
+        (
+            Model::Gompertz,
+            0.0,
+            10.0,
+            &[6.0, 3.0, 0.9],
+            0.05,
+            &[6.001514782537589, 2.997167483936787, 0.9002960676563785],
+            &[0.008223440236067856, 0.005550430110585135, 0.006264636574684849],
+            0.03056073914187006,
+        ),
+        (
+            Model::Allometric2,
+            0.5,
+            10.0,
+            &[1.0, 0.8, 1.6],
+            0.05,
+            &[1.0063233380609855, 0.8003853338039472, 1.5996609617553645],
+            &[0.01309187654574319, 0.0038208430944108016, 0.0020292713044496834],
+            0.029939208157724446,
+        ),
+        (
+            Model::Power1,
+            1.0,
+            10.0,
+            &[2.0, 0.5, 0.7],
+            0.02,
+            &[1.9994608903244961, 0.4967582288374258, 0.7000192675871021],
+            &[0.0071972334099453935, 0.007057862408701341, 0.0015076629812576963],
+            0.004784781759805734,
+        ),
+        (
+            Model::Log3P1,
+            0.5,
+            10.0,
+            &[3.0, 1.2, 0.5],
+            0.02,
+            &[2.997125235443011, 1.1988014402935538, 0.4915073331562746],
+            &[0.020361190029973577, 0.00866411045169326, 0.02210971956403735],
+            0.0047744246482707055,
+        ),
+    ];
+
     #[test]
     fn added_builtin_functions_converge_to_scipy_curve_fit() {
         // 参考值：scipy.optimize.curve_fit（SciPy 1.17.1，p0 取真值）；这里用自动初值
-        let cases: [Case; 13] = [
-            (
-                Model::Voigt,
-                0.0,
-                10.0,
-                &[0.5, 5.0, 8.0, 1.2, 0.8],
-                0.03,
-                &[
-                    0.502987389692305,
-                    4.9994087742597,
-                    7.98905574485161,
-                    1.212719629821541,
-                    0.790032894133966,
-                ],
-                &[
-                    0.006207464376162809,
-                    0.0022433759402392768,
-                    0.07572102365167718,
-                    0.025374812557617577,
-                    0.03208450677549791,
-                ],
-                0.01072010972019333,
-            ),
-            (
-                Model::PsdVoigt1,
-                0.0,
-                10.0,
-                &[0.3, 4.5, 6.0, 1.5, 0.4],
-                0.03,
-                &[
-                    0.3009534141880661,
-                    4.499172087721348,
-                    6.021337487717337,
-                    1.4959212882150772,
-                    0.4103596138827938,
-                ],
-                &[
-                    0.005587425411888454,
-                    0.0023442627654601854,
-                    0.06509666834675183,
-                    0.0071941672597614845,
-                    0.024730834968163404,
-                ],
-                0.010758003239766188,
-            ),
-            (
-                Model::LogNormal,
-                0.2,
-                10.0,
-                &[0.2, 3.0, 0.4, 10.0],
-                0.03,
-                &[
-                    0.20191298275817007,
-                    3.000019482867363,
-                    0.40007606359111575,
-                    10.005413179919492,
-                ],
-                &[
-                    0.004615721739269777,
-                    0.0036396418783872795,
-                    0.0012550820665772344,
-                    0.038148829178791185,
-                ],
-                0.010908537439269561,
-            ),
-            (
-                Model::ExpDec2,
-                0.0,
-                10.0,
-                &[0.5, 4.0, 0.8, 2.0, 4.0],
-                0.02,
-                &[
-                    0.4937960013006856,
-                    4.01551121614994,
-                    0.7974110921387975,
-                    2.002545767816202,
-                    4.046387326181638,
-                ],
-                &[
-                    0.019735941188441294,
-                    0.06279795003108511,
-                    0.012293474333771807,
-                    0.048313578591315055,
-                    0.1865327482325991,
-                ],
-                0.00466318079317071,
-            ),
-            (
-                Model::ExpDec3,
-                0.0,
-                20.0,
-                &[0.2, 3.0, 0.5, 2.0, 2.5, 1.5, 9.0],
-                0.01,
-                &[
-                    0.1559698425034319,
-                    3.0833964991005396,
-                    0.5123124336847743,
-                    2.1498771149859217,
-                    2.7657495595984742,
-                    1.3151952150003738,
-                    10.713480339384695,
-                ],
-                &[
-                    0.04963758730807458,
-                    0.05390947691399579,
-                    0.008111631918091625,
-                    0.16100156150396602,
-                    0.22126250699496686,
-                    0.15655332356926485,
-                    1.9724746003585718,
-                ],
-                0.001095159831052157,
-            ),
-            (
-                Model::ExpGro1,
-                0.0,
-                5.0,
-                &[1.0, 0.5, 1.5],
-                0.05,
-                &[1.0036677407365988, 0.5015354665130808, 1.5017889664546158],
-                &[0.013547135634189463, 0.005649400152885607, 0.005030990698243008],
-                0.02974095858852069,
-            ),
-            (
-                Model::ExpAssoc,
-                0.0,
-                10.0,
-                &[0.5, 3.0, 0.7, 2.0, 4.0],
-                0.02,
-                &[
-                    0.5121172136536161,
-                    2.982998017016836,
-                    0.7024269163748263,
-                    1.9988689165175193,
-                    3.9534873311285605,
-                ],
-                &[
-                    0.010467899233794022,
-                    0.049455331835194315,
-                    0.012954363639320485,
-                    0.03733528622375226,
-                    0.15270653325894512,
-                ],
-                0.0046612916151662015,
-            ),
-            (
-                Model::DoseResp,
-                -3.0,
-                3.0,
-                &[1.0, 9.0, 0.3, 1.2],
-                0.05,
-                &[
-                    1.0074086343720887,
-                    8.998715240450007,
-                    0.29953788120668495,
-                    1.203679123501137,
-                ],
-                &[
-                    0.007757719078944026,
-                    0.009197507525541885,
-                    0.0025321707989441815,
-                    0.00744571058800078,
-                ],
-                0.029938095567038366,
-            ),
-            (
-                Model::Hill,
-                0.1,
-                10.0,
-                &[1.0, 8.0, 2.5, 2.2],
-                0.05,
-                &[
-                    1.0189718518346893,
-                    7.98959662778498,
-                    2.500333429637884,
-                    2.217168150144736,
-                ],
-                &[
-                    0.01797666302307224,
-                    0.017193247431952313,
-                    0.009893466179771038,
-                    0.020345891202554135,
-                ],
-                0.02953457394949384,
-            ),
-            (
-                Model::Gompertz,
-                0.0,
-                10.0,
-                &[6.0, 3.0, 0.9],
-                0.05,
-                &[6.001514782537589, 2.997167483936787, 0.9002960676563785],
-                &[0.008223440236067856, 0.005550430110585135, 0.006264636574684849],
-                0.03056073914187006,
-            ),
-            (
-                Model::Allometric2,
-                0.5,
-                10.0,
-                &[1.0, 0.8, 1.6],
-                0.05,
-                &[1.0063233380609855, 0.8003853338039472, 1.5996609617553645],
-                &[0.01309187654574319, 0.0038208430944108016, 0.0020292713044496834],
-                0.029939208157724446,
-            ),
-            (
-                Model::Power1,
-                1.0,
-                10.0,
-                &[2.0, 0.5, 0.7],
-                0.02,
-                &[1.9994608903244961, 0.4967582288374258, 0.7000192675871021],
-                &[0.0071972334099453935, 0.007057862408701341, 0.0015076629812576963],
-                0.004784781759805734,
-            ),
-            (
-                Model::Log3P1,
-                0.5,
-                10.0,
-                &[3.0, 1.2, 0.5],
-                0.02,
-                &[2.997125235443011, 1.1988014402935538, 0.4915073331562746],
-                &[0.020361190029973577, 0.00866411045169326, 0.02210971956403735],
-                0.0047744246482707055,
-            ),
-        ];
+        let cases = AUTO_START_CASES;
         for (model, from, to, truth, amp, params, se, rss) in cases {
             let (xs, ys) = data(model, from, to, truth, amp);
             let f = fit(model, &xs, &ys, None, &[]).unwrap_or_else(|e| panic!("{}: {e}", model.name()));

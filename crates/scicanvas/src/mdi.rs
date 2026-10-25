@@ -383,69 +383,81 @@ pub fn window(
             let line = if active { pal.title } else { pal.line };
             painter.rect_stroke(rect, 0.0, Stroke::new(1.0_f32, line));
 
-            // 改变大小：右下角、右边、下边
-            if geom.state == WinState::Normal {
-                let grips = [
-                    (
-                        Rect::from_min_max(pos2(rect.right() - 14.0, rect.bottom() - 14.0), rect.max),
-                        CursorIcon::ResizeNwSe,
-                        (true, true),
-                    ),
-                    (
-                        Rect::from_min_max(
-                            pos2(rect.right() - 4.0, bar.bottom()),
-                            pos2(rect.right() + 3.0, rect.bottom() - 14.0),
-                        ),
-                        CursorIcon::ResizeHorizontal,
-                        (true, false),
-                    ),
-                    (
-                        Rect::from_min_max(
-                            pos2(rect.left(), rect.bottom() - 4.0),
-                            pos2(rect.right() - 14.0, rect.bottom() + 3.0),
-                        ),
-                        CursorIcon::ResizeVertical,
-                        (false, true),
-                    ),
-                ];
-                for (i, (r, cursor, (dx, dy))) in grips.into_iter().enumerate() {
-                    let g = ui.interact(r, id.with(("grip", i)), Sense::drag());
-                    if g.hovered() || g.dragged() {
-                        ctx.set_cursor_icon(cursor);
-                    }
-                    if g.dragged() {
-                        geom.restore = None;
-                        let d = g.drag_delta();
-                        let mut max = geom.rect.max;
-                        if dx {
-                            max.x += d.x;
-                        }
-                        if dy {
-                            max.y += d.y;
-                        }
-                        let size = (max - geom.rect.min).max(MIN_SIZE);
-                        geom.rect = Rect::from_min_size(geom.rect.min, size);
-                    }
-                    if i == 0 {
-                        // 右下角的斜纹
-                        let s = Stroke::new(1.0_f32, pal.weak);
-                        for k in [4.0, 8.0] {
-                            painter.line_segment(
-                                [
-                                    pos2(rect.right() - 2.0 - k, rect.bottom() - 2.0),
-                                    pos2(rect.right() - 2.0, rect.bottom() - 2.0 - k),
-                                ],
-                                s,
-                            );
-                        }
-                    }
-                }
-            }
+            resize_grips(ui, ctx, id, geom, rect, bar, pal);
         });
     if geom.state == WinState::Normal || out.state == Some(WinState::Normal) {
         geom.rect = geom.rect.translate(vec2(0.0, (-geom.rect.top()).max(0.0)));
     }
     out
+}
+
+fn resize_grips(
+    ui: &mut egui::Ui,
+    ctx: &egui::Context,
+    id: egui::Id,
+    geom: &mut Geom,
+    rect: Rect,
+    bar: Rect,
+    pal: &Palette,
+) {
+    let painter = ui.painter().clone();
+    if geom.state == WinState::Normal {
+        let grips = [
+            (
+                Rect::from_min_max(pos2(rect.right() - 14.0, rect.bottom() - 14.0), rect.max),
+                CursorIcon::ResizeNwSe,
+                (true, true),
+            ),
+            (
+                Rect::from_min_max(
+                    pos2(rect.right() - 4.0, bar.bottom()),
+                    pos2(rect.right() + 3.0, rect.bottom() - 14.0),
+                ),
+                CursorIcon::ResizeHorizontal,
+                (true, false),
+            ),
+            (
+                Rect::from_min_max(
+                    pos2(rect.left(), rect.bottom() - 4.0),
+                    pos2(rect.right() - 14.0, rect.bottom() + 3.0),
+                ),
+                CursorIcon::ResizeVertical,
+                (false, true),
+            ),
+        ];
+        for (i, (r, cursor, (dx, dy))) in grips.into_iter().enumerate() {
+            let g = ui.interact(r, id.with(("grip", i)), Sense::drag());
+            if g.hovered() || g.dragged() {
+                ctx.set_cursor_icon(cursor);
+            }
+            if g.dragged() {
+                geom.restore = None;
+                let d = g.drag_delta();
+                let mut max = geom.rect.max;
+                if dx {
+                    max.x += d.x;
+                }
+                if dy {
+                    max.y += d.y;
+                }
+                let size = (max - geom.rect.min).max(MIN_SIZE);
+                geom.rect = Rect::from_min_size(geom.rect.min, size);
+            }
+            if i == 0 {
+                // 右下角的斜纹
+                let s = Stroke::new(1.0_f32, pal.weak);
+                for k in [4.0, 8.0] {
+                    painter.line_segment(
+                        [
+                            pos2(rect.right() - 2.0 - k, rect.bottom() - 2.0),
+                            pos2(rect.right() - 2.0, rect.bottom() - 2.0 - k),
+                        ],
+                        s,
+                    );
+                }
+            }
+        }
+    }
 }
 
 #[cfg(test)]

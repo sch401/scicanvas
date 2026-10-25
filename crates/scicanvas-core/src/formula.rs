@@ -640,263 +640,344 @@ fn datetime(ms: f64) -> Option<chrono::DateTime<chrono::Utc>> {
     }
 }
 
-/// 逐行标量函数。
+use crate::stats::{beta_inc, erfc, gamma_p, gamma_q, ln_gamma, norm_cdf, norm_ppf, t_cdf, t_ppf};
+use chrono::{Datelike, Timelike};
+use std::f64::consts::PI;
+
+struct ScalarInput<'a> {
+    name: &'a str,
+    args: &'a [f64],
+    x: f64,
+    y: f64,
+    z: f64,
+    mu: f64,
+    sigma: f64,
+}
+
+/// 逐行标量函数；按数学类别分派，分支计算式与原实现保持一致。
 fn scalar(name: &str, a: &[f64]) -> f64 {
-    use crate::stats::{beta_inc, erfc, gamma_p, gamma_q, ln_gamma, norm_cdf, norm_ppf, t_cdf, t_ppf};
-    use chrono::{Datelike, Timelike};
-    use std::f64::consts::PI;
-    let x = a[0];
-    let y = a.get(1).copied().unwrap_or(f64::NAN);
-    let z = a.get(2).copied().unwrap_or(f64::NAN);
-    // 正态分布的位置与尺度参数（缺省为标准正态）
-    let (mu, sigma) = (a.get(1).copied().unwrap_or(0.0), a.get(2).copied().unwrap_or(1.0));
-    match name {
-        "abs" => x.abs(),
-        "sign" => {
-            if x == 0.0 {
+    let input = ScalarInput {
+        name,
+        args: a,
+        x: a[0],
+        y: a.get(1).copied().unwrap_or(f64::NAN),
+        z: a.get(2).copied().unwrap_or(f64::NAN),
+        mu: a.get(1).copied().unwrap_or(0.0),
+        sigma: a.get(2).copied().unwrap_or(1.0),
+    };
+    scalar_arithmetic(&input)
+        .or_else(|| scalar_trigonometric(&input))
+        .or_else(|| scalar_special(&input))
+        .or_else(|| scalar_logic(&input))
+        .or_else(|| scalar_probability(&input))
+        .or_else(|| scalar_datetime(&input))
+        .unwrap_or(f64::NAN)
+}
+
+fn scalar_arithmetic(input: &ScalarInput<'_>) -> Option<f64> {
+    match input.name {
+        "abs" => Some(input.x.abs()),
+        "sign" => Some({
+            if input.x == 0.0 {
                 0.0
             } else {
-                x.signum()
+                input.x.signum()
             }
-        }
-        "sqrt" => x.sqrt(),
-        "cbrt" => x.cbrt(),
-        "sqr" => x * x,
-        "exp" => x.exp(),
-        "exp2" => x.exp2(),
-        "exp10" => 10f64.powf(x),
-        "ln" => x.ln(),
-        "log" | "log10" => x.log10(),
-        "log2" => x.log2(),
-        "logb" => x.ln() / y.ln(),
-        "pow" => x.powf(y),
-        "floor" => x.floor(),
-        "ceil" => x.ceil(),
-        "trunc" => x.trunc(),
-        "frac" => x.fract(),
-        "round" => {
-            if a.len() == 1 {
-                x.round()
+        }),
+        "sqrt" => Some(input.x.sqrt()),
+        "cbrt" => Some(input.x.cbrt()),
+        "sqr" => Some(input.x * input.x),
+        "exp" => Some(input.x.exp()),
+        "exp2" => Some(input.x.exp2()),
+        "exp10" => Some(10f64.powf(input.x)),
+        "ln" => Some(input.x.ln()),
+        "log" | "log10" => Some(input.x.log10()),
+        "log2" => Some(input.x.log2()),
+        "logb" => Some(input.x.ln() / input.y.ln()),
+        "pow" => Some(input.x.powf(input.y)),
+        "floor" => Some(input.x.floor()),
+        "ceil" => Some(input.x.ceil()),
+        "trunc" => Some(input.x.trunc()),
+        "frac" => Some(input.x.fract()),
+        "round" => Some({
+            if input.args.len() == 1 {
+                input.x.round()
             } else {
-                let k = 10f64.powi(y.round() as i32);
-                (x * k).round() / k
+                let k = 10f64.powi(input.y.round() as i32);
+                (input.x * k).round() / k
             }
-        }
-        "recip" => 1.0 / x,
-        "mod" => x.rem_euclid(y),
-        "rem" => x % y,
-        "hypot" => x.hypot(y),
-        "fact" => {
-            if x >= 0.0 && x == x.floor() {
-                gamma(x + 1.0).round()
+        }),
+        "recip" => Some(1.0 / input.x),
+        "mod" => Some(input.x.rem_euclid(input.y)),
+        "rem" => Some(input.x % input.y),
+        "hypot" => Some(input.x.hypot(input.y)),
+        "fact" => Some({
+            if input.x >= 0.0 && input.x == input.x.floor() {
+                gamma(input.x + 1.0).round()
             } else {
                 f64::NAN
             }
-        }
-        "ncr" => {
-            if x >= 0.0 && y >= 0.0 && y <= x && x == x.floor() && y == y.floor() {
-                (ln_gamma(x + 1.0) - ln_gamma(y + 1.0) - ln_gamma(x - y + 1.0))
+        }),
+        "ncr" => Some({
+            if input.x >= 0.0
+                && input.y >= 0.0
+                && input.y <= input.x
+                && input.x == input.x.floor()
+                && input.y == input.y.floor()
+            {
+                (ln_gamma(input.x + 1.0) - ln_gamma(input.y + 1.0) - ln_gamma(input.x - input.y + 1.0))
                     .exp()
                     .round()
             } else {
                 f64::NAN
             }
-        }
-        "npr" => {
-            if x >= 0.0 && y >= 0.0 && y <= x && x == x.floor() && y == y.floor() {
-                (ln_gamma(x + 1.0) - ln_gamma(x - y + 1.0)).exp().round()
+        }),
+        "npr" => Some({
+            if input.x >= 0.0
+                && input.y >= 0.0
+                && input.y <= input.x
+                && input.x == input.x.floor()
+                && input.y == input.y.floor()
+            {
+                (ln_gamma(input.x + 1.0) - ln_gamma(input.x - input.y + 1.0))
+                    .exp()
+                    .round()
             } else {
                 f64::NAN
             }
-        }
-        "gcd" => gcd(x, y),
-        "lcm" => {
-            let g = gcd(x, y);
+        }),
+        "gcd" => Some(gcd(input.x, input.y)),
+        "lcm" => Some({
+            let g = gcd(input.x, input.y);
             if g == 0.0 {
                 0.0
             } else {
-                (x.abs().round() / g * y.abs().round()).abs()
+                (input.x.abs().round() / g * input.y.abs().round()).abs()
             }
-        }
-        "clamp" => x.max(y).min(z),
-        "isnan" => bool_num(x.is_nan()),
-        "isinf" => bool_num(x.is_infinite()),
-        "sin" => x.sin(),
-        "cos" => x.cos(),
-        "tan" => x.tan(),
-        "sec" => 1.0 / x.cos(),
-        "csc" => 1.0 / x.sin(),
-        "cot" => 1.0 / x.tan(),
-        "asin" => x.asin(),
-        "acos" => x.acos(),
-        "atan" => x.atan(),
-        "acot" => (1.0 / x).atan(),
-        "atan2" => x.atan2(y),
-        "sinh" => x.sinh(),
-        "cosh" => x.cosh(),
-        "tanh" => x.tanh(),
-        "sech" => 1.0 / x.cosh(),
-        "csch" => 1.0 / x.sinh(),
-        "coth" => 1.0 / x.tanh(),
-        "asinh" => x.asinh(),
-        "acosh" => x.acosh(),
-        "atanh" => x.atanh(),
-        "deg" => x.to_degrees(),
-        "rad" => x.to_radians(),
-        "sinc" => {
-            if x == 0.0 {
+        }),
+        "clamp" => Some(input.x.max(input.y).min(input.z)),
+        "isnan" => Some(bool_num(input.x.is_nan())),
+        "isinf" => Some(bool_num(input.x.is_infinite())),
+        _ => None,
+    }
+}
+
+fn scalar_trigonometric(input: &ScalarInput<'_>) -> Option<f64> {
+    match input.name {
+        "sin" => Some(input.x.sin()),
+        "cos" => Some(input.x.cos()),
+        "tan" => Some(input.x.tan()),
+        "sec" => Some(1.0 / input.x.cos()),
+        "csc" => Some(1.0 / input.x.sin()),
+        "cot" => Some(1.0 / input.x.tan()),
+        "asin" => Some(input.x.asin()),
+        "acos" => Some(input.x.acos()),
+        "atan" => Some(input.x.atan()),
+        "acot" => Some((1.0 / input.x).atan()),
+        "atan2" => Some(input.x.atan2(input.y)),
+        "sinh" => Some(input.x.sinh()),
+        "cosh" => Some(input.x.cosh()),
+        "tanh" => Some(input.x.tanh()),
+        "sech" => Some(1.0 / input.x.cosh()),
+        "csch" => Some(1.0 / input.x.sinh()),
+        "coth" => Some(1.0 / input.x.tanh()),
+        "asinh" => Some(input.x.asinh()),
+        "acosh" => Some(input.x.acosh()),
+        "atanh" => Some(input.x.atanh()),
+        "deg" => Some(input.x.to_degrees()),
+        "rad" => Some(input.x.to_radians()),
+        "sinc" => Some({
+            if input.x == 0.0 {
                 1.0
             } else {
-                (PI * x).sin() / (PI * x)
+                (PI * input.x).sin() / (PI * input.x)
             }
-        }
-        "gamma" => gamma(x),
-        "lngamma" => {
-            if x > 0.0 {
-                ln_gamma(x)
+        }),
+        _ => None,
+    }
+}
+
+fn scalar_special(input: &ScalarInput<'_>) -> Option<f64> {
+    match input.name {
+        "gamma" => Some(gamma(input.x)),
+        "lngamma" => Some({
+            if input.x > 0.0 {
+                ln_gamma(input.x)
             } else {
-                gamma(x).abs().ln()
+                gamma(input.x).abs().ln()
             }
-        }
-        "beta" => lnbeta(x, y).exp(),
-        "lnbeta" => lnbeta(x, y),
-        "erf" => 1.0 - erfc(x),
-        "erfc" => erfc(x),
-        "erfinv" => {
-            if x <= -1.0 || x >= 1.0 {
-                if x == 1.0 {
+        }),
+        "beta" => Some(lnbeta(input.x, input.y).exp()),
+        "lnbeta" => Some(lnbeta(input.x, input.y)),
+        "erf" => Some(1.0 - erfc(input.x)),
+        "erfc" => Some(erfc(input.x)),
+        "erfinv" => Some({
+            if input.x <= -1.0 || input.x >= 1.0 {
+                if input.x == 1.0 {
                     f64::INFINITY
-                } else if x == -1.0 {
+                } else if input.x == -1.0 {
                     f64::NEG_INFINITY
                 } else {
                     f64::NAN
                 }
             } else {
-                norm_ppf((x + 1.0) / 2.0) / std::f64::consts::SQRT_2
+                norm_ppf((input.x + 1.0) / 2.0) / std::f64::consts::SQRT_2
             }
-        }
-        "betainc" => beta_inc(y, z, x),
-        "gammainc" => gamma_p(y, x),
-        "gammaincc" => gamma_q(y, x),
-        "step" => bool_num(x >= 0.0),
-        "logistic" => 1.0 / (1.0 + (-x).exp()),
-        "if" => {
-            if truthy(x) {
-                y
+        }),
+        "betainc" => Some(beta_inc(input.y, input.z, input.x)),
+        "gammainc" => Some(gamma_p(input.y, input.x)),
+        "gammaincc" => Some(gamma_q(input.y, input.x)),
+        _ => None,
+    }
+}
+
+fn scalar_logic(input: &ScalarInput<'_>) -> Option<f64> {
+    match input.name {
+        "step" => Some(bool_num(input.x >= 0.0)),
+        "logistic" => Some(1.0 / (1.0 + (-input.x).exp())),
+        "if" => Some({
+            if truthy(input.x) {
+                input.y
             } else {
-                z
+                input.z
             }
+        }),
+        "and" => Some(bool_num(truthy(input.x) && truthy(input.y))),
+        "or" => Some(bool_num(truthy(input.x) || truthy(input.y))),
+        "not" => Some(bool_num(!truthy(input.x))),
+        "xor" => Some(bool_num(truthy(input.x) != truthy(input.y))),
+        "between" => Some(bool_num(input.x >= input.y && input.x <= input.z)),
+        "min" => Some(input.x.min(input.y)),
+        "max" => Some(input.x.max(input.y)),
+        _ => None,
+    }
+}
+
+fn scalar_probability(input: &ScalarInput<'_>) -> Option<f64> {
+    match input.name {
+        "normpdf" => {
+            Some((-0.5 * ((input.x - input.mu) / input.sigma).powi(2)).exp() / (input.sigma * (2.0 * PI).sqrt()))
         }
-        "and" => bool_num(truthy(x) && truthy(y)),
-        "or" => bool_num(truthy(x) || truthy(y)),
-        "not" => bool_num(!truthy(x)),
-        "xor" => bool_num(truthy(x) != truthy(y)),
-        "between" => bool_num(x >= y && x <= z),
-        "min" => x.min(y),
-        "max" => x.max(y),
-        "normpdf" => (-0.5 * ((x - mu) / sigma).powi(2)).exp() / (sigma * (2.0 * PI).sqrt()),
-        "normcdf" => norm_cdf((x - mu) / sigma),
-        "norminv" => mu + sigma * norm_ppf(x),
-        "tpdf" => (ln_gamma((y + 1.0) / 2.0)
-            - ln_gamma(y / 2.0)
-            - 0.5 * (y * PI).ln()
-            - (y + 1.0) / 2.0 * (1.0 + x * x / y).ln())
-        .exp(),
-        "tcdf" => t_cdf(x, y),
-        "tinv" => {
-            if x > 0.0 && x < 1.0 {
-                t_ppf(x, y)
+        "normcdf" => Some(norm_cdf((input.x - input.mu) / input.sigma)),
+        "norminv" => Some(input.mu + input.sigma * norm_ppf(input.x)),
+        "tpdf" => Some(
+            (ln_gamma((input.y + 1.0) / 2.0)
+                - ln_gamma(input.y / 2.0)
+                - 0.5 * (input.y * PI).ln()
+                - (input.y + 1.0) / 2.0 * (1.0 + input.x * input.x / input.y).ln())
+            .exp(),
+        ),
+        "tcdf" => Some(t_cdf(input.x, input.y)),
+        "tinv" => Some({
+            if input.x > 0.0 && input.x < 1.0 {
+                t_ppf(input.x, input.y)
             } else {
                 f64::NAN
             }
-        }
-        "fpdf" => {
-            if x <= 0.0 {
+        }),
+        "fpdf" => Some({
+            if input.x <= 0.0 {
                 0.0
             } else {
-                ((y / 2.0) * (y / z).ln() + (y / 2.0 - 1.0) * x.ln()
-                    - ((y + z) / 2.0) * (1.0 + y * x / z).ln()
-                    - lnbeta(y / 2.0, z / 2.0))
+                ((input.y / 2.0) * (input.y / input.z).ln() + (input.y / 2.0 - 1.0) * input.x.ln()
+                    - ((input.y + input.z) / 2.0) * (1.0 + input.y * input.x / input.z).ln()
+                    - lnbeta(input.y / 2.0, input.z / 2.0))
                 .exp()
             }
-        }
-        "fcdf" => f_cdf(x, y, z),
-        "finv" => invert(|v| f_cdf(v, y, z), x, 0.0),
-        "chi2pdf" => {
-            if x <= 0.0 {
+        }),
+        "fcdf" => Some(f_cdf(input.x, input.y, input.z)),
+        "finv" => Some(invert(|v| f_cdf(v, input.y, input.z), input.x, 0.0)),
+        "chi2pdf" => Some({
+            if input.x <= 0.0 {
                 0.0
             } else {
-                ((y / 2.0 - 1.0) * x.ln() - x / 2.0 - (y / 2.0) * 2f64.ln() - ln_gamma(y / 2.0)).exp()
+                ((input.y / 2.0 - 1.0) * input.x.ln()
+                    - input.x / 2.0
+                    - (input.y / 2.0) * 2f64.ln()
+                    - ln_gamma(input.y / 2.0))
+                .exp()
             }
-        }
-        "chi2cdf" => gamma_p(y / 2.0, x.max(0.0) / 2.0),
-        "chi2inv" => invert(|v| gamma_p(y / 2.0, v / 2.0), x, 0.0),
-        "binopdf" => {
-            if x < 0.0 || x > y || x != x.floor() {
+        }),
+        "chi2cdf" => Some(gamma_p(input.y / 2.0, input.x.max(0.0) / 2.0)),
+        "chi2inv" => Some(invert(|v| gamma_p(input.y / 2.0, v / 2.0), input.x, 0.0)),
+        "binopdf" => Some({
+            if input.x < 0.0 || input.x > input.y || input.x != input.x.floor() {
                 0.0
             } else {
-                (ln_gamma(y + 1.0) - ln_gamma(x + 1.0) - ln_gamma(y - x + 1.0) + x * z.ln() + (y - x) * (1.0 - z).ln())
-                    .exp()
+                (ln_gamma(input.y + 1.0) - ln_gamma(input.x + 1.0) - ln_gamma(input.y - input.x + 1.0)
+                    + input.x * input.z.ln()
+                    + (input.y - input.x) * (1.0 - input.z).ln())
+                .exp()
             }
-        }
-        "binocdf" => {
-            let k = x.floor();
+        }),
+        "binocdf" => Some({
+            let k = input.x.floor();
             if k < 0.0 {
                 0.0
-            } else if k >= y {
+            } else if k >= input.y {
                 1.0
             } else {
                 // P(X ≤ k) = I_{1−p}(n − k, k + 1)
-                beta_inc(y - k, k + 1.0, 1.0 - z)
+                beta_inc(input.y - k, k + 1.0, 1.0 - input.z)
             }
-        }
-        "poisspdf" => {
-            if x < 0.0 || x != x.floor() {
+        }),
+        "poisspdf" => Some({
+            if input.x < 0.0 || input.x != input.x.floor() {
                 0.0
             } else {
-                (x * y.ln() - y - ln_gamma(x + 1.0)).exp()
+                (input.x * input.y.ln() - input.y - ln_gamma(input.x + 1.0)).exp()
             }
-        }
-        "poisscdf" => {
-            let k = x.floor();
+        }),
+        "poisscdf" => Some({
+            let k = input.x.floor();
             if k < 0.0 {
                 0.0
             } else {
-                gamma_q(k + 1.0, y)
+                gamma_q(k + 1.0, input.y)
             }
-        }
-        "exppdf" => {
-            if x < 0.0 {
+        }),
+        "exppdf" => Some({
+            if input.x < 0.0 {
                 0.0
             } else {
-                (-x / y).exp() / y
+                (-input.x / input.y).exp() / input.y
             }
-        }
-        "expcdf" => {
-            if x < 0.0 {
+        }),
+        "expcdf" => Some({
+            if input.x < 0.0 {
                 0.0
             } else {
-                -(-x / y).exp_m1()
+                -(-input.x / input.y).exp_m1()
             }
-        }
-        "year" => datetime(x).map_or(f64::NAN, |t| f64::from(t.year())),
-        "month" => datetime(x).map_or(f64::NAN, |t| f64::from(t.month())),
-        "day" => datetime(x).map_or(f64::NAN, |t| f64::from(t.day())),
-        "hour" => datetime(x).map_or(f64::NAN, |t| f64::from(t.hour())),
-        "minute" => datetime(x).map_or(f64::NAN, |t| f64::from(t.minute())),
-        "second" => datetime(x).map_or(f64::NAN, |t| f64::from(t.second()) + x.rem_euclid(1000.0) / 1000.0),
-        "weekday" => datetime(x).map_or(f64::NAN, |t| f64::from(t.weekday().number_from_monday())),
-        "dayofyear" => datetime(x).map_or(f64::NAN, |t| f64::from(t.ordinal())),
-        "date" => {
-            let ok = [x, y, z].iter().all(|v| v.is_finite() && *v == v.floor());
-            ok.then(|| chrono::NaiveDate::from_ymd_opt(x as i32, y as u32, z as u32))
+        }),
+        _ => None,
+    }
+}
+
+fn scalar_datetime(input: &ScalarInput<'_>) -> Option<f64> {
+    match input.name {
+        "year" => Some(datetime(input.x).map_or(f64::NAN, |t| f64::from(t.year()))),
+        "month" => Some(datetime(input.x).map_or(f64::NAN, |t| f64::from(t.month()))),
+        "day" => Some(datetime(input.x).map_or(f64::NAN, |t| f64::from(t.day()))),
+        "hour" => Some(datetime(input.x).map_or(f64::NAN, |t| f64::from(t.hour()))),
+        "minute" => Some(datetime(input.x).map_or(f64::NAN, |t| f64::from(t.minute()))),
+        "second" => Some(datetime(input.x).map_or(f64::NAN, |t| {
+            f64::from(t.second()) + input.x.rem_euclid(1000.0) / 1000.0
+        })),
+        "weekday" => Some(datetime(input.x).map_or(f64::NAN, |t| f64::from(t.weekday().number_from_monday()))),
+        "dayofyear" => Some(datetime(input.x).map_or(f64::NAN, |t| f64::from(t.ordinal()))),
+        "date" => Some({
+            let ok = [input.x, input.y, input.z]
+                .iter()
+                .all(|v| v.is_finite() && *v == v.floor());
+            ok.then(|| chrono::NaiveDate::from_ymd_opt(input.x as i32, input.y as u32, input.z as u32))
                 .flatten()
                 .map_or(f64::NAN, |d| {
                     d.and_hms_opt(0, 0, 0).unwrap().and_utc().timestamp_millis() as f64
                 })
-        }
-        "time" => ((x * 60.0 + y) * 60.0 + z) * 1000.0,
-        _ => f64::NAN,
+        }),
+        "time" => Some(((input.x * 60.0 + input.y) * 60.0 + input.z) * 1000.0),
+        _ => None,
     }
 }
 
