@@ -497,12 +497,12 @@ fn titles(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_group:
 }
 
 fn axes(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_group: &mut Option<egui::Id>) {
+    use scicanvas_core::format::NumberFormat;
     // 刻度格式：日期列做 X 时自动用日期刻度，这里只设数字格式
     for (label, format, salt) in [
         ("X 刻度格式", &mut g.x_format, "props-x-format"),
-        ("Y 刻度格式", &mut g.y_format, "props-y-format"),
+        ("左 Y 刻度格式", &mut g.y_format, "props-y-format"),
     ] {
-        use scicanvas_core::format::NumberFormat;
         ui.label(label);
         ui.horizontal_wrapped(|ui| {
             let mut kind = format.index();
@@ -522,6 +522,35 @@ fn axes(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_group: &
         });
         ui.end_row();
     }
+    if g.has_right_axis_style() {
+        let y2_format = g.y2_format;
+        let linked_places = y2_format.unwrap_or(g.y_format).places();
+        ui.label("右 Y 刻度格式");
+        ui.horizontal_wrapped(|ui| {
+            egui::ComboBox::from_id_salt("props-y2-format")
+                .selected_text(y2_format.map_or("跟随左 Y", |format| NumberFormat::KINDS[format.index()]))
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut g.y2_format, None, "跟随左 Y");
+                    for (i, name) in NumberFormat::KINDS.iter().enumerate() {
+                        ui.selectable_value(
+                            &mut g.y2_format,
+                            Some(NumberFormat::from_index(i, linked_places)),
+                            *name,
+                        );
+                    }
+                });
+            if let Some(format) = g.y2_format {
+                if format.index() != 0 {
+                    let mut places = format.places();
+                    ui.label("小数位");
+                    let response = ui.add(egui::DragValue::new(&mut places).range(0..=10));
+                    edit_group(&response, history_group);
+                    g.y2_format = Some(NumberFormat::from_index(format.index(), places));
+                }
+            }
+        });
+        ui.end_row();
+    }
 
     ui.label("X 范围");
     ui.horizontal_wrapped(|ui| {
@@ -538,7 +567,7 @@ fn axes(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_group: &
         ui.checkbox(&mut g.x_log, "对数");
     });
     ui.end_row();
-    ui.label("Y 范围");
+    ui.label("左 Y 范围");
     ui.horizontal_wrapped(|ui| {
         ui.checkbox(&mut g.y_auto, "自动");
         edit_group(
@@ -550,9 +579,25 @@ fn axes(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_group: &
             &ui.add_enabled(!g.y_auto, egui::DragValue::new(&mut g.y_max).speed(0.1)),
             history_group,
         );
-        ui.checkbox(&mut g.y_log, "对数");
+        ui.checkbox(&mut g.y_log, "对数（左右共用）");
     });
     ui.end_row();
+    if g.has_right_axis_style() {
+        ui.label("右 Y 范围");
+        ui.horizontal_wrapped(|ui| {
+            ui.checkbox(&mut g.y2_auto, "自动");
+            edit_group(
+                &ui.add_enabled(!g.y2_auto, egui::DragValue::new(&mut g.y2_min).speed(0.1)),
+                history_group,
+            );
+            ui.label("到");
+            edit_group(
+                &ui.add_enabled(!g.y2_auto, egui::DragValue::new(&mut g.y2_max).speed(0.1)),
+                history_group,
+            );
+        });
+        ui.end_row();
+    }
 }
 
 fn layer_style(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_group: &mut Option<egui::Id>) {

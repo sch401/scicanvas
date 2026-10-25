@@ -270,6 +270,22 @@ pub struct Layer {
     /// 折线、点线图的连接方式。
     #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Connect::is_straight"))]
     pub connect: Connect,
+    /// 右侧 Y 轴范围；默认自动，手动范围仅影响右轴曲线。
+    #[cfg_attr(
+        feature = "serde",
+        serde(default = "default_y2_auto", skip_serializing_if = "is_true")
+    )]
+    pub y2_auto: bool,
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "is_zero_f64"))]
+    pub y2_min: f64,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default = "default_y2_max", skip_serializing_if = "is_default_y2_max")
+    )]
+    pub y2_max: f64,
+    /// None 时沿用左 Y 轴数字格式，保持 v14 行为。
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Option::is_none"))]
+    pub y2_format: Option<crate::format::NumberFormat>,
 }
 
 /// 一条曲线的单独样式；None 表示跟随图层设置。
@@ -412,8 +428,35 @@ impl Default for Layer {
             link_y: None,
             x_format: crate::format::NumberFormat::Auto,
             y_format: crate::format::NumberFormat::Auto,
+            y2_auto: default_y2_auto(),
+            y2_min: 0.0,
+            y2_max: default_y2_max(),
+            y2_format: None,
         }
     }
+}
+
+fn default_y2_auto() -> bool {
+    true
+}
+
+fn default_y2_max() -> f64 {
+    10.0
+}
+
+#[cfg(feature = "serde")]
+fn is_true(value: &bool) -> bool {
+    *value
+}
+
+#[cfg(feature = "serde")]
+fn is_zero_f64(value: &f64) -> bool {
+    *value == 0.0
+}
+
+#[cfg(feature = "serde")]
+fn is_default_y2_max(value: &f64) -> bool {
+    *value == default_y2_max()
 }
 
 fn default_area_opacity() -> f32 {

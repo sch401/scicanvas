@@ -1164,6 +1164,80 @@ fn properties_y_toggle_keeps_curve_configuration_and_undo_history() {
 }
 
 #[test]
+fn right_y_axis_range_and_format_controls_are_live_and_undoable() {
+    use scicanvas_core::{format::NumberFormat, page::CurveStyle};
+    let mut app = app();
+    let layer = app.project.graph_mut(2).unwrap().first_layer_mut();
+    let key = layer.draft().y_keys[0].clone();
+    layer.set_plot_style(
+        &key,
+        Some(CurveStyle {
+            right_axis: true,
+            ..Default::default()
+        }),
+    );
+    let before = app.project.clone();
+    app.props_for = Some(2);
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    ctx.style_mut(|style| style.animation_time = 0.0);
+    let mut harness = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1500.0, 1300.0)),
+        |app: &mut SciApp, ctx: &egui::Context| {
+            app.history_group = None;
+            app.props_window(ctx);
+            app.finish_frame_edit(app.history_group);
+        },
+    )
+    .with_step(0.02);
+    harness.frame(&mut app, vec![]);
+    assert_eq!(
+        app.project, before,
+        "opening the properties panel does not edit the graph"
+    );
+    let output = harness.frame(&mut app, vec![]);
+    let right_range = crate::test_ui::text_rect(&output, "右 Y 范围").unwrap();
+    assert!(crate::test_ui::text_rect(&output, "右 Y 刻度格式").is_some());
+    let at = output
+        .shapes
+        .iter()
+        .filter_map(|shape| match &shape.shape {
+            egui::Shape::Text(text) if text.galley.job.text == "自动" => {
+                Some((text.pos + egui::vec2(5.0, 5.0), text.pos.y + text.galley.size().y / 2.0))
+            }
+            _ => None,
+        })
+        .min_by(|a, b| {
+            (a.1 - right_range.center().y)
+                .abs()
+                .total_cmp(&(b.1 - right_range.center().y).abs())
+        })
+        .map(|(position, _)| position)
+        .unwrap();
+    let before_range = app.project.clone();
+    harness.click(&mut app, at);
+    assert!(!app.project.graph(2).unwrap().first_layer().y2_auto);
+    roundtrip(&mut app, &before_range);
+    assert!(!app.project.graph(2).unwrap().first_layer().y2_auto);
+
+    let before_format = app.project.clone();
+    let output = harness.frame(&mut app, vec![]);
+    harness.click_text(&mut app, &output, "跟随左 Y");
+    let output = harness.frame(&mut app, vec![]);
+    harness.click_text(&mut app, &output, "科学计数");
+    assert_eq!(
+        app.project.graph(2).unwrap().first_layer().y2_format,
+        Some(NumberFormat::Scientific { places: 2 })
+    );
+    roundtrip(&mut app, &before_format);
+    assert_eq!(
+        app.project.graph(2).unwrap().first_layer().y2_format,
+        Some(NumberFormat::Scientific { places: 2 })
+    );
+}
+
+#[test]
 fn builder_edits_keep_draft_mapping_and_create_with_the_existing_undo_transaction() {
     for kind in [PlotType::LineSymbol, PlotType::FloatingBar] {
         let mut app = app();

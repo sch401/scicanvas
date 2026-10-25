@@ -857,19 +857,21 @@ fn axis_ranges(ctx: &LayerContext<'_, '_, '_>, data: &LayerData) -> AxisRanges {
         Some(names) => TickLabel::Category(names),
         None => TickLabel::Number(g.y_format),
     };
-    // 右侧 Y 轴：自动范围；带符号的点落在端点时同样留 4%
+    // 右侧 Y 轴独立控制范围；自动范围时，符号落在端点会留 4%
     let ya2 = (!all_y2.is_empty()).then(|| {
-        let mut a = axis(all_y2, true, 0.0, 0.0, g.y_log, false);
-        let marks: Vec<f64> = plots
-            .iter()
-            .map(|p| (&p.series, &p.style))
-            .filter(|(s, st)| !s.line_only && st.kind.has_symbol() && st.y_axis == crate::coord::YAxis::Right)
-            .flat_map(|(s, _)| s.points.iter().map(|p| p[1]))
-            .collect();
-        pad_ends(&mut a, marks.into_iter());
+        let mut a = axis(all_y2, g.y2_auto, g.y2_min, g.y2_max, g.y_log, false);
+        if g.y2_auto {
+            let marks: Vec<f64> = plots
+                .iter()
+                .map(|p| (&p.series, &p.style))
+                .filter(|(s, st)| !s.line_only && st.kind.has_symbol() && st.y_axis == crate::coord::YAxis::Right)
+                .flat_map(|(s, _)| s.points.iter().map(|p| p[1]))
+                .collect();
+            pad_ends(&mut a, marks.into_iter());
+        }
         a
     });
-    let y2_label = TickLabel::Number(g.y_format);
+    let y2_label = TickLabel::Number(g.y2_format.unwrap_or(g.y_format));
     let ylab2_w = ya2.as_ref().map_or(0.0, |a| {
         a.ticks
             .iter()

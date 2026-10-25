@@ -262,6 +262,8 @@ fn validate(project: &Project) -> Result<(), String> {
                 layer.x_max,
                 layer.y_min,
                 layer.y_max,
+                layer.y2_min,
+                layer.y2_max,
                 f64::from(layer.line_width),
                 f64::from(layer.symbol_size),
                 f64::from(layer.error_bars.cap),

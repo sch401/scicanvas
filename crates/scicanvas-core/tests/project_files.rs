@@ -189,7 +189,7 @@ fn v2_layers_roundtrip_and_invalid_page_is_rejected() {
     assert!(project_file::from_json(&value.to_string()).is_err());
 }
 
-// 迁移前 v14 的保存投影，用于逐字节核对，保持原字段、顺序和省略规则。
+// 迁移前曲线存储投影，用于逐字节核对旧字段、顺序和省略规则。
 fn legacy_curve_projection(p: &Project) -> String {
     let mut value = serde_json::to_value(p).unwrap();
     for (graph, wire) in p.graphs.iter().zip(value["graphs"].as_array_mut().unwrap()) {
@@ -219,8 +219,22 @@ fn legacy_curve_projection(p: &Project) -> String {
     serde_json::to_string_pretty(&value).unwrap()
 }
 
+fn legacy_v14_projection(p: &Project) -> String {
+    let mut value: serde_json::Value = serde_json::from_str(&legacy_curve_projection(p)).unwrap();
+    value["version"] = 14.into();
+    for graph in value["graphs"].as_array_mut().unwrap() {
+        for layer in graph["page"]["layers"].as_array_mut().unwrap() {
+            let object = layer.as_object_mut().unwrap();
+            for key in ["y2_auto", "y2_min", "y2_max", "y2_format"] {
+                object.remove(key);
+            }
+        }
+    }
+    serde_json::to_string_pretty(&value).unwrap()
+}
+
 #[test]
-fn unified_export_preserves_v14_bytes_previews_and_legacy_projects() {
+fn unified_export_preserves_current_bytes_previews_and_legacy_projects() {
     fixture_fonts();
     let mut original = Project::sample();
     let foreign = original.new_book();
@@ -266,9 +280,11 @@ fn unified_export_preserves_v14_bytes_previews_and_legacy_projects() {
     }
     // v0/v1 使用真实旧文件；v10 使用旧平行表，v11/v13 使用旧类型化曲线。
     let mut legacy_files = vec![V0.to_string(), V1.to_string()];
-    for version in [10, 11, 13] {
+    for version in [10, 11, 13, 14] {
         let mut wire = if version == 10 {
             legacy_editor_projection(&original)
+        } else if version == 14 {
+            serde_json::from_str(&legacy_v14_projection(&original)).unwrap()
         } else {
             serde_json::from_str(&legacy_curve_projection(&original)).unwrap()
         };
@@ -289,6 +305,45 @@ fn unified_export_preserves_v14_bytes_previews_and_legacy_projects() {
             );
         }
     }
+}
+
+#[test]
+fn v14_defaults_keep_the_old_right_axis_appearance_and_v15_settings_roundtrip() {
+    use scicanvas_core::{format::NumberFormat, page::CurveStyle};
+    fixture_fonts();
+    let mut p = Project::sample();
+    let key = p.graphs[0].first_layer().draft().y_keys[0].clone();
+    let layer = p.graphs[0].first_layer_mut();
+    layer.set_plot_style(
+        &key,
+        Some(CurveStyle {
+            right_axis: true,
+            ..Default::default()
+        }),
+    );
+    layer.y_format = NumberFormat::Scientific { places: 1 };
+    let old_svg = svg::render_page(&p.graphs[0], &p);
+    let v14 = legacy_v14_projection(&p);
+    let restored = project_file::from_json(&v14).unwrap();
+    let layer = restored.graphs[0].first_layer();
+    assert!(layer.y2_auto);
+    assert_eq!((layer.y2_min, layer.y2_max), (0.0, 10.0));
+    assert_eq!(layer.y2_format, None);
+    assert_eq!(svg::render_page(&restored.graphs[0], &restored), old_svg);
+
+    let mut manual = restored.clone();
+    let layer = manual.graphs[0].first_layer_mut();
+    layer.y2_auto = false;
+    layer.y2_min = 40.0;
+    layer.y2_max = 80.0;
+    layer.y2_format = Some(NumberFormat::Engineering { places: 2 });
+    let json = project_file::to_json(&manual).unwrap();
+    let loaded = project_file::from_json(&json).unwrap();
+    assert_eq!(loaded, manual);
+    assert_eq!(
+        project_file::from_scv(&project_file::to_scv(&manual).unwrap()).unwrap(),
+        manual
+    );
 }
 
 #[test]
@@ -391,7 +446,7 @@ fn vec_storage_matches_pre_refactor_v14_json_and_svg_bytes() {
         ("analysis", 13022549547118744312, 10274796173482420218),
     ] {
         let p = vector_compat_fixture(mode);
-        let json = project_file::to_json(&p).unwrap();
+        let json = legacy_v14_projection(&p);
         let svg = p
             .graphs
             .iter()
@@ -401,7 +456,14 @@ fn vec_storage_matches_pre_refactor_v14_json_and_svg_bytes() {
         assert_eq!(hash(json.as_bytes()), json_hash, "{mode}: v14 JSON");
         assert_eq!(hash(svg.as_bytes()), svg_hash, "{mode}: SVG");
         let saved = project_file::from_json(&json).unwrap();
-        assert_eq!(project_file::to_json(&saved).unwrap(), json);
+        assert_eq!(
+            project_file::to_json(&saved).unwrap(),
+            project_file::to_json(&p).unwrap()
+        );
+        assert_eq!(
+            project_file::from_json(&project_file::to_json(&saved).unwrap()).unwrap(),
+            saved
+        );
         assert_eq!(
             project_file::from_scv(&project_file::to_scv(&p).unwrap()).unwrap(),
             saved

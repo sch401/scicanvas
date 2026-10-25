@@ -63,6 +63,53 @@ fn page_text_and_manual_legends_keep_page_positions_when_axes_zoom() {
     assert!(next > id, "deleted text IDs are not reused");
 }
 
+#[test]
+fn right_y_axis_range_and_number_format_are_independent() {
+    use scicanvas_core::{format::NumberFormat, page::CurveStyle};
+    let mut project = Project::sample();
+    let key = project.graphs[0].first_layer().draft().y_keys[0].clone();
+    let layer = project.graphs[0].first_layer_mut();
+    layer.set_plot_style(
+        &key,
+        Some(CurveStyle {
+            right_axis: true,
+            ..Default::default()
+        }),
+    );
+    layer.y_format = NumberFormat::Decimal { places: 0 };
+    layer.y2_auto = false;
+    layer.y2_min = 40.0;
+    layer.y2_max = 80.0;
+    layer.y2_format = Some(NumberFormat::Scientific { places: 1 });
+
+    let graph = &project.graphs[0];
+    let scene = scene::layout_page(graph, &project, &[]);
+    let right = scene.layers[0].axes.right_y.as_ref().unwrap();
+    assert_eq!((right.lo, right.hi), (40.0, 80.0));
+    assert!((scene.layers[0].axes.left_y.lo, scene.layers[0].axes.left_y.hi) != (right.lo, right.hi));
+    assert!(scene.items.iter().any(|item| matches!(
+        &item.prim,
+        scene::Prim::Text { text, .. } if text == "4.0E1"
+    )));
+
+    let zoomed = scene::layout_page(
+        graph,
+        &project,
+        &[Some(scene::View {
+            x: (2.0, 8.0),
+            y: (-1.0, 2.0),
+        })],
+    );
+    assert_eq!(
+        (
+            zoomed.layers[0].axes.right_y.as_ref().unwrap().lo,
+            zoomed.layers[0].axes.right_y.as_ref().unwrap().hi
+        ),
+        (40.0, 80.0)
+    );
+    assert!(svg::render_page(graph, &project).contains("4.0E1"));
+}
+
 #[cfg(feature = "serde")]
 #[test]
 fn v13_objects_roundtrip_and_legacy_defaults_keep_literal_text_and_auto_legends() {
