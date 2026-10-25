@@ -180,6 +180,7 @@ pub fn from_json(text: &str) -> Result<Project, String> {
         .chain(project.graphs.iter().map(|g| g.id))
         .chain(project.notes.iter().map(|n| n.id))
         .chain(project.folders.iter().map(|f| f.id))
+        .chain(project.fit_functions.iter().map(|f| f.id))
         .max()
         .unwrap_or(0);
     project.next_id = project.next_id.max(max_id.checked_add(1).ok_or("项目对象编号已用尽")?);
@@ -233,9 +234,17 @@ fn validate(project: &Project) -> Result<(), String> {
         .chain(project.graphs.iter().map(|g| g.id))
         .chain(project.notes.iter().map(|n| n.id))
         .chain(project.folders.iter().map(|f| f.id))
+        .chain(project.fit_functions.iter().map(|f| f.id))
     {
         if id == 0 || id == u64::MAX || !ids.insert(id) {
             return Err(format!("对象编号 {id} 无效或重复"));
+        }
+    }
+    let mut function_names = BTreeSet::new();
+    for saved in &project.fit_functions {
+        saved.definition.resolve()?;
+        if !function_names.insert(&saved.definition.name) {
+            return Err("项目函数库中有重复名称".into());
         }
     }
     project.validate_folders()?;
@@ -589,6 +598,58 @@ pub fn load_graph_template(path: &Path) -> Result<GraphTemplate, String> {
     }
     let text = String::from_utf8(content).map_err(|_| "图形模板不是 UTF-8 JSON")?;
     graph_template_from_json(&text)
+}
+
+const MAX_FIT_FUNCTION_BYTES: usize = 64 * 1024;
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FitFunctionFile {
+    version: u32,
+    function: crate::nlfit::CustomFitDefinition,
+}
+
+pub fn fit_function_to_json(function: &crate::nlfit::CustomFitDefinition) -> Result<String, String> {
+    function.resolve()?;
+    let content = serde_json::to_string_pretty(&FitFunctionFile {
+        version: 1,
+        function: function.clone(),
+    })
+    .map_err(|error| format!("序列化拟合函数失败：{error}"))?;
+    if content.len() > MAX_FIT_FUNCTION_BYTES {
+        return Err("拟合函数文件过大".into());
+    }
+    Ok(content)
+}
+
+pub fn fit_function_from_json(text: &str) -> Result<crate::nlfit::CustomFitDefinition, String> {
+    if text.len() > MAX_FIT_FUNCTION_BYTES {
+        return Err("拟合函数文件过大".into());
+    }
+    let file: FitFunctionFile = serde_json::from_str(text.trim_start_matches('\u{feff}'))
+        .map_err(|error| format!("拟合函数文件格式错误：{error}"))?;
+    if file.version != 1 {
+        return Err(format!("不支持的拟合函数文件版本 {}", file.version));
+    }
+    file.function.resolve()?;
+    Ok(file.function)
+}
+
+pub fn save_fit_function(path: &Path, function: &crate::nlfit::CustomFitDefinition) -> Result<(), String> {
+    let content = fit_function_to_json(function)?;
+    write_atomic(path, content.as_bytes(), "函数文件名为空", "保存拟合函数失败：")
+}
+
+pub fn load_fit_function(path: &Path) -> Result<crate::nlfit::CustomFitDefinition, String> {
+    let file = std::fs::File::open(path).map_err(|error| error.to_string())?;
+    if file.metadata().map_err(|error| error.to_string())?.len() > MAX_FIT_FUNCTION_BYTES as u64 {
+        return Err("拟合函数文件过大".into());
+    }
+    let mut content = String::new();
+    file.take(MAX_FIT_FUNCTION_BYTES as u64 + 1)
+        .read_to_string(&mut content)
+        .map_err(|error| format!("读取拟合函数失败：{error}"))?;
+    fit_function_from_json(&content)
 }
 
 fn scv_text(zip: &mut zip::ZipArchive<Cursor<&[u8]>>, name: &str) -> Result<Option<String>, String> {

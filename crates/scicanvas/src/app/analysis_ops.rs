@@ -36,13 +36,117 @@ impl SciApp {
     }
 
     pub(crate) fn open_custom_nlfit_dialog(&mut self) {
-        self.dialog = Some(Dialog::CustomNlFit {
-            name: "自定义函数".into(),
-            formula: "a*exp(-b*x)+c".into(),
-            parameters: "a, b, c".into(),
-            initial: "2, 0.3, 0".into(),
-            constraints: String::new(),
-        });
+        let editor = self
+            .project
+            .fit_functions
+            .first()
+            .map(dialogs::CustomFitEditor::saved)
+            .unwrap_or_default();
+        self.dialog = Some(Dialog::CustomNlFit(editor));
+    }
+
+    pub(super) fn edit_custom_fit_definition(&mut self, definition: scicanvas_core::nlfit::CustomFitDefinition) {
+        let mut editor = dialogs::CustomFitEditor::from_definition(&definition);
+        editor.before = self
+            .project
+            .fit_functions
+            .iter()
+            .find(|entry| entry.definition.name == definition.name)
+            .cloned();
+        self.dialog = Some(Dialog::CustomNlFit(editor));
+    }
+
+    pub(super) fn save_custom_fit_definition(
+        &mut self,
+        before: Option<scicanvas_core::nlfit::SavedFitFunction>,
+        definition: scicanvas_core::nlfit::CustomFitDefinition,
+    ) -> bool {
+        self.edit_with(
+            "保存拟合函数",
+            |project| project.save_fit_function(before.as_ref(), definition).map(Some),
+            |app, id| {
+                let saved = app.project.fit_functions.iter().find(|entry| entry.id == id).unwrap();
+                app.status = format!("已保存函数：{}", saved.definition.name);
+                app.dialog = Some(Dialog::CustomNlFit(dialogs::CustomFitEditor::saved(saved)));
+            },
+        )
+        .is_some()
+    }
+
+    pub(super) fn import_custom_fit_function(&mut self, path: &std::path::Path) -> bool {
+        let definition = match scicanvas_core::project_file::load_fit_function(path) {
+            Ok(definition) => definition,
+            Err(error) => {
+                self.status = error;
+                return false;
+            }
+        };
+        if self
+            .project
+            .fit_functions
+            .iter()
+            .any(|entry| entry.definition.name == definition.name)
+        {
+            self.edit_custom_fit_definition(definition);
+            self.status = "已载入同名函数，保存函数后更新当前项目".into();
+            true
+        } else {
+            self.save_custom_fit_definition(None, definition)
+        }
+    }
+
+    pub(super) fn apply_custom_fit_library_action(&mut self, action: dialogs::CustomFitAction) -> bool {
+        use dialogs::CustomFitAction;
+        match action {
+            CustomFitAction::Save { before, definition } => match definition {
+                Ok(definition) => self.save_custom_fit_definition(before, definition),
+                Err(error) => {
+                    self.status = error;
+                    false
+                }
+            },
+            CustomFitAction::Edit(definition) => {
+                self.edit_custom_fit_definition(definition);
+                true
+            }
+            CustomFitAction::LoadFile => {
+                let Some(path) = rfd::FileDialog::new()
+                    .set_title("载入拟合函数")
+                    .add_filter("SciCanvas 拟合函数", &["scfn"])
+                    .pick_file()
+                else {
+                    return true;
+                };
+                self.import_custom_fit_function(&path)
+            }
+            CustomFitAction::Export(definition) => {
+                let definition = match definition {
+                    Ok(definition) => definition,
+                    Err(error) => {
+                        self.status = error;
+                        return false;
+                    }
+                };
+                let Some(path) = rfd::FileDialog::new()
+                    .set_title("导出拟合函数")
+                    .add_filter("SciCanvas 拟合函数", &["scfn"])
+                    .set_file_name(format!("{}.scfn", definition.name))
+                    .save_file()
+                else {
+                    return true;
+                };
+                match scicanvas_core::project_file::save_fit_function(&path, &definition) {
+                    Ok(()) => {
+                        self.status = format!("已导出函数：{}", path.display());
+                        true
+                    }
+                    Err(error) => {
+                        self.status = error;
+                        false
+                    }
+                }
+            }
+        }
     }
 
     pub(super) fn nlfit(

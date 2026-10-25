@@ -53,6 +53,7 @@ mod window;
 pub use column_props::ColumnEdit;
 pub(crate) use docking::{begin_docks, end_docks, has_docks, place_docks, reset_docks, DockSide};
 pub use layer_contents::LayerContents;
+pub use nl_fit::{CustomFitAction, CustomFitEditor};
 pub(crate) use plot_object::PlotObjectEditor;
 pub(crate) use scientific_text::{scientific_text, scientific_text_multiline};
 pub(crate) use tables::md_table;
@@ -151,13 +152,7 @@ pub enum Dialog {
         /// 参数间线性约束，一行一条。
         constraints: String,
     },
-    CustomNlFit {
-        name: String,
-        formula: String,
-        parameters: String,
-        initial: String,
-        constraints: String,
-    },
+    CustomNlFit(CustomFitEditor),
     /// 非线性拟合结果。
     NlFitReport(Vec<NlFitReport>),
     /// FFT 滤波：类型（0 低通、1 高通、2 带通、3 带阻）、截止频率与奈奎斯特频率（仅作提示）。
@@ -272,6 +267,7 @@ pub enum Action {
     SetValues(String, bool),
     NlFit(Model, Vec<scicanvas_core::nlfit::ParamLimits>, String),
     OpenCustomNlFit,
+    CustomFitLibrary(Box<CustomFitAction>),
     CustomNlFit {
         name: String,
         formula: String,
@@ -309,7 +305,7 @@ impl Dialog {
             Self::Anova { .. } => self.show_anova(ctx, pal, &mut open, esc),
             Self::Correlations(..) => self.show_correlations(ctx, pal, &mut open, esc),
             Self::NlFit { .. } => self.show_nl_fit(ctx, pal, &mut open, esc),
-            Self::CustomNlFit { .. } => self.show_custom_nl_fit(ctx, pal, &mut open, esc),
+            Self::CustomNlFit(..) => self.show_custom_nl_fit(ctx, pal, &mut open, esc, project),
             Self::NlFitReport(..) => self.show_nl_fit_report(ctx, pal, &mut open, esc),
             Self::FftFilter { .. } => self.show_fft_filter(ctx, pal, &mut open, esc),
             Self::Fill { .. } => self.show_fill(ctx, pal, &mut open, esc),

@@ -971,6 +971,7 @@ impl SciApp {
         self.book_preview = None;
         self.project = project;
         match &mut self.dialog {
+            Some(Dialog::CustomNlFit(edit)) => edit.sync_saved(&self.project.fit_functions),
             Some(Dialog::LayerContents(edit)) => {
                 if let Some(layer) = self
                     .project
@@ -1091,7 +1092,12 @@ impl SciApp {
         }
         if !matches!(
             self.dialog,
-            Some(Dialog::LayerContents(_) | Dialog::ColumnProps { .. } | Dialog::CategoryOrder { .. })
+            Some(
+                Dialog::LayerContents(_)
+                    | Dialog::ColumnProps { .. }
+                    | Dialog::CategoryOrder { .. }
+                    | Dialog::CustomNlFit(_)
+            )
         ) {
             self.dialog = None;
         }

@@ -347,13 +347,13 @@ fn v14_defaults_keep_the_old_right_axis_appearance_and_v15_settings_roundtrip() 
 }
 
 #[test]
-fn v15_projects_default_reference_lines_and_v17_roundtrips_them() {
+fn v15_projects_default_reference_lines_and_current_version_roundtrips_them() {
     use scicanvas_core::page::{ReferenceAxis, ReferenceLine};
     let project = Project::sample();
     let mut legacy = serde_json::to_value(&project).unwrap();
     legacy["version"] = 15.into();
     let loaded = project_file::from_json(&legacy.to_string()).unwrap();
-    assert_eq!(loaded.version, 17);
+    assert_eq!(loaded.version, scicanvas_core::project_file::CURRENT_VERSION);
     assert!(loaded.graphs[0].first_layer().reference_lines.is_empty());
 
     let mut current = loaded;
@@ -365,7 +365,10 @@ fn v15_projects_default_reference_lines_and_v17_roundtrips_them() {
         dashed: false,
     });
     let json = project_file::to_json(&current).unwrap();
-    assert_eq!(serde_json::from_str::<serde_json::Value>(&json).unwrap()["version"], 17);
+    assert_eq!(
+        serde_json::from_str::<serde_json::Value>(&json).unwrap()["version"],
+        scicanvas_core::project_file::CURRENT_VERSION
+    );
     assert_eq!(project_file::from_json(&json).unwrap(), current);
     assert_eq!(
         project_file::from_scv(&project_file::to_scv(&current).unwrap()).unwrap(),
@@ -374,7 +377,7 @@ fn v15_projects_default_reference_lines_and_v17_roundtrips_them() {
 }
 
 #[test]
-fn v16_curve_styles_default_new_point_mappings_and_v17_roundtrips_them() {
+fn v16_curve_styles_default_new_point_mappings_and_current_version_roundtrips_them() {
     use scicanvas_core::page::{CurveStyle, SymbolFill};
     let mut project = Project::sample();
     let key = project.graphs[0].first_layer().draft().y_keys[0].clone();
@@ -412,7 +415,7 @@ fn v16_curve_styles_default_new_point_mappings_and_v17_roundtrips_them() {
     }
     remove_v17_fields(&mut v16);
     let mut loaded = project_file::from_json(&v16.to_string()).unwrap();
-    assert_eq!(loaded.version, 17);
+    assert_eq!(loaded.version, scicanvas_core::project_file::CURRENT_VERSION);
     let style = loaded.graphs[0].first_layer().plot_style(&key).unwrap();
     assert_eq!(style.color, Some([80, 40, 120]));
     assert!(style.color_column.is_none() && style.symbol_border_color.is_none());
@@ -693,4 +696,111 @@ fn legacy_invalid_explicit_refs_remain_distinct_from_unbound_and_missing_base() 
     p.graphs[0].first_layer_mut().book_id = None;
     let text = project_file::to_json(&p).unwrap();
     assert_eq!(project_file::from_json(&text).unwrap(), p);
+}
+
+#[test]
+fn custom_fit_library_v18_roundtrips_and_v17_defaults_to_an_empty_library() {
+    use scicanvas_core::nlfit::{CustomFitDefinition, FitFunction};
+    fixture_fonts();
+    let mut project = Project::sample();
+    let old_svg = svg::render_page(&project.graphs[0], &project);
+    let mut legacy = serde_json::to_value(&project).unwrap();
+    legacy["version"] = 17.into();
+    assert!(legacy.get("fit_functions").is_none());
+    let loaded = project_file::from_json(&legacy.to_string()).unwrap();
+    assert!(loaded.fit_functions.is_empty());
+    assert_eq!(loaded.version, 18);
+    assert_eq!(svg::render_page(&loaded.graphs[0], &loaded), old_svg);
+    let definition = CustomFitDefinition::from_text("Decay", "a*exp(-b*x)+c", "a,b,c", "2,0.3,0.2", "b >= 0").unwrap();
+    let id = project.save_fit_function(None, definition.clone()).unwrap();
+    let file = project_file::fit_function_to_json(&definition).unwrap();
+    assert!(!file.contains("\"id\""));
+    let restored = project_file::fit_function_from_json(&file).unwrap();
+    assert_eq!(restored, definition);
+    assert_eq!(
+        project_file::from_json(&project_file::to_json(&project).unwrap()).unwrap(),
+        project
+    );
+    assert_eq!(
+        project_file::from_scv(&project_file::to_scv(&project).unwrap()).unwrap(),
+        project
+    );
+    let mut stale = serde_json::to_value(&project).unwrap();
+    stale["next_id"] = 1.into();
+    assert!(project_file::from_json(&stale.to_string()).unwrap().next_id > id);
+    let xs: Vec<f64> = (0..40).map(|i| i as f64 * 0.25).collect();
+    let ys: Vec<f64> = xs.iter().map(|x| 2.2 * (-0.4 * x).exp() + 0.3).collect();
+    let (function, constraints) = restored.resolve().unwrap();
+    let fit = scicanvas_core::nlfit::fit_function(
+        FitFunction::Custom(function),
+        &xs,
+        &ys,
+        Some(&restored.initial),
+        &[],
+        &constraints,
+    )
+    .unwrap();
+    assert!(fit.converged);
+    for (actual, expected) in fit.params.iter().zip([2.2, 0.4, 0.3]) {
+        assert!((actual - expected).abs() < 1e-7);
+    }
+    for kind in ["duplicate-name", "duplicate-id", "formula", "initial"] {
+        let mut wire = serde_json::to_value(&project).unwrap();
+        match kind {
+            "duplicate-name" => {
+                let mut duplicate = wire["fit_functions"][0].clone();
+                duplicate["id"] = (id + 100).into();
+                wire["fit_functions"].as_array_mut().unwrap().push(duplicate);
+            }
+            "duplicate-id" => wire["fit_functions"][0]["id"] = project.books[0].id.into(),
+            "formula" => wire["fit_functions"][0]["definition"]["formula"] = "a*x+missing".into(),
+            _ => wire["fit_functions"][0]["definition"]["initial"] = serde_json::json!([1]),
+        }
+        assert!(project_file::from_json(&wire.to_string()).is_err(), "{kind}");
+    }
+}
+
+#[test]
+fn custom_fit_files_validate_inputs_and_failed_saves_preserve_existing_bytes() {
+    use scicanvas_core::nlfit::CustomFitDefinition;
+    let definition = CustomFitDefinition::from_text("直线", "a*x+b", "a,b", "2,1", "").unwrap();
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let path = std::env::temp_dir().join(format!("scicanvas-function-{}-{stamp}.scfn", std::process::id()));
+    project_file::save_fit_function(&path, &definition).unwrap();
+    assert_eq!(project_file::load_fit_function(&path).unwrap(), definition);
+    let original = std::fs::read(&path).unwrap();
+    for kind in [
+        "newer-version",
+        "formula",
+        "initial",
+        "parameters",
+        "constraints",
+        "unknown-field",
+    ] {
+        let mut value: serde_json::Value = serde_json::from_slice(&original).unwrap();
+        match kind {
+            "newer-version" => value["version"] = 2.into(),
+            "formula" => value["function"]["formula"] = "a*x+missing".into(),
+            "initial" => value["function"]["initial"] = serde_json::json!([null, 1]),
+            "parameters" => value["function"]["parameters"] = serde_json::json!(["a", "a"]),
+            "constraints" => value["function"]["constraints"] = "c >= 1".into(),
+            _ => value["extra"] = true.into(),
+        }
+        assert!(
+            project_file::fit_function_from_json(&value.to_string()).is_err(),
+            "{kind}"
+        );
+    }
+    assert!(project_file::fit_function_from_json(&" ".repeat(65537)).is_err());
+    assert!(project_file::fit_function_from_json("not JSON").is_err());
+    let bad = CustomFitDefinition {
+        initial: vec![f64::INFINITY, 1.0],
+        ..definition
+    };
+    assert!(project_file::save_fit_function(&path, &bad).is_err());
+    assert_eq!(std::fs::read(&path).unwrap(), original);
+    std::fs::remove_file(path).unwrap();
 }

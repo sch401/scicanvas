@@ -7,6 +7,110 @@ mod guess;
 mod model;
 pub use model::{voigt_profile, Model, MAX_PARAMS};
 
+/// 可保存、跨项目交换的函数定义；语法树在使用时重新解析。
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(deny_unknown_fields)
+)]
+pub struct CustomFitDefinition {
+    pub name: String,
+    pub formula: String,
+    pub parameters: Vec<String>,
+    pub initial: Vec<f64>,
+    pub constraints: String,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(deny_unknown_fields)
+)]
+pub struct SavedFitFunction {
+    pub id: u64,
+    pub definition: CustomFitDefinition,
+}
+
+impl CustomFitDefinition {
+    pub fn from_text(
+        name: &str,
+        formula: &str,
+        parameters: &str,
+        initial: &str,
+        constraints: &str,
+    ) -> Result<Self, String> {
+        let split = |text: &str| {
+            text.split([',', '，', ';', '；'])
+                .map(str::trim)
+                .filter(|part| !part.is_empty())
+                .map(str::to_owned)
+                .collect::<Vec<_>>()
+        };
+        let initial = split(initial)
+            .iter()
+            .map(|value| value.parse::<f64>().map_err(|_| format!("初始值 {value} 不是有限数")))
+            .collect::<Result<Vec<_>, _>>()?;
+        let mut definition = Self {
+            name: name.trim().into(),
+            formula: formula.trim().into(),
+            parameters: split(parameters),
+            initial,
+            constraints: constraints.trim().into(),
+        };
+        let (function, _) = definition.resolve()?;
+        definition.name = function.name.clone();
+        definition.formula = function.formula.clone();
+        Ok(definition)
+    }
+
+    pub fn resolve(&self) -> Result<(CustomFitFunction, Vec<LinearConstraint>), String> {
+        let function = CustomFitFunction::new(&self.name, &self.formula, self.parameters.clone())?;
+        if self.initial.len() != self.parameters.len() || self.initial.iter().any(|value| !value.is_finite()) {
+            return Err(format!("请为 {} 个参数各填写一个有限初始值", self.parameters.len()));
+        }
+        if self.constraints.len() > 16384 {
+            return Err("参数约束过长".into());
+        }
+        let constraints = parse_constraints_for_function(&FitFunction::Custom(function.clone()), &self.constraints)?;
+        Ok((function, constraints))
+    }
+}
+
+impl crate::Project {
+    /// 已载入的定义作为编辑基线；重命名保留编号，过期草稿在写入前拒绝。
+    pub fn save_fit_function(
+        &mut self,
+        before: Option<&SavedFitFunction>,
+        definition: CustomFitDefinition,
+    ) -> Result<u64, String> {
+        definition.resolve()?;
+        if self
+            .fit_functions
+            .iter()
+            .any(|entry| entry.definition.name == definition.name && Some(entry.id) != before.map(|old| old.id))
+        {
+            return Err("已存在同名函数，请修改函数名后保存".into());
+        }
+        if let Some(before) = before {
+            let entry = self
+                .fit_functions
+                .iter_mut()
+                .find(|entry| entry.id == before.id)
+                .ok_or("函数已移除，请重新载入或新建")?;
+            if entry != before {
+                return Err("函数已在别处更改，请重新载入后编辑".into());
+            }
+            entry.definition = definition;
+            return Ok(entry.id);
+        }
+        let id = self.alloc_id();
+        self.fit_functions.push(SavedFitFunction { id, definition });
+        Ok(id)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 pub struct CustomFitFunction {
     name: String,
@@ -1804,5 +1908,75 @@ mod tests {
             a.params[0] + a.params[1] * (-2.0 / a.params[2]).exp(),
             1e-12,
         );
+    }
+}
+
+#[cfg(test)]
+mod function_library_tests {
+    use super::*;
+    use crate::{history::History, Project};
+
+    #[test]
+    fn custom_fit_library_edits_are_atomic_stable_and_undoable() {
+        let mut project = Project::default();
+        let definition =
+            CustomFitDefinition::from_text("Decay", "a*exp(-b*x)+c", "a,b,c", "2,0.3,0", "b >= 0").unwrap();
+        let before = project.clone();
+        let mut history = History::default();
+        history.begin(&project, "save function");
+        let id = project.save_fit_function(None, definition.clone()).unwrap();
+        history.changed();
+        history.commit(&project);
+        let saved = project.clone();
+        project = history.undo(&project).unwrap();
+        assert_eq!(project, before);
+        project = history.redo(&project).unwrap();
+        assert_eq!(project, saved);
+        let original = project.fit_functions[0].clone();
+        let mut edited = definition.clone();
+        edited.name = "Renamed".into();
+        edited.initial = vec![2.2, 0.4, 0.3];
+        history.begin(&project, "edit function");
+        assert_eq!(project.save_fit_function(Some(&original), edited.clone()).unwrap(), id);
+        history.changed();
+        history.commit(&project);
+        let changed = project.clone();
+        assert_eq!(project.fit_functions[0].id, id);
+        assert_eq!(project.fit_functions[0].definition, edited);
+        assert!(project.save_fit_function(Some(&original), definition.clone()).is_err());
+        assert_eq!(
+            project, changed,
+            "stale edits preserve the current definition and allocator"
+        );
+        assert!(project.save_fit_function(None, edited.clone()).is_err());
+        assert_eq!(project, changed);
+        let current = project.fit_functions[0].clone();
+        project.save_fit_function(Some(&current), edited).unwrap();
+        assert_eq!(project, changed, "saving an unchanged function is a no-op");
+        project = history.undo(&project).unwrap();
+        assert_eq!(project, saved);
+        project = history.redo(&project).unwrap();
+        assert_eq!(project, changed);
+        for bad in [
+            CustomFitDefinition {
+                formula: "a*x+missing".into(),
+                ..definition.clone()
+            },
+            CustomFitDefinition {
+                initial: vec![f64::NAN, 0.3, 0.0],
+                ..definition.clone()
+            },
+            CustomFitDefinition {
+                initial: vec![1.0],
+                ..definition.clone()
+            },
+            CustomFitDefinition {
+                constraints: "unknown = 0".into(),
+                ..definition.clone()
+            },
+        ] {
+            assert!(project.save_fit_function(None, bad).is_err());
+            assert_eq!(project, changed);
+        }
     }
 }

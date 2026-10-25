@@ -1,4 +1,88 @@
 use super::*;
+use scicanvas_core::nlfit::{CustomFitDefinition, SavedFitFunction};
+
+pub enum CustomFitAction {
+    Save {
+        before: Option<SavedFitFunction>,
+        definition: Result<CustomFitDefinition, String>,
+    },
+    LoadFile,
+    Export(Result<CustomFitDefinition, String>),
+    Edit(CustomFitDefinition),
+}
+
+pub struct CustomFitEditor {
+    pub name: String,
+    pub formula: String,
+    pub parameters: String,
+    pub initial: String,
+    pub constraints: String,
+    pub before: Option<SavedFitFunction>,
+}
+
+impl Default for CustomFitEditor {
+    fn default() -> Self {
+        Self {
+            name: "自定义函数".into(),
+            formula: "y = a*exp(-b*x)+c".into(),
+            parameters: "a, b, c".into(),
+            initial: "2, 0.3, 0".into(),
+            constraints: String::new(),
+            before: None,
+        }
+    }
+}
+
+impl CustomFitEditor {
+    pub fn from_definition(definition: &CustomFitDefinition) -> Self {
+        Self {
+            name: definition.name.clone(),
+            formula: definition.formula.clone(),
+            parameters: definition.parameters.join(", "),
+            initial: definition
+                .initial
+                .iter()
+                .map(ToString::to_string)
+                .collect::<Vec<_>>()
+                .join(", "),
+            constraints: definition.constraints.clone(),
+            before: None,
+        }
+    }
+
+    pub fn saved(saved: &SavedFitFunction) -> Self {
+        let mut editor = Self::from_definition(&saved.definition);
+        editor.before = Some(saved.clone());
+        editor
+    }
+
+    pub fn definition(&self) -> Result<CustomFitDefinition, String> {
+        CustomFitDefinition::from_text(
+            &self.name,
+            &self.formula,
+            &self.parameters,
+            &self.initial,
+            &self.constraints,
+        )
+    }
+
+    pub fn sync_saved(&mut self, library: &[SavedFitFunction]) {
+        let Some(before) = &self.before else { return };
+        let clean = Self::from_definition(&before.definition);
+        if self.name == clean.name
+            && self.formula == clean.formula
+            && self.parameters == clean.parameters
+            && self.initial == clean.initial
+            && self.constraints == clean.constraints
+        {
+            if let Some(current) = library.iter().find(|entry| entry.id == before.id) {
+                if current != before {
+                    *self = Self::saved(current);
+                }
+            }
+        }
+    }
+}
 
 impl Dialog {
     pub(super) fn show_nl_fit(&mut self, ctx: &egui::Context, pal: &Palette, open: &mut bool, _esc: bool) -> Action {
@@ -98,52 +182,92 @@ impl Dialog {
         pal: &Palette,
         open: &mut bool,
         _esc: bool,
+        project: &scicanvas_core::Project,
     ) -> Action {
-        let Self::CustomNlFit {
-            name,
-            formula,
-            parameters,
-            initial,
-            constraints,
-        } = self
-        else {
-            unreachable!()
-        };
+        let Self::CustomNlFit(edit) = self else { unreachable!() };
+        edit.sync_saved(&project.fit_functions);
         let mut action = Action::None;
         window(ctx, "自定义非线性拟合").open(open).show(ctx, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                ui.label("项目函数");
+                let before = edit.before.as_ref().map(|entry| entry.id);
+                let mut picked = before;
+                let mut load = None;
+                let selected = project
+                    .fit_functions
+                    .iter()
+                    .find(|entry| Some(entry.id) == before)
+                    .map_or("新函数", |entry| entry.definition.name.as_str());
+                egui::ComboBox::from_id_salt("custom-fit-library")
+                    .selected_text(selected)
+                    .show_ui(ui, |ui| {
+                        for entry in &project.fit_functions {
+                            if ui
+                                .selectable_value(&mut picked, Some(entry.id), &entry.definition.name)
+                                .clicked()
+                            {
+                                load = Some(entry.clone());
+                            }
+                        }
+                    });
+                if let Some(entry) = load {
+                    *edit = CustomFitEditor::saved(&entry);
+                }
+                if ui.button("新建").clicked() {
+                    *edit = CustomFitEditor::default();
+                }
+            });
             ui.label(
                 RichText::new("使用 x 和参数名组成标量表达式，参数初值以逗号分隔。最多 7 个参数。").color(pal.weak),
             );
             ui.label("函数名");
-            ui.text_edit_singleline(name);
+            ui.text_edit_singleline(&mut edit.name);
             ui.label("表达式");
             ui.add(
-                egui::TextEdit::multiline(formula)
+                egui::TextEdit::multiline(&mut edit.formula)
                     .desired_rows(2)
                     .desired_width(f32::INFINITY)
                     .font(egui::TextStyle::Monospace)
                     .hint_text("y = a*exp(-b*x)+c"),
             );
             ui.label("参数名");
-            ui.text_edit_singleline(parameters);
+            ui.text_edit_singleline(&mut edit.parameters);
             ui.label("初始值");
-            ui.text_edit_singleline(initial);
+            ui.text_edit_singleline(&mut edit.initial);
             ui.label("参数约束");
             ui.add(
-                egui::TextEdit::multiline(constraints)
+                egui::TextEdit::multiline(&mut edit.constraints)
                     .desired_rows(2)
                     .desired_width(f32::INFINITY)
                     .font(egui::TextStyle::Monospace)
                     .hint_text("每行一条，如 a >= 0"),
             );
+            ui.horizontal_wrapped(|ui| {
+                if ui
+                    .button("保存函数")
+                    .on_hover_text("保存到当前项目函数库，随项目文件保存")
+                    .clicked()
+                {
+                    action = Action::CustomFitLibrary(Box::new(CustomFitAction::Save {
+                        before: edit.before.clone(),
+                        definition: edit.definition(),
+                    }));
+                }
+                if ui.button("载入文件…").clicked() {
+                    action = Action::CustomFitLibrary(Box::new(CustomFitAction::LoadFile));
+                }
+                if ui.button("导出函数…").clicked() {
+                    action = Action::CustomFitLibrary(Box::new(CustomFitAction::Export(edit.definition())));
+                }
+            });
             let (ok, cancel) = buttons(ui, "拟合");
             if ok {
                 action = Action::CustomNlFit {
-                    name: name.clone(),
-                    formula: formula.clone(),
-                    parameters: parameters.clone(),
-                    initial: initial.clone(),
-                    constraints: constraints.clone(),
+                    name: edit.name.clone(),
+                    formula: edit.formula.clone(),
+                    parameters: edit.parameters.clone(),
+                    initial: edit.initial.clone(),
+                    constraints: edit.constraints.clone(),
                 };
             } else if cancel {
                 action = Action::Close;

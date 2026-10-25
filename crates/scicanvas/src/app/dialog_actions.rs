@@ -12,6 +12,7 @@ impl SciApp {
         let Some(d) = self.dialog.as_mut() else { return };
         // 未改动的实时控件应同步功能区或其他已打开面板中的修改。
         match d {
+            Dialog::CustomNlFit(edit) => edit.sync_saved(&self.project.fit_functions),
             Dialog::LayerContents(edit) if edit.draft == edit.before => {
                 if let Some(layer) = self
                     .project
@@ -137,6 +138,7 @@ impl SciApp {
             dialogs::Action::TTest(kind, level) => self.run_ttest(kind, level),
             dialogs::Action::NlFit(model, limits, text) => return self.apply_nlfit_action(model, limits, text),
             dialogs::Action::OpenCustomNlFit => self.open_custom_nlfit_dialog(),
+            dialogs::Action::CustomFitLibrary(action) => return self.apply_custom_fit_library_action(*action),
             dialogs::Action::CustomNlFit {
                 name,
                 formula,
@@ -437,41 +439,19 @@ impl SciApp {
         initial: String,
         constraint_text: String,
     ) -> bool {
-        let parameters: Vec<String> = parameters
-            .split([',', '，', ';', '；'])
-            .map(str::trim)
-            .filter(|part| !part.is_empty())
-            .map(str::to_owned)
-            .collect();
-        let function = match scicanvas_core::nlfit::CustomFitFunction::new(&name, &formula, parameters) {
-            Ok(function) => function,
-            Err(error) => {
-                self.status = error;
-                return false;
-            }
-        };
-        let mut values = Vec::new();
-        for value in initial
-            .split([',', '，', ';', '；'])
-            .map(str::trim)
-            .filter(|v| !v.is_empty())
-        {
-            match value.parse::<f64>() {
-                Ok(value) if value.is_finite() => values.push(value),
-                _ => {
-                    self.status = format!("初始值 {value} 不是有限数");
-                    return false;
-                }
-            }
-        }
-        if values.len() != function.parameters().len() {
-            self.status = format!("请为 {} 个参数各填写一个初始值", function.parameters().len());
-            return false;
-        }
-        let function_spec = scicanvas_core::nlfit::FitFunction::Custom(function.clone());
-        let constraints = match scicanvas_core::nlfit::parse_constraints_for_function(&function_spec, &constraint_text)
-        {
-            Ok(constraints) => constraints,
+        let result = scicanvas_core::nlfit::CustomFitDefinition::from_text(
+            &name,
+            &formula,
+            &parameters,
+            &initial,
+            &constraint_text,
+        )
+        .and_then(|definition| {
+            let (function, constraints) = definition.resolve()?;
+            Ok((function, definition.initial, constraints))
+        });
+        let (function, values, constraints) = match result {
+            Ok(result) => result,
             Err(error) => {
                 self.status = error;
                 return false;

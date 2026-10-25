@@ -378,7 +378,7 @@ fn mapped_area_keeps_source_colors_through_sorting_gaps_and_zero_crossings() {
         let loaded = scicanvas_core::project_file::from_json(&saved).unwrap();
         assert_eq!(loaded, p);
         assert_eq!(svg::render_page(loaded.graph(id).unwrap(), &loaded), output);
-        assert_eq!(loaded.version, 17);
+        assert_eq!(loaded.version, scicanvas_core::project_file::CURRENT_VERSION);
     }
 }
 

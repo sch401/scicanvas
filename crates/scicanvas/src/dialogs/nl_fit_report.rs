@@ -1,3 +1,4 @@
+use super::nl_fit::CustomFitAction;
 use super::*;
 
 impl Dialog {
@@ -20,6 +21,19 @@ impl Dialog {
                         let f = &r.fit;
                         ui.label(RichText::new(format!("{} · {}", r.name, f.model.name())).strong());
                         ui.label(RichText::new(f.model.formula()).monospace().small());
+                        if matches!(f.model, scicanvas_core::nlfit::FitFunction::Custom(_))
+                            && ui.button("重新编辑函数").clicked()
+                        {
+                            let definition = scicanvas_core::nlfit::CustomFitDefinition {
+                                name: f.model.name().into(),
+                                formula: f.model.formula().into(),
+                                parameters: f.model.params().into_iter().map(str::to_owned).collect(),
+                                initial: f.params.clone(),
+                                constraints: f.constraints.join("\n"),
+                            };
+                            action = Action::CustomFitLibrary(Box::new(CustomFitAction::Edit(definition)));
+                        }
+
                         for c in &f.constraints {
                             ui.label(RichText::new(format!("约束：{c}")).small().color(pal.weak));
                         }

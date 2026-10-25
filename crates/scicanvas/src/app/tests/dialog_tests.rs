@@ -347,7 +347,7 @@ fn custom_fit_dialog_keeps_invalid_input_and_creates_an_undoable_report() {
     app.selection.insert(1, vec!["B".into()]);
     app.open_nlfit_dialog();
     press_dialog_button(&mut app, "自定义函数…");
-    assert!(matches!(app.dialog, Some(Dialog::CustomNlFit { .. })));
+    assert!(matches!(app.dialog, Some(Dialog::CustomNlFit(..))));
     let ctx = egui::Context::default();
 
     let invalid = dialogs::Action::CustomNlFit {
@@ -358,7 +358,7 @@ fn custom_fit_dialog_keeps_invalid_input_and_creates_an_undoable_report() {
         constraints: String::new(),
     };
     assert!(!app.apply_dialog_action(&ctx, invalid));
-    assert!(matches!(app.dialog, Some(Dialog::CustomNlFit { .. })));
+    assert!(matches!(app.dialog, Some(Dialog::CustomNlFit(..))));
 
     let before = app.project.clone();
     let valid = dialogs::Action::CustomNlFit {
@@ -996,4 +996,175 @@ fn invalid_nlfit_action_preserves_input_and_signals_early_return() {
     assert_eq!(app.project, before);
     assert!(!app.history.is_pending());
     assert!(app.history.undo_label().is_none());
+}
+
+#[test]
+fn custom_fit_library_real_controls_save_rename_reuse_and_reedit_with_history() {
+    fn rename<F: FnMut(&mut SciApp, &egui::Context)>(
+        harness: &mut crate::test_ui::Harness<F>,
+        app: &mut SciApp,
+        old: &str,
+        new: &str,
+    ) {
+        let output = harness.frame(app, vec![]);
+        let point = crate::test_ui::text_positions(&output, old)
+            .into_iter()
+            .max_by(|a, b| a.y.total_cmp(&b.y))
+            .unwrap_or_else(|| {
+                let visible: Vec<_> = output
+                    .shapes
+                    .iter()
+                    .filter_map(|shape| match &shape.shape {
+                        egui::Shape::Text(text) => Some(text.galley.job.text.clone()),
+                        _ => None,
+                    })
+                    .collect();
+                panic!("missing name {old}; visible text: {visible:?}");
+            });
+        harness.click(app, point + egui::vec2(5.0, 5.0));
+        harness.modifiers = egui::Modifiers::COMMAND;
+        harness.frame(
+            app,
+            vec![egui::Event::Key {
+                key: egui::Key::A,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::COMMAND,
+            }],
+        );
+        harness.modifiers = egui::Modifiers::NONE;
+        harness.frame(app, vec![egui::Event::Text(new.into())]);
+    }
+    let mut app = app();
+    let xs: Vec<f64> = (0..40).map(|i| i as f64 * 0.25).collect();
+    app.project.books[0].columns[0].data = xs.iter().map(|x| fmt_num(*x)).collect();
+    app.project.books[0].columns[1].data = xs.iter().map(|x| fmt_num(2.2 * (-0.4 * x).exp() + 0.3)).collect();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["B".into()]);
+    app.open_custom_nlfit_dialog();
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    ctx.style_mut(|style| style.animation_time = 0.0);
+    let mut harness = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1400.0, 1200.0)),
+        |app: &mut SciApp, ctx: &egui::Context| app.dialogs(ctx),
+    )
+    .with_step(0.02);
+    for _ in 0..3 {
+        harness.frame(&mut app, vec![]);
+    }
+    rename(&mut harness, &mut app, "自定义函数", "SavedDecay");
+    let before = app.project.clone();
+    let output = harness.frame(&mut app, vec![]);
+    harness.click_text(&mut app, &output, "保存函数");
+    assert_eq!(app.project.fit_functions.len(), 1, "{}", app.status);
+    let id = app.project.fit_functions[0].id;
+    assert_eq!(app.project.fit_functions[0].definition.name, "SavedDecay");
+    roundtrip(&mut app, &before);
+    harness.frame(&mut app, vec![]);
+    let original = app.project.clone();
+    rename(&mut harness, &mut app, "SavedDecay", "RenamedDecay");
+    let output = harness.frame(&mut app, vec![]);
+    harness.click_text(&mut app, &output, "保存函数");
+    assert_eq!(app.project.fit_functions[0].id, id);
+    assert_eq!(app.project.fit_functions[0].definition.name, "RenamedDecay");
+    let edited = app.project.clone();
+    app.run_command("edit.undo");
+    harness.frame(&mut app, vec![]);
+    assert_eq!(app.project, original);
+    assert!(matches!(&app.dialog,Some(Dialog::CustomNlFit(edit)) if edit.name=="SavedDecay"));
+    app.run_command("edit.redo");
+    harness.frame(&mut app, vec![]);
+    assert_eq!(app.project, edited);
+    assert!(matches!(&app.dialog,Some(Dialog::CustomNlFit(edit)) if edit.name=="RenamedDecay"));
+    let saved = scicanvas_core::project_file::to_scv(&app.project).unwrap();
+    app.project = scicanvas_core::project_file::from_scv(&saved).unwrap();
+    app.dialog = None;
+    app.open_custom_nlfit_dialog();
+    assert!(matches!(&app.dialog,Some(Dialog::CustomNlFit(edit)) if edit.before.as_ref().unwrap().id==id));
+    let before_fit = app.project.clone();
+    press_dialog_button(&mut app, "拟合");
+    let Some(Dialog::NlFitReport(reports)) = &app.dialog else {
+        panic!("{}", app.status)
+    };
+    assert_eq!(reports[0].fit.model.name(), "RenamedDecay");
+    assert!(reports[0].fit.converged);
+    let params = reports[0].fit.params.clone();
+    let after_fit = app.project.clone();
+    press_dialog_button(&mut app, "重新编辑函数");
+    let Some(Dialog::CustomNlFit(editor)) = &app.dialog else {
+        panic!("editor should reopen")
+    };
+    assert_eq!(editor.definition().unwrap().initial, params);
+    assert_eq!(
+        app.project, after_fit,
+        "reopening an editor leaves fitted output unchanged"
+    );
+    app.run_command("edit.undo");
+    assert_eq!(app.project, before_fit);
+    app.run_command("edit.redo");
+    assert_eq!(app.project, after_fit);
+}
+
+#[test]
+fn custom_fit_library_file_import_is_undoable_and_name_conflicts_require_save() {
+    use scicanvas_core::{nlfit::CustomFitDefinition, project_file};
+    let mut app = app();
+    app.open_custom_nlfit_dialog();
+    let definition = CustomFitDefinition::from_text("Imported", "a*x+b", "a,b", "2,1", "").unwrap();
+    let stamp = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap()
+        .as_nanos();
+    let path = std::env::temp_dir().join(format!("scicanvas-app-fit-{}-{stamp}.scfn", std::process::id()));
+    project_file::save_fit_function(&path, &definition).unwrap();
+    let before = app.project.clone();
+    assert!(app.import_custom_fit_function(&path));
+    let imported = app.project.clone();
+    assert_eq!(imported.fit_functions.len(), 1);
+    app.run_command("edit.undo");
+    assert_eq!(app.project, before);
+    std::fs::write(&path, "broken").unwrap();
+    assert!(!app.import_custom_fit_function(&path));
+    assert_eq!(app.project, before);
+    app.run_command("edit.redo");
+    assert_eq!(app.project, imported, "failed imports preserve redo");
+    let changed = scicanvas_core::nlfit::CustomFitDefinition {
+        formula: "y = a*x+b+1".into(),
+        ..definition
+    };
+    project_file::save_fit_function(&path, &changed).unwrap();
+    assert!(app.import_custom_fit_function(&path));
+    assert_eq!(
+        app.project, imported,
+        "same-name files stay in the editor until explicitly saved"
+    );
+    press_dialog_button(&mut app, "保存函数");
+    assert_eq!(app.project.fit_functions[0].id, imported.fit_functions[0].id);
+    assert_eq!(app.project.fit_functions[0].definition, changed);
+    roundtrip(&mut app, &imported);
+    std::fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn custom_fit_library_dirty_editor_keeps_input_and_rejects_stale_saves() {
+    use scicanvas_core::nlfit::CustomFitDefinition;
+    let mut app = app();
+    let definition = CustomFitDefinition::from_text("Line", "a*x+b", "a,b", "2,1", "").unwrap();
+    assert!(app.save_custom_fit_definition(None, definition));
+    let original = app.project.fit_functions[0].clone();
+    let Some(Dialog::CustomNlFit(edit)) = app.dialog.as_mut() else {
+        panic!()
+    };
+    edit.formula = "y = a*x+b+1".into();
+    let mut external = original.definition.clone();
+    external.initial = vec![3.0, 2.0];
+    app.project.save_fit_function(Some(&original), external).unwrap();
+    let before = app.project.clone();
+    press_dialog_button(&mut app, "保存函数");
+    assert_eq!(app.project, before);
+    assert!(app.status.contains("别处更改"), "{}", app.status);
+    assert!(matches!(&app.dialog,Some(Dialog::CustomNlFit(edit)) if edit.formula=="y = a*x+b+1"));
 }

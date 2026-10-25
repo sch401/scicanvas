@@ -1571,6 +1571,6 @@ fn mapped_area_color_is_live_undoable_and_saved_without_a_format_change() {
     assert_eq!(svg::render_page(app.project.graph(2).unwrap(), &app.project), after_svg);
     let restored = project_file::from_scv(&project_file::to_scv(&app.project).unwrap()).unwrap();
     assert_eq!(restored, app.project);
-    assert_eq!(restored.version, 17);
+    assert_eq!(restored.version, scicanvas_core::project_file::CURRENT_VERSION);
     assert_eq!(svg::render_page(restored.graph(2).unwrap(), &restored), after_svg);
 }

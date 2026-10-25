@@ -162,6 +162,19 @@ fn estimated_bytes(p: &Project) -> usize {
             .iter()
             .map(|f| f.name.capacity() + f.items.capacity() * size_of::<u64>())
             .sum::<usize>();
+    bytes += p.fit_functions.capacity() * size_of::<crate::nlfit::SavedFitFunction>()
+        + p.fit_functions
+            .iter()
+            .map(|saved| {
+                let f = &saved.definition;
+                f.name.capacity()
+                    + f.formula.capacity()
+                    + f.constraints.capacity()
+                    + f.parameters.capacity() * size_of::<String>()
+                    + f.parameters.iter().map(String::capacity).sum::<usize>()
+                    + f.initial.capacity() * size_of::<f64>()
+            })
+            .sum::<usize>();
     for b in &p.books {
         bytes += b.name.capacity() + b.columns.capacity() * size_of::<Column>();
         for c in &b.columns {
@@ -283,6 +296,22 @@ mod tests {
         assert!(h.bytes <= 4096);
         assert!(h.redo(&p).is_none());
     }
+    #[test]
+    fn custom_fit_library_memory_is_included_in_snapshot_budget() {
+        let mut project = Project::default();
+        let empty = estimated_bytes(&project);
+        let definition = crate::nlfit::CustomFitDefinition::from_text("Line", "a*x+b", "a,b", "2,1", "a >= 0").unwrap();
+        project.save_fit_function(None, definition).unwrap();
+        project.fit_functions[0].definition.formula.reserve(4096);
+        assert!(estimated_bytes(&project) > empty + 4096);
+        assert_eq!(estimated_bytes(&project), reference_estimated_bytes(&project));
+        let snapshot = Snapshot::new(project.clone(), "function".into());
+        assert_eq!(
+            snapshot.bytes,
+            estimated_bytes(&snapshot.project) + size_of::<Snapshot>() + "function".len()
+        );
+    }
+
     fn reference_estimated_bytes(p: &Project) -> usize {
         let mut bytes = p.books.capacity() * size_of::<Book>() + p.graphs.capacity() * size_of::<Graph>();
         bytes += p.notes.capacity() * size_of::<crate::Note>()
@@ -294,6 +323,19 @@ mod tests {
             + p.folders
                 .iter()
                 .map(|f| f.name.capacity() + f.items.capacity() * size_of::<u64>())
+                .sum::<usize>();
+        bytes += p.fit_functions.capacity() * size_of::<crate::nlfit::SavedFitFunction>()
+            + p.fit_functions
+                .iter()
+                .map(|saved| {
+                    let f = &saved.definition;
+                    f.name.capacity()
+                        + f.formula.capacity()
+                        + f.constraints.capacity()
+                        + f.parameters.capacity() * size_of::<String>()
+                        + f.parameters.iter().map(String::capacity).sum::<usize>()
+                        + f.initial.capacity() * size_of::<f64>()
+                })
                 .sum::<usize>();
         for b in &p.books {
             bytes += b.name.capacity() + b.columns.capacity() * size_of::<Column>();

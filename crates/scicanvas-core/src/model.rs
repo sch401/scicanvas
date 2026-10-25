@@ -3,7 +3,7 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-pub const PROJECT_VERSION: u32 = 17;
+pub const PROJECT_VERSION: u32 = 18;
 pub const GRAPH_TEMPLATE_VERSION: u32 = 1;
 
 /// 列的绘图角色，对应 Origin 里的 X / Y / 忽略。
@@ -757,6 +757,8 @@ pub struct Project {
     pub graphs: Vec<Graph>,
     #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Vec::is_empty"))]
     pub notes: Vec<Note>,
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Vec::is_empty"))]
+    pub fit_functions: Vec<crate::nlfit::SavedFitFunction>,
     #[cfg_attr(feature = "serde", serde(default))]
     pub folders: Vec<crate::project_tree::Folder>,
     pub next_id: u64,
@@ -769,6 +771,7 @@ impl Default for Project {
             books: Vec::new(),
             graphs: Vec::new(),
             notes: Vec::new(),
+            fit_functions: Vec::new(),
             folders: Vec::new(),
             next_id: 1,
         }
