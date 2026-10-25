@@ -347,6 +347,33 @@ fn v14_defaults_keep_the_old_right_axis_appearance_and_v15_settings_roundtrip() 
 }
 
 #[test]
+fn v15_projects_default_reference_lines_and_v16_roundtrips_them() {
+    use scicanvas_core::page::{ReferenceAxis, ReferenceLine};
+    let project = Project::sample();
+    let mut legacy = serde_json::to_value(&project).unwrap();
+    legacy["version"] = 15.into();
+    let loaded = project_file::from_json(&legacy.to_string()).unwrap();
+    assert_eq!(loaded.version, 16);
+    assert!(loaded.graphs[0].first_layer().reference_lines.is_empty());
+
+    let mut current = loaded;
+    current.graphs[0].first_layer_mut().reference_lines.push(ReferenceLine {
+        axis: ReferenceAxis::YLeft,
+        value: 2.5,
+        color: [20, 40, 60],
+        width: 1.5,
+        dashed: false,
+    });
+    let json = project_file::to_json(&current).unwrap();
+    assert_eq!(serde_json::from_str::<serde_json::Value>(&json).unwrap()["version"], 16);
+    assert_eq!(project_file::from_json(&json).unwrap(), current);
+    assert_eq!(
+        project_file::from_scv(&project_file::to_scv(&current).unwrap()).unwrap(),
+        current
+    );
+}
+
+#[test]
 fn graph_template_files_rebind_columns_and_keep_page_and_curve_styles() {
     use scicanvas_core::{format::NumberFormat, page::CurveStyle};
     fixture_fonts();

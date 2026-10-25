@@ -1067,6 +1067,44 @@ fn draw_layer_data(
         }
         data_start = start;
 
+        for line in &g.reference_lines {
+            let seg = match line.axis {
+                crate::page::ReferenceAxis::X => {
+                    if axes.x.log && line.value <= 0.0 {
+                        continue;
+                    }
+                    let x = coord.project([line.value, ya.lo])[0];
+                    [x, top, x, top + ph]
+                }
+                crate::page::ReferenceAxis::YLeft => {
+                    if ya.log && line.value <= 0.0 {
+                        continue;
+                    }
+                    let y = coord.project([xa.lo, line.value])[1];
+                    [left, y, left + pw, y]
+                }
+                crate::page::ReferenceAxis::YRight => {
+                    let Some(right) = axes.right_y.as_ref() else { continue };
+                    if right.log && line.value <= 0.0 {
+                        continue;
+                    }
+                    let y = axes
+                        .cartesian([left, top, pw, ph], crate::coord::YAxis::Right)
+                        .project([xa.lo, line.value])[1];
+                    [left, y, left + pw, y]
+                }
+            };
+            push(
+                Prim::Segments {
+                    segs: vec![seg],
+                    color: (line.color[0], line.color[1], line.color[2]),
+                    width: f64::from(line.width),
+                    dashed: line.dashed,
+                },
+                true,
+            );
+        }
+
         // 曲线：线和柱子裁剪到坐标框内；符号只画范围内的点、不裁剪，落在坐标轴上的点保持完整。
         if all_x.is_empty() {
             let msg = if book.is_some() {

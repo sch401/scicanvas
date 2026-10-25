@@ -110,6 +110,95 @@ fn right_y_axis_range_and_number_format_are_independent() {
     assert!(svg::render_page(graph, &project).contains("4.0E1"));
 }
 
+#[test]
+fn reference_lines_follow_each_axis_and_export_through_the_shared_scene() {
+    use scicanvas_core::page::{CurveStyle, ReferenceAxis, ReferenceLine};
+    let mut project = Project::sample();
+    let key = project.graphs[0].first_layer().draft().y_keys[0].clone();
+    let layer = project.graphs[0].first_layer_mut();
+    layer.set_plot_style(
+        &key,
+        Some(CurveStyle {
+            right_axis: true,
+            ..Default::default()
+        }),
+    );
+    layer.x_auto = false;
+    layer.x_min = 1.0;
+    layer.x_max = 100.0;
+    layer.y_auto = false;
+    layer.y_min = 1.0;
+    layer.y_max = 100.0;
+    layer.y2_auto = false;
+    layer.y2_min = 1.0;
+    layer.y2_max = 100.0;
+    layer.x_log = true;
+    layer.y_log = true;
+    layer.reference_lines = vec![
+        ReferenceLine {
+            axis: ReferenceAxis::X,
+            value: 10.0,
+            color: [200, 0, 0],
+            ..Default::default()
+        },
+        ReferenceLine {
+            axis: ReferenceAxis::YLeft,
+            value: 10.0,
+            color: [0, 200, 0],
+            ..Default::default()
+        },
+        ReferenceLine {
+            axis: ReferenceAxis::YRight,
+            value: 50.0,
+            color: [0, 0, 200],
+            ..Default::default()
+        },
+        ReferenceLine {
+            axis: ReferenceAxis::YLeft,
+            value: 0.0,
+            color: [201, 0, 201],
+            ..Default::default()
+        },
+    ];
+
+    let graph = &project.graphs[0];
+    let scene = scene::layout_page(graph, &project, &[]);
+    let reference_segments: Vec<_> = scene
+        .items
+        .iter()
+        .filter_map(|item| match &item.prim {
+            scene::Prim::Segments {
+                segs,
+                color,
+                dashed: true,
+                ..
+            } if *color != (217, 217, 217) => Some((*color, segs[0])),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(reference_segments.len(), 3);
+    let left = scene.axes.cartesian(scene.plot, scicanvas_core::coord::YAxis::Left);
+    let right = scene.axes.cartesian(scene.plot, scicanvas_core::coord::YAxis::Right);
+    let x = left.project([10.0, scene.axes.left_y.lo])[0];
+    let y_left = left.project([scene.axes.x.lo, 10.0])[1];
+    let y_right = right.project([scene.axes.x.lo, 50.0])[1];
+    assert!(reference_segments
+        .iter()
+        .any(|(c, s)| *c == (200, 0, 0) && (s[0] - x).abs() < 1e-9 && (s[2] - x).abs() < 1e-9));
+    assert!(reference_segments
+        .iter()
+        .any(|(c, s)| *c == (0, 200, 0) && (s[1] - y_left).abs() < 1e-9 && (s[3] - y_left).abs() < 1e-9));
+    assert!(reference_segments
+        .iter()
+        .any(|(c, s)| *c == (0, 0, 200) && (s[1] - y_right).abs() < 1e-9 && (s[3] - y_right).abs() < 1e-9));
+    let svg = svg::render_page(graph, &project);
+    assert!(svg.contains("#c80000") && svg.contains("#00c800") && svg.contains("#0000c8"));
+    assert!(
+        !svg.contains("#c900c9"),
+        "nonpositive reference values are skipped on log axes"
+    );
+}
+
 #[cfg(feature = "serde")]
 #[test]
 fn v13_objects_roundtrip_and_legacy_defaults_keep_literal_text_and_auto_legends() {

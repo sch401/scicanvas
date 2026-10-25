@@ -244,7 +244,10 @@ pub static TABS: &[Tab] = &[
             },
             Group {
                 label: "坐标轴",
-                items: &[Smalls(&["graph.logx", "graph.logy", "graph.grid"])],
+                items: &[
+                    Smalls(&["graph.logx", "graph.logy", "graph.grid"]),
+                    Smalls(&["graph.reference.vertical", "graph.reference.horizontal"]),
+                ],
             },
             Group {
                 label: "图例",

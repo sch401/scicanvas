@@ -3,7 +3,7 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-pub const PROJECT_VERSION: u32 = 15;
+pub const PROJECT_VERSION: u32 = 16;
 pub const GRAPH_TEMPLATE_VERSION: u32 = 1;
 
 /// 列的绘图角色，对应 Origin 里的 X / Y / 忽略。

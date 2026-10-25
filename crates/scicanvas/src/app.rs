@@ -1326,6 +1326,26 @@ impl SciApp {
         }
     }
 
+    pub(crate) fn add_reference_line(&mut self, axis: scicanvas_core::page::ReferenceAxis) {
+        let Some(gid) = self.active_graph_id() else { return };
+        let index = self.layer_index(gid);
+        let layer = &mut self.project.graph_mut(gid).unwrap().page.layers_mut()[index];
+        if axis == scicanvas_core::page::ReferenceAxis::YRight && !layer.has_right_axis_style() {
+            self.status = "请先把一条曲线设置为右 Y 轴".into();
+            return;
+        }
+        let log = match axis {
+            scicanvas_core::page::ReferenceAxis::X => layer.x_log,
+            scicanvas_core::page::ReferenceAxis::YLeft | scicanvas_core::page::ReferenceAxis::YRight => layer.y_log,
+        };
+        layer.reference_lines.push(scicanvas_core::page::ReferenceLine {
+            axis,
+            value: if log { 1.0 } else { 0.0 },
+            ..Default::default()
+        });
+        self.status = format!("已添加{}参考线", axis.label());
+    }
+
     pub(crate) fn set_theme(&mut self, pref: egui::ThemePreference) {
         self.theme_pref = pref;
         self.pending_theme = Some(pref);

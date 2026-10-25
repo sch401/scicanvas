@@ -315,6 +315,28 @@ pub(super) fn decorations(commands: &mut Vec<Command>) {
 pub(super) fn graph(commands: &mut Vec<Command>) {
     commands.extend([
         c(
+            "graph.reference.vertical",
+            "添加垂直参考线",
+            "stepv",
+            "",
+            "图形",
+            "reference line vertical x value 参考线 垂直 X 轴值",
+            need_graph,
+            |a| a.add_reference_line(scicanvas_core::page::ReferenceAxis::X),
+        )
+        .modifies(),
+        c(
+            "graph.reference.horizontal",
+            "添加水平参考线",
+            "fitlin",
+            "",
+            "图形",
+            "reference line horizontal y value 参考线 水平 Y 轴值",
+            need_graph,
+            |a| a.add_reference_line(scicanvas_core::page::ReferenceAxis::YLeft),
+        )
+        .modifies(),
+        c(
             "layer.add",
             "添加图层",
             "newbook",

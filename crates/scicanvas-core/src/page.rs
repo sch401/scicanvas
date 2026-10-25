@@ -205,6 +205,9 @@ impl Page {
             }
         }
         for layer in &self.layers {
+            for line in &layer.reference_lines {
+                line.validate()?;
+            }
             if let Some(rect) = layer.placement {
                 rect.validate()?;
             }
@@ -244,6 +247,8 @@ pub struct Layer {
     pub error_bars: ErrorBars,
     #[cfg_attr(feature = "serde", serde(default))]
     pub labels: DataLabels,
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Vec::is_empty"))]
+    pub reference_lines: Vec<ReferenceLine>,
     pub grid: bool,
     pub legend: bool,
     /// None keeps automatic avoidance; manual anchors are fractions of the entire page.
@@ -286,6 +291,58 @@ pub struct Layer {
     /// None 时沿用左 Y 轴数字格式，保持 v14 行为。
     #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Option::is_none"))]
     pub y2_format: Option<crate::format::NumberFormat>,
+}
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum ReferenceAxis {
+    X,
+    #[default]
+    YLeft,
+    YRight,
+}
+
+impl ReferenceAxis {
+    pub const ALL: [Self; 3] = [Self::X, Self::YLeft, Self::YRight];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::X => "X",
+            Self::YLeft => "左 Y",
+            Self::YRight => "右 Y",
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize), serde(default))]
+pub struct ReferenceLine {
+    pub axis: ReferenceAxis,
+    pub value: f64,
+    pub color: [u8; 3],
+    pub width: f32,
+    pub dashed: bool,
+}
+
+impl Default for ReferenceLine {
+    fn default() -> Self {
+        Self {
+            axis: ReferenceAxis::YLeft,
+            value: 0.0,
+            color: [136, 136, 136],
+            width: 1.0,
+            dashed: true,
+        }
+    }
+}
+
+impl ReferenceLine {
+    pub fn validate(&self) -> Result<(), String> {
+        if !self.value.is_finite() || !self.width.is_finite() || !(0.2..=8.0).contains(&self.width) {
+            return Err("参考线位置或线宽无效".into());
+        }
+        Ok(())
+    }
 }
 
 /// 一条曲线的单独样式；None 表示跟随图层设置。
@@ -417,6 +474,7 @@ impl Default for Layer {
             area_opacity: default_area_opacity(),
             error_bars: Default::default(),
             labels: Default::default(),
+            reference_lines: Vec::new(),
             grid: false,
             legend: true,
             legend_position: None,

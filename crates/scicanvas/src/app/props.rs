@@ -60,6 +60,7 @@ impl SciApp {
                         layer_style(ui, g, history_group);
                         labels(ui, g, &cols, history_group);
                         error_bars(ui, g, history_group);
+                        reference_lines(ui, g, gid, history_group);
                     });
                 curve_style(ui, g, gid, props_layer, &cols, &curve_names, history_group);
             });
@@ -708,6 +709,72 @@ fn error_bars(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_gr
         &ui.add(egui::Slider::new(&mut g.error_bars.width, 0.5..=6.0)),
         history_group,
     );
+    ui.end_row();
+}
+
+fn reference_lines(
+    ui: &mut egui::Ui,
+    g: &mut scicanvas_core::page::Layer,
+    gid: u64,
+    history_group: &mut Option<egui::Id>,
+) {
+    use scicanvas_core::page::{ReferenceAxis, ReferenceLine};
+    ui.label("参考线");
+    ui.vertical(|ui| {
+        ui.horizontal_wrapped(|ui| {
+            let vertical = ui.button("＋垂直");
+            edit_group(&vertical, history_group);
+            if vertical.clicked() {
+                g.reference_lines.push(ReferenceLine {
+                    axis: ReferenceAxis::X,
+                    value: if g.x_log { 1.0 } else { 0.0 },
+                    ..Default::default()
+                });
+            }
+            let horizontal = ui.button("＋水平");
+            edit_group(&horizontal, history_group);
+            if horizontal.clicked() {
+                g.reference_lines.push(ReferenceLine {
+                    axis: ReferenceAxis::YLeft,
+                    value: if g.y_log { 1.0 } else { 0.0 },
+                    ..Default::default()
+                });
+            }
+        });
+        let mut remove = None;
+        let has_right_axis = g.has_right_axis_style();
+        for (index, line) in g.reference_lines.iter_mut().enumerate() {
+            ui.horizontal_wrapped(|ui| {
+                let axis = egui::ComboBox::from_id_salt(("reference-axis", gid, index))
+                    .selected_text(line.axis.label())
+                    .show_ui(ui, |ui| {
+                        for axis in ReferenceAxis::ALL {
+                            ui.add_enabled_ui(axis != ReferenceAxis::YRight || has_right_axis, |ui| {
+                                ui.selectable_value(&mut line.axis, axis, axis.label());
+                            });
+                        }
+                    })
+                    .response;
+                edit_group(&axis, history_group);
+                let value = ui.add(egui::DragValue::new(&mut line.value).speed(0.1).max_decimals(6));
+                edit_group(&value, history_group);
+                let color = ui.color_edit_button_srgb(&mut line.color);
+                edit_group(&color, history_group);
+                let width = ui.add(egui::DragValue::new(&mut line.width).range(0.2..=8.0).speed(0.1));
+                edit_group(&width, history_group);
+                let dashed = ui.checkbox(&mut line.dashed, "虚线");
+                edit_group(&dashed, history_group);
+                let delete = ui.small_button("删除");
+                edit_group(&delete, history_group);
+                if delete.clicked() {
+                    remove = Some(index);
+                }
+            });
+        }
+        if let Some(index) = remove {
+            g.reference_lines.remove(index);
+        }
+    });
     ui.end_row();
 }
 

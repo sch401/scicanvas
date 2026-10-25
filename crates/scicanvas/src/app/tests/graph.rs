@@ -1260,6 +1260,53 @@ fn applying_a_graph_template_adds_one_undoable_graph() {
 }
 
 #[test]
+fn adding_a_reference_line_is_undoable_and_redoable() {
+    let mut app = app();
+    app.active = Some(2);
+    let before = app.project.clone();
+    app.run_command("graph.reference.horizontal");
+    assert_eq!(app.project.graph(2).unwrap().first_layer().reference_lines.len(), 1);
+    assert_eq!(
+        app.project.graph(2).unwrap().first_layer().reference_lines[0].axis,
+        scicanvas_core::page::ReferenceAxis::YLeft
+    );
+    roundtrip(&mut app, &before);
+    assert_eq!(app.project.graph(2).unwrap().first_layer().reference_lines.len(), 1);
+}
+
+#[test]
+fn reference_line_properties_add_and_remove_live_with_history() {
+    let mut app = app();
+    app.props_for = Some(2);
+    let before = app.project.clone();
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    ctx.style_mut(|style| style.animation_time = 0.0);
+    let mut harness = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1500.0, 1300.0)),
+        |app: &mut SciApp, ctx: &egui::Context| {
+            app.history_group = None;
+            app.props_window(ctx);
+            app.finish_frame_edit(app.history_group);
+        },
+    )
+    .with_step(0.02);
+    harness.frame(&mut app, vec![]);
+    let output = harness.frame(&mut app, vec![]);
+    harness.click_text(&mut app, &output, "＋水平");
+    assert_eq!(app.project.graph(2).unwrap().first_layer().reference_lines.len(), 1);
+    roundtrip(&mut app, &before);
+
+    let before_remove = app.project.clone();
+    let output = harness.frame(&mut app, vec![]);
+    harness.click_text(&mut app, &output, "删除");
+    assert!(app.project.graph(2).unwrap().first_layer().reference_lines.is_empty());
+    roundtrip(&mut app, &before_remove);
+    assert!(app.project.graph(2).unwrap().first_layer().reference_lines.is_empty());
+}
+
+#[test]
 fn builder_edits_keep_draft_mapping_and_create_with_the_existing_undo_transaction() {
     for kind in [PlotType::LineSymbol, PlotType::FloatingBar] {
         let mut app = app();
