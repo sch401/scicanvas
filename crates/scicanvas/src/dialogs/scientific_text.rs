@@ -1,6 +1,6 @@
 use super::*;
 
-/// Shared title/legend editor. Selection indices are Unicode character positions, as in egui.
+/// 标题与图例共用编辑器；选区索引按 Unicode 字符计算，与 egui 一致。
 pub(crate) fn scientific_text(ui: &mut egui::Ui, text: &mut String, rich: &mut bool, hint: &str) -> egui::Response {
     scientific_text_editor(ui, text, rich, hint, false)
 }
@@ -95,7 +95,7 @@ pub(super) fn format_selection(
     let selected = text[start..end].to_string();
     let mut first = range.start;
     let replacement = if format && command.is_empty() {
-        // Strip enclosing formats too when a toolbar-created inner selection is still active.
+        // 工具栏创建的内层选区仍有效时，同时移除包裹它的外层格式。
         while let Some(prefix) = ["\\b{", "\\i{", "^{", "_{"]
             .into_iter()
             .find(|p| text[..start].ends_with(p) && text[end..].starts_with('}'))

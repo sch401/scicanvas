@@ -10,7 +10,7 @@ pub(super) struct DialogFrame {
 impl SciApp {
     fn sync_dialog_controls(&mut self) {
         let Some(d) = self.dialog.as_mut() else { return };
-        // Clean live controls follow edits made through the ribbon or another open panel.
+        // 未改动的实时控件应同步功能区或其他已打开面板中的修改。
         match d {
             Dialog::LayerContents(edit) if edit.draft == edit.before => {
                 if let Some(layer) = self

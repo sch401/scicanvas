@@ -199,7 +199,7 @@ pub(super) fn compose<'a>(
             }
             if let Some(position) = layer.legend_position {
                 if let Some(mut object) = scene.objects.pop() {
-                    // Manual placement changes translation only: keep the automatic plot rectangle stable.
+                    // 手动定位只改变整体偏移，自动计算的绘图区矩形保持不变。
                     let x = (position[0] * w).clamp(0.0, (w - object.bounds[2]).max(0.0));
                     let y = (position[1] * h).clamp(0.0, (h - object.bounds[3]).max(0.0));
                     let mut items: Vec<_> = scene.items.drain(object.items.clone()).collect();

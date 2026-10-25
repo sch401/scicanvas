@@ -1,6 +1,6 @@
 use super::*;
 
-/// A text focus cycle or continuous pointer edit shares one history transaction.
+/// 文本框连续输入或指针连续编辑共用一个历史事务。
 pub(crate) fn edit_group(response: &egui::Response, group: &mut Option<egui::Id>) {
     let text_focus = response.has_focus() && egui::TextEdit::load_state(&response.ctx, response.id).is_some();
     if text_focus || response.is_pointer_button_down_on() || response.dragged() || response.drag_stopped() {

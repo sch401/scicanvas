@@ -1,7 +1,7 @@
 use super::window::PANEL_MARGIN;
 use super::*;
 
-/// Settings share one docking implementation and keep their existing widget IDs and drafts.
+/// 设置面板共用停靠逻辑，并保留现有控件 ID 与编辑草稿。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum DockSide {
     Left,
@@ -80,7 +80,7 @@ pub(super) fn panel_header_height(ctx: &egui::Context) -> f32 {
         + 2.0 * PANEL_MARGIN
 }
 
-/// Reserve sidebar space before drawing document windows; each expanded panel gets a scrollable row.
+/// 绘制子窗口前先预留侧栏空间，再为每个展开面板分配可滚动区域。
 pub(crate) fn place_docks(ui: &mut egui::Ui, side: DockSide, rect: egui::Rect) {
     let ctx = ui.ctx().clone();
     let mut state = docks(&ctx);
@@ -101,7 +101,7 @@ pub(crate) fn place_docks(ui: &mut egui::Ui, side: DockSide, rect: egui::Rect) {
         .map(|&i| {
             let id = state.panels[i].id.with("collapsing");
             let open = egui::collapsing_header::CollapsingState::load_with_default_open(&ctx, id, true).is_open();
-            // Docked rows redistribute space immediately, without animated bodies overlapping their neighbours.
+            // 停靠面板立即重新分配行高，不使用动画，避免相邻面板的内容重叠。
             ctx.animate_bool_with_time(id, open, 0.0);
             open
         })

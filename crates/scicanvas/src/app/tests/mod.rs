@@ -118,7 +118,7 @@ fn press_dialog_button(app: &mut SciApp, label: &str) {
         |app: &mut SciApp, ctx: &egui::Context| app.dialogs(ctx),
     )
     .with_step(0.02);
-    // Narrow grids need several frames to settle their column widths and wrapped rows.
+    // 列较窄时需经过几帧，才能稳定列宽和换行后的行高。
     for _ in 0..5 {
         harness.frame(app, vec![]);
     }

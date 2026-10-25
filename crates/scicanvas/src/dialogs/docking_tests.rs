@@ -146,7 +146,7 @@ fn actual_title_drags_dock_stack_reorder_resize_collapse_and_float() {
     host.title_drag("Second", egui::pos2(160.0, 210.0));
     assert!(host.rect("Second").top() < host.rect("First").top());
     host.ctx.style_mut(|style| style.animation_time = 0.2);
-    // Use the native collapse arrow; the other expanded panel takes the freed space.
+    // 使用原生折叠箭头；上方折叠后，另一展开面板占用释放的空间。
     let second = host.rect("Second");
     let pos = second.min + egui::vec2(12.0, 12.0);
     host.frame(vec![egui::Event::PointerMoved(pos)]);
@@ -180,7 +180,7 @@ fn actual_title_drags_dock_stack_reorder_resize_collapse_and_float() {
     host.settle();
     let right = host.rect("First");
     assert!(right.right() <= 1000.0 && right.bottom() <= 650.0, "{right:?}");
-    // Panel context menu is an alternative to dragging.
+    // 可用面板右键菜单代替拖动操作。
     let pos = egui::pos2(right.center().x, right.top() + 12.0);
     host.frame(vec![egui::Event::PointerMoved(pos)]);
     for pressed in [true, false] {
