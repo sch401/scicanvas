@@ -128,17 +128,22 @@ fn curve_sample(plot: &crate::page::PreparedPlot, area_opacity: f32, x: f64, y: 
 fn fill_or_line_sample(plot: &crate::page::PreparedPlot, area_opacity: f32, x: f64, y: f64, width: f64) -> Vec<Prim> {
     let style = &plot.style;
     let color = style.color.rgb();
-    let mapped: Vec<_> = plot
-        .series
-        .point_styles
-        .iter()
-        .filter_map(|point| point.color)
-        .collect();
+    let has_mapped_color = plot.series.point_styles.iter().any(|point| point.color.is_some());
+    let mapped: Vec<_> = if has_mapped_color {
+        plot.series
+            .point_styles
+            .iter()
+            .map(|point| point.color.map_or(color, |[r, g, b]| (r, g, b)))
+            .collect()
+    } else {
+        Vec::new()
+    };
+    let color = mapped.first().copied().unwrap_or(color);
     let varying = mapped
         .first()
         .is_some_and(|first| mapped.iter().any(|value| value != first));
     if style.kind.is_bar() || style.kind == PlotType::Area {
-        if style.kind.is_bar() && varying {
+        if varying {
             let count = mapped.len().min(3);
             return (0..count)
                 .map(|index| {
@@ -148,8 +153,19 @@ fn fill_or_line_sample(plot: &crate::page::PreparedPlot, area_opacity: f32, x: f
                         y: y - 3.5,
                         w: (width - 8.0) / count as f64,
                         h: 7.0,
-                        fill: Some((mapped[source].into(), 1.0)),
-                        stroke: Some((INK, 0.5)),
+                        fill: Some((
+                            mapped[source],
+                            if style.kind == PlotType::Area {
+                                f64::from(area_opacity)
+                            } else {
+                                1.0
+                            },
+                        )),
+                        stroke: Some(if style.kind == PlotType::Area {
+                            (mapped[source], f64::from(style.line_width))
+                        } else {
+                            (INK, 0.5)
+                        }),
                     }
                 })
                 .collect();
@@ -167,7 +183,11 @@ fn fill_or_line_sample(plot: &crate::page::PreparedPlot, area_opacity: f32, x: f
                     1.0
                 },
             )),
-            stroke: Some((INK, 0.5)),
+            stroke: Some(if style.kind == PlotType::Area && has_mapped_color {
+                (color, f64::from(style.line_width))
+            } else {
+                (INK, 0.5)
+            }),
         }];
     }
     if !style.kind.has_line() {
@@ -182,7 +202,7 @@ fn fill_or_line_sample(plot: &crate::page::PreparedPlot, area_opacity: f32, x: f
                 let right = x + width * (index + 1) as f64 / count as f64;
                 ColoredSegment {
                     points: [left, y, right, y],
-                    color: mapped[source].into(),
+                    color: mapped[source],
                 }
             })
             .collect();

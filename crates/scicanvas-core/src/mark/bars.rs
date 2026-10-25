@@ -72,6 +72,10 @@ pub(super) fn draw(
             },
             style.y_axis,
         );
+        if series.point_styles.iter().any(|point| point.color.is_some()) {
+            mapped_area(ctx, series, style, base, items);
+            return true;
+        }
         for run in crate::stat::data_runs(series) {
             let points: Vec<_> = run
                 .iter()
@@ -104,6 +108,65 @@ pub(super) fn draw(
         return true;
     }
     false
+}
+
+/// 每个点的颜色覆盖相邻边的半段；分段与原面积图使用相同的投影和三角剖分。
+fn mapped_area(
+    ctx: &Context<'_, '_, '_, '_>,
+    series: &Series,
+    style: &SeriesStyle,
+    base: f64,
+    items: &mut Vec<crate::scene::Item>,
+) {
+    for range in crate::stat::row_runs(series) {
+        let mut indices: Vec<_> = range.collect();
+        indices.sort_by(|a, b| series.points[*a][0].total_cmp(&series.points[*b][0]));
+        // 同一段按 X 排序后填充互不重叠，按颜色合并图元；各缺失行分段仍按原顺序叠放。
+        let mut fills: std::collections::BTreeMap<_, Vec<_>> = std::collections::BTreeMap::new();
+        let mut segments = Vec::new();
+        for pair in indices.windows(2) {
+            let project = |index: usize| {
+                let point = series.points[index];
+                [ctx.px(point[0]), ctx.py(point[1], style.y_axis)]
+            };
+            let (a, b) = (project(pair[0]), project(pair[1]));
+            let mid = [a[0] / 2.0 + b[0] / 2.0, a[1] / 2.0 + b[1] / 2.0];
+            for (index, from, to) in [(pair[0], a, mid), (pair[1], mid, b)] {
+                let color = series.point_styles[index]
+                    .color
+                    .map_or(style.color.rgb(), |[r, g, b]| (r, g, b));
+                fills
+                    .entry(color)
+                    .or_default()
+                    .extend(area_triangles(&[from, to], base));
+                segments.push(crate::scene::ColoredSegment {
+                    points: [from[0], from[1], to[0], to[1]],
+                    color,
+                });
+            }
+        }
+        for (color, pts) in fills.into_iter().filter(|(_, pts)| !pts.is_empty()) {
+            ctx.push(
+                items,
+                Prim::Triangles {
+                    pts,
+                    color,
+                    opacity: f64::from(ctx.layer.area_opacity),
+                },
+                true,
+            );
+        }
+        if !segments.is_empty() {
+            ctx.push(
+                items,
+                Prim::ColoredSegments {
+                    segments,
+                    width: f64::from(style.line_width),
+                },
+                true,
+            );
+        }
+    }
 }
 
 fn area_triangles(points: &[[f64; 2]], base: f64) -> Vec<[f64; 2]> {

@@ -291,3 +291,196 @@ fn v6_roundtrips_new_types_and_migrates_v5_area_defaults() {
         assert!(project_file::to_json(&p).is_err());
     }
 }
+
+#[test]
+fn mapped_area_keeps_source_colors_through_sorting_gaps_and_zero_crossings() {
+    use scicanvas_core::page::CurveStyle;
+    let (mut p, id) = project(
+        PlotType::Area,
+        &["2", "0", "1", "3", "4", "5"],
+        &[&["2", "-2", "4", "", "2", "4"]],
+    );
+    let key = p.book_mut(1).unwrap().push_column(Role::Ignore);
+    p.book_mut(1).unwrap().columns.last_mut().unwrap().data =
+        ["1", "0", "", "0", "0", "1"].into_iter().map(str::to_owned).collect();
+    let fallback = (201, 17, 131);
+    let layer = p.graph_mut(id).unwrap().first_layer_mut();
+    layer.area_opacity = 0.4;
+    layer.legend = false;
+    layer.set_plot_style(
+        "B",
+        Some(CurveStyle {
+            color: Some(fallback.into()),
+            right_axis: true,
+            ..Default::default()
+        }),
+    );
+    let plain = scene::layout_page(p.graph(id).unwrap(), &p, &[]);
+    let mut style = p.graph(id).unwrap().first_layer().plot_style("B").cloned().unwrap();
+    style.color_column = Some(key);
+    p.graph_mut(id)
+        .unwrap()
+        .first_layer_mut()
+        .set_plot_style("B", Some(style));
+    let sc = scene::layout_page(p.graph(id).unwrap(), &p, &[]);
+    let segments: Vec<_> = sc
+        .items
+        .iter()
+        .filter(|it| it.clip.is_some())
+        .flat_map(|it| match &it.prim {
+            Prim::ColoredSegments { segments, .. } => segments.clone(),
+            _ => Vec::new(),
+        })
+        .collect();
+    let low = scicanvas_core::PALETTE[0];
+    let high = *scicanvas_core::PALETTE.last().unwrap();
+    assert_eq!(
+        segments.iter().map(|s| s.color).collect::<Vec<_>>(),
+        [low, fallback, fallback, high, low, high]
+    );
+    for (segment, (a, b)) in
+        segments
+            .iter()
+            .zip([(0.0, 0.5), (0.5, 1.0), (1.0, 1.5), (1.5, 2.0), (4.0, 4.5), (4.5, 5.0)])
+    {
+        near(segment.points[0], sc.px(a));
+        near(segment.points[2], sc.px(b));
+    }
+    let area = |scene: &Scene| {
+        triangles(scene)
+            .into_iter()
+            .flat_map(|pts| pts.as_chunks::<3>().0)
+            .map(|t| {
+                ((t[1][0] - t[0][0]) * (t[2][1] - t[0][1]) - (t[1][1] - t[0][1]) * (t[2][0] - t[0][0])).abs() / 2.0
+            })
+            .sum::<f64>()
+    };
+    near(area(&sc), area(&plain));
+    for item in sc
+        .items
+        .iter()
+        .filter(|it| matches!(it.prim, Prim::Triangles { .. } | Prim::ColoredSegments { .. }))
+    {
+        assert_eq!(item.clip, Some(sc.plot));
+        if let Prim::Triangles { opacity, .. } = item.prim {
+            near(opacity, f64::from(0.4f32));
+        }
+    }
+    let output = svg::render_page(p.graph(id).unwrap(), &p);
+    for color in [low, fallback, high] {
+        let hex = format!("#{:02x}{:02x}{:02x}", color.0, color.1, color.2);
+        assert!(output.contains(&format!("fill=\"{hex}\"")));
+        assert!(output.contains(&format!("stroke=\"{hex}\"")));
+    }
+    #[cfg(feature = "serde")]
+    {
+        let saved = scicanvas_core::project_file::to_json(&p).unwrap();
+        let loaded = scicanvas_core::project_file::from_json(&saved).unwrap();
+        assert_eq!(loaded, p);
+        assert_eq!(svg::render_page(loaded.graph(id).unwrap(), &loaded), output);
+        assert_eq!(loaded.version, 17);
+    }
+}
+
+#[test]
+fn mapped_area_foreign_categories_survive_mean_and_log_projection() {
+    use scicanvas_core::{colormap::ColorMap, page::CurveStyle, plotspec::foreign_key};
+    let (mut p, id) = project(
+        PlotType::Area,
+        &["1", "1", "10", "10", "100", "100"],
+        &[&["1", "3", "10", "30", "100", "300"]],
+    );
+    let mut foreign = p.book(1).unwrap().clone();
+    foreign.id = p.alloc_id();
+    let bid = foreign.id;
+    let key = foreign.push_column(Role::Ignore);
+    foreign.columns.last_mut().unwrap().data = scicanvas_core::ColumnData::Category {
+        codes: vec![0, 0, 1, 1, 2, 2],
+        levels: vec!["Z".into(), "A".into(), "B".into()],
+        ordered: true,
+    };
+    p.books.push(foreign);
+    p.add_curves(id, 0, bid, &["B".into()]).unwrap();
+    let layer = p.graph_mut(id).unwrap().first_layer_mut();
+    layer.transform = Transform::Mean;
+    layer.x_log = true;
+    layer.y_log = true;
+    layer.color_map = ColorMap::Colorblind;
+    layer.set_plot_style(
+        &foreign_key(bid, "B"),
+        Some(CurveStyle {
+            color_column: Some(key),
+            right_axis: true,
+            ..Default::default()
+        }),
+    );
+    let (_, prepared) = p
+        .graph(id)
+        .unwrap()
+        .first_layer()
+        .prepared_plots_in(p.book(1).unwrap(), &|bid| p.book(bid));
+    let data = &prepared
+        .iter()
+        .find(|plot| plot.plot.mapping.y.book == bid)
+        .unwrap()
+        .series;
+    assert_eq!(data.points, [[1.0, 2.0], [10.0, 20.0], [100.0, 200.0]]);
+    let expected: Vec<_> = [0.0, 0.5, 1.0]
+        .into_iter()
+        .map(|t| ColorMap::Colorblind.sample(t))
+        .collect();
+    assert_eq!(
+        data.point_styles
+            .iter()
+            .map(|s| s.color.unwrap().into())
+            .collect::<Vec<(u8, u8, u8)>>(),
+        expected
+    );
+    let sc = scene::layout_page(p.graph(id).unwrap(), &p, &[]);
+    let mapped: Vec<_> = sc
+        .items
+        .iter()
+        .filter_map(|it| match &it.prim {
+            Prim::ColoredSegments { segments, .. } if it.clip.is_some() => Some(segments),
+            _ => None,
+        })
+        .flatten()
+        .collect();
+    assert_eq!(mapped.len(), 4);
+    assert_eq!(
+        mapped.iter().map(|segment| segment.color).collect::<Vec<_>>(),
+        [expected[0], expected[1], expected[1], expected[2]]
+    );
+    assert!(mapped.iter().flat_map(|s| s.points).all(f64::is_finite));
+    assert!(!triangles(&sc).is_empty());
+}
+
+#[test]
+fn mapped_area_constant_color_legend_matches_fill_and_outline() {
+    use scicanvas_core::{colormap::ColorMap, page::CurveStyle};
+    let (mut p, id) = project(PlotType::Area, &["0", "1", "1", "2"], &[&["2", "4", "3", "2"]]);
+    p.graph_mut(id).unwrap().page.width_mm = 89.0;
+    let key = p.book_mut(1).unwrap().push_column(Role::Ignore);
+    p.book_mut(1).unwrap().columns.last_mut().unwrap().data =
+        ["5", "5", "5", "5"].into_iter().map(str::to_owned).collect();
+    let layer = p.graph_mut(id).unwrap().first_layer_mut();
+    layer.color_map = ColorMap::Viridis;
+    layer.area_opacity = 0.5;
+    layer.set_plot_style(
+        "B",
+        Some(CurveStyle {
+            color_column: Some(key),
+            line_width: Some(2.0),
+            ..Default::default()
+        }),
+    );
+    let sc = scene::layout_page(p.graph(id).unwrap(), &p, &[]);
+    let expected = ColorMap::Viridis.sample(0.5);
+    assert!(sc.items.iter().any(|it| matches!(it.prim,
+        Prim::Rect { fill: Some((color, 0.5)), stroke: Some((border, 2.0)), .. }
+            if it.clip.is_none() && color == expected && border == expected
+    )));
+    assert!(sc.items.iter().any(|it| matches!(it.prim,
+        Prim::Triangles { color, opacity: 0.5, .. } if it.clip.is_some() && color == expected
+    )));
+}

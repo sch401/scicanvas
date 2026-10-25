@@ -136,7 +136,7 @@ fn prim(out: &mut String, p: &Prim) {
                 let [x1, y1, x2, y2] = segment.points;
                 let _ = write!(
                     out,
-                    "<path d=\"M{x1:.2},{y1:.2}L{x2:.2},{y2:.2}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{width}\"/>",
+                    "<path d=\"M{x1:.2},{y1:.2}L{x2:.2},{y2:.2}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{width}\" stroke-linecap=\"round\"/>",
                     hex(segment.color)
                 );
             }

@@ -249,6 +249,116 @@ mod tests {
         assert!(pdf_bytes("invalid SVG").is_err());
     }
 
+    #[test]
+    fn mapped_area_fill_and_outline_match_screen_svg_png_and_vector_pdf() {
+        use eframe::egui;
+        use scicanvas_core::{
+            colormap::ColorMap,
+            page::CurveStyle,
+            scene::{self, Prim},
+            PlotType,
+        };
+        let mut project = Project::sample();
+        for (column, values) in project.books[0].columns.iter_mut().zip([
+            vec!["0", "1", "2", "3"],
+            vec!["4", "4", "4", "4"],
+            vec!["0", "0", "1", "1"],
+        ]) {
+            column.data = values.into_iter().map(str::to_owned).collect();
+        }
+        let graph = &mut project.graphs[0];
+        graph.page.width_mm = 89.0;
+        graph.page.height_mm = 70.0;
+        let layer = graph.first_layer_mut();
+        layer.set_plot_type(PlotType::Area).unwrap();
+        layer.edit_draft(|draft| draft.y_keys = vec!["B".into()]);
+        layer.legend = false;
+        layer.x_auto = false;
+        layer.x_min = 0.0;
+        layer.x_max = 3.0;
+        layer.y_auto = false;
+        layer.y_min = 0.0;
+        layer.y_max = 5.0;
+        layer.area_opacity = 0.5;
+        layer.color_map = ColorMap::Viridis;
+        layer.set_plot_style(
+            "B",
+            Some(CurveStyle {
+                color_column: Some("C".into()),
+                line_width: Some(3.0),
+                ..Default::default()
+            }),
+        );
+        let sc = scene::layout_page(&project.graphs[0], &project, &[]);
+        let page = svg::render_page(&project.graphs[0], &project);
+        let expected = [ColorMap::Viridis.sample(0.0), ColorMap::Viridis.sample(1.0)];
+        for color in expected {
+            let hex = format!("#{:02x}{:02x}{:02x}", color.0, color.1, color.2);
+            assert!(page.contains(&format!("fill=\"{hex}\"")));
+            assert!(page.contains(&format!("stroke=\"{hex}\" stroke-width=\"3\" stroke-linecap=\"round\"")));
+        }
+        assert!(sc
+            .items
+            .iter()
+            .any(|it| matches!(it.prim, Prim::Triangles { opacity: 0.5, .. })));
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        for scale in [0.75, 1.5] {
+            let rect = egui::Rect::from_min_size(egui::pos2(20.0, 25.0), egui::vec2(sc.w as f32, sc.h as f32) * scale);
+            let output = ctx.run(egui::RawInput::default(), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| crate::plot::paint(ui, rect, &sc));
+            });
+            for (r, g, b) in expected {
+                let color = egui::Color32::from_rgb(r, g, b);
+                assert!(output.shapes.iter().any(|item| matches!(&item.shape,
+                    egui::Shape::Mesh(mesh) if !mesh.vertices.is_empty() && mesh.vertices.iter().all(|v| v.color == color.gamma_multiply(0.5))
+                )));
+                assert!(output.shapes.iter().any(|item| matches!(&item.shape,
+                    egui::Shape::LineSegment { stroke, .. } if stroke.color == eframe::epaint::ColorMode::Solid(color)
+                )));
+            }
+        }
+        for dpi in [96, 192] {
+            let pixmap = rasterize(&page, dpi).unwrap();
+            let scale = f64::from(dpi) / 96.0;
+            for (x, color) in [(0.75, expected[0]), (2.25, expected[1])] {
+                let px = (sc.px(x) * scale).round() as u32;
+                let py = (sc.py(2.0) * scale).round() as u32;
+                let pixel = pixmap.pixel(px, py).unwrap();
+                let blended =
+                    [color.0, color.1, color.2].map(|channel| (f64::from(channel) * 0.5 + 127.5).round() as u8);
+                for (actual, expected) in [pixel.red(), pixel.green(), pixel.blue()].into_iter().zip(blended) {
+                    assert!(
+                        actual.abs_diff(expected) <= 2,
+                        "{dpi}: fill at {x}: {actual} != {expected}"
+                    );
+                }
+                let y = (sc.py(4.0) * scale).round() as i32;
+                assert!(
+                    (-2..=2).any(|dy| {
+                        let pixel = pixmap.pixel(px, (y + dy) as u32).unwrap();
+                        [pixel.red(), pixel.green(), pixel.blue()]
+                            .into_iter()
+                            .zip([color.0, color.1, color.2])
+                            .all(|(a, b)| a.abs_diff(b) <= 2)
+                    }),
+                    "{dpi}: opaque outline at {x}"
+                );
+            }
+        }
+        let pdf = pdf_bytes(&page).unwrap();
+        assert!(pdf.starts_with(b"%PDF-1."));
+        assert!(!String::from_utf8_lossy(&pdf).contains("/Subtype /Image"));
+        if let Ok(directory) = std::env::var("SCICANVAS_PDF_PROBE_DIR") {
+            let dir = std::path::Path::new(&directory);
+            std::fs::create_dir_all(dir).unwrap();
+            std::fs::write(dir.join("mapped-area.pdf"), pdf).unwrap();
+            std::fs::write(dir.join("mapped-area.svg"), &page).unwrap();
+            let png = rasterize(&page, 150).unwrap();
+            std::fs::write(dir.join("mapped-area.png"), png_bytes(&png, 150).unwrap()).unwrap();
+        }
+    }
+
     fn chunk<'a>(png: &'a [u8], kind: &[u8; 4]) -> Option<&'a [u8]> {
         let mut at = 8;
         while at + 8 <= png.len() {

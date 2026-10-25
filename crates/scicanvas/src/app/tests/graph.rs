@@ -1499,3 +1499,78 @@ fn builder_edits_keep_draft_mapping_and_create_with_the_existing_undo_transactio
         );
     }
 }
+
+#[test]
+fn mapped_area_color_is_live_undoable_and_saved_without_a_format_change() {
+    use scicanvas_core::{project_file, scene, svg};
+    let mut app = app();
+    let layer = app.project.graph_mut(2).unwrap().first_layer_mut();
+    layer.set_plot_type(PlotType::Area).unwrap();
+    layer.edit_draft(|draft| draft.y_keys = vec!["B".into()]);
+    app.props_for = Some(2);
+    let before = app.project.clone();
+    let before_svg = svg::render_page(app.project.graph(2).unwrap(), &app.project);
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    ctx.style_mut(|style| style.animation_time = 0.0);
+    let mut harness = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1500.0, 3000.0)),
+        |app: &mut SciApp, ctx: &egui::Context| {
+            app.history_group = None;
+            app.props_window(ctx);
+            app.finish_frame_edit(app.history_group);
+        },
+    )
+    .with_step(0.02);
+    harness.frame(&mut app, vec![]);
+    let output = harness.frame(&mut app, vec![]);
+    harness.click_text(&mut app, &output, "曲线样式");
+    let output = harness.frame(&mut app, vec![]);
+    let row = crate::test_ui::text_rect(&output, "颜色映射列").unwrap();
+    let pick = crate::test_ui::text_positions(&output, "无")
+        .into_iter()
+        .min_by(|a, b| (a.y - row.center().y).abs().total_cmp(&(b.y - row.center().y).abs()))
+        .unwrap();
+    harness.click(&mut app, pick + egui::vec2(5.0, 5.0));
+    let popup = harness.frame(&mut app, vec![]);
+    harness.click_text(&mut app, &popup, "电压 B");
+    let graph = app.project.graph(2).unwrap();
+    let sc = scene::layout_page(graph, &app.project, &[]);
+    let fill_colors: std::collections::HashSet<_> = sc
+        .items
+        .iter()
+        .filter_map(|it| match &it.prim {
+            scene::Prim::Triangles { color, .. } if it.clip.is_some() => Some(*color),
+            _ => None,
+        })
+        .collect();
+    let outline_colors: std::collections::HashSet<_> = sc
+        .items
+        .iter()
+        .flat_map(|it| match &it.prim {
+            scene::Prim::ColoredSegments { segments, .. } if it.clip.is_some() => {
+                segments.iter().map(|s| s.color).collect::<Vec<_>>()
+            }
+            _ => Vec::new(),
+        })
+        .collect();
+    assert!(fill_colors.len() > 1);
+    assert_eq!(fill_colors, outline_colors);
+    let after = app.project.clone();
+    let after_svg = svg::render_page(graph, &app.project);
+    assert_ne!(before_svg, after_svg);
+    app.run_command("edit.undo");
+    assert_eq!(app.project, before);
+    assert_eq!(
+        svg::render_page(app.project.graph(2).unwrap(), &app.project),
+        before_svg
+    );
+    app.run_command("edit.redo");
+    assert_eq!(app.project, after);
+    assert_eq!(svg::render_page(app.project.graph(2).unwrap(), &app.project), after_svg);
+    let restored = project_file::from_scv(&project_file::to_scv(&app.project).unwrap()).unwrap();
+    assert_eq!(restored, app.project);
+    assert_eq!(restored.version, 17);
+    assert_eq!(svg::render_page(restored.graph(2).unwrap(), &restored), after_svg);
+}
