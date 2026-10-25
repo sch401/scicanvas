@@ -135,6 +135,9 @@ crates/
       recalc.rs     公式、操作记录与依赖重算
       columns.rs    结果列与附图辅助、列运算、填充、排序
       stats.rs      行/列统计、频数统计
+    nlfit.rs        非线性求解、参数/线性约束与原单元测试；公开类型重导出
+    nlfit/model.rs  24 种模型定义、公式与 Voigt 线形
+    nlfit/guess.rs  按类别计算自动初值、共享初值计算与位模式回归
     csv.rs          CSV 解析、编码识别、Excel 粘贴
     ticks.rs        坐标轴范围与刻度（1/2/5 步长、对数轴、刻度标签）
     scene.rs        图形版面：坐标框、刻度、曲线、图例排成图元，界面绘制和 SVG 导出共用
