@@ -79,7 +79,6 @@ impl Project {
                 })
             };
             cr.op = op(OpKind::PolyResidual { order });
-            let kr = self.insert_result_column(item.book_id, &item.y, cr).unwrap();
             const N: usize = 200;
             let fx: Vec<f64> = (0..N)
                 .map(|i| fit.x_min + (fit.x_max - fit.x_min) * i as f64 / (N - 1) as f64)
@@ -96,11 +95,17 @@ impl Project {
             cy.comment = fit.equation();
             cy.data = fx.iter().map(|x| fmt_num(fit.eval(*x))).collect();
             cy.op = op(OpKind::PolyFitY { order });
-            let kx = self.insert_result_column(item.book_id, &item.y, cx).unwrap();
-            let ky = self.insert_result_column(item.book_id, &item.y, cy).unwrap();
-            let (gid, index) = self.graph_for_result(&r, item)?;
-            self.attach_result(gid, index, item, &ky, Some(&kx))?;
-            graph = Some(gid);
+            let result = self.write_result(
+                item,
+                vec![cr, cx, cy],
+                ResultLink::Auto {
+                    resolved: &r,
+                    x: 1,
+                    y: 2,
+                },
+            )?;
+            let [kr, kx, ky]: [String; 3] = result.columns.try_into().unwrap();
+            graph = result.graph;
             reports.push(FitReport {
                 name,
                 kind: kind.clone(),
@@ -145,7 +150,7 @@ impl Project {
         let units = book.column(y_key).map(|c| c.units.clone()).unwrap_or_default();
         let pct = fmt_num(level * 100.0);
         let rows: Vec<(f64, f64, f64)> = xs.iter().map(|x| band(*x)).collect();
-        let mut keys = vec![];
+        let mut columns = vec![];
         // 依次为置信下限、置信上限、预测下限、预测上限
         let value = |i: usize, b: &(f64, f64, f64)| match i {
             0 => b.0 - b.1,
@@ -169,30 +174,22 @@ impl Project {
                     }
                 })
                 .collect();
-            keys.push(self.insert_result_column(book_id, y_key, c).unwrap());
+            columns.push(c);
         }
-        let mut targets = Vec::new();
-        for graph in &self.graphs {
-            for (index, layer) in graph.page.layers().iter().enumerate() {
-                if layer
-                    .plot(&DataRef::new(book_id, &curve.1), &|id| self.book(id))
-                    .is_some()
-                {
-                    targets.push((graph.id, index));
-                }
-            }
-        }
+        let source = Item {
+            book_id,
+            y: y_key.into(),
+            x: None,
+            rows: None,
+        };
+        let keys = self.write_result(&source, columns, ResultLink::None)?.columns;
         let item = Item {
             book_id,
             y: curve.1.clone(),
             x: Some(curve.0.clone()),
             rows: None,
         };
-        for (gid, index) in targets {
-            for key in &keys {
-                self.attach_result(gid, index, &item, key, Some(&curve.0))?;
-            }
-        }
+        self.bind_results(&item, &keys, ResultLink::Matching)?;
         Ok(keys)
     }
 
@@ -286,11 +283,17 @@ impl Project {
             cy.units = y_units;
             cy.comment = format!("{}；{}", model.formula(), equation);
             cy.data = fx.iter().map(|x| fmt_num(fit.eval(*x))).collect();
-            let kx = self.insert_result_column(item.book_id, &item.y, cx).unwrap();
-            let ky = self.insert_result_column(item.book_id, &item.y, cy).unwrap();
-            let (gid, index) = self.graph_for_result(&r, item)?;
-            self.attach_result(gid, index, item, &ky, Some(&kx))?;
-            graph = Some(gid);
+            let result = self.write_result(
+                item,
+                vec![cx, cy],
+                ResultLink::Auto {
+                    resolved: &r,
+                    x: 0,
+                    y: 1,
+                },
+            )?;
+            let [kx, ky]: [String; 2] = result.columns.try_into().unwrap();
+            graph = result.graph;
             reports.push(NlFitReport {
                 name,
                 fit,
@@ -353,8 +356,14 @@ impl Project {
         };
         let c0 = make(format!("{s_name} 反查{x_name}"), |v| v.0);
         let c1 = make("95% 置信区间 ±".into(), |v| v.2);
-        let k0 = self.insert_result_column(book_id, sample, c0).unwrap();
-        let k1 = self.insert_result_column(book_id, sample, c1).unwrap();
+        let item = Item {
+            book_id,
+            y: sample.into(),
+            x: None,
+            rows: None,
+        };
+        let result = self.write_result(&item, vec![c0, c1], ResultLink::None)?;
+        let [k0, k1]: [String; 2] = result.columns.try_into().unwrap();
         Ok((cal, k0, k1))
     }
 }

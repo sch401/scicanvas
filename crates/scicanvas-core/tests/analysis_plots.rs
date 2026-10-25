@@ -347,3 +347,80 @@ fn book_analysis_creates_and_reuses_scatter_layers_with_the_original_defaults() 
     assert_eq!(p.graph(target).unwrap().first_layer().rows, Some((2, 8)));
     check_roundtrip(&p);
 }
+
+#[test]
+fn write_only_results_preserve_graphs_column_order_error_sources_and_history() {
+    use scicanvas_core::analysis::NormalizeMethod;
+    use scicanvas_core::ops::{ColumnOp, Operand};
+    for operation in [
+        "smooth",
+        "filter",
+        "baseline",
+        "normalize",
+        "differentiate",
+        "row_stats",
+        "math",
+        "calibrate",
+    ] {
+        let (mut p, a, _, _) = project();
+        // 已存在的结果列和自动关联误差列，不能被新结果列插入改变。
+        let error = p.book_mut(a).unwrap().push_column(Role::YError);
+        p.book_mut(a).unwrap().columns.last_mut().unwrap().data = vec!["0.5".into(); 12].into();
+        let expected_errors = p
+            .book(a)
+            .unwrap()
+            .error_source(p.book(a).unwrap().column_index(&error).unwrap())
+            .map(str::to_owned);
+        let mut existing = scicanvas_core::Column::new("", Role::Y);
+        existing.long_name = "已有结果".into();
+        let existing_key = p.insert_result_column(a, "B", existing).unwrap();
+        let before = p.clone();
+        let mut history = History::default();
+        history.begin(&p, operation);
+        let source = Source::Book {
+            id: a,
+            selected: vec!["B".into()],
+            rows: Some((2, 8)),
+        };
+        let keys = match operation {
+            "smooth" => p.smooth(&source, SmoothMethod::MovingAverage, 3).unwrap(),
+            "filter" => p.fft_filter(&source, FilterKind::LowPass(0.2)).unwrap(),
+            "baseline" => {
+                let pairs = p.subtract_baseline(&source, BaselineMethod::Line).unwrap();
+                pairs.into_iter().flat_map(|(a, b)| [a, b]).collect()
+            }
+            "normalize" => p.normalize(&source, NormalizeMethod::DivideByMax).unwrap(),
+            "differentiate" => p.differentiate(&source).unwrap(),
+            "row_stats" => p.row_stats(a, &["A".into(), "B".into()]).unwrap(),
+            "math" => vec![p.column_math(a, "B", ColumnOp::Add, &Operand::Constant(2.0)).unwrap()],
+            "calibrate" => {
+                let (_, concentration, interval) = p.calibrate(a, "A", "B", "B").unwrap();
+                vec![concentration, interval]
+            }
+            _ => unreachable!(),
+        };
+        assert_eq!(p.graphs, before.graphs, "{operation} changed graphs for a Book source");
+        let book = p.book(a).unwrap();
+        let position = book.column_index(&existing_key).unwrap();
+        assert_eq!(
+            book.columns[position + 1..position + 1 + keys.len()]
+                .iter()
+                .map(|c| c.key.clone())
+                .collect::<Vec<_>>(),
+            keys
+        );
+        for key in &keys {
+            assert_eq!(book.column(key).unwrap().derived_from.as_deref(), Some("B"));
+        }
+        assert_eq!(
+            book.error_source(book.column_index(&error).unwrap()).map(str::to_owned),
+            expected_errors
+        );
+        assert!(book.column(&error).is_some());
+        history.changed();
+        history.commit(&p);
+        assert_eq!(history.undo(&p).unwrap(), before);
+        assert_eq!(history.redo(&before).unwrap(), p);
+        check_roundtrip(&p);
+    }
+}

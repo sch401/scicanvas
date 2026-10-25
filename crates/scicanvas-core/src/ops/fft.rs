@@ -32,7 +32,7 @@ impl Project {
         })?;
         if let Some(gid) = r.graph_id {
             for (item, key) in &made {
-                self.attach_result(gid, r.layer_index, item, key, item.x.as_deref())?;
+                self.bind_results(item, std::slice::from_ref(key), ResultLink::Layer(gid, r.layer_index))?;
             }
         }
         Ok(made.into_iter().map(|(_, k)| k).collect())

@@ -80,7 +80,72 @@ pub(super) fn analysis_plot(
     }
 }
 
+// 仅用于内部绑定策略，结果列沿用既有的插入顺序和元数据。
+pub(super) enum ResultLink<'a> {
+    None,
+    Auto { resolved: &'a Resolved, x: usize, y: usize },
+    Layer(u64, usize),
+    Matching,
+}
+
+pub(super) struct ResultKeys {
+    pub(super) columns: Vec<String>,
+    pub(super) graph: Option<u64>,
+}
+
 impl Project {
+    pub(super) fn write_result(
+        &mut self,
+        item: &Item,
+        columns: Vec<Column>,
+        link: ResultLink<'_>,
+    ) -> Result<ResultKeys, String> {
+        let keys = columns
+            .into_iter()
+            .map(|col| self.insert_result_column(item.book_id, &item.y, col).unwrap())
+            .collect::<Vec<_>>();
+        let graph = self.bind_results(item, &keys, link)?;
+        Ok(ResultKeys { columns: keys, graph })
+    }
+
+    // 独立绑定入口保留多曲线操作“全部写列后再附图”的顺序。
+    pub(super) fn bind_results(
+        &mut self,
+        item: &Item,
+        keys: &[String],
+        link: ResultLink<'_>,
+    ) -> Result<Option<u64>, String> {
+        let (targets, keys, x) = match link {
+            ResultLink::None => return Ok(None),
+            ResultLink::Auto { resolved, x, y } => (
+                vec![self.graph_for_result(resolved, item)?],
+                std::slice::from_ref(&keys[y]),
+                Some(keys[x].as_str()),
+            ),
+            ResultLink::Layer(gid, index) => (vec![(gid, index)], keys, item.x.as_deref()),
+            ResultLink::Matching => {
+                let mut targets = Vec::new();
+                for graph in &self.graphs {
+                    for (index, layer) in graph.page.layers().iter().enumerate() {
+                        if layer
+                            .plot(&DataRef::new(item.book_id, &item.y), &|id| self.book(id))
+                            .is_some()
+                        {
+                            targets.push((graph.id, index));
+                        }
+                    }
+                }
+                (targets, keys, item.x.as_deref())
+            }
+        };
+        for &(gid, index) in &targets {
+            for key in keys {
+                self.attach_result(gid, index, item, key, x)?;
+            }
+        }
+        Ok(targets.last().map(|&(gid, _)| gid))
+    }
+
     /// 在 after_key 列右边插入结果列（排在同一来源已有结果列之后），返回新列标识。
     pub fn insert_result_column(&mut self, book_id: u64, after_key: &str, mut col: Column) -> Option<String> {
         let book = self.book_mut(book_id)?;
@@ -196,7 +261,11 @@ impl Project {
                 rows: item.rows,
                 mode: RecalcMode::Auto,
             });
-            let key = self.insert_result_column(item.book_id, &item.y, c).unwrap();
+            let key = self
+                .write_result(item, vec![c], ResultLink::None)?
+                .columns
+                .pop()
+                .unwrap();
             made.push((item.clone(), key));
         }
         if made.is_empty() {
@@ -308,9 +377,17 @@ impl Project {
         col.comment = format!("列运算 {name}{note}");
         col.long_name = name;
         col.data = data.into();
-        let a = a.to_string();
-        self.insert_result_column(book_id, &a, col)
-            .ok_or_else(|| "无法写入结果列".into())
+        let item = Item {
+            book_id,
+            y: a.to_string(),
+            x: None,
+            rows: None,
+        };
+        Ok(self
+            .write_result(&item, vec![col], ResultLink::None)?
+            .columns
+            .pop()
+            .unwrap())
     }
 
     /// 按某一列排序整张工作表，各行数据一起移动。数值排在文本前面，空单元格排在最后。

@@ -45,12 +45,16 @@ impl Project {
             while c.data.last().is_some_and(|s| s.is_empty()) {
                 c.data.pop();
             }
-            let key = self.insert_result_column(item.book_id, &item.y, c).unwrap();
+            let key = self
+                .write_result(item, vec![c], ResultLink::None)?
+                .columns
+                .pop()
+                .unwrap();
             made.push((bkey.clone(), key));
         }
         if let Some(gid) = r.graph_id {
             for (item, key) in &base {
-                self.attach_result(gid, r.layer_index, item, key, item.x.as_deref())?;
+                self.bind_results(item, std::slice::from_ref(key), ResultLink::Layer(gid, r.layer_index))?;
             }
         }
         Ok(made)

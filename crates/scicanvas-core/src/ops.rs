@@ -23,7 +23,7 @@ pub use fit::{FitReport, NlFitReport};
 pub use recalc::{OpKind, Operation, RecalcMode};
 pub use resolve::{get_xy, AnalysisColumn, Item, Resolved, Source};
 
-use columns::analysis_plot;
+use columns::{analysis_plot, ResultLink};
 use resolve::{name_of, x_for};
 
 #[cfg(test)]

@@ -46,7 +46,7 @@ impl Project {
             ("标准误", Role::Ignore, units),
             ("N", Role::Ignore, String::new()),
         ];
-        let mut made = vec![];
+        let mut columns = vec![];
         for ((label, role, units), mut data) in defs.into_iter().zip(out) {
             while data.last().is_some_and(|s| s.is_empty()) {
                 data.pop();
@@ -56,9 +56,15 @@ impl Project {
             c.units = units;
             c.comment = format!("{names} 共 {} 列逐行统计", keys.len());
             c.data = data.into();
-            made.push(self.insert_result_column(book_id, keys.last().unwrap(), c).unwrap());
+            columns.push(c);
         }
-        Ok(made)
+        let item = Item {
+            book_id,
+            y: keys.last().unwrap().clone(),
+            x: None,
+            rows: None,
+        };
+        Ok(self.write_result(&item, columns, ResultLink::None)?.columns)
     }
 
     pub fn stats_on_columns(&mut self, src: &Source) -> Result<u64, String> {

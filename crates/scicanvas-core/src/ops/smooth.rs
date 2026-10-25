@@ -57,11 +57,17 @@ impl Project {
             cy.units = y_units;
             cy.comment = note;
             cy.data = fy.iter().map(|y| fmt_num(*y)).collect();
-            let kx = self.insert_result_column(item.book_id, &item.y, cx).unwrap();
-            let ky = self.insert_result_column(item.book_id, &item.y, cy).unwrap();
-            let (gid, index) = self.graph_for_result(&r, item)?;
-            self.attach_result(gid, index, item, &ky, Some(&kx))?;
-            graph = Some(gid);
+            let result = self.write_result(
+                item,
+                vec![cx, cy],
+                ResultLink::Auto {
+                    resolved: &r,
+                    x: 0,
+                    y: 1,
+                },
+            )?;
+            let [_, ky]: [String; 2] = result.columns.try_into().unwrap();
+            graph = result.graph;
             made.push(ky);
         }
         match graph {
@@ -93,7 +99,7 @@ impl Project {
         })?;
         if let Some(gid) = r.graph_id {
             for (item, key) in &made {
-                self.attach_result(gid, r.layer_index, item, key, item.x.as_deref())?;
+                self.bind_results(item, std::slice::from_ref(key), ResultLink::Layer(gid, r.layer_index))?;
             }
         }
         Ok(made.into_iter().map(|(_, k)| k).collect())
