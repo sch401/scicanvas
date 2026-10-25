@@ -849,3 +849,109 @@ fn report_band_failure_rolls_back_earlier_results_and_preserves_redo() {
         assert!(!app.history.is_pending());
     }
 }
+
+#[test]
+fn dialog_action_generation_leaves_project_unchanged_until_application() {
+    let mut app = app();
+    app.open_layer_contents();
+    let Some(Dialog::LayerContents(contents)) = &mut app.dialog else {
+        panic!("layer dialog");
+    };
+    contents.draft.title = "generated action".into();
+    let before = app.project.clone();
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut harness = crate::test_ui::Harness::new(
+        ctx.clone(),
+        Some(egui::vec2(1400.0, 1000.0)),
+        |app: &mut SciApp, ctx: &egui::Context| app.generate_dialog_action(ctx),
+    );
+    let frame = harness.frame_value(&mut app, vec![]).unwrap();
+    assert!(matches!(&frame.action, dialogs::Action::LayerContents(_)));
+    assert!(!frame.closing);
+    assert_eq!(app.project, before);
+    assert!(!app.history.is_pending());
+    assert!(app.history.undo_label().is_none());
+    assert!(app.apply_dialog_action(&ctx, frame.action));
+    app.finish_dialog_frame(&ctx, frame.closing, frame.layer_before);
+    assert_eq!(app.project.graph(2).unwrap().first_layer().title, "generated action");
+    assert_eq!(app.history.undo_label(), Some("图层内容"));
+    roundtrip(&mut app, &before);
+    app.undo();
+    assert!(app.history.undo_label().is_none());
+}
+
+#[test]
+fn close_generates_live_action_before_clearing_dialog_and_preview() {
+    let mut app = app();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["B".into()]);
+    app.open_column_props();
+    let Some(Dialog::ColumnProps { edit, .. }) = &mut app.dialog else {
+        panic!("column dialog");
+    };
+    edit.long_name = "last valid setting".into();
+    let before = app.project.clone();
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut harness = crate::test_ui::Harness::new(
+        ctx.clone(),
+        Some(egui::vec2(1400.0, 1000.0)),
+        |app: &mut SciApp, ctx: &egui::Context| app.generate_dialog_action(ctx),
+    );
+    let frame = harness
+        .frame_value(
+            &mut app,
+            vec![egui::Event::Key {
+                key: egui::Key::Escape,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+        )
+        .unwrap();
+    assert!(frame.closing);
+    assert!(matches!(&frame.action, dialogs::Action::ColumnProps(1, _)));
+    assert_eq!(app.project, before);
+    assert!(app.book_preview.is_some());
+    assert!(app.dialog.is_some());
+    assert!(app.apply_dialog_action(&ctx, frame.action));
+    app.finish_dialog_frame(&ctx, frame.closing, frame.layer_before);
+    assert_eq!(
+        app.project.book(1).unwrap().column("B").unwrap().long_name,
+        "last valid setting"
+    );
+    assert!(app.dialog.is_none() && app.book_preview.is_none() && app.history_group.is_none());
+    assert!(!app.history.is_pending());
+    let saved = scicanvas_core::project_file::to_scv(&app.project).unwrap();
+    assert_eq!(scicanvas_core::project_file::from_scv(&saved).unwrap(), app.project);
+    roundtrip(&mut app, &before);
+    app.undo();
+    assert!(app.history.undo_label().is_none());
+}
+
+#[test]
+fn invalid_nlfit_action_preserves_input_and_signals_early_return() {
+    use scicanvas_core::nlfit::Model;
+    let mut app = app();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["C".into()]);
+    app.open_nlfit_dialog();
+    let Some(Dialog::NlFit { model, constraints, .. }) = &mut app.dialog else {
+        panic!("nlfit dialog");
+    };
+    *model = Model::ExpDec1;
+    *constraints = "y0 + A1 = q".into();
+    let before = app.project.clone();
+    let ctx = egui::Context::default();
+    assert!(!app.apply_dialog_action(
+        &ctx,
+        dialogs::Action::NlFit(Model::ExpDec1, vec![], "y0 + A1 = q".into())
+    ));
+    assert!(matches!(&app.dialog,Some(Dialog::NlFit {constraints,..}) if constraints=="y0 + A1 = q"));
+    assert!(app.status.contains("不是参数名"));
+    assert_eq!(app.project, before);
+    assert!(!app.history.is_pending());
+    assert!(app.history.undo_label().is_none());
+}
