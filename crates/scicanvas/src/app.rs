@@ -474,6 +474,66 @@ impl SciApp {
         self.open_path(&path);
     }
 
+    pub(crate) fn save_graph_template(&mut self) {
+        let Some(gid) = self.target_graph() else { return };
+        let Some(graph) = self.project.graph(gid).cloned() else {
+            return;
+        };
+        let template = match scicanvas_core::project_file::graph_template_from_graph(&graph, &self.project) {
+            Ok(template) => template,
+            Err(error) => {
+                self.status = error;
+                return;
+            }
+        };
+        let Some(path) = rfd::FileDialog::new()
+            .set_title("保存图形模板")
+            .add_filter("SciCanvas 图形模板", &["scgt"])
+            .set_file_name(format!("{}.scgt", graph.name))
+            .save_file()
+        else {
+            return;
+        };
+        self.status = match scicanvas_core::project_file::save_graph_template(&path, &template) {
+            Ok(()) => format!("已保存图形模板 {}", path.display()),
+            Err(error) => format!("保存图形模板失败：{error}"),
+        };
+    }
+
+    pub(crate) fn apply_graph_template_dialog(&mut self) {
+        let Some(book_id) = self.active_book_id() else { return };
+        let Some(path) = rfd::FileDialog::new()
+            .set_title("应用图形模板")
+            .add_filter("SciCanvas 图形模板", &["scgt"])
+            .pick_file()
+        else {
+            return;
+        };
+        match scicanvas_core::project_file::load_graph_template(&path) {
+            Ok(template) => {
+                self.apply_graph_template_to_book(template, book_id);
+            }
+            Err(error) => self.status = format!("无法应用图形模板：{error}"),
+        }
+    }
+
+    pub(crate) fn apply_graph_template_to_book(
+        &mut self,
+        template: scicanvas_core::GraphTemplate,
+        book_id: u64,
+    ) -> Option<u64> {
+        let template_name = template.name.clone();
+        self.edit_with(
+            "应用图形模板",
+            |project| project.apply_graph_template(&template, book_id).map(Some),
+            move |app, id| {
+                app.show_item(id);
+                app.status = format!("已应用图形模板：{template_name}");
+                id
+            },
+        )
+    }
+
     fn open_path(&mut self, path: &std::path::Path) {
         match scicanvas_core::project_file::load(path) {
             Ok(p) => {

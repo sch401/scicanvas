@@ -536,7 +536,7 @@ fn all_marked_commands_use_the_unified_transaction_and_roundtrip_in_one_step() {
     let mut changed = std::collections::HashSet::new();
     for command in commands::commands()
         .iter()
-        .filter(|c| c.modifies && c.id != "file.import")
+        .filter(|c| c.modifies && !matches!(c.id, "file.import" | "graph.template.apply"))
     {
         for scope in 0..3 {
             let mut app = app();

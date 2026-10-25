@@ -109,6 +109,32 @@ pub(super) fn builder(commands: &mut Vec<Command>) {
     ]);
 }
 
+pub(super) fn templates(commands: &mut Vec<Command>) {
+    commands.extend([
+        c(
+            "graph.template.save",
+            "保存为模板",
+            "save",
+            "",
+            "绘图",
+            "graph template save style layout 模板 保存 样式",
+            need_any_graph,
+            |a| a.save_graph_template(),
+        ),
+        c(
+            "graph.template.apply",
+            "应用模板",
+            "open",
+            "",
+            "绘图",
+            "graph template apply workbook columns 应用 模板 工作簿",
+            need_book,
+            |a| a.apply_graph_template_dialog(),
+        )
+        .modifies(),
+    ]);
+}
+
 pub(super) fn basic(commands: &mut Vec<Command>) {
     commands.extend([
         c(

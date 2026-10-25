@@ -4,6 +4,7 @@
 use serde::{Deserialize, Serialize};
 
 pub const PROJECT_VERSION: u32 = 15;
+pub const GRAPH_TEMPLATE_VERSION: u32 = 1;
 
 /// 列的绘图角色，对应 Origin 里的 X / Y / 忽略。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -719,6 +720,15 @@ impl Graph {
     }
 }
 
+/// 不含工作簿数据或编号、按列标识重绑定的图形页面模板。
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize), serde(deny_unknown_fields))]
+pub struct GraphTemplate {
+    pub version: u32,
+    pub name: String,
+    pub page: crate::page::Page,
+}
+
 /// 随项目保存的文本笔记或计算报告。
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -781,6 +791,47 @@ impl Project {
         self.move_project_item(id, parent)?;
         Ok(id)
     }
+
+    pub fn apply_graph_template(&mut self, template: &GraphTemplate, book_id: u64) -> Result<u64, String> {
+        if template.version != GRAPH_TEMPLATE_VERSION {
+            return Err(format!("不支持的图形模板版本 {}", template.version));
+        }
+        if template.name.trim().is_empty() {
+            return Err("图形模板名称不能为空".into());
+        }
+        let mut page = template.page.clone();
+        let mut curve_count = 0;
+        {
+            let book = self.book(book_id).ok_or("找不到目标工作簿")?;
+            for layer in page.layers_mut() {
+                if layer.book_id.is_some() || !layer.foreign_books().is_empty() {
+                    return Err("图形模板仍绑定源工作簿，请重新保存模板".into());
+                }
+                layer.book_id = Some(book_id);
+                let count = layer.draft().y_keys.len();
+                if count > 0 {
+                    layer.validate(book)?;
+                    curve_count += count;
+                }
+            }
+        }
+        if curve_count == 0 {
+            return Err("图形模板没有可应用的曲线".into());
+        }
+        page.validate()?;
+        let name = self.unique_name(template.name.trim());
+        let parent = self.folder_of(book_id);
+        let next_id = self.next_id;
+        let id = self.alloc_id();
+        self.graphs.push(Graph { id, name, page });
+        if let Err(error) = self.move_project_item(id, parent) {
+            self.graphs.pop();
+            self.next_id = next_id;
+            return Err(error);
+        }
+        Ok(id)
+    }
+
     pub fn alloc_id(&mut self) -> u64 {
         let id = self.next_id;
         self.next_id += 1;

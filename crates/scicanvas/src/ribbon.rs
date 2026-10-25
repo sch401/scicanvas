@@ -118,6 +118,10 @@ pub static TABS: &[Tab] = &[
                     Smalls(&["graph.copy"]),
                 ],
             },
+            Group {
+                label: "模板",
+                items: &[Smalls(&["graph.template.save", "graph.template.apply"])],
+            },
         ],
     },
     Tab {

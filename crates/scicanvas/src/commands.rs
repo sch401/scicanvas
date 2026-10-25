@@ -167,6 +167,7 @@ fn build() -> Vec<Command> {
     view::help(&mut commands);
     edit::selection(&mut commands);
     plot::builder(&mut commands);
+    plot::templates(&mut commands);
     plot::basic(&mut commands);
     plot::decorations(&mut commands);
     plot::graph(&mut commands);

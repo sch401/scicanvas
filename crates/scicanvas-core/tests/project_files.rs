@@ -347,6 +347,70 @@ fn v14_defaults_keep_the_old_right_axis_appearance_and_v15_settings_roundtrip() 
 }
 
 #[test]
+fn graph_template_files_rebind_columns_and_keep_page_and_curve_styles() {
+    use scicanvas_core::{format::NumberFormat, page::CurveStyle};
+    fixture_fonts();
+    let mut source = Project::sample();
+    let key = source.graphs[0].first_layer().draft().y_keys[0].clone();
+    let layer = source.graphs[0].first_layer_mut();
+    layer.set_plot_style(
+        &key,
+        Some(CurveStyle {
+            right_axis: true,
+            symbol_size: Some(9.0),
+            ..Default::default()
+        }),
+    );
+    layer.y2_auto = false;
+    layer.y2_min = 40.0;
+    layer.y2_max = 80.0;
+    layer.y2_format = Some(NumberFormat::Engineering { places: 1 });
+    source.graphs[0].page.width_mm = 180.0;
+    let template = project_file::graph_template_from_graph(&source.graphs[0], &source).unwrap();
+    assert!(template.page.layers().iter().all(|layer| layer.book_id.is_none()));
+
+    let path = std::env::temp_dir().join(format!(
+        "scicanvas-template-{}-{}.scgt",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    project_file::save_graph_template(&path, &template).unwrap();
+    let loaded = project_file::load_graph_template(&path).unwrap();
+    std::fs::remove_file(&path).unwrap();
+    assert_eq!(loaded, template);
+    let json = project_file::graph_template_to_json(&loaded).unwrap();
+    assert!(!json.contains("\"book\":"), "templates store no source book IDs");
+
+    let mut target = source.clone();
+    let target_id = target.alloc_id();
+    let mut book = target.book(1).unwrap().clone();
+    book.id = target_id;
+    book.name = "Target".into();
+    let column = book.column_index(&key).unwrap();
+    book.columns[column].data = ["50", "60", "70"].map(str::to_owned).to_vec().into();
+    target.books.push(book);
+    let graph_id = target.apply_graph_template(&loaded, target_id).unwrap();
+    let graph = target.graph(graph_id).unwrap();
+    assert_eq!(graph.page.width_mm, 180.0);
+    assert_eq!(graph.page.columns, 1);
+    assert_eq!(graph.first_layer().book_id, Some(target_id));
+    assert_eq!((graph.first_layer().y2_min, graph.first_layer().y2_max), (40.0, 80.0));
+    assert_eq!(graph.first_layer().plot_style(&key).unwrap().symbol_size, Some(9.0));
+    let series = graph.first_layer().series(target.book(target_id).unwrap()).1;
+    assert!(series.iter().any(|s| s.points.iter().any(|point| point[1] == 60.0)));
+
+    let project = project_file::to_json(&target).unwrap();
+    assert_eq!(project_file::from_json(&project).unwrap(), target);
+    assert_eq!(
+        project_file::from_scv(&project_file::to_scv(&target).unwrap()).unwrap(),
+        target
+    );
+}
+
+#[test]
 fn export_still_rejects_inactive_ranges_and_preserves_validation_error_order() {
     for (key, range, expected) in [
         ("hidden", (3, 1), "图层行范围无效"),

@@ -1238,6 +1238,28 @@ fn right_y_axis_range_and_format_controls_are_live_and_undoable() {
 }
 
 #[test]
+fn applying_a_graph_template_adds_one_undoable_graph() {
+    let mut app = app();
+    let template =
+        scicanvas_core::project_file::graph_template_from_graph(app.project.graph(2).unwrap(), &app.project).unwrap();
+    let target_id = app.project.alloc_id();
+    let mut book = app.project.book(1).unwrap().clone();
+    book.id = target_id;
+    book.name = "TemplateTarget".into();
+    app.project.books.push(book);
+    let before = app.project.clone();
+
+    let graph_id = app.apply_graph_template_to_book(template, target_id).unwrap();
+    let graph = app.project.graph(graph_id).unwrap();
+    assert_eq!(graph.first_layer().book_id, Some(target_id));
+    assert_eq!(
+        graph.first_layer().draft().y_keys,
+        before.graph(2).unwrap().first_layer().draft().y_keys
+    );
+    roundtrip(&mut app, &before);
+}
+
+#[test]
 fn builder_edits_keep_draft_mapping_and_create_with_the_existing_undo_transaction() {
     for kind in [PlotType::LineSymbol, PlotType::FloatingBar] {
         let mut app = app();

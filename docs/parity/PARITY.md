@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 97 项，P1 146 项，P2 259 项，不做 12 项。
-状态：已完成 26 项，已实现待验收 88 项，部分实现 15 项，未开始 373 项，不做 12 项。
+状态：已完成 26 项，已实现待验收 89 项，部分实现 15 项，未开始 372 项，不做 12 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -134,7 +134,7 @@
 | F086 | 分组绘图（按分类列分组） | Plotting Data by Groups | P1 | 未开始 | — | 与 Origin 比较 | — |
 | F087 | 图形缩放、平移 | Zooming on the Graph Page and inside Layer | P0 | 已完成 | 自绘 plot.rs/coord.rs：图层独立缩放、平移和视图复位；固定页面画布整体缩放 | 手动操作 | — |
 | F088 | 批量绘图（同一模板换数据） | Batch Plotting | P1 | 未开始 | — | 手动操作 | — |
-| F089 | 图形模板（保存样式，换数据一键出图） | Creating Graphs from Graph Templates | P0 | 未开始 | 图形样式与数据引用分离 | 套模板后版式一致 | — |
+| F089 | 图形模板（保存样式，换数据一键出图） | Creating Graphs from Graph Templates | P0 | 已实现待验收 | 在“绘图 → 模板”中将当前页面/图层/轴设置/曲线样式保存为独立 `.scgt` 模板；不保存源工作簿编号或数据，曲线按列短名重绑定到选中的目标 Book，缺少所需列时拒绝应用；模板可跨项目复用并生成新图 | 模板文件保存/加载；套用到列标识匹配的不同工作簿后核对图型、图层、曲线样式、轴设置和数据来源；缺列/损坏模板不改项目；单步撤销重做；Origin 模板视觉人工验收待做 | — |
 | F090 | 格式复制粘贴 | Copying and Pasting Formats | P1 | 未开始 | — | 手动操作 | — |
 | F091 | 主题（图形样式主题） | Graph Formats and Themes | P1 | 未开始 | 已有 Nature 默认配色与版式；图形主题的保存、切换和应用入口待做，默认样式单独计入现有绘图能力 | 目视检查 | — |
 | F092 | 坐标轴范围与刻度 | Controlling the Graph Axis Display Range | P0 | 已完成 | ticks.rs（1/2/5 步长）；左 Y 和右 Y 分别支持自动或手动设定范围 | 自动/手动范围和独立左右 Y 范围场景回归；Origin 刻度与范围对照 | — |
