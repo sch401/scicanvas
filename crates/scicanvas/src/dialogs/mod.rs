@@ -151,6 +151,13 @@ pub enum Dialog {
         /// 参数间线性约束，一行一条。
         constraints: String,
     },
+    CustomNlFit {
+        name: String,
+        formula: String,
+        parameters: String,
+        initial: String,
+        constraints: String,
+    },
     /// 非线性拟合结果。
     NlFitReport(Vec<NlFitReport>),
     /// FFT 滤波：类型（0 低通、1 高通、2 带通、3 带阻）、截止频率与奈奎斯特频率（仅作提示）。
@@ -264,6 +271,14 @@ pub enum Action {
     Fill(Sequence, usize),
     SetValues(String, bool),
     NlFit(Model, Vec<scicanvas_core::nlfit::ParamLimits>, String),
+    OpenCustomNlFit,
+    CustomNlFit {
+        name: String,
+        formula: String,
+        parameters: String,
+        initial: String,
+        constraints: String,
+    },
     /// 运算符，以及常数（为空时用列 B）。
     ColumnMath(ColumnOp, Option<f64>),
 }
@@ -294,6 +309,7 @@ impl Dialog {
             Self::Anova { .. } => self.show_anova(ctx, pal, &mut open, esc),
             Self::Correlations(..) => self.show_correlations(ctx, pal, &mut open, esc),
             Self::NlFit { .. } => self.show_nl_fit(ctx, pal, &mut open, esc),
+            Self::CustomNlFit { .. } => self.show_custom_nl_fit(ctx, pal, &mut open, esc),
             Self::NlFitReport(..) => self.show_nl_fit_report(ctx, pal, &mut open, esc),
             Self::FftFilter { .. } => self.show_fft_filter(ctx, pal, &mut open, esc),
             Self::Fill { .. } => self.show_fill(ctx, pal, &mut open, esc),

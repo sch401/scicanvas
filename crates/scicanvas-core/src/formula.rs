@@ -500,6 +500,39 @@ impl Expr {
         out
     }
 
+    /// Variables allowed by a scalar fitting function; worksheet rows and vector operations are excluded.
+    pub fn scalar_variables(&self) -> Result<Vec<String>, String> {
+        fn walk(expr: &Expr, vars: &mut Vec<String>) -> Result<(), String> {
+            match expr {
+                Expr::Num(_) => {}
+                Expr::Col(name) => {
+                    if !vars.contains(name) {
+                        vars.push(name.clone());
+                    }
+                }
+                Expr::Row | Expr::Vector(_) => return Err("拟合函数不能使用行号或向量结果".into()),
+                Expr::Neg(value) => walk(value, vars)?,
+                Expr::Bin(_, left, right) => {
+                    walk(left, vars)?;
+                    walk(right, vars)?;
+                }
+                Expr::Call(name, args) => {
+                    if whole_column(name, args.len()).is_some() {
+                        return Err(format!("拟合函数不支持整列函数 {name}"));
+                    }
+                    for arg in args {
+                        walk(arg, vars)?;
+                    }
+                }
+            }
+            Ok(())
+        }
+
+        let mut vars = Vec::new();
+        walk(self, &mut vars)?;
+        Ok(vars)
+    }
+
     /// 把列统计和按行序列在 `rows` 行上先算好（替换成常数或逐行结果），之后再逐行求值。
     /// `col(key, row)` 给出列在某行的值（缺失为 NaN）。
     pub fn prepare(&self, rows: usize, col: &dyn Fn(&str, usize) -> f64) -> Expr {

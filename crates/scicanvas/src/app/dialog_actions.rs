@@ -136,6 +136,16 @@ impl SciApp {
             }
             dialogs::Action::TTest(kind, level) => self.run_ttest(kind, level),
             dialogs::Action::NlFit(model, limits, text) => return self.apply_nlfit_action(model, limits, text),
+            dialogs::Action::OpenCustomNlFit => self.open_custom_nlfit_dialog(),
+            dialogs::Action::CustomNlFit {
+                name,
+                formula,
+                parameters,
+                initial,
+                constraints,
+            } => {
+                return self.apply_custom_nlfit_action(name, formula, parameters, initial, constraints);
+            }
             dialogs::Action::SetValues(formula, keep) => self.apply_set_values_action(formula, keep),
             dialogs::Action::Fill(kind, rows) => {
                 self.finish_dialog_input();
@@ -417,6 +427,58 @@ impl SciApp {
         self.dialog = None;
         self.nlfit(model, &limits, &constraints);
         true
+    }
+
+    fn apply_custom_nlfit_action(
+        &mut self,
+        name: String,
+        formula: String,
+        parameters: String,
+        initial: String,
+        constraint_text: String,
+    ) -> bool {
+        let parameters: Vec<String> = parameters
+            .split([',', '，', ';', '；'])
+            .map(str::trim)
+            .filter(|part| !part.is_empty())
+            .map(str::to_owned)
+            .collect();
+        let function = match scicanvas_core::nlfit::CustomFitFunction::new(&name, &formula, parameters) {
+            Ok(function) => function,
+            Err(error) => {
+                self.status = error;
+                return false;
+            }
+        };
+        let mut values = Vec::new();
+        for value in initial
+            .split([',', '，', ';', '；'])
+            .map(str::trim)
+            .filter(|v| !v.is_empty())
+        {
+            match value.parse::<f64>() {
+                Ok(value) if value.is_finite() => values.push(value),
+                _ => {
+                    self.status = format!("初始值 {value} 不是有限数");
+                    return false;
+                }
+            }
+        }
+        if values.len() != function.parameters().len() {
+            self.status = format!("请为 {} 个参数各填写一个初始值", function.parameters().len());
+            return false;
+        }
+        let function_spec = scicanvas_core::nlfit::FitFunction::Custom(function.clone());
+        let constraints = match scicanvas_core::nlfit::parse_constraints_for_function(&function_spec, &constraint_text)
+        {
+            Ok(constraints) => constraints,
+            Err(error) => {
+                self.status = error;
+                return false;
+            }
+        };
+        let limits = vec![scicanvas_core::nlfit::ParamLimits::default(); function.parameters().len()];
+        self.custom_nlfit(function, values, limits, constraints)
     }
 
     fn apply_set_values_action(&mut self, formula: String, keep: bool) {

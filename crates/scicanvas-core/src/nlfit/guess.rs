@@ -24,6 +24,10 @@ impl Model {
             | Model::Freundlich
             | Model::PseudoFirstOrder
             | Model::PseudoSecondOrder => self.guess_adsorption(xs, ys, hi),
+            Model::Rational1 => {
+                let (slope, intercept) = linreg(xs.iter().zip(ys).map(|(x, y)| (*x, *y)));
+                vec![intercept, slope, 0.0]
+            }
         }
     }
 
@@ -352,7 +356,7 @@ mod guess_regression {
         ]
     }
 
-    // 从拆分前实现记录的24模型×6组位模式指纹，NaN仅统一载荷。
+    // The original 24 initial-guess implementations remain byte-for-byte stable.
     const EXPECTED: [[u64; 24]; 6] = [
         [
             1809068557224687906,
@@ -515,7 +519,7 @@ mod guess_regression {
     #[test]
     fn initial_values_match_before_split() {
         for (case, (xs, ys)) in cases().iter().enumerate() {
-            for (index, model) in Model::ALL.into_iter().enumerate() {
+            for (index, model) in Model::ALL.into_iter().take(24).enumerate() {
                 let bits: Vec<u64> = model
                     .guess(xs, ys)
                     .into_iter()

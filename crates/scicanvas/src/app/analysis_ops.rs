@@ -35,6 +35,16 @@ impl SciApp {
         });
     }
 
+    pub(crate) fn open_custom_nlfit_dialog(&mut self) {
+        self.dialog = Some(Dialog::CustomNlFit {
+            name: "自定义函数".into(),
+            formula: "a*exp(-b*x)+c".into(),
+            parameters: "a, b, c".into(),
+            initial: "2, 0.3, 0".into(),
+            constraints: String::new(),
+        });
+    }
+
     pub(super) fn nlfit(
         &mut self,
         model: scicanvas_core::nlfit::Model,
@@ -56,6 +66,39 @@ impl SciApp {
                 app.dialog = Some(Dialog::NlFitReport(reports));
             },
         );
+    }
+
+    pub(super) fn custom_nlfit(
+        &mut self,
+        function: scicanvas_core::nlfit::CustomFitFunction,
+        initial: Vec<f64>,
+        limits: Vec<scicanvas_core::nlfit::ParamLimits>,
+        constraints: Vec<scicanvas_core::nlfit::LinearConstraint>,
+    ) -> bool {
+        let Some(src) = self.analysis_source() else {
+            self.status = "请选择要拟合的数据曲线".into();
+            return false;
+        };
+        let function_name = function.name().to_owned();
+        self.edit_with(
+            "自定义非线性拟合",
+            |project| {
+                project
+                    .nlfit_custom(&src, function, &initial, &limits, &constraints)
+                    .map(Some)
+            },
+            move |app, (gid, reports)| {
+                app.after_analysis(Some(gid));
+                let unconverged = reports.iter().filter(|report| !report.fit.converged).count();
+                app.status = if unconverged == 0 {
+                    format!("已完成 {} 条数据的 {} 拟合", reports.len(), function_name)
+                } else {
+                    format!("{} 拟合有 {unconverged} 条未收敛，请查看结果", function_name)
+                };
+                app.dialog = Some(Dialog::NlFitReport(reports));
+            },
+        )
+        .is_some()
     }
 
     pub(crate) fn open_poly_dialog(&mut self) {

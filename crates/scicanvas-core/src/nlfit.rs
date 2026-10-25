@@ -7,10 +7,128 @@ mod guess;
 mod model;
 pub use model::{voigt_profile, Model, MAX_PARAMS};
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct CustomFitFunction {
+    name: String,
+    formula: String,
+    parameters: Vec<String>,
+    expression: crate::formula::Expr,
+}
+
+impl CustomFitFunction {
+    pub fn new(name: &str, formula: &str, parameters: Vec<String>) -> Result<Self, String> {
+        let name = name.trim();
+        let formula = formula.trim();
+        if name.is_empty() || name.len() > 64 || formula.is_empty() || formula.len() > 4096 {
+            return Err("函数名称或表达式为空、过长".into());
+        }
+        if parameters.is_empty() || parameters.len() > MAX_PARAMS {
+            return Err(format!("参数数量必须在 1 到 {MAX_PARAMS} 之间"));
+        }
+        let valid_identifier = |value: &str| {
+            let mut chars = value.chars();
+            chars.next().is_some_and(|c| c.is_ascii_alphabetic() || c == '_')
+                && chars.all(|c| c.is_ascii_alphanumeric() || c == '_')
+        };
+        let mut unique = std::collections::HashSet::new();
+        for parameter in &parameters {
+            if !valid_identifier(parameter)
+                || matches!(parameter.as_str(), "x" | "y" | "e" | "pi" | "PI")
+                || !unique.insert(parameter)
+            {
+                return Err(format!("参数名 {parameter} 无效或重复"));
+            }
+        }
+        let body = match formula.split_once('=') {
+            Some((lhs, rhs)) if matches!(lhs.trim(), "y" | "Y") => rhs.trim(),
+            Some(_) => return Err("表达式等号左侧只能写 y".into()),
+            None => formula,
+        };
+        let expression = crate::formula::parse(body)?;
+        let variables = expression.scalar_variables()?;
+        for variable in variables {
+            if variable != "x" && !unique.contains(&variable) {
+                return Err(format!("表达式中的变量 {variable} 未列在参数表中"));
+            }
+        }
+        Ok(Self {
+            name: name.to_owned(),
+            formula: format!("y = {body}"),
+            parameters,
+            expression,
+        })
+    }
+
+    pub fn parameters(&self) -> &[String] {
+        &self.parameters
+    }
+
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    fn eval(&self, x: f64, params: &[f64]) -> f64 {
+        self.expression.eval(0, &|name, _| {
+            if name == "x" {
+                x
+            } else {
+                self.parameters
+                    .iter()
+                    .position(|parameter| parameter == name)
+                    .and_then(|index| params.get(index).copied())
+                    .unwrap_or(f64::NAN)
+            }
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum FitFunction {
+    Builtin(Model),
+    Custom(CustomFitFunction),
+}
+
+impl FitFunction {
+    pub fn name(&self) -> &str {
+        match self {
+            Self::Builtin(model) => model.name(),
+            Self::Custom(function) => &function.name,
+        }
+    }
+
+    pub fn formula(&self) -> &str {
+        match self {
+            Self::Builtin(model) => model.formula(),
+            Self::Custom(function) => &function.formula,
+        }
+    }
+
+    pub fn params(&self) -> Vec<&str> {
+        match self {
+            Self::Builtin(model) => model.params().to_vec(),
+            Self::Custom(function) => function.parameters.iter().map(String::as_str).collect(),
+        }
+    }
+
+    fn eval(&self, x: f64, params: &[f64]) -> f64 {
+        match self {
+            Self::Builtin(model) => model.eval(x, params),
+            Self::Custom(function) => function.eval(x, params),
+        }
+    }
+
+    fn guess(&self, xs: &[f64], ys: &[f64]) -> Option<Vec<f64>> {
+        match self {
+            Self::Builtin(model) => Some(model.guess(xs, ys)),
+            Self::Custom(_) => None,
+        }
+    }
+}
+
 /// 拟合结果。
 #[derive(Clone, Debug, PartialEq)]
 pub struct NlFit {
-    pub model: Model,
+    pub model: FitFunction,
     pub params: Vec<f64>,
     pub se: Vec<f64>,
     pub rss: f64,
@@ -71,7 +189,7 @@ impl NlFit {
     }
 }
 
-fn rss(model: Model, xs: &[f64], ys: &[f64], p: &[f64]) -> f64 {
+fn rss(model: &FitFunction, xs: &[f64], ys: &[f64], p: &[f64]) -> f64 {
     let s: f64 = xs.iter().zip(ys).map(|(x, y)| (y - model.eval(*x, p)).powi(2)).sum();
     if s.is_finite() {
         s
@@ -81,7 +199,7 @@ fn rss(model: Model, xs: &[f64], ys: &[f64], p: &[f64]) -> f64 {
 }
 
 /// 中心差分雅可比 ∂f/∂p，只对 `free` 中的参数求导，n × free.len()。
-fn jacobian(model: Model, xs: &[f64], p: &[f64], free: &[usize]) -> Vec<Vec<f64>> {
+fn jacobian(model: &FitFunction, xs: &[f64], p: &[f64], free: &[usize]) -> Vec<Vec<f64>> {
     let mut j = vec![vec![0.0; free.len()]; xs.len()];
     for (col, &k) in free.iter().enumerate() {
         let h = 1e-6 * p[k].abs().max(1e-6);
@@ -138,7 +256,14 @@ pub struct LinearConstraint {
 /// 解析参数约束：每行（或用分号隔开）一条，如 `A1 + A2 = 1`、`t2 >= t1 + 3`、`2*w <= 5`。
 /// 两边都必须是参数的线性式（参数只能乘、除常数）。
 pub fn parse_constraints(model: Model, text: &str) -> Result<Vec<LinearConstraint>, String> {
-    let names = model.params();
+    parse_constraints_for_names(model.params(), text)
+}
+
+pub fn parse_constraints_for_function(function: &FitFunction, text: &str) -> Result<Vec<LinearConstraint>, String> {
+    parse_constraints_for_names(&function.params(), text)
+}
+
+pub fn parse_constraints_for_names(names: &[&str], text: &str) -> Result<Vec<LinearConstraint>, String> {
     let mut out = vec![];
     for line in text.split(['\n', ';', '；']).map(str::trim).filter(|l| !l.is_empty()) {
         let line_norm = line.replace("≤", "<=").replace("≥", ">=").replace("==", "=");
@@ -334,7 +459,7 @@ pub fn fit_with(
 
 /// 拟合过程的输入与迭代状态集中保存，独立步骤负责投影、迭代和统计。
 struct FitSession<'a> {
-    model: Model,
+    model: FitFunction,
     xs: Vec<f64>,
     ys: Vec<f64>,
     limits: &'a [ParamLimits],
@@ -351,13 +476,18 @@ struct FitSession<'a> {
 
 impl<'a> FitSession<'a> {
     fn new(
-        model: Model,
+        model: FitFunction,
         xs: &[f64],
         ys: &[f64],
         initial: Option<&[f64]>,
         limits: &'a [ParamLimits],
         constraints: &[LinearConstraint],
     ) -> Result<Self, String> {
+        let names = model.params();
+        let all = names.len();
+        if initial.is_some_and(|values| values.len() != all) {
+            return Err(format!("{} 需要 {all} 个初始参数", model.name()));
+        }
         let fixed_values: Vec<Option<f64>> = limits.iter().map(|l| l.fixed).collect();
         let fixed = fixed_values.as_slice();
         let limit = |k: usize| limits.get(k).copied().unwrap_or_default();
@@ -366,7 +496,7 @@ impl<'a> FitSession<'a> {
                 if lo >= hi || lo.is_nan() || hi.is_nan() {
                     return Err(format!(
                         "参数 {} 的下限必须小于上限",
-                        model.params().get(k).unwrap_or(&"?")
+                        names.get(k).copied().unwrap_or("?")
                     ));
                 }
             }
@@ -382,7 +512,6 @@ impl<'a> FitSession<'a> {
             .collect();
         pts.sort_by(|a, b| a.0.total_cmp(&b.0));
         let (xs, ys): (Vec<f64>, Vec<f64>) = pts.into_iter().unzip();
-        let all = model.params().len();
         let is_fixed = |k: usize| fixed.get(k).is_some_and(|v| v.is_some());
         let free: Vec<usize> = (0..all).filter(|k| !is_fixed(*k)).collect();
         let m = free.len();
@@ -428,8 +557,13 @@ impl<'a> FitSession<'a> {
         }
         let mut params = match initial {
             Some(v) => v.to_vec(),
-            None => model.guess(&xs, &ys),
+            None => model
+                .guess(&xs, &ys)
+                .ok_or_else(|| format!("{} 需要提供每个参数的初始值", model.name()))?,
         };
+        if params.iter().any(|value| !value.is_finite()) {
+            return Err("初始参数必须为有限数".into());
+        }
         for (k, v) in fixed.iter().enumerate() {
             if let Some(v) = v {
                 params[k] = *v;
@@ -475,7 +609,7 @@ impl<'a> FitSession<'a> {
             }
         }
 
-        let cost = rss(model, &xs, &ys, &params);
+        let cost = rss(&model, &xs, &ys, &params);
         if !cost.is_finite() {
             return Err("初值处函数值无效，请检查数据是否适合该函数".into());
         }
@@ -513,7 +647,7 @@ impl<'a> FitSession<'a> {
             self.iterations += 1;
             let n = self.xs.len();
             let m = self.free.len();
-            let j = jacobian(self.model, &self.xs, &self.params, &self.free);
+            let j = jacobian(&self.model, &self.xs, &self.params, &self.free);
             let residuals: Vec<f64> = self
                 .xs
                 .iter()
@@ -653,7 +787,7 @@ impl<'a> FitSession<'a> {
                 for (u, &k) in self.free.iter().enumerate() {
                     trial[k] = self.limit(k).clamp(self.params[k] + alpha * delta[u]);
                 }
-                let new_cost = rss(self.model, &self.xs, &self.ys, &trial);
+                let new_cost = rss(&self.model, &self.xs, &self.ys, &trial);
                 if new_cost < self.cost {
                     let small_step = self
                         .free
@@ -695,7 +829,7 @@ impl<'a> FitSession<'a> {
             for (d, &k) in delta.iter().zip(&self.free) {
                 trial[k] = self.limit(k).clamp(trial[k] + d);
             }
-            let new_cost = rss(self.model, &self.xs, &self.ys, &trial);
+            let new_cost = rss(&self.model, &self.xs, &self.ys, &trial);
             if new_cost < self.cost {
                 let small_step = self
                     .free
@@ -718,7 +852,7 @@ impl<'a> FitSession<'a> {
     }
 
     fn finish(self) -> Result<NlFit, String> {
-        let model = self.model;
+        let model = self.model.clone();
         let xs = &self.xs;
         let free = &self.free;
         let n = xs.len();
@@ -728,7 +862,7 @@ impl<'a> FitSession<'a> {
         let active_tol = |p: &[f64]| self.active_tol(p);
         let lhs = |p: &[f64], a: &[f64]| self.lhs(p, a);
         let cost = self.cost;
-        let j = jacobian(self.model, &self.xs, &self.params, &self.free);
+        let j = jacobian(&self.model, &self.xs, &self.params, &self.free);
         let mut a = vec![vec![0.0; m]; m];
         for row in &j {
             for u in 0..m {
@@ -845,9 +979,38 @@ pub fn fit_constrained(
     limits: &[ParamLimits],
     constraints: &[LinearConstraint],
 ) -> Result<NlFit, String> {
-    let mut session = FitSession::new(model, xs, ys, initial, limits, constraints)?;
+    fit_function(FitFunction::Builtin(model), xs, ys, initial, limits, constraints)
+}
+
+pub fn fit_function(
+    function: FitFunction,
+    xs: &[f64],
+    ys: &[f64],
+    initial: Option<&[f64]>,
+    limits: &[ParamLimits],
+    constraints: &[LinearConstraint],
+) -> Result<NlFit, String> {
+    let mut session = FitSession::new(function, xs, ys, initial, limits, constraints)?;
     session.optimize();
     session.finish()
+}
+
+pub fn fit_custom(
+    function: CustomFitFunction,
+    xs: &[f64],
+    ys: &[f64],
+    initial: &[f64],
+    limits: &[ParamLimits],
+    constraints: &[LinearConstraint],
+) -> Result<NlFit, String> {
+    fit_function(
+        FitFunction::Custom(function),
+        xs,
+        ys,
+        Some(initial),
+        limits,
+        constraints,
+    )
 }
 #[cfg(test)]
 mod tests {
@@ -1326,12 +1489,52 @@ mod tests {
             }
             close(f.rss, rss, 1e-8);
         }
-        assert_eq!(Model::ALL.len(), 24);
+        assert_eq!(Model::ALL.len(), 25);
         assert!(
             Model::ALL.iter().all(|m| m.params().len() <= MAX_PARAMS),
             "the dialog holds up to MAX_PARAMS parameters"
         );
         assert!(Model::ALL.iter().all(|m| Model::CATEGORIES.contains(&m.category())));
+    }
+
+    #[test]
+    fn rational1_fits_a_synthetic_curve_from_automatic_initial_values() {
+        let xs: Vec<f64> = (0..80).map(|i| i as f64 / 10.0).collect();
+        let truth = [2.0, 1.5, 0.2];
+        let ys: Vec<f64> = xs.iter().map(|x| Model::Rational1.eval(*x, &truth)).collect();
+        let fit = fit(Model::Rational1, &xs, &ys, None, &[]).unwrap();
+        assert!(fit.converged);
+        for (actual, expected) in fit.params.iter().zip(truth) {
+            assert!((actual - expected).abs() < 1e-5, "{actual} != {expected}");
+        }
+    }
+
+    #[test]
+    fn custom_formula_uses_validated_scalar_variables_and_the_shared_lm_solver() {
+        let function = CustomFitFunction::new(
+            "Decay",
+            "y = a * exp(-b*x) + c",
+            vec!["a".into(), "b".into(), "c".into()],
+        )
+        .unwrap();
+        let truth = [2.2, 0.4, 0.3];
+        let xs: Vec<f64> = (0..60).map(|i| i as f64 / 10.0).collect();
+        let ys: Vec<f64> = xs.iter().map(|x| function.eval(*x, &truth)).collect();
+        let fit = fit_custom(
+            function.clone(),
+            &xs,
+            &ys,
+            &[2.0, 0.3, 0.2],
+            &[ParamLimits::default(); 3],
+            &[],
+        )
+        .unwrap();
+        assert!(fit.converged);
+        assert_eq!(fit.model.name(), "Decay");
+        assert_eq!(fit.model.params(), vec!["a", "b", "c"]);
+        assert!((fit.eval(1.5) - function.eval(1.5, &truth)).abs() < 1e-7);
+        assert!(CustomFitFunction::new("bad", "a*x + missing", vec!["a".into()]).is_err());
+        assert!(CustomFitFunction::new("bad", "mean(x)", vec!["a".into()]).is_err());
     }
 
     #[test]

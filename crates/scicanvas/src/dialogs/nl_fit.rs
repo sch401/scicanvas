@@ -69,8 +69,11 @@ impl Dialog {
                     .font(egui::TextStyle::Monospace)
                     .hint_text("每行一条，如 A1 + A2 = 1、t2 >= t1"),
             );
+            if ui.button("自定义函数…").clicked() {
+                action = Action::OpenCustomNlFit;
+            }
             let (ok, cancel) = buttons(ui, "拟合");
-            if ok {
+            if ok && !matches!(action, Action::OpenCustomNlFit) {
                 let held = model
                     .params()
                     .iter()
@@ -82,6 +85,66 @@ impl Dialog {
                     })
                     .collect();
                 action = Action::NlFit(*model, held, constraints.clone());
+            } else if cancel && !matches!(action, Action::OpenCustomNlFit) {
+                action = Action::Close;
+            }
+        });
+        action
+    }
+
+    pub(super) fn show_custom_nl_fit(
+        &mut self,
+        ctx: &egui::Context,
+        pal: &Palette,
+        open: &mut bool,
+        _esc: bool,
+    ) -> Action {
+        let Self::CustomNlFit {
+            name,
+            formula,
+            parameters,
+            initial,
+            constraints,
+        } = self
+        else {
+            unreachable!()
+        };
+        let mut action = Action::None;
+        window(ctx, "自定义非线性拟合").open(open).show(ctx, |ui| {
+            ui.label(
+                RichText::new("使用 x 和参数名组成标量表达式，参数初值以逗号分隔。最多 7 个参数。").color(pal.weak),
+            );
+            ui.label("函数名");
+            ui.text_edit_singleline(name);
+            ui.label("表达式");
+            ui.add(
+                egui::TextEdit::multiline(formula)
+                    .desired_rows(2)
+                    .desired_width(f32::INFINITY)
+                    .font(egui::TextStyle::Monospace)
+                    .hint_text("y = a*exp(-b*x)+c"),
+            );
+            ui.label("参数名");
+            ui.text_edit_singleline(parameters);
+            ui.label("初始值");
+            ui.text_edit_singleline(initial);
+            ui.label("参数约束");
+            ui.add(
+                egui::TextEdit::multiline(constraints)
+                    .desired_rows(2)
+                    .desired_width(f32::INFINITY)
+                    .font(egui::TextStyle::Monospace)
+                    .hint_text("每行一条，如 a >= 0"),
+            );
+            let (ok, cancel) = buttons(ui, "拟合");
+            if ok {
+                action = Action::CustomNlFit {
+                    name: name.clone(),
+                    formula: formula.clone(),
+                    parameters: parameters.clone(),
+                    initial: initial.clone(),
+                    constraints: constraints.clone(),
+                };
             } else if cancel {
                 action = Action::Close;
             }

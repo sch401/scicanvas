@@ -151,6 +151,46 @@ mod tests {
     }
 
     #[test]
+    fn custom_nonlinear_fit_writes_a_named_curve_and_formula_report() {
+        let mut project = Project::sample();
+        let book = project.book_mut(1).unwrap();
+        let xs: Vec<f64> = (0..40).map(|row| row as f64 * 0.25).collect();
+        book.columns[0].data = xs.iter().map(|x| fmt_num(*x)).collect();
+        book.columns[1].data = xs.iter().map(|x| fmt_num(2.2 * (-0.4 * x).exp() + 0.3)).collect();
+        let function =
+            crate::nlfit::CustomFitFunction::new("Decay", "a*exp(-b*x)+c", vec!["a".into(), "b".into(), "c".into()])
+                .unwrap();
+        let (graph, reports) = project
+            .nlfit_custom(
+                &book_src(&["B"]),
+                function,
+                &[2.0, 0.3, 0.2],
+                &[crate::nlfit::ParamLimits::default(); 3],
+                &[],
+            )
+            .unwrap();
+        assert_eq!(reports.len(), 1);
+        assert_eq!(reports[0].fit.model.name(), "Decay");
+        assert!(reports[0].fit.converged);
+        assert!((reports[0].fit.params[0] - 2.2).abs() < 1e-5);
+        let curve = project
+            .book(1)
+            .unwrap()
+            .columns
+            .iter()
+            .find(|column| column.key == reports[0].curve.1)
+            .unwrap();
+        assert!(curve.comment.contains("y = a*exp(-b*x)+c") && curve.comment.contains("a = "));
+        assert!(project
+            .graph(graph)
+            .unwrap()
+            .first_layer()
+            .draft()
+            .line_only
+            .contains(&curve.key));
+    }
+
+    #[test]
     fn fft_builds_a_spectrum_table_and_amplitude_graph_per_curve() {
         let mut p = Project::sample();
         // 10 Hz 采样（X 以 s 为单位、间隔 0.1），2 Hz、振幅 4 的正弦落在频点上

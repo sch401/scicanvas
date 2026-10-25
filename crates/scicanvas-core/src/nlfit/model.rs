@@ -29,13 +29,14 @@ pub enum Model {
     PseudoFirstOrder,
     PseudoSecondOrder,
     MichaelisMenten,
+    Rational1,
 }
 
 /// 内置函数的最多参数个数（ExpDec3）。
 pub const MAX_PARAMS: usize = 7;
 
 impl Model {
-    pub const ALL: [Model; 24] = [
+    pub const ALL: [Model; 25] = [
         Model::Gauss,
         Model::Lorentz,
         Model::Voigt,
@@ -60,10 +61,11 @@ impl Model {
         Model::PseudoFirstOrder,
         Model::PseudoSecondOrder,
         Model::MichaelisMenten,
+        Model::Rational1,
     ];
 
     /// 对话框里的类别顺序。
-    pub const CATEGORIES: [&'static str; 7] = [
+    pub const CATEGORIES: [&'static str; 8] = [
         "峰函数",
         "指数",
         "S 形",
@@ -71,6 +73,7 @@ impl Model {
         "吸附等温线",
         "吸附动力学",
         "酶动力学",
+        "有理函数",
     ];
 
     pub fn name(self) -> &'static str {
@@ -99,6 +102,7 @@ impl Model {
             Model::PseudoFirstOrder => "准一级动力学",
             Model::PseudoSecondOrder => "准二级动力学",
             Model::MichaelisMenten => "MichaelisMenten",
+            Model::Rational1 => "Rational1",
         }
     }
 
@@ -111,6 +115,7 @@ impl Model {
             Model::Langmuir | Model::Freundlich => "吸附等温线",
             Model::PseudoFirstOrder | Model::PseudoSecondOrder => "吸附动力学",
             Model::MichaelisMenten => "酶动力学",
+            Model::Rational1 => "有理函数",
         }
     }
 
@@ -140,6 +145,7 @@ impl Model {
             Model::PseudoFirstOrder => "qt = qe·(1 − exp(−k1·t))",
             Model::PseudoSecondOrder => "qt = qe²·k2·t/(1 + qe·k2·t)",
             Model::MichaelisMenten => "v = Vmax·S/(Km + S)",
+            Model::Rational1 => "y = (a0 + a1·x)/(1 + b1·x)",
         }
     }
 
@@ -168,6 +174,7 @@ impl Model {
             Model::PseudoFirstOrder => &["qe", "k1"],
             Model::PseudoSecondOrder => &["qe", "k2"],
             Model::MichaelisMenten => &["Vmax", "Km"],
+            Model::Rational1 => &["a0", "a1", "b1"],
         }
     }
 
@@ -221,6 +228,7 @@ impl Model {
             Model::PseudoFirstOrder => p[0] * (1.0 - (-p[1] * x).exp()),
             Model::PseudoSecondOrder => p[0] * p[0] * p[1] * x / (1.0 + p[0] * p[1] * x),
             Model::MichaelisMenten => p[0] * x / (p[1] + x),
+            Model::Rational1 => (p[0] + p[1] * x) / (1.0 + p[2] * x),
         }
     }
 }

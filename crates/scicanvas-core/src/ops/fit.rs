@@ -243,6 +243,40 @@ impl Project {
         limits: &[crate::nlfit::ParamLimits],
         constraints: &[crate::nlfit::LinearConstraint],
     ) -> Result<(u64, Vec<NlFitReport>), String> {
+        self.nlfit_function(
+            src,
+            crate::nlfit::FitFunction::Builtin(model),
+            None,
+            limits,
+            constraints,
+        )
+    }
+
+    pub fn nlfit_custom(
+        &mut self,
+        src: &Source,
+        function: crate::nlfit::CustomFitFunction,
+        initial: &[f64],
+        limits: &[crate::nlfit::ParamLimits],
+        constraints: &[crate::nlfit::LinearConstraint],
+    ) -> Result<(u64, Vec<NlFitReport>), String> {
+        self.nlfit_function(
+            src,
+            crate::nlfit::FitFunction::Custom(function),
+            Some(initial),
+            limits,
+            constraints,
+        )
+    }
+
+    fn nlfit_function(
+        &mut self,
+        src: &Source,
+        function: crate::nlfit::FitFunction,
+        initial: Option<&[f64]>,
+        limits: &[crate::nlfit::ParamLimits],
+        constraints: &[crate::nlfit::LinearConstraint],
+    ) -> Result<(u64, Vec<NlFitReport>), String> {
         let r = self.resolve(src)?;
         let mut reports = vec![];
         let mut graph = None;
@@ -251,7 +285,7 @@ impl Project {
             let book = self.book(item.book_id).unwrap();
             let (xs, ys, _) = get_xy(book, item);
             let name = r.name(book, item);
-            let fit = match crate::nlfit::fit_constrained(model, &xs, &ys, None, limits, constraints) {
+            let fit = match crate::nlfit::fit_function(function.clone(), &xs, &ys, initial, limits, constraints) {
                 Ok(f) => f,
                 Err(e) => {
                     problems.push(format!("{name}：{e}"));
@@ -265,7 +299,8 @@ impl Project {
                 .map(|c| c.units.clone())
                 .unwrap_or_default();
             let y_units = book.column(&item.y).map(|c| c.units.clone()).unwrap_or_default();
-            let equation = model
+            let equation = fit
+                .model
                 .params()
                 .iter()
                 .zip(&fit.params)
@@ -274,14 +309,14 @@ impl Project {
                 .join("，");
             let fx = interpolate::grid(fit.x_min, fit.x_max, 200);
             let mut cx = Column::new("", Role::X);
-            cx.long_name = format!("{name} {} 拟合 X", model.name());
+            cx.long_name = format!("{name} {} 拟合 X", fit.model.name());
             cx.units = x_units;
-            cx.comment = model.formula().into();
+            cx.comment = fit.model.formula().into();
             cx.data = fx.iter().map(|x| fmt_num(*x)).collect();
             let mut cy = Column::new("", Role::Y);
-            cy.long_name = format!("{name} {} 拟合", model.name());
+            cy.long_name = format!("{name} {} 拟合", fit.model.name());
             cy.units = y_units;
-            cy.comment = format!("{}；{}", model.formula(), equation);
+            cy.comment = format!("{}；{}", fit.model.formula(), equation);
             cy.data = fx.iter().map(|x| fmt_num(fit.eval(*x))).collect();
             let result = self.write_result(
                 item,

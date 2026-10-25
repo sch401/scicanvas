@@ -337,6 +337,48 @@ fn nonlinear_fit_opens_a_report_and_undoes_as_one_step() {
 }
 
 #[test]
+fn custom_fit_dialog_keeps_invalid_input_and_creates_an_undoable_report() {
+    let mut app = app();
+    let book = app.project.book_mut(1).unwrap();
+    let xs: Vec<f64> = (0..40).map(|row| row as f64 * 0.25).collect();
+    book.columns[0].data = xs.iter().map(|x| fmt_num(*x)).collect();
+    book.columns[1].data = xs.iter().map(|x| fmt_num(2.2 * (-0.4 * x).exp() + 0.3)).collect();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["B".into()]);
+    app.open_nlfit_dialog();
+    press_dialog_button(&mut app, "自定义函数…");
+    assert!(matches!(app.dialog, Some(Dialog::CustomNlFit { .. })));
+    let ctx = egui::Context::default();
+
+    let invalid = dialogs::Action::CustomNlFit {
+        name: "Decay".into(),
+        formula: "a*x+missing".into(),
+        parameters: "a".into(),
+        initial: "1".into(),
+        constraints: String::new(),
+    };
+    assert!(!app.apply_dialog_action(&ctx, invalid));
+    assert!(matches!(app.dialog, Some(Dialog::CustomNlFit { .. })));
+
+    let before = app.project.clone();
+    let valid = dialogs::Action::CustomNlFit {
+        name: "Decay".into(),
+        formula: "y = a*exp(-b*x)+c".into(),
+        parameters: "a, b, c".into(),
+        initial: "2, 0.3, 0.2".into(),
+        constraints: String::new(),
+    };
+    assert!(app.apply_dialog_action(&ctx, valid));
+    let Some(Dialog::NlFitReport(reports)) = &app.dialog else {
+        panic!("custom fit report should open: {}", app.status);
+    };
+    assert_eq!(reports.len(), 1);
+    assert_eq!(reports[0].fit.model.name(), "Decay");
+    assert!(reports[0].fit.converged);
+    roundtrip(&mut app, &before);
+}
+
+#[test]
 fn column_math_dialog_follows_the_picked_columns_and_undoes() {
     use scicanvas_core::ops::ColumnOp;
     let mut app = app();
