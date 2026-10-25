@@ -156,10 +156,8 @@ fn dialog_confirmation_is_recorded_and_cancellation_is_empty() {
     app.run_command("fit.poly");
     assert!(app.history.undo_label().is_none());
     app.dialog = None;
-    app.begin_edit("多项式拟合");
     app.fit(2);
-    app.history.changed();
-    app.finish_edit();
+
     roundtrip(&mut app, &before);
 }
 
@@ -498,4 +496,37 @@ fn migrated_properties_group_real_typing_and_separate_focus_changes() {
     assert_eq!(app.project, second);
     let saved = scicanvas_core::project_file::to_scv(&app.project).unwrap();
     assert_eq!(scicanvas_core::project_file::from_scv(&saved).unwrap(), app.project);
+}
+
+#[test]
+fn transaction_success_presentation_precedes_formula_diagnostics_and_is_not_run_on_error() {
+    let mut app = app();
+    app.project.set_column_formula(1, "C", "B * 2", true).unwrap();
+    let before = app.project.clone();
+    app.edit_with(
+        "删除来源",
+        |project| {
+            project.delete_columns(1, &["B".into()]);
+            Ok(Some(()))
+        },
+        |app, ()| app.status = "成功提示".into(),
+    );
+    assert!(app.status.starts_with("公式重算出错："));
+    roundtrip(&mut app, &before);
+    let before = app.project.clone();
+    let mut shown = false;
+    assert_eq!(
+        app.edit_with::<(), ()>(
+            "失败",
+            |project| {
+                project.new_book();
+                Err("计算失败".into())
+            },
+            |_, ()| shown = true
+        ),
+        None
+    );
+    assert!(!shown);
+    assert_eq!(app.project, before);
+    assert_eq!(app.status, "计算失败");
 }

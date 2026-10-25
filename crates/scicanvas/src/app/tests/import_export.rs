@@ -135,3 +135,78 @@ fn dropped_data_files_import_as_one_step_and_project_files_open() {
     assert!(app.history.undo_label().is_none());
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn mixed_imports_keep_successful_files_folder_windows_and_one_undo_step() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/file-tests")
+        .join(format!("mixed-import-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let csv = dir.join("data.csv");
+    let bad = dir.join("bad.xlsx");
+    let empty = dir.join("empty.csv");
+    let absent = dir.join("absent.csv");
+    std::fs::write(&csv, "X,Y\n0,1\n1,2\n").unwrap();
+    std::fs::write(&bad, "broken Excel").unwrap();
+    std::fs::write(&empty, "").unwrap();
+    let mut app = app();
+    let parent = app.project.add_folder(None).unwrap();
+    app.explorer_target = Some(parent);
+    let before = app.project.clone();
+    app.open_dropped(vec![csv.clone(), bad.clone(), absent, csv.clone(), empty.clone()]);
+    assert_eq!(app.project.books.len(), before.books.len() + 2);
+    let ids: Vec<_> = app
+        .project
+        .books
+        .iter()
+        .skip(before.books.len())
+        .map(|b| b.id)
+        .collect();
+    assert_eq!(app.project.book(ids[0]).unwrap().name, "data");
+    assert_eq!(app.project.book(ids[1]).unwrap().name, "data_1");
+    for id in &ids {
+        assert_eq!(app.project.folder_of(*id), Some(parent));
+        assert_eq!(app.open.get(id), Some(&true));
+    }
+    assert_eq!(app.active, ids.last().copied());
+    assert_eq!(app.current_folder(), Some(parent));
+    assert!(
+        app.status.contains("无法导入") && app.status.contains("无法读取") && app.status.ends_with("文件里没有数据")
+    );
+    assert_eq!(app.history.undo_label(), Some("导入数据"));
+    let saved = scicanvas_core::project_file::to_scv(&app.project).unwrap();
+    assert_eq!(scicanvas_core::project_file::from_scv(&saved).unwrap(), app.project);
+    roundtrip(&mut app, &before);
+    app.undo();
+    assert!(app.history.undo_label().is_none());
+    for path in [csv, bad, empty] {
+        std::fs::remove_file(path).unwrap();
+    }
+    std::fs::remove_dir(dir).unwrap();
+}
+
+#[test]
+fn failed_imports_preserve_redo_selection_and_existing_project() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/file-tests")
+        .join(format!("failed-import-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let empty = dir.join("empty.csv");
+    std::fs::write(&empty, "").unwrap();
+    let mut app = app();
+    app.run_command("book.new");
+    app.undo();
+    let before = app.project.clone();
+    let active = app.active;
+    let selection = app.explorer_selection.clone();
+    let redo = app.history.redo_label().unwrap().to_string();
+    app.open_dropped(vec![dir.join("absent.csv"), empty.clone()]);
+    assert_eq!(app.project, before);
+    assert_eq!(app.active, active);
+    assert_eq!(app.explorer_selection, selection);
+    assert!(!app.history.is_pending());
+    assert!(app.history.undo_label().is_none());
+    assert_eq!(app.history.redo_label(), Some(redo.as_str()));
+    std::fs::remove_file(empty).unwrap();
+    std::fs::remove_dir(dir).unwrap();
+}

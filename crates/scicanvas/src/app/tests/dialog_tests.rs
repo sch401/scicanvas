@@ -323,11 +323,8 @@ fn nonlinear_fit_opens_a_report_and_undoes_as_one_step() {
         })
     ));
     app.finish_edit();
-    app.begin_edit("非线性拟合");
     app.dialog = None;
     app.nlfit(Model::ExpDec1, &[], &[]);
-    app.history.changed();
-    app.finish_edit();
     match &app.dialog {
         Some(Dialog::NlFitReport(reports)) => {
             assert_eq!(reports.len(), 1);
@@ -352,10 +349,8 @@ fn column_math_dialog_follows_the_picked_columns_and_undoes() {
         Some(Dialog::ColumnMath { a, b: Some(b), use_constant: false, .. }) if a == "电压 B" && b == "电压 A"
     ));
     app.finish_edit();
-    app.begin_edit("列运算");
     app.column_math(ColumnOp::Sub, None);
-    app.history.changed();
-    app.finish_edit();
+
     let book = app.project.book(1).unwrap();
     let result = book.columns.iter().find(|c| c.long_name == "电压 B − 电压 A").unwrap();
     let want = book.column("C").unwrap().values()[3] - book.column("B").unwrap().values()[3];
@@ -400,10 +395,8 @@ fn baseline_subtraction_runs_on_picked_columns_in_one_undo_step() {
     app.active = Some(1);
     app.selection.insert(1, vec!["B".into()]);
     let cols = app.project.book(1).unwrap().columns.len();
-    app.begin_edit("扣除基线");
     app.subtract_baseline(scicanvas_core::baseline::BaselineMethod::Line);
-    app.history.changed();
-    app.finish_edit();
+
     let book = app.project.book(1).unwrap();
     assert_eq!(book.columns.len(), cols + 2);
     assert_eq!(book.columns[3].long_name, "电压 A 扣除基线");
@@ -427,10 +420,8 @@ fn peaks_open_a_table_per_curve_in_one_undo_step() {
         .collect();
     app.selection.insert(1, vec!["B".into()]);
     let books = app.project.books.len();
-    app.begin_edit("寻峰");
     app.find_peaks(0.05);
-    app.history.changed();
-    app.finish_edit();
+
     assert_eq!(app.project.books.len(), books + 1);
     let table = app.project.books.last().unwrap();
     assert_eq!(table.columns[0].values(), [20.0, 45.0]);
@@ -642,4 +633,219 @@ fn ttest_uses_the_picked_columns_in_click_order_and_leaves_data_alone() {
     app.selection.insert(1, vec!["B".into()]);
     app.open_ttest_dialog();
     assert!(matches!(app.dialog, Some(Dialog::TTest { kind: 0, .. })));
+}
+
+#[test]
+fn migrated_analysis_dialogs_match_core_results_and_undo_as_one_step() {
+    use scicanvas_core::{
+        baseline::BaselineMethod,
+        fft::{FilterKind, Window},
+        interpolate::InterpMethod,
+        ops::{ColumnOp, Operand},
+    };
+    for case in 0..10 {
+        let mut app = app();
+        let src = Source::Graph(2);
+        if case == 9 {
+            app.active = Some(1);
+            app.selection.insert(1, vec!["B".into()]);
+        }
+        let before = app.project.clone();
+        let mut expected = before.clone();
+        let (dialog, button, label) = match case {
+            0 => {
+                expected.smooth(&src, SmoothMethod::MovingAverage, 3).unwrap();
+                (
+                    Dialog::Smooth {
+                        method: SmoothMethod::MovingAverage,
+                        window: 3,
+                    },
+                    "平滑",
+                    "平滑",
+                )
+            }
+            1 => {
+                expected.normalize(&src, NormalizeMethod::MinMax).unwrap();
+                (
+                    Dialog::Normalize {
+                        method: NormalizeMethod::MinMax,
+                    },
+                    "归一化",
+                    "归一化",
+                )
+            }
+            2 => {
+                expected.subtract_baseline(&src, BaselineMethod::Line).unwrap();
+                (
+                    Dialog::Baseline {
+                        als: false,
+                        log_lambda: 5.0,
+                        p: 0.01,
+                    },
+                    "扣除",
+                    "扣除基线",
+                )
+            }
+            3 => {
+                expected.interpolate(&src, InterpMethod::Linear, 10, None).unwrap();
+                (
+                    Dialog::Interpolate {
+                        method: InterpMethod::Linear,
+                        points: 10,
+                        custom: false,
+                        from: 0.0,
+                        to: 20.0,
+                    },
+                    "插值",
+                    "插值",
+                )
+            }
+            4 => {
+                expected.differentiate_sg(&src, 7, 2, 1).unwrap();
+                (
+                    Dialog::SgDiff {
+                        window: 7,
+                        order: 2,
+                        deriv: 1,
+                    },
+                    "求导",
+                    "SG 平滑求导",
+                )
+            }
+            5 => {
+                expected.fft_filter(&src, FilterKind::LowPass(0.2)).unwrap();
+                (
+                    Dialog::FftFilter {
+                        kind: 0,
+                        lo: 0.2,
+                        hi: 0.4,
+                        nyquist: 1.0,
+                    },
+                    "滤波",
+                    "FFT 滤波",
+                )
+            }
+            6 => {
+                expected.fft(&src, Window::Rect).unwrap();
+                (Dialog::Fft { window: Window::Rect }, "变换", "FFT")
+            }
+            7 => {
+                expected.frequency_counts(&src, Some(4), None).unwrap();
+                (
+                    Dialog::Frequency {
+                        auto: false,
+                        bins: 4,
+                        custom: false,
+                        from: 0.0,
+                        to: 1.0,
+                    },
+                    "统计",
+                    "频数统计",
+                )
+            }
+            8 => {
+                expected.find_peaks(&src, 0.05).unwrap();
+                (Dialog::Peaks { percent: 5.0 }, "寻峰", "寻峰")
+            }
+            _ => {
+                expected
+                    .column_math(1, "B", ColumnOp::Add, &Operand::Constant(1.5))
+                    .unwrap();
+                (
+                    Dialog::ColumnMath {
+                        a: "电压 A".into(),
+                        b: None,
+                        use_constant: true,
+                        op: ColumnOp::Add,
+                        constant: 1.5,
+                    },
+                    "计算",
+                    "列运算",
+                )
+            }
+        };
+        expected.recalc_computed(false);
+        app.dialog = Some(dialog);
+        press_dialog_button(&mut app, button);
+        assert_eq!(app.project, expected, "case {case}: {}", app.status);
+        assert!(app.dialog.is_none());
+        assert_eq!(app.history.undo_label(), Some(label));
+        assert!(!app.history.is_pending());
+        let saved = scicanvas_core::project_file::to_scv(&app.project).unwrap();
+        assert_eq!(scicanvas_core::project_file::from_scv(&saved).unwrap(), app.project);
+        roundtrip(&mut app, &before);
+        app.undo();
+        assert!(app.history.undo_label().is_none());
+    }
+}
+
+#[test]
+fn report_band_failure_rolls_back_earlier_results_and_preserves_redo() {
+    for nonlinear in [false, true] {
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["C".into()]);
+        if nonlinear {
+            app.nlfit(scicanvas_core::nlfit::Model::PseudoFirstOrder, &[], &[]);
+        } else {
+            app.fit(1);
+        }
+        let reports = app.dialog.take().unwrap();
+        app.run_command("book.new");
+        app.undo();
+        let before = app.project.clone();
+        let active = app.active;
+        let open = app.open.clone();
+        let redo = app.history.redo_label().unwrap().to_string();
+        let undo = app.history.undo_label().unwrap().to_string();
+        let mut trial = before.clone();
+        app.dialog = Some(match reports {
+            Dialog::FitReport(mut reports) => {
+                let good = reports[0].clone();
+                let mut bad = good.clone();
+                bad.book_id = 999999;
+                assert!(trial.poly_bands(&good, 0.95).is_ok());
+                assert!(trial.poly_bands(&bad, 0.95).is_err());
+                reports = vec![good, bad];
+                Dialog::FitReport(reports)
+            }
+            Dialog::NlFitReport(mut reports) => {
+                let good = reports[0].clone();
+                let mut bad = good.clone();
+                bad.book_id = 999999;
+                assert!(trial.nlfit_bands(&good, 0.95).is_ok());
+                assert!(trial.nlfit_bands(&bad, 0.95).is_err());
+                reports = vec![good, bad];
+                Dialog::NlFitReport(reports)
+            }
+            _ => panic!("report"),
+        });
+        assert_ne!(
+            trial, before,
+            "the old collection path can write before the later error"
+        );
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        ctx.style_mut(|s| s.animation_time = 0.0);
+        let mut harness = crate::test_ui::Harness::new(
+            ctx,
+            Some(egui::vec2(1800.0, 1600.0)),
+            |app: &mut SciApp, ctx: &egui::Context| app.dialogs(ctx),
+        )
+        .with_step(0.02);
+        for _ in 0..10 {
+            harness.frame(&mut app, vec![]);
+        }
+        let output = harness.frame(&mut app, vec![]);
+        let at = crate::test_ui::text_rect(&output, "置信/预测带").unwrap().center();
+        harness.click(&mut app, at);
+        assert_eq!(app.project, before);
+        assert_eq!(app.active, active);
+        assert_eq!(app.open, open);
+        assert!(app.dialog.is_some());
+        assert_eq!(app.status, "找不到工作簿", "nonlinear={nonlinear}");
+        assert_eq!(app.history.redo_label(), Some(redo.as_str()));
+        assert_eq!(app.history.undo_label(), Some(undo.as_str()));
+        assert!(!app.history.is_pending());
+    }
 }

@@ -166,10 +166,8 @@ fn manual_analysis_results_update_only_on_recalc_command() {
     let mut app = app();
     app.active = Some(1);
     app.selection.insert(1, vec!["B".into()]);
-    app.begin_edit("平滑");
     app.smooth(scicanvas_core::analysis::SmoothMethod::MovingAverage, 3);
-    app.history.changed();
-    app.finish_edit();
+
     let key = app
         .project
         .book(1)

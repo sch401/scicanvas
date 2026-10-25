@@ -341,11 +341,45 @@ impl SciApp {
 
     /// 把一个数据文件导入成新工作簿，放在当前文件夹里。Excel 工作簿的每张非空工作表各成一个工作簿。
     fn import_path(&mut self, path: &std::path::Path) {
+        self.import_paths(&[path.to_path_buf()]);
+    }
+
+    fn import_paths(&mut self, paths: &[PathBuf]) {
+        let parent = self.current_folder();
+        self.edit_with(
+            "导入数据",
+            |project| {
+                let mut shown = Vec::new();
+                let mut messages = Vec::new();
+                for path in paths {
+                    match Self::import_into(project, path, parent) {
+                        Ok((id, message)) => {
+                            shown.push(id);
+                            messages.push(message);
+                        }
+                        Err(error) => messages.push(error),
+                    }
+                }
+                Ok(Some((shown, messages)))
+            },
+            |app, (shown, messages)| {
+                for id in shown {
+                    app.show_item(id);
+                }
+                app.status = messages.join("；");
+            },
+        );
+    }
+
+    fn import_into(
+        project: &mut Project,
+        path: &std::path::Path,
+        parent: Option<u64>,
+    ) -> Result<(u64, String), String> {
         let bytes = match std::fs::read(path) {
             Ok(b) => b,
             Err(e) => {
-                self.status = format!("无法读取 {}：{}", path.display(), e);
-                return;
+                return Err(format!("无法读取 {}：{}", path.display(), e));
             }
         };
         let stem = path
@@ -379,8 +413,7 @@ impl SciApp {
                         .collect()
                 }
                 Err(e) => {
-                    self.status = format!("无法导入 {}：{e}", path.display());
-                    return;
+                    return Err(format!("无法导入 {}：{e}", path.display()));
                 }
             }
         } else {
@@ -394,32 +427,27 @@ impl SciApp {
             })
             .collect();
         if tables.is_empty() {
-            self.status = "文件里没有数据".into();
-            return;
+            return Err("文件里没有数据".into());
         }
         let mut done = vec![];
         let mut last = None;
         for (base, table) in tables {
-            let name = if self.project.books.iter().any(|b| b.name == base) {
-                self.project.unique_name(&format!("{}_", base))
+            let name = if project.books.iter().any(|b| b.name == base) {
+                project.unique_name(&format!("{}_", base))
             } else {
                 base
             };
-            let id = self.project.alloc_id();
+            let id = project.alloc_id();
             let book = match table {
                 Table::Rows(rows) => csv::book_from_table(id, &name, rows),
                 Table::Text(text) => csv::book_from_text(id, &name, &text),
             };
             done.push(format!("{}（{} 行 × {} 列）", name, book.nrows(), book.columns.len()));
-            self.project.books.push(book);
-            let parent = self.current_folder();
-            self.project.move_project_item(id, parent).unwrap();
+            project.books.push(book);
+            project.move_project_item(id, parent)?;
             last = Some(id);
         }
-        if let Some(id) = last {
-            self.show_item(id);
-        }
-        self.status = format!("已导入 {}：{}", path.display(), done.join("、"));
+        Ok((last.unwrap(), format!("已导入 {}：{}", path.display(), done.join("、"))))
     }
 
     pub(crate) fn open_project(&mut self) {
@@ -461,16 +489,7 @@ impl SciApp {
         if paths.is_empty() {
             return;
         }
-        self.finish_edit();
-        self.begin_edit("导入数据");
-        let mut done = Vec::new();
-        for path in &paths {
-            self.import_path(path);
-            done.push(std::mem::take(&mut self.status));
-        }
-        self.history.changed();
-        self.finish_edit();
-        self.status = done.join("；");
+        self.import_paths(&paths);
     }
 
     /// 处理拖入窗口的文件，拖动经过时显示提示层。
@@ -687,14 +706,25 @@ impl SciApp {
     /// 一次性项目编辑：Some 返回结果，None 取消，Err 回滚并显示原因。
     /// 实际改变才重算并记一步；重算诊断继续沿用既有 finish_edit 规则。
     fn edit<T>(&mut self, label: &str, f: impl FnOnce(&mut Project) -> Result<Option<T>, String>) -> Option<T> {
+        self.edit_with(label, f, |_, value| value)
+    }
+
+    /// 展示成功结果后统一重算和提交，保留状态提示优先级；show 只更新界面。
+    fn edit_with<T, R>(
+        &mut self,
+        label: &str,
+        f: impl FnOnce(&mut Project) -> Result<Option<T>, String>,
+        show: impl FnOnce(&mut Self, T) -> R,
+    ) -> Option<R> {
         self.finish_edit();
         self.history_group = None;
         self.begin_edit(label);
         match f(&mut self.project) {
             Ok(Some(value)) => {
                 self.history.changed_if_different(&self.project);
+                let result = show(self, value);
                 self.finish_edit();
-                Some(value)
+                Some(result)
             }
             result => {
                 self.project = self.history.rollback().unwrap();
@@ -1175,15 +1205,20 @@ impl SciApp {
     }
 
     pub(crate) fn fit(&mut self, order: usize) {
+        self.fit_order(order, if order == 1 { "线性拟合" } else { "多项式拟合" });
+    }
+
+    fn fit_order(&mut self, order: usize, label: &str) {
         let Some(src) = self.analysis_source() else { return };
-        match self.project.fit_poly(&src, order) {
-            Ok((gid, reports)) => {
-                self.after_analysis(Some(gid));
-                self.status = format!("已完成 {} 条数据的{}", reports.len(), reports[0].kind);
-                self.dialog = Some(Dialog::FitReport(reports));
-            }
-            Err(e) => self.status = e,
-        }
+        self.edit_with(
+            label,
+            |project| project.fit_poly(&src, order).map(Some),
+            |app, (gid, reports)| {
+                app.after_analysis(Some(gid));
+                app.status = format!("已完成 {} 条数据的{}", reports.len(), reports[0].kind);
+                app.dialog = Some(Dialog::FitReport(reports));
+            },
+        );
     }
 
     pub(crate) fn open_nlfit_dialog(&mut self) {
@@ -1201,19 +1236,20 @@ impl SciApp {
         constraints: &[scicanvas_core::nlfit::LinearConstraint],
     ) {
         let Some(src) = self.analysis_source() else { return };
-        match self.project.nlfit(&src, model, limits, constraints) {
-            Ok((gid, reports)) => {
-                self.after_analysis(Some(gid));
+        self.edit_with(
+            "非线性拟合",
+            |project| project.nlfit(&src, model, limits, constraints).map(Some),
+            |app, (gid, reports)| {
+                app.after_analysis(Some(gid));
                 let unconverged = reports.iter().filter(|r| !r.fit.converged).count();
-                self.status = if unconverged == 0 {
+                app.status = if unconverged == 0 {
                     format!("已完成 {} 条数据的 {} 拟合", reports.len(), model.name())
                 } else {
                     format!("{} 拟合有 {unconverged} 条未收敛，请查看结果", model.name())
                 };
-                self.dialog = Some(Dialog::NlFitReport(reports));
-            }
-            Err(e) => self.status = e,
-        }
+                app.dialog = Some(Dialog::NlFitReport(reports));
+            },
+        );
     }
 
     pub(crate) fn open_poly_dialog(&mut self) {
@@ -1284,13 +1320,14 @@ impl SciApp {
 
     fn subtract_baseline(&mut self, method: scicanvas_core::baseline::BaselineMethod) {
         let Some(src) = self.analysis_source() else { return };
-        match self.project.subtract_baseline(&src, method) {
-            Ok(made) => {
+        self.edit_with(
+            "扣除基线",
+            |project| project.subtract_baseline(&src, method).map(Some),
+            |app, made| {
                 let keys: Vec<&str> = made.iter().map(|(_, k)| k.as_str()).collect();
-                self.status = format!("已扣除基线（{}），结果在新列 {}", method.label(), keys.join(", "));
-            }
-            Err(e) => self.status = e,
-        }
+                app.status = format!("已扣除基线（{}），结果在新列 {}", method.label(), keys.join(", "));
+            },
+        );
     }
 
     pub(crate) fn open_peaks_dialog(&mut self) {
@@ -1299,21 +1336,22 @@ impl SciApp {
 
     fn find_peaks(&mut self, min_prominence: f64) {
         let Some(src) = self.analysis_source() else { return };
-        match self.project.find_peaks(&src, min_prominence) {
-            Ok(made) => {
+        self.edit_with(
+            "寻峰",
+            |project| project.find_peaks(&src, min_prominence).map(Some),
+            |app, made| {
                 let mut parts = vec![];
                 for id in &made {
-                    if let Some(book) = self.project.book(*id) {
+                    if let Some(book) = app.project.book(*id) {
                         parts.push(format!("{}（{} 个峰）", book.name, book.columns[0].data.len()));
                     }
                 }
                 if let Some(id) = made.last() {
-                    self.show_item(*id);
+                    app.show_item(*id);
                 }
-                self.status = format!("峰表在 {}", parts.join("、"));
-            }
-            Err(e) => self.status = e,
-        }
+                app.status = format!("峰表在 {}", parts.join("、"));
+            },
+        );
     }
 
     pub(crate) fn open_fft_dialog(&mut self) {
@@ -1324,19 +1362,20 @@ impl SciApp {
 
     fn fft(&mut self, window: scicanvas_core::fft::Window) {
         let Some(src) = self.analysis_source() else { return };
-        match self.project.fft(&src, window) {
-            Ok(made) => {
+        self.edit_with(
+            "FFT",
+            |project| project.fft(&src, window).map(Some),
+            |app, made| {
                 let names: Vec<String> = made
                     .iter()
-                    .filter_map(|(b, _)| self.project.name_of(*b).map(str::to_owned))
+                    .filter_map(|(b, _)| app.project.name_of(*b).map(str::to_owned))
                     .collect();
                 if let Some((_, g)) = made.last() {
-                    self.show_item(*g);
+                    app.show_item(*g);
                 }
-                self.status = format!("FFT 结果在 {}，幅值谱已画成图", names.join("、"));
-            }
-            Err(e) => self.status = e,
-        }
+                app.status = format!("FFT 结果在 {}，幅值谱已画成图", names.join("、"));
+            },
+        );
     }
 
     pub(crate) fn open_column_math_dialog(&mut self) {
@@ -1369,10 +1408,11 @@ impl SciApp {
                 return;
             }
         };
-        match self.project.column_math(id, &a, op, &operand) {
-            Ok(key) => self.status = format!("列运算结果在新列 {key}"),
-            Err(e) => self.status = e,
-        }
+        self.edit_with(
+            "列运算",
+            |project| project.column_math(id, &a, op, &operand).map(Some),
+            |app, key| app.status = format!("列运算结果在新列 {key}"),
+        );
     }
 
     pub(crate) fn open_frequency_dialog(&mut self) {
@@ -1392,19 +1432,20 @@ impl SciApp {
 
     fn frequency_counts(&mut self, bins: Option<usize>, range: Option<(f64, f64)>) {
         let Some(src) = self.analysis_source() else { return };
-        match self.project.frequency_counts(&src, bins, range) {
-            Ok(ids) => {
+        self.edit_with(
+            "频数统计",
+            |project| project.frequency_counts(&src, bins, range).map(Some),
+            |app, ids| {
                 let names: Vec<String> = ids
                     .iter()
-                    .filter_map(|id| self.project.name_of(*id).map(str::to_owned))
+                    .filter_map(|id| app.project.name_of(*id).map(str::to_owned))
                     .collect();
                 if let Some(last) = ids.last() {
-                    self.show_item(*last);
+                    app.show_item(*last);
                 }
-                self.status = format!("频数统计结果在 {}", names.join("、"));
-            }
-            Err(e) => self.status = e,
-        }
+                app.status = format!("频数统计结果在 {}", names.join("、"));
+            },
+        );
     }
 
     /// 当前工作簿里按点选顺序参与检验的列（没有点选列时用单元格选区覆盖的列）。
@@ -1479,10 +1520,11 @@ impl SciApp {
 
     fn fft_filter(&mut self, kind: scicanvas_core::fft::FilterKind) {
         let Some(src) = self.analysis_source() else { return };
-        match self.project.fft_filter(&src, kind) {
-            Ok(keys) => self.status = format!("已 FFT 滤波（{}），结果在新列 {}", kind.label(), keys.join(", ")),
-            Err(e) => self.status = e,
-        }
+        self.edit_with(
+            "FFT 滤波",
+            |project| project.fft_filter(&src, kind).map(Some),
+            |app, keys| app.status = format!("已 FFT 滤波（{}），结果在新列 {}", kind.label(), keys.join(", ")),
+        );
     }
 
     /// 自相关（选一列）或互相关（选两列）。
@@ -1799,13 +1841,14 @@ impl SciApp {
         range: Option<(f64, f64)>,
     ) {
         let Some(src) = self.analysis_source() else { return };
-        match self.project.interpolate(&src, method, points, range) {
-            Ok((gid, keys)) => {
-                self.show_item(gid);
-                self.status = format!("已{}插值，结果在新列 {}", method.label(), keys.join(", "));
-            }
-            Err(e) => self.status = e,
-        }
+        self.edit_with(
+            "插值",
+            |project| project.interpolate(&src, method, points, range).map(Some),
+            |app, (gid, keys)| {
+                app.show_item(gid);
+                app.status = format!("已{}插值，结果在新列 {}", method.label(), keys.join(", "));
+            },
+        );
     }
 
     pub(crate) fn open_normalize_dialog(&mut self) {
@@ -1816,10 +1859,11 @@ impl SciApp {
 
     fn smooth(&mut self, method: SmoothMethod, window: usize) {
         let Some(src) = self.analysis_source() else { return };
-        match self.project.smooth(&src, method, window) {
-            Ok(keys) => self.status = format!("已平滑，结果在新列 {}", keys.join(", ")),
-            Err(e) => self.status = e,
-        }
+        self.edit_with(
+            "平滑",
+            |project| project.smooth(&src, method, window).map(Some),
+            |app, keys| app.status = format!("已平滑，结果在新列 {}", keys.join(", ")),
+        );
     }
 
     pub(crate) fn differentiate(&mut self) {
@@ -1843,10 +1887,11 @@ impl SciApp {
 
     fn normalize(&mut self, method: NormalizeMethod) {
         let Some(src) = self.analysis_source() else { return };
-        match self.project.normalize(&src, method) {
-            Ok(keys) => self.status = format!("已归一化，结果在新列 {}", keys.join(", ")),
-            Err(e) => self.status = e,
-        }
+        self.edit_with(
+            "归一化",
+            |project| project.normalize(&src, method).map(Some),
+            |app, keys| app.status = format!("已归一化，结果在新列 {}", keys.join(", ")),
+        );
     }
 
     pub(crate) fn stats_on_columns(&mut self) {
@@ -1960,47 +2005,60 @@ impl SciApp {
                 self.analysis_curves.insert((graph, layer), curves);
             }
             dialogs::Action::SaveNote(title, text) => {
-                self.finish_edit();
-                self.begin_edit("保存结果为 Note");
-                self.save_note(&title, text);
-                self.history.changed();
-                self.finish_edit();
+                let parent = self.current_folder();
+                self.edit_with(
+                    "保存结果为 Note",
+                    |project| {
+                        let id = project.add_note(&title, text);
+                        project.move_project_item(id, parent)?;
+                        Ok(Some(id))
+                    },
+                    |app, id| {
+                        app.show_item(id);
+                        app.status = "Note 已添加到项目，保存项目即可保留内容".into();
+                    },
+                );
                 self.dialog = None;
             }
             dialogs::Action::FitBands(reports) => {
-                self.finish_edit();
-                self.begin_edit("置信/预测带");
-                let made: Result<Vec<_>, _> = reports.iter().map(|r| self.project.poly_bands(r, 0.95)).collect();
-                self.status = match made {
-                    Ok(_) => "已写入 95% 置信带和预测带，并加到图中".into(),
-                    Err(e) => e,
-                };
-                self.history.changed();
-                self.finish_edit();
+                self.edit_with(
+                    "置信/预测带",
+                    |project| {
+                        reports
+                            .iter()
+                            .map(|r| project.poly_bands(r, 0.95))
+                            .collect::<Result<Vec<_>, _>>()
+                            .map(Some)
+                    },
+                    |app, _| {
+                        app.status = "已写入 95% 置信带和预测带，并加到图中".into();
+                    },
+                );
             }
             dialogs::Action::NlFitBands(reports) => {
-                self.finish_edit();
-                self.begin_edit("置信/预测带");
-                let made: Result<Vec<_>, _> = reports.iter().map(|r| self.project.nlfit_bands(r, 0.95)).collect();
-                self.status = match made {
-                    Ok(_) => "已写入 95% 置信带和预测带，并加到图中".into(),
-                    Err(e) => e,
-                };
-                self.history.changed();
-                self.finish_edit();
+                self.edit_with(
+                    "置信/预测带",
+                    |project| {
+                        reports
+                            .iter()
+                            .map(|r| project.nlfit_bands(r, 0.95))
+                            .collect::<Result<Vec<_>, _>>()
+                            .map(Some)
+                    },
+                    |app, _| {
+                        app.status = "已写入 95% 置信带和预测带，并加到图中".into();
+                    },
+                );
             }
             dialogs::Action::ResidualPlot(reports) => {
-                self.finish_edit();
-                self.begin_edit("残差图");
-                match self.project.residual_plot(&reports) {
-                    Ok(id) => {
-                        self.show_item(id);
-                        self.status = "已生成残差图（残差 = Y − 拟合值）".into();
-                        self.history.changed();
-                    }
-                    Err(error) => self.status = error,
-                }
-                self.finish_edit();
+                self.edit_with(
+                    "残差图",
+                    |project| project.residual_plot(&reports).map(Some),
+                    |app, id| {
+                        app.show_item(id);
+                        app.status = "已生成残差图（残差 = Y − 拟合值）".into();
+                    },
+                );
             }
             dialogs::Action::None => {}
             dialogs::Action::Close => self.dialog = None,
@@ -2049,26 +2107,21 @@ impl SciApp {
             }
             dialogs::Action::Fit(order) => {
                 self.finish_edit();
-                self.begin_edit("多项式拟合");
                 self.dialog = None;
-                self.fit(order);
-                self.history.changed();
-                self.finish_edit();
+                self.fit_order(order, "多项式拟合");
             }
             dialogs::Action::Ifft(book, re, im, input) => {
                 self.finish_edit();
-                self.begin_edit("IFFT");
                 self.dialog = None;
-                match self.project.ifft(book, &re, im.as_deref(), input) {
-                    Ok((b, g)) => {
-                        self.show_item(g);
-                        let name = self.project.name_of(b).unwrap_or("").to_string();
-                        self.status = format!("IFFT 结果在 {name}，实部已画成图");
-                    }
-                    Err(e) => self.status = e,
-                }
-                self.history.changed();
-                self.finish_edit();
+                self.edit_with(
+                    "IFFT",
+                    |project| project.ifft(book, &re, im.as_deref(), input).map(Some),
+                    |app, (b, g)| {
+                        app.show_item(g);
+                        let name = app.project.name_of(b).unwrap_or("").to_string();
+                        app.status = format!("IFFT 结果在 {name}，实部已画成图");
+                    },
+                );
             }
             dialogs::Action::Sort(book, keys, within) => {
                 self.finish_edit();
@@ -2110,32 +2163,26 @@ impl SciApp {
             }
             dialogs::Action::SgDiff(w, order, deriv) => {
                 self.finish_edit();
-                self.begin_edit("SG 平滑求导");
                 self.dialog = None;
                 if let Some(src) = self.analysis_source() {
-                    match self.project.differentiate_sg(&src, w, order, deriv) {
-                        Ok(keys) => self.status = format!("已求导数，结果在新列 {}", keys.join(", ")),
-                        Err(e) => self.status = e,
-                    }
+                    self.edit_with(
+                        "SG 平滑求导",
+                        |project| project.differentiate_sg(&src, w, order, deriv).map(Some),
+                        |app, keys| {
+                            app.status = format!("已求导数，结果在新列 {}", keys.join(", "));
+                        },
+                    );
                 }
-                self.history.changed();
-                self.finish_edit();
             }
             dialogs::Action::Smooth(m, w) => {
                 self.finish_edit();
-                self.begin_edit("平滑");
                 self.dialog = None;
                 self.smooth(m, w);
-                self.history.changed();
-                self.finish_edit();
             }
             dialogs::Action::Interpolate(method, points, range) => {
                 self.finish_edit();
-                self.begin_edit("插值");
                 self.dialog = None;
                 self.interpolate(method, points, range);
-                self.history.changed();
-                self.finish_edit();
             }
             dialogs::Action::TTest(kind, level) => self.run_ttest(kind, level),
             dialogs::Action::NlFit(model, limits, text) => {
@@ -2148,11 +2195,8 @@ impl SciApp {
                     }
                 };
                 self.finish_edit();
-                self.begin_edit("非线性拟合");
                 self.dialog = None;
                 self.nlfit(model, &limits, &constraints);
-                self.history.changed();
-                self.finish_edit();
             }
             dialogs::Action::SetValues(formula, keep) => {
                 self.finish_edit();
@@ -2173,51 +2217,33 @@ impl SciApp {
             }
             dialogs::Action::FftFilter(kind) => {
                 self.finish_edit();
-                self.begin_edit("FFT 滤波");
                 self.dialog = None;
                 self.fft_filter(kind);
-                self.history.changed();
-                self.finish_edit();
             }
             dialogs::Action::Baseline(method) => {
                 self.finish_edit();
-                self.begin_edit("扣除基线");
                 self.dialog = None;
                 self.subtract_baseline(method);
-                self.history.changed();
-                self.finish_edit();
             }
             dialogs::Action::Peaks(min_prominence) => {
                 self.finish_edit();
-                self.begin_edit("寻峰");
                 self.dialog = None;
                 self.find_peaks(min_prominence);
-                self.history.changed();
-                self.finish_edit();
             }
             dialogs::Action::Fft(window) => {
                 self.finish_edit();
-                self.begin_edit("FFT");
                 self.dialog = None;
                 self.fft(window);
-                self.history.changed();
-                self.finish_edit();
             }
             dialogs::Action::ColumnMath(op, constant) => {
                 self.finish_edit();
-                self.begin_edit("列运算");
                 self.dialog = None;
                 self.column_math(op, constant);
-                self.history.changed();
-                self.finish_edit();
             }
             dialogs::Action::Frequency(bins, range) => {
                 self.finish_edit();
-                self.begin_edit("频数统计");
                 self.dialog = None;
                 self.frequency_counts(bins, range);
-                self.history.changed();
-                self.finish_edit();
             }
             dialogs::Action::ExportPng(dpi) => {
                 self.dialog = None;
@@ -2225,11 +2251,8 @@ impl SciApp {
             }
             dialogs::Action::Normalize(m) => {
                 self.finish_edit();
-                self.begin_edit("归一化");
                 self.dialog = None;
                 self.normalize(m);
-                self.history.changed();
-                self.finish_edit();
             }
         }
         if let Some(Dialog::LayerContents(edit)) = &mut self.dialog {
