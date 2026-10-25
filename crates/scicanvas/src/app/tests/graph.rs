@@ -1238,6 +1238,127 @@ fn right_y_axis_range_and_format_controls_are_live_and_undoable() {
 }
 
 #[test]
+fn curve_point_style_properties_map_columns_and_undo_the_changes() {
+    use scicanvas_core::page::SymbolFill;
+    let mut app = app();
+    let category = {
+        let book = app.project.book_mut(1).unwrap();
+        let key = book.push_column(Role::Ignore);
+        let rows = book.nrows();
+        let column = book.columns.iter_mut().find(|column| column.key == key).unwrap();
+        column.long_name = "批次".into();
+        column.data = scicanvas_core::ColumnData::Category {
+            codes: (0..rows).map(|row| (row % 2) as u32).collect(),
+            levels: vec!["A".into(), "B".into()],
+            ordered: true,
+        };
+        key
+    };
+    app.props_for = Some(2);
+    let before = app.project.clone();
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    ctx.style_mut(|style| style.animation_time = 0.0);
+    let mut harness = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1500.0, 3000.0)),
+        |app: &mut SciApp, ctx: &egui::Context| {
+            app.history_group = None;
+            app.props_window(ctx);
+            app.finish_frame_edit(app.history_group);
+        },
+    )
+    .with_step(0.02);
+    harness.frame(&mut app, vec![]);
+    let output = harness.frame(&mut app, vec![]);
+    harness.click_text(&mut app, &output, "曲线样式");
+    let output = harness.frame(&mut app, vec![]);
+    let row = crate::test_ui::text_rect(&output, "颜色映射列").unwrap();
+    let none = crate::test_ui::text_positions(&output, "无")
+        .into_iter()
+        .min_by(|a, b| (a.y - row.center().y).abs().total_cmp(&(b.y - row.center().y).abs()))
+        .unwrap();
+    harness.click(&mut app, none + egui::vec2(5.0, 5.0));
+    let popup = harness.frame(&mut app, vec![]);
+    harness.click_text(&mut app, &popup, "电压 B");
+    assert_eq!(
+        app.project
+            .graph(2)
+            .unwrap()
+            .first_layer()
+            .plot_style("B")
+            .unwrap()
+            .color_column
+            .as_deref(),
+        Some("C")
+    );
+    roundtrip(&mut app, &before);
+
+    let before_size = app.project.clone();
+    let output = harness.frame(&mut app, vec![]);
+    let row = crate::test_ui::text_rect(&output, "大小映射列").unwrap();
+    let none = crate::test_ui::text_positions(&output, "无")
+        .into_iter()
+        .min_by(|a, b| (a.y - row.center().y).abs().total_cmp(&(b.y - row.center().y).abs()))
+        .unwrap();
+    harness.click(&mut app, none + egui::vec2(5.0, 5.0));
+    let popup = harness.frame(&mut app, vec![]);
+    harness.click_text(&mut app, &popup, "电压 B");
+    assert_eq!(
+        app.project
+            .graph(2)
+            .unwrap()
+            .first_layer()
+            .plot_style("B")
+            .unwrap()
+            .size_column
+            .as_deref(),
+        Some("C")
+    );
+    roundtrip(&mut app, &before_size);
+
+    let before_symbol = app.project.clone();
+    let output = harness.frame(&mut app, vec![]);
+    let row = crate::test_ui::text_rect(&output, "形状映射列").unwrap();
+    let none = crate::test_ui::text_positions(&output, "无")
+        .into_iter()
+        .min_by(|a, b| (a.y - row.center().y).abs().total_cmp(&(b.y - row.center().y).abs()))
+        .unwrap();
+    harness.click(&mut app, none + egui::vec2(5.0, 5.0));
+    let popup = harness.frame(&mut app, vec![]);
+    harness.click_text(&mut app, &popup, "批次");
+    assert_eq!(
+        app.project
+            .graph(2)
+            .unwrap()
+            .first_layer()
+            .plot_style("B")
+            .unwrap()
+            .symbol_column
+            .as_deref(),
+        Some(category.as_str())
+    );
+    roundtrip(&mut app, &before_symbol);
+
+    let before_fill = app.project.clone();
+    let output = harness.frame(&mut app, vec![]);
+    harness.click_text(&mut app, &output, "跟随曲线颜色");
+    let popup = harness.frame(&mut app, vec![]);
+    harness.click_text(&mut app, &popup, "空心");
+    assert_eq!(
+        app.project
+            .graph(2)
+            .unwrap()
+            .first_layer()
+            .plot_style("B")
+            .unwrap()
+            .symbol_fill,
+        Some(SymbolFill::Hollow)
+    );
+    roundtrip(&mut app, &before_fill);
+}
+
+#[test]
 fn applying_a_graph_template_adds_one_undoable_graph() {
     let mut app = app();
     let template =

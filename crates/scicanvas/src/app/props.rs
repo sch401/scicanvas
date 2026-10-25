@@ -11,12 +11,7 @@ impl SciApp {
             return;
         };
         let graph_before = g0.clone();
-        let SourceOptions {
-            column_options,
-            book_specs,
-            curve_options,
-            curve_names,
-        } = source_options(&self.project);
+        let options = source_options(&self.project);
         let mut props_layer = self.layer_index(gid);
         let title = format!("绘图属性 — {}", g0.name);
         let history_group = &mut self.history_group;
@@ -40,16 +35,23 @@ impl SciApp {
                 let g = &mut graph.page.layers_mut()[props_layer];
                 let cols = g
                     .book_id
-                    .and_then(|id| column_options.get(&id))
+                    .and_then(|id| options.column_options.get(&id))
                     .cloned()
                     .unwrap_or_default();
                 egui::Grid::new(("props-grid", gid, props_layer))
                     .num_columns(2)
                     .spacing([8.0, 4.0])
                     .show(ui, |ui| {
-                        data_source(ui, g, &book_specs);
+                        data_source(ui, g, &options.book_specs);
                         columns(ui, g, &cols);
-                        foreign_curves(ui, g, &book_specs, &curve_options, &curve_names, &lookup);
+                        foreign_curves(
+                            ui,
+                            g,
+                            &options.book_specs,
+                            &options.curve_options,
+                            &options.curve_names,
+                            &lookup,
+                        );
                         if g.plot_type == PlotType::FloatingBar {
                             ui.label("浮动柱下端");
                             crate::builder::floating_columns(ui, g, &cols);
@@ -62,7 +64,7 @@ impl SciApp {
                         error_bars(ui, g, history_group);
                         reference_lines(ui, g, gid, history_group);
                     });
-                curve_style(ui, g, gid, props_layer, &cols, &curve_names, history_group);
+                curve_style(ui, g, gid, props_layer, &cols, &options, history_group);
             });
         if self.project.graph(gid).unwrap() != &graph_before {
             ctx.request_repaint();
@@ -82,11 +84,19 @@ impl SciApp {
 
 type CurveOptions = HashMap<u64, Vec<(String, String, Option<String>)>>;
 
+#[derive(Clone, Default)]
+struct MappingColumns {
+    color: Vec<(String, String)>,
+    size: Vec<(String, String)>,
+    symbol: Vec<(String, String)>,
+}
+
 struct SourceOptions {
     column_options: HashMap<u64, Vec<(String, String)>>,
     book_specs: Vec<(u64, String, Option<scicanvas_core::plotspec::PlotSpec>)>,
     curve_options: CurveOptions,
     curve_names: HashMap<DataRef, String>,
+    mapping_columns: HashMap<u64, MappingColumns>,
 }
 
 fn source_options(project: &Project) -> SourceOptions {
@@ -108,6 +118,29 @@ fn source_options(project: &Project) -> SourceOptions {
                     })
                     .collect(),
             )
+        })
+        .collect();
+    let mapping_columns: HashMap<u64, MappingColumns> = project
+        .books
+        .iter()
+        .map(|book| {
+            let mut options = MappingColumns::default();
+            for column in &book.columns {
+                let item = (column.key.clone(), column.display_name().to_owned());
+                match column.data.kind() {
+                    scicanvas_core::DataKind::Num => {
+                        options.color.push(item.clone());
+                        options.size.push(item);
+                    }
+                    scicanvas_core::DataKind::DateTime => options.color.push(item),
+                    scicanvas_core::DataKind::Category => {
+                        options.color.push(item.clone());
+                        options.symbol.push(item);
+                    }
+                    scicanvas_core::DataKind::Text => {}
+                }
+            }
+            (book.id, options)
         })
         .collect();
     // 每个工作簿的默认列映射（与“选中工作簿后作图”相同），切换数据来源时套用
@@ -139,6 +172,7 @@ fn source_options(project: &Project) -> SourceOptions {
         book_specs,
         curve_options,
         curve_names,
+        mapping_columns,
     }
 }
 
@@ -784,7 +818,7 @@ fn curve_style(
     gid: u64,
     props_layer: usize,
     cols: &[(String, String)],
-    curve_names: &HashMap<DataRef, String>,
+    options: &SourceOptions,
     history_group: &mut Option<egui::Id>,
 ) {
     // 逐曲线样式：选一条数据曲线，单独设图型、颜色、符号、线宽、符号大小和右侧 Y 轴
@@ -803,7 +837,7 @@ fn curve_style(
                     cols.iter()
                         .find(|(c, _)| Some(source.book) == g.book_id && c == &source.col)
                         .map(|(_, n)| n.clone())
-                        .or_else(|| curve_names.get(source).cloned())
+                        .or_else(|| options.curve_names.get(source).cloned())
                         .unwrap_or_else(|| {
                             if source.book == 0 {
                                 source.col.clone()
@@ -821,6 +855,7 @@ fn curve_style(
                     });
                 ui.data_mut(|d| d.insert_temp(pick_id, key.clone()));
                 let mut style = g.source_style(&key).cloned().unwrap_or_default();
+                let mapping = options.mapping_columns.get(&key.book).cloned().unwrap_or_default();
                 egui::Grid::new(("props-curve-grid", gid, props_layer))
                     .num_columns(2)
                     .spacing([10.0, 6.0])
@@ -894,6 +929,7 @@ fn curve_style(
                         ui.checkbox(&mut style.right_axis, "右侧 Y 轴");
                         ui.end_row();
                     });
+                point_style_properties(ui, gid, &key, &mut style, &mapping, history_group);
                 g.set_source_style(&key, (!style.is_default()).then_some(style));
                 if g.has_right_axis_style() {
                     ui.horizontal_wrapped(|ui| {
@@ -906,4 +942,128 @@ fn curve_style(
                 }
             });
     }
+}
+
+fn point_style_properties(
+    ui: &mut egui::Ui,
+    gid: u64,
+    key: &DataRef,
+    style: &mut scicanvas_core::page::CurveStyle,
+    mapping: &MappingColumns,
+    history_group: &mut Option<egui::Id>,
+) {
+    use scicanvas_core::page::SymbolFill;
+    ui.label(RichText::new("符号边框、填充与逐点映射").strong());
+    egui::Grid::new(("props-point-style-grid", gid, key.clone()))
+        .num_columns(2)
+        .spacing([10.0, 6.0])
+        .show(ui, |ui| {
+            ui.label("符号填充");
+            let mut fill = style.symbol_fill.unwrap_or_default();
+            let fill_label = match fill {
+                SymbolFill::MatchCurve => "跟随曲线颜色",
+                SymbolFill::Hollow => "空心",
+                SymbolFill::Color(_) => "自定义颜色",
+            };
+            let response = egui::ComboBox::from_id_salt(("props-symbol-fill", gid, key.clone()))
+                .selected_text(fill_label)
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut fill, SymbolFill::MatchCurve, "跟随曲线颜色");
+                    ui.selectable_value(&mut fill, SymbolFill::Hollow, "空心");
+                    ui.selectable_value(&mut fill, SymbolFill::Color([15, 77, 146]), "自定义颜色");
+                })
+                .response;
+            edit_group(&response, history_group);
+            if let SymbolFill::Color(mut color) = fill {
+                let response = ui.color_edit_button_srgb(&mut color);
+                edit_group(&response, history_group);
+                fill = SymbolFill::Color(color);
+            }
+            style.symbol_fill = (fill != SymbolFill::MatchCurve).then_some(fill);
+            ui.end_row();
+
+            ui.label("边框");
+            ui.horizontal_wrapped(|ui| {
+                let mut enabled = style.symbol_border_color.is_some() || style.symbol_border_width.is_some();
+                let response = ui.checkbox(&mut enabled, "启用");
+                edit_group(&response, history_group);
+                if enabled {
+                    let mut color = style.symbol_border_color.unwrap_or([0, 0, 0]);
+                    let response = ui.color_edit_button_srgb(&mut color);
+                    edit_group(&response, history_group);
+                    style.symbol_border_color = Some(color);
+                    let mut width = style.symbol_border_width.unwrap_or(0.6);
+                    let response = ui.add(egui::DragValue::new(&mut width).range(0.0..=8.0).speed(0.1));
+                    edit_group(&response, history_group);
+                    style.symbol_border_width = Some(width);
+                } else {
+                    style.symbol_border_color = None;
+                    style.symbol_border_width = None;
+                }
+            });
+            ui.end_row();
+
+            ui.label("颜色映射列");
+            mapped_column_combo(
+                ui,
+                ("props-color-map", gid, key.clone()),
+                &mut style.color_column,
+                &mapping.color,
+                history_group,
+            );
+            ui.end_row();
+            ui.label("大小映射列");
+            mapped_column_combo(
+                ui,
+                ("props-size-map", gid, key.clone()),
+                &mut style.size_column,
+                &mapping.size,
+                history_group,
+            );
+            ui.end_row();
+            if style.size_column.is_some() {
+                ui.label("映射尺寸范围");
+                let mut range = style.size_range.unwrap_or([2.0, 12.0]);
+                ui.horizontal_wrapped(|ui| {
+                    ui.label("最小");
+                    let response = ui.add(egui::DragValue::new(&mut range[0]).range(1.0..=20.0).speed(0.1));
+                    edit_group(&response, history_group);
+                    ui.label("最大");
+                    let response = ui.add(egui::DragValue::new(&mut range[1]).range(1.0..=20.0).speed(0.1));
+                    edit_group(&response, history_group);
+                });
+                style.size_range = Some(range);
+                ui.end_row();
+            } else {
+                style.size_range = None;
+            }
+            ui.label("形状映射列");
+            mapped_column_combo(
+                ui,
+                ("props-symbol-map", gid, key.clone()),
+                &mut style.symbol_column,
+                &mapping.symbol,
+                history_group,
+            );
+            ui.end_row();
+        });
+}
+
+fn mapped_column_combo(
+    ui: &mut egui::Ui,
+    id: impl std::hash::Hash,
+    value: &mut Option<String>,
+    columns: &[(String, String)],
+    history_group: &mut Option<egui::Id>,
+) {
+    let response = egui::ComboBox::from_id_salt(id)
+        .selected_text(value.as_deref().unwrap_or("无"))
+        .show_ui(ui, |ui| {
+            ui.selectable_value(value, None, "无");
+            for (key, label) in columns {
+                ui.selectable_value(value, Some(key.clone()), label);
+            }
+        })
+        .response;
+    edit_group(&response, history_group);
 }

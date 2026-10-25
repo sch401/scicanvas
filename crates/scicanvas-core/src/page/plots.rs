@@ -51,6 +51,32 @@ fn source_is(stored: &ColumnRef, main: Option<u64>, source: &DataRef) -> bool {
     stored.col == source.col && stored.book.or(main).unwrap_or(0) == source.book
 }
 
+fn clear_mapped_style(plot: &mut Plot, keys: Option<&[String]>) {
+    let Some(style) = &mut plot.style else { return };
+    let matches = |value: &Option<String>| {
+        value
+            .as_ref()
+            .is_some_and(|key| keys.is_none_or(|keys| keys.contains(key)))
+    };
+    let mut changed = false;
+    if matches(&style.color_column) {
+        style.color_column = None;
+        changed = true;
+    }
+    if matches(&style.size_column) {
+        style.size_column = None;
+        style.size_range = None;
+        changed = true;
+    }
+    if matches(&style.symbol_column) {
+        style.symbol_column = None;
+        changed = true;
+    }
+    if changed && style.is_default() {
+        plot.style = None;
+    }
+}
+
 impl Default for LayerSpec {
     fn default() -> Self {
         PlotSpec::default().into()
@@ -272,7 +298,41 @@ impl LayerSpec {
         self.validate_in(book, &|_| None)
     }
     pub fn validate_in<'a>(&self, book: &'a crate::Book, others: BookLookup<'a, '_>) -> Result<(), String> {
-        self.draft().validate_in(book, others)
+        self.draft().validate_in(book, others)?;
+        for plot in self.plots.iter().filter(|plot| plot.active) {
+            let Some(style) = &plot.style else { continue };
+            if style
+                .symbol_border_width
+                .is_some_and(|width| !width.is_finite() || !(0.0..=8.0).contains(&width))
+            {
+                return Err("符号边框线宽无效".into());
+            }
+            if style
+                .size_range
+                .is_some_and(|[min, max]| !min.is_finite() || !max.is_finite() || min < 1.0 || max > 20.0 || min > max)
+            {
+                return Err("符号映射尺寸范围无效".into());
+            }
+            let source_book_id = plot.source.book.or(self.book_id).ok_or("曲线没有数据工作簿")?;
+            let source_book = if source_book_id == book.id {
+                Some(book)
+            } else {
+                others(source_book_id)
+            }
+            .ok_or("找不到曲线的数据工作簿")?;
+            for (key, mapping) in [
+                (style.color_column.as_deref(), "颜色"),
+                (style.size_column.as_deref(), "大小"),
+                (style.symbol_column.as_deref(), "形状"),
+            ] {
+                if let Some(key) = key {
+                    source_book
+                        .column(key)
+                        .ok_or_else(|| format!("找不到符号映射{mapping}列 {key}"))?;
+                }
+            }
+        }
+        Ok(())
     }
     pub fn add_curve(&mut self, book: &crate::Book, key: &str) -> Result<String, String> {
         let mut draft = self.draft();
@@ -314,6 +374,7 @@ impl LayerSpec {
             x_key: self.x_key.clone(),
             plot_type: self.plot_type,
             transform: self.transform,
+            color_map: self.color_map,
             ..Default::default()
         }
         .series_from_plots(book, others, plots)
@@ -591,6 +652,9 @@ impl Layer {
             if (p.active || p.source.book.is_none()) && keys.contains(&raw_key(&p.source)) {
                 return false;
             }
+            if p.source.book.is_none() {
+                clear_mapped_style(p, Some(keys));
+            }
             if p.x.as_ref().is_some_and(|r| r.book.is_none() && keys.contains(&r.col)) {
                 p.x = None;
             }
@@ -770,10 +834,15 @@ impl LayerSpec {
     }
     pub(crate) fn drop_foreign(&mut self, book: u64, keys: Option<&[String]>) {
         let hit = |r: &ColumnRef| r.book == Some(book) && keys.is_none_or(|keys| keys.contains(&r.col));
+        let main_book = self.book_id;
         // 沿用既有删除语义：隐藏的编辑设置仍保留，下端缺失留下明确标记。
         self.retain_plots(|p| {
             if p.active && (hit(&p.source) || p.x.as_ref().is_some_and(hit)) {
                 return false;
+            }
+            let source_book = p.source.book.or(main_book);
+            if source_book == Some(book) {
+                clear_mapped_style(p, keys);
             }
             if p.base.as_ref().is_some_and(hit) {
                 p.base = Some(raw_ref(""));

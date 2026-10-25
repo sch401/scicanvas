@@ -26,13 +26,18 @@ pub(super) fn draw_layer_legend(
         let names: Vec<_> = plots
             .iter()
             .map(|p| {
-                crate::text::fonts().wrap_formatted(
-                    &p.series.name,
-                    LEGEND_FONT,
-                    false,
-                    (pw - sw - 16.0).max(20.0),
-                    g.rich_text,
-                )
+                let mapped = p.plot.style.as_ref().and_then(|style| {
+                    style
+                        .color_column
+                        .as_ref()
+                        .or(style.size_column.as_ref())
+                        .or(style.symbol_column.as_ref())
+                });
+                let name = mapped.map_or_else(
+                    || p.series.name.clone(),
+                    |column| format!("{} · {}", p.series.name, column),
+                );
+                crate::text::fonts().wrap_formatted(&name, LEGEND_FONT, false, (pw - sw - 16.0).max(20.0), g.rich_text)
             })
             .collect();
         let layouts: Vec<_> = names
@@ -84,44 +89,13 @@ pub(super) fn draw_layer_legend(
             stroke: None,
         });
         let mut row_y = ly + 2.0;
-        for (i, st) in plots.iter().map(|p| &p.style).enumerate() {
-            let color = st.color.rgb();
+        for (i, plot) in plots.iter().enumerate() {
             let row_height = layouts[i].height + 4.0;
             let cy = row_y + row_height / 2.0;
             row_y += row_height;
             let x0 = lx + 4.0;
-            if st.kind.is_bar() || st.kind == PlotType::Area {
-                push(Prim::Rect {
-                    x: x0 + 4.0,
-                    y: cy - 3.5,
-                    w: sw - 8.0,
-                    h: 7.0,
-                    fill: Some((
-                        color,
-                        if st.kind == PlotType::Area {
-                            f64::from(g.area_opacity)
-                        } else {
-                            1.0
-                        },
-                    )),
-                    stroke: Some((INK, 0.5)),
-                });
-            } else {
-                if st.kind.has_line() {
-                    push(Prim::Polyline {
-                        pts: vec![[x0, cy], [x0 + sw, cy]],
-                        color,
-                        width: f64::from(st.line_width),
-                    });
-                }
-                if st.kind.has_symbol() {
-                    push(Prim::Symbols {
-                        sym: st.symbol,
-                        pts: vec![[x0 + sw / 2.0, cy]],
-                        r: f64::from(st.symbol_size) / 2.0,
-                        color,
-                    });
-                }
+            for prim in curve_sample(plot, g.area_opacity, x0, cy, sw) {
+                push(prim);
             }
             push(formatted_text(
                 x0 + sw + 4.0,
@@ -141,4 +115,153 @@ pub(super) fn draw_layer_legend(
     }
 
     None
+}
+
+fn curve_sample(plot: &crate::page::PreparedPlot, area_opacity: f32, x: f64, y: f64, width: f64) -> Vec<Prim> {
+    let mut items = fill_or_line_sample(plot, area_opacity, x, y, width);
+    if let Some(symbol) = symbol_sample(plot, x, y, width) {
+        items.push(symbol);
+    }
+    items
+}
+
+fn fill_or_line_sample(plot: &crate::page::PreparedPlot, area_opacity: f32, x: f64, y: f64, width: f64) -> Vec<Prim> {
+    let style = &plot.style;
+    let color = style.color.rgb();
+    let mapped: Vec<_> = plot
+        .series
+        .point_styles
+        .iter()
+        .filter_map(|point| point.color)
+        .collect();
+    let varying = mapped
+        .first()
+        .is_some_and(|first| mapped.iter().any(|value| value != first));
+    if style.kind.is_bar() || style.kind == PlotType::Area {
+        if style.kind.is_bar() && varying {
+            let count = mapped.len().min(3);
+            return (0..count)
+                .map(|index| {
+                    let source = [0, mapped.len() / 2, mapped.len() - 1][index];
+                    Prim::Rect {
+                        x: x + 4.0 + (width - 8.0) * index as f64 / count as f64,
+                        y: y - 3.5,
+                        w: (width - 8.0) / count as f64,
+                        h: 7.0,
+                        fill: Some((mapped[source].into(), 1.0)),
+                        stroke: Some((INK, 0.5)),
+                    }
+                })
+                .collect();
+        }
+        return vec![Prim::Rect {
+            x: x + 4.0,
+            y: y - 3.5,
+            w: width - 8.0,
+            h: 7.0,
+            fill: Some((
+                color,
+                if style.kind == PlotType::Area {
+                    f64::from(area_opacity)
+                } else {
+                    1.0
+                },
+            )),
+            stroke: Some((INK, 0.5)),
+        }];
+    }
+    if !style.kind.has_line() {
+        return Vec::new();
+    }
+    if varying {
+        let count = mapped.len().min(3);
+        let segments = (0..count)
+            .map(|index| {
+                let source = [0, mapped.len() / 2, mapped.len() - 1][index];
+                let left = x + width * index as f64 / count as f64;
+                let right = x + width * (index + 1) as f64 / count as f64;
+                ColoredSegment {
+                    points: [left, y, right, y],
+                    color: mapped[source].into(),
+                }
+            })
+            .collect();
+        vec![Prim::ColoredSegments {
+            segments,
+            width: f64::from(style.line_width),
+        }]
+    } else {
+        vec![Prim::Polyline {
+            pts: vec![[x, y], [x + width, y]],
+            color,
+            width: f64::from(style.line_width),
+        }]
+    }
+}
+
+fn symbol_sample(plot: &crate::page::PreparedPlot, x: f64, y: f64, width: f64) -> Option<Prim> {
+    let style = &plot.style;
+    if !style.kind.has_symbol() {
+        return None;
+    }
+    let curve_style = plot.plot.style.as_ref();
+    let mapped = plot
+        .series
+        .point_styles
+        .iter()
+        .any(|point| point.color.is_some() || point.size.is_some() || point.symbol.is_some());
+    let custom = curve_style.is_some_and(|style| {
+        style.symbol_fill.is_some() || style.symbol_border_color.is_some() || style.symbol_border_width.is_some()
+    });
+    if !mapped && !custom {
+        return Some(Prim::Symbols {
+            sym: style.symbol,
+            pts: vec![[x + width / 2.0, y]],
+            r: f64::from(style.symbol_size) / 2.0,
+            color: style.color.rgb(),
+        });
+    }
+    let count = plot.series.point_styles.len();
+    let sample = if count == 0 {
+        vec![0]
+    } else {
+        let mut indices = vec![0, count / 2, count - 1];
+        indices.dedup();
+        indices
+    };
+    let fill_style = curve_style
+        .and_then(|style| style.symbol_fill)
+        .unwrap_or(crate::page::SymbolFill::MatchCurve);
+    let border_color = curve_style.and_then(|style| style.symbol_border_color);
+    let border_width = curve_style.and_then(|style| style.symbol_border_width);
+    let symbols = sample
+        .iter()
+        .enumerate()
+        .map(|(index, source)| {
+            let point = plot.series.point_styles.get(*source).copied().unwrap_or_default();
+            let fill = match fill_style {
+                crate::page::SymbolFill::MatchCurve => {
+                    Some(point.color.map_or(style.color.rgb(), |[r, g, b]| (r, g, b)))
+                }
+                crate::page::SymbolFill::Hollow => None,
+                crate::page::SymbolFill::Color([r, g, b]) => Some((r, g, b)),
+            };
+            let stroke = if border_color.is_some() || border_width.is_some() {
+                Some((
+                    border_color.map_or((0, 0, 0), |[r, g, b]| (r, g, b)),
+                    f64::from(border_width.unwrap_or(0.6)),
+                ))
+            } else {
+                None
+            };
+            StyledSymbol {
+                at: [x + width * (index as f64 + 0.5) / sample.len() as f64, y],
+                symbol: point.symbol.unwrap_or(style.symbol),
+                radius: f64::from(point.size.unwrap_or(style.symbol_size)) / 2.0,
+                fill,
+                stroke,
+            }
+        })
+        .collect();
+    Some(Prim::StyledSymbols { symbols })
 }

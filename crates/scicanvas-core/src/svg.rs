@@ -121,6 +121,26 @@ fn prim(out: &mut String, p: &Prim) {
             }
             let _ = write!(out, r#"<path d="{d}" fill="{}"/>"#, hex(*color));
         }
+        Prim::StyledSymbols { symbols } => {
+            for symbol in symbols {
+                let d = symbol_path(symbol.symbol, symbol.at[0], symbol.at[1], symbol.radius);
+                let fill = symbol.fill.map_or_else(|| "none".to_owned(), hex);
+                let stroke = symbol.stroke.map_or_else(String::new, |(color, width)| {
+                    format!(" stroke=\"{}\" stroke-width=\"{width}\"", hex(color))
+                });
+                let _ = write!(out, "<path d=\"{d}\" fill=\"{fill}\"{stroke}/>");
+            }
+        }
+        Prim::ColoredSegments { segments, width } => {
+            for segment in segments {
+                let [x1, y1, x2, y2] = segment.points;
+                let _ = write!(
+                    out,
+                    "<path d=\"M{x1:.2},{y1:.2}L{x2:.2},{y2:.2}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{width}\"/>",
+                    hex(segment.color)
+                );
+            }
+        }
         Prim::Text {
             x,
             y,

@@ -753,6 +753,35 @@ pub fn paint(ui: &egui::Ui, rect: Rect, sc: &Scene) {
                     }
                 }
             }
+            Prim::StyledSymbols { symbols } => {
+                for symbol in symbols {
+                    let fill = symbol.fill.map_or(egui::Color32::TRANSPARENT, rgb);
+                    let stroke = symbol.stroke.map_or(Stroke::NONE, |(color, width)| {
+                        Stroke::new(width as f32 * scale, rgb(color))
+                    });
+                    let center = at(symbol.at[0], symbol.at[1]);
+                    match scene::symbol_polygon(symbol.symbol, symbol.at[0], symbol.at[1], symbol.radius) {
+                        None => {
+                            p.circle(center, symbol.radius as f32 * scale, fill, stroke);
+                        }
+                        Some(polygon) => {
+                            let polygon: Vec<Pos2> = polygon.iter().map(|point| at(point[0], point[1])).collect();
+                            p.add(Shape::convex_polygon(polygon, fill, stroke));
+                        }
+                    }
+                }
+            }
+            Prim::ColoredSegments { segments, width } => {
+                for segment in segments {
+                    p.line_segment(
+                        [
+                            at(segment.points[0], segment.points[1]),
+                            at(segment.points[2], segment.points[3]),
+                        ],
+                        Stroke::new(*width as f32 * scale, rgb(segment.color)),
+                    );
+                }
+            }
             Prim::Text {
                 x,
                 y,

@@ -199,6 +199,101 @@ fn reference_lines_follow_each_axis_and_export_through_the_shared_scene() {
     );
 }
 
+#[test]
+fn column_mappings_drive_point_style_and_independent_symbol_fill_and_border() {
+    use scicanvas_core::page::{CurveStyle, SymbolFill};
+    let mut project = Project::sample();
+    let mapping_key = {
+        let book = project.book_mut(1).unwrap();
+        let key = book.push_column(Role::Ignore);
+        let rows = book.nrows();
+        book.columns.iter_mut().find(|column| column.key == key).unwrap().data = (0..rows)
+            .map(|row| {
+                if row == 1 {
+                    String::new()
+                } else {
+                    scicanvas_core::fmt_num(if row == 0 {
+                        -1e308
+                    } else if row + 1 == rows {
+                        1e308
+                    } else {
+                        0.0
+                    })
+                }
+            })
+            .collect();
+        key
+    };
+    let category_key = {
+        let book = project.book_mut(1).unwrap();
+        let key = book.push_column(Role::Ignore);
+        let rows = book.nrows();
+        book.columns.iter_mut().find(|column| column.key == key).unwrap().data = scicanvas_core::ColumnData::Category {
+            codes: (0..rows).map(|row| (row % 3) as u32).collect(),
+            levels: vec!["Alpha".into(), "Beta".into(), "Gamma".into()],
+            ordered: true,
+        };
+        key
+    };
+    project.graph_mut(2).unwrap().first_layer_mut().set_plot_style(
+        "B",
+        Some(CurveStyle {
+            color_column: Some(mapping_key.clone()),
+            size_column: Some(mapping_key),
+            symbol_column: Some(category_key),
+            size_range: Some([2.0, 10.0]),
+            symbol_fill: Some(SymbolFill::Hollow),
+            symbol_border_color: Some([20, 30, 40]),
+            symbol_border_width: Some(0.8),
+            ..Default::default()
+        }),
+    );
+    let graph = project.graph(2).unwrap();
+    let book = project.book(1).unwrap();
+    let (_, plots) = graph.first_layer().prepared_plots_in(book, &|_| None);
+    let plot = plots.iter().find(|plot| plot.series.key == "B").unwrap();
+    assert_eq!(plot.series.points.len(), plot.series.point_styles.len());
+    assert_eq!(plot.series.point_styles[0].size, Some(2.0));
+    assert_eq!(plot.series.point_styles.last().unwrap().size, Some(10.0));
+    assert!(plot.series.point_styles[1].color.is_none() && plot.series.point_styles[1].size.is_none());
+    assert_eq!(
+        plot.series
+            .point_styles
+            .iter()
+            .take(3)
+            .map(|style| style.symbol)
+            .collect::<Vec<_>>(),
+        [
+            Some(scicanvas_core::Symbol::Circle),
+            Some(scicanvas_core::Symbol::Square),
+            Some(scicanvas_core::Symbol::Up),
+        ]
+    );
+    assert!(
+        plot.series
+            .point_styles
+            .iter()
+            .filter_map(|style| style.color)
+            .collect::<std::collections::HashSet<_>>()
+            .len()
+            > 1
+    );
+
+    let scene = scene::layout_page(graph, &project, &[]);
+    assert!(scene.items.iter().any(|item| matches!(
+        &item.prim,
+        scene::Prim::StyledSymbols { symbols }
+            if symbols.iter().any(|symbol| symbol.fill.is_none() && symbol.stroke.is_some())
+    )));
+    assert!(scene.items.iter().any(|item| matches!(
+        &item.prim,
+        scene::Prim::ColoredSegments { segments, .. } if segments.iter().map(|segment| segment.color).collect::<std::collections::HashSet<_>>().len() > 1
+    )));
+    let svg = svg::render_page(graph, &project);
+    assert!(svg.contains("fill=\"none\"") && svg.contains("stroke=\"#141e28\""));
+    assert!(svg.contains(" · D"), "the legend shows the mapped color column");
+}
+
 #[cfg(feature = "serde")]
 #[test]
 fn v13_objects_roundtrip_and_legacy_defaults_keep_literal_text_and_auto_legends() {

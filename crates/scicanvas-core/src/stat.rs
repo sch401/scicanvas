@@ -11,6 +11,7 @@ pub(crate) fn apply(series: &mut [Series], transform: Transform) {
             indices.sort_by(|a, b| s.points[*a][0].total_cmp(&s.points[*b][0]));
             let mut grouped = Vec::new();
             let mut bases = Vec::new();
+            let mut point_styles = Vec::new();
             let mut i = 0;
             while i < s.points.len() {
                 let x = s.points[indices[i]][0];
@@ -21,9 +22,33 @@ pub(crate) fn apply(series: &mut [Series], transform: Transform) {
                 let mean = indices[i..end].iter().map(|j| s.points[*j][1]).sum::<f64>() / (end - i) as f64;
                 grouped.push([x, mean]);
                 bases.push(indices[i..end].iter().map(|j| s.bases[*j]).sum::<f64>() / (end - i) as f64);
+                let styles = indices[i..end]
+                    .iter()
+                    .filter_map(|j| s.point_styles.get(*j))
+                    .collect::<Vec<_>>();
+                let color = (0..3)
+                    .map(|channel| {
+                        let values = styles
+                            .iter()
+                            .filter_map(|style| style.color.map(|color| f64::from(color[channel])));
+                        let (sum, count) = values.fold((0.0, 0), |(sum, count), value| (sum + value, count + 1));
+                        (count > 0).then(|| (sum / count as f64).round() as u8)
+                    })
+                    .collect::<Option<Vec<_>>>()
+                    .and_then(|channels| channels.try_into().ok());
+                let size = styles
+                    .iter()
+                    .filter_map(|style| style.size)
+                    .fold((0.0, 0), |(sum, count), value| (sum + f64::from(value), count + 1));
+                point_styles.push(crate::PointStyle {
+                    color,
+                    size: (size.1 > 0).then(|| (size.0 / size.1 as f64) as f32),
+                    symbol: styles.iter().find_map(|style| style.symbol),
+                });
                 i = end;
             }
             s.points = grouped;
+            s.point_styles = point_styles;
             s.bases = bases;
             s.rows = vec![0; s.points.len()];
             // 原始行的测量误差不代表分组均值的标准误。
@@ -98,6 +123,8 @@ pub(crate) fn prepare(g: &crate::page::Layer, series: &mut [Series]) {
         s.points.retain(|_| *flags.next().unwrap());
         let mut flags = keep.iter();
         s.errors.retain(|_| *flags.next().unwrap());
+        let mut flags = keep.iter();
+        s.point_styles.retain(|_| *flags.next().unwrap());
         let mut flags = keep.iter();
         s.bases.retain(|_| *flags.next().unwrap());
         let mut flags = keep.iter();

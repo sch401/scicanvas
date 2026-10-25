@@ -14,6 +14,21 @@ mod legend;
 
 pub type Rgb = (u8, u8, u8);
 
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct StyledSymbol {
+    pub at: [f64; 2],
+    pub symbol: Symbol,
+    pub radius: f64,
+    pub fill: Option<Rgb>,
+    pub stroke: Option<(Rgb, f64)>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ColoredSegment {
+    pub points: [f64; 4],
+    pub color: Rgb,
+}
+
 pub const INK: Rgb = (0, 0, 0);
 pub const PAPER: Rgb = (255, 255, 255);
 const GRID: Rgb = (217, 217, 217);
@@ -57,7 +72,11 @@ pub enum Prim {
         dashed: bool,
     },
     /// 折线。
-    Polyline { pts: Vec<[f64; 2]>, color: Rgb, width: f64 },
+    Polyline {
+        pts: Vec<[f64; 2]>,
+        color: Rgb,
+        width: f64,
+    },
     /// 每三个顶点组成一个填充三角形，屏幕与 SVG 使用同一份剖分。
     Triangles {
         pts: Vec<[f64; 2]>,
@@ -70,6 +89,13 @@ pub enum Prim {
         pts: Vec<[f64; 2]>,
         r: f64,
         color: Rgb,
+    },
+    StyledSymbols {
+        symbols: Vec<StyledSymbol>,
+    },
+    ColoredSegments {
+        segments: Vec<ColoredSegment>,
+        width: f64,
     },
     /// 文字。(x, y) 是锚点：水平方向按 anchor 对齐，垂直方向居中。
     /// vertical 为真时逆时针旋转 90°（Y 轴标题）。
@@ -419,6 +445,21 @@ fn scale_prim(prim: &mut Prim, k: f64) {
             scale_pts(pts);
             *r *= k;
         }
+        Prim::StyledSymbols { symbols } => {
+            for symbol in symbols {
+                symbol.at = symbol.at.map(|value| value * k);
+                symbol.radius *= k;
+                if let Some((_, width)) = &mut symbol.stroke {
+                    *width *= k;
+                }
+            }
+        }
+        Prim::ColoredSegments { segments, width } => {
+            for segment in segments {
+                segment.points = segment.points.map(|value| value * k);
+            }
+            *width *= k;
+        }
         Prim::Segments { segs, width, .. } => {
             segs.iter_mut().for_each(|s| *s = s.map(|v| v * k));
             *width *= k;
@@ -436,6 +477,20 @@ fn translate(prim: &mut Prim, dx: f64, dy: f64) {
             for p in pts {
                 p[0] += dx;
                 p[1] += dy;
+            }
+        }
+        Prim::StyledSymbols { symbols } => {
+            for symbol in symbols {
+                symbol.at[0] += dx;
+                symbol.at[1] += dy;
+            }
+        }
+        Prim::ColoredSegments { segments, .. } => {
+            for segment in segments {
+                segment.points[0] += dx;
+                segment.points[1] += dy;
+                segment.points[2] += dx;
+                segment.points[3] += dy;
             }
         }
         Prim::Segments { segs, .. } => {
@@ -517,6 +572,10 @@ fn obstacles(items: &[Item]) -> Vec<Obstacle> {
             Prim::Triangles { pts, .. } => out.extend(pts.as_chunks::<3>().0.iter().map(|t| Obstacle::Tri(*t))),
             // 多边形符号最远伸到 1.3 倍半径
             Prim::Symbols { pts, r, .. } => out.extend(pts.iter().map(|p| Obstacle::Dot(*p, r * 1.3))),
+            Prim::StyledSymbols { symbols } => out.extend(symbols.iter().map(|s| Obstacle::Dot(s.at, s.radius * 1.3))),
+            Prim::ColoredSegments { segments, width } => {
+                out.extend(segments.iter().map(|s| Obstacle::Seg(s.points, width / 2.0)))
+            }
             Prim::Text {
                 x,
                 y,

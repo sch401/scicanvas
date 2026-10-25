@@ -345,6 +345,16 @@ impl ReferenceLine {
     }
 }
 
+/// 符号填充方式。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum SymbolFill {
+    #[default]
+    MatchCurve,
+    Hollow,
+    Color([u8; 3]),
+}
+
 /// 一条曲线的单独样式；None 表示跟随图层设置。
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize), serde(default))]
@@ -358,6 +368,20 @@ pub struct CurveStyle {
     pub symbol_size: Option<f32>,
     /// 画在右侧 Y 轴上（双 Y 轴）。
     pub right_axis: bool,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub symbol_fill: Option<SymbolFill>,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub symbol_border_color: Option<[u8; 3]>,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub symbol_border_width: Option<f32>,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub color_column: Option<String>,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub size_column: Option<String>,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub symbol_column: Option<String>,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub size_range: Option<[f32; 2]>,
 }
 
 impl CurveStyle {

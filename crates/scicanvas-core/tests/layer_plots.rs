@@ -305,6 +305,45 @@ fn removal_and_retention_clear_every_table_without_affecting_other_sources() {
 }
 
 #[test]
+fn deleting_mapped_style_columns_clears_the_mapping_and_keeps_the_graph_saveable() {
+    let mut project = Project::sample();
+    let category = {
+        let book = project.book_mut(1).unwrap();
+        let key = book.push_column(Role::Ignore);
+        let rows = book.nrows();
+        book.columns.iter_mut().find(|column| column.key == key).unwrap().data = scicanvas_core::ColumnData::Category {
+            codes: (0..rows).map(|row| (row % 2) as u32).collect(),
+            levels: vec!["one".into(), "two".into()],
+            ordered: true,
+        };
+        key
+    };
+    project.graph_mut(2).unwrap().first_layer_mut().set_plot_style(
+        "B",
+        Some(CurveStyle {
+            color_column: Some("C".into()),
+            size_column: Some("C".into()),
+            symbol_column: Some(category.clone()),
+            size_range: Some([2.0, 10.0]),
+            ..Default::default()
+        }),
+    );
+
+    project.delete_columns(1, &["C".into()]);
+    let style = project.graph(2).unwrap().first_layer().plot_style("B").unwrap();
+    assert!(style.color_column.is_none() && style.size_column.is_none() && style.size_range.is_none());
+    assert_eq!(style.symbol_column.as_deref(), Some(category.as_str()));
+    project.delete_columns(1, &[category]);
+    assert!(project
+        .graph(2)
+        .unwrap()
+        .first_layer()
+        .plot_style("B")
+        .is_none_or(|style| style.symbol_column.is_none()));
+    roundtrip(&project);
+}
+
+#[test]
 fn invalid_edits_and_missing_sources_leave_the_whole_layer_unchanged() {
     let (mut p, foreign) = project();
     let books = &p.books;

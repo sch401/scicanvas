@@ -6,6 +6,125 @@ use serde::{Deserialize, Serialize};
 /// 按编号查工作簿：图层里的曲线可以来自其他工作簿。
 pub type BookLookup<'a, 'b> = &'b dyn Fn(u64) -> Option<&'a Book>;
 
+fn normalized(value: f64, lo: f64, hi: f64) -> f64 {
+    if hi <= lo {
+        return 0.5;
+    }
+    let span = hi - lo;
+    let t = if span.is_finite() {
+        (value - lo) / span
+    } else {
+        let scale = lo.abs().max(hi.abs());
+        (value / scale - lo / scale) / (hi / scale - lo / scale)
+    };
+    if t.is_finite() {
+        t.clamp(0.0, 1.0)
+    } else {
+        0.5
+    }
+}
+
+struct PointStyleColumns {
+    color_values: Option<Vec<f64>>,
+    size_values: Option<Vec<f64>>,
+    symbol_values: Option<Vec<f64>>,
+    color_levels: Option<usize>,
+    symbol_levels: Option<usize>,
+    color_range: Option<(f64, f64)>,
+    size_data_range: Option<(f64, f64)>,
+    size_range: [f32; 2],
+    color_map: crate::colormap::ColorMap,
+}
+
+impl PointStyleColumns {
+    fn new(
+        style: Option<&crate::page::CurveStyle>,
+        book: &Book,
+        rows: std::ops::Range<usize>,
+        color_map: crate::colormap::ColorMap,
+    ) -> Self {
+        let column = |key: Option<&String>| key.and_then(|key| book.column(key));
+        let color = column(style.and_then(|style| style.color_column.as_ref()));
+        let size = column(style.and_then(|style| style.size_column.as_ref()));
+        let symbol = column(style.and_then(|style| style.symbol_column.as_ref()));
+        let color_values = color.map(|column| column.data.plot_category_positions().unwrap_or_else(|| column.values()));
+        let size_values = size.map(|column| column.values());
+        let symbol_values = symbol.and_then(|column| column.data.plot_category_positions());
+        let color_levels = color
+            .and_then(|column| column.data.plot_category_levels())
+            .map(|levels| levels.len());
+        let symbol_levels = symbol
+            .and_then(|column| column.data.plot_category_levels())
+            .map(|levels| levels.len());
+        let range = |values: &[f64]| {
+            values
+                .get(rows.clone())
+                .unwrap_or_default()
+                .iter()
+                .copied()
+                .filter(|value| value.is_finite())
+                .fold(None, |range, value| {
+                    Some(range.map_or((value, value), |(lo, hi): (f64, f64)| (lo.min(value), hi.max(value))))
+                })
+        };
+        Self {
+            color_range: color_values.as_deref().and_then(range),
+            size_data_range: size_values.as_deref().and_then(range),
+            size_range: style.and_then(|style| style.size_range).unwrap_or([2.0, 12.0]),
+            color_values,
+            size_values,
+            symbol_values,
+            color_levels,
+            symbol_levels,
+            color_map,
+        }
+    }
+
+    fn at(&self, row: usize) -> crate::PointStyle {
+        let color = self
+            .color_values
+            .as_ref()
+            .and_then(|values| values.get(row).copied())
+            .and_then(|value| {
+                let (lo, hi) = self.color_range?;
+                if !value.is_finite() {
+                    return None;
+                }
+                let t = self.color_levels.map_or_else(
+                    || normalized(value, lo, hi),
+                    |levels| {
+                        if levels <= 1 {
+                            0.5
+                        } else {
+                            normalized(value - 1.0, 0.0, (levels - 1) as f64)
+                        }
+                    },
+                );
+                let (r, g, b) = self.color_map.sample(t);
+                Some([r, g, b])
+            });
+        let size = self
+            .size_values
+            .as_ref()
+            .and_then(|values| values.get(row).copied())
+            .and_then(|value| {
+                let (lo, hi) = self.size_data_range?;
+                value.is_finite().then(|| {
+                    let t = normalized(value, lo, hi);
+                    (self.size_range[0] + (self.size_range[1] - self.size_range[0]) * t as f32).clamp(1.0, 20.0)
+                })
+            });
+        let symbol = self
+            .symbol_values
+            .as_ref()
+            .and_then(|values| values.get(row).copied())
+            .filter(|value| value.is_finite())
+            .and_then(|value| self.symbol_levels.filter(|levels| *levels > 0).map(|_| value))
+            .map(|value| crate::SYMBOLS[(value.round().max(1.0) as usize - 1) % crate::SYMBOLS.len()]);
+        crate::PointStyle { color, size, symbol }
+    }
+}
+
 /// 明确的列引用；列名相同的不同工作簿始终是不同的数据源。
 #[derive(Clone, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize), serde(deny_unknown_fields))]
@@ -480,6 +599,7 @@ impl PlotSpec {
                 Some((a, b)) => (a, b.saturating_add(1).min(n)),
                 None => (0, n),
             };
+            let point_style_columns = PointStyleColumns::new(plot.style.as_ref(), cbook, i0..i1, self.color_map);
             let mut pts = Vec::with_capacity(i1.saturating_sub(i0));
             let error_values = [crate::Role::XError, crate::Role::YError].map(|role| {
                 if mapping.line_only || c.derived_from.is_some() {
@@ -504,6 +624,7 @@ impl PlotSpec {
             let mut errors = Vec::with_capacity(pts.capacity());
             let mut rows = Vec::with_capacity(pts.capacity());
             let mut bases = Vec::with_capacity(pts.capacity());
+            let mut point_styles = Vec::with_capacity(i1.saturating_sub(i0));
             // 分类列做 X：按类别显示顺序放在 1、2、3…
             let categories = xv.and_then(|v| v.data.plot_category_positions());
             for i in i0..i1 {
@@ -518,6 +639,7 @@ impl PlotSpec {
                     pts.push([x, y]);
                     rows.push(i);
                     bases.push(base);
+                    point_styles.push(point_style_columns.at(i));
                     errors.push(error_values.each_ref().map(|values| {
                         values
                             .as_ref()
@@ -539,6 +661,7 @@ impl PlotSpec {
                 key: key.clone(),
                 name,
                 points: pts,
+                point_styles,
                 errors,
                 rows,
                 bases,

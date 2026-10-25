@@ -11,7 +11,12 @@ pub(super) fn draw(
     if super::contains(style.kind, Kind::Bar) {
         let position = crate::presets::recipe(style.kind).position;
         let color = style.color.rgb();
-        for (point, base) in series.points.iter().zip(&series.bases) {
+        for (index, (point, base)) in series.points.iter().zip(&series.bases).enumerate() {
+            let color = series
+                .point_styles
+                .get(index)
+                .and_then(|style| style.color)
+                .map_or(color, |[r, g, b]| (r, g, b));
             let (category, value, category_axis, value_axis) = if ctx.horizontal {
                 (point[1], point[0], &ctx.axes.left_y, &ctx.axes.x)
             } else {

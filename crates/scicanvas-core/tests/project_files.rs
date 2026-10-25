@@ -347,13 +347,13 @@ fn v14_defaults_keep_the_old_right_axis_appearance_and_v15_settings_roundtrip() 
 }
 
 #[test]
-fn v15_projects_default_reference_lines_and_v16_roundtrips_them() {
+fn v15_projects_default_reference_lines_and_v17_roundtrips_them() {
     use scicanvas_core::page::{ReferenceAxis, ReferenceLine};
     let project = Project::sample();
     let mut legacy = serde_json::to_value(&project).unwrap();
     legacy["version"] = 15.into();
     let loaded = project_file::from_json(&legacy.to_string()).unwrap();
-    assert_eq!(loaded.version, 16);
+    assert_eq!(loaded.version, 17);
     assert!(loaded.graphs[0].first_layer().reference_lines.is_empty());
 
     let mut current = loaded;
@@ -365,11 +365,77 @@ fn v15_projects_default_reference_lines_and_v16_roundtrips_them() {
         dashed: false,
     });
     let json = project_file::to_json(&current).unwrap();
-    assert_eq!(serde_json::from_str::<serde_json::Value>(&json).unwrap()["version"], 16);
+    assert_eq!(serde_json::from_str::<serde_json::Value>(&json).unwrap()["version"], 17);
     assert_eq!(project_file::from_json(&json).unwrap(), current);
     assert_eq!(
         project_file::from_scv(&project_file::to_scv(&current).unwrap()).unwrap(),
         current
+    );
+}
+
+#[test]
+fn v16_curve_styles_default_new_point_mappings_and_v17_roundtrips_them() {
+    use scicanvas_core::page::{CurveStyle, SymbolFill};
+    let mut project = Project::sample();
+    let key = project.graphs[0].first_layer().draft().y_keys[0].clone();
+    project.graphs[0].first_layer_mut().set_plot_style(
+        &key,
+        Some(CurveStyle {
+            right_axis: true,
+            color: Some([80, 40, 120]),
+            ..Default::default()
+        }),
+    );
+    let mut v16 = serde_json::to_value(&project).unwrap();
+    v16["version"] = 16.into();
+    fn remove_v17_fields(value: &mut serde_json::Value) {
+        match value {
+            serde_json::Value::Object(fields) => {
+                for name in [
+                    "symbol_fill",
+                    "symbol_border_color",
+                    "symbol_border_width",
+                    "color_column",
+                    "size_column",
+                    "symbol_column",
+                    "size_range",
+                ] {
+                    fields.remove(name);
+                }
+                for child in fields.values_mut() {
+                    remove_v17_fields(child);
+                }
+            }
+            serde_json::Value::Array(values) => values.iter_mut().for_each(remove_v17_fields),
+            _ => {}
+        }
+    }
+    remove_v17_fields(&mut v16);
+    let mut loaded = project_file::from_json(&v16.to_string()).unwrap();
+    assert_eq!(loaded.version, 17);
+    let style = loaded.graphs[0].first_layer().plot_style(&key).unwrap();
+    assert_eq!(style.color, Some([80, 40, 120]));
+    assert!(style.color_column.is_none() && style.symbol_border_color.is_none());
+
+    loaded.graphs[0].first_layer_mut().set_plot_style(
+        &key,
+        Some(CurveStyle {
+            right_axis: true,
+            color: Some([80, 40, 120]),
+            color_column: Some("C".into()),
+            size_column: Some("C".into()),
+            size_range: Some([2.0, 11.0]),
+            symbol_fill: Some(SymbolFill::Hollow),
+            symbol_border_color: Some([10, 20, 30]),
+            symbol_border_width: Some(0.7),
+            ..Default::default()
+        }),
+    );
+    let json = project_file::to_json(&loaded).unwrap();
+    assert_eq!(project_file::from_json(&json).unwrap(), loaded);
+    assert_eq!(
+        project_file::from_scv(&project_file::to_scv(&loaded).unwrap()).unwrap(),
+        loaded
     );
 }
 

@@ -3,7 +3,7 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-pub const PROJECT_VERSION: u32 = 16;
+pub const PROJECT_VERSION: u32 = 17;
 pub const GRAPH_TEMPLATE_VERSION: u32 = 1;
 
 /// 列的绘图角色，对应 Origin 里的 X / Y / 忽略。
@@ -577,12 +577,20 @@ pub const SYMBOLS: [Symbol; 8] = [
     Symbol::Hexagon,
 ];
 
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PointStyle {
+    pub color: Option<[u8; 3]>,
+    pub size: Option<f32>,
+    pub symbol: Option<Symbol>,
+}
+
 /// 一条曲线的数据。
 #[derive(Clone, Debug, PartialEq)]
 pub struct Series {
     pub key: String,
     pub name: String,
     pub points: Vec<[f64; 2]>,
+    pub point_styles: Vec<PointStyle>,
     /// 与 points 逐点对齐；无效或缺失的误差为 None。
     pub errors: Vec<[Option<f64>; 2]>,
     /// 原始行用于堆叠对齐；均值变换后按 X 对齐。
