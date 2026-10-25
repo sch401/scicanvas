@@ -669,11 +669,13 @@ impl SciApp {
                 } else {
                     c.label.to_string()
                 };
+                // ponytail: 迁移期命令可能多建一次快照，旧调用迁完后移除外层 begin。
                 if c.modifies {
                     self.begin_edit(&label);
                 }
                 (c.run)(self);
-                if c.modifies {
+                // 已迁移的操作自行提交或回滚，旧命令仍由外层收尾。
+                if c.modifies && self.history.is_pending() {
                     self.history.changed();
                     self.finish_edit();
                 }
@@ -684,7 +686,6 @@ impl SciApp {
 
     /// 一次性项目编辑：Some 返回结果，None 取消，Err 回滚并显示原因。
     /// 实际改变才重算并记一步；重算诊断继续沿用既有 finish_edit 规则。
-    #[allow(dead_code)] // 3.1 先提供入口和回归，现有命令在 3.2 分批迁移。
     fn edit<T>(&mut self, label: &str, f: impl FnOnce(&mut Project) -> Result<Option<T>, String>) -> Option<T> {
         self.finish_edit();
         self.history_group = None;
@@ -703,6 +704,23 @@ impl SciApp {
                 None
             }
         }
+    }
+
+    /// 连续编辑只接收已验证的实际修改；同组复用快照，换组或离散操作分步。
+    /// 校验留在原草稿/局部编辑视图中，避免每帧复制整个项目来处理失败。
+    fn edit_grouped(&mut self, label: &str, group: Option<egui::Id>, f: impl FnOnce(&mut Project)) {
+        if self.history.is_pending() && (group.is_none() || self.last_history_group != group) {
+            self.finish_edit();
+        }
+        if !self.history.is_pending() {
+            self.begin_edit(label);
+        } else {
+            self.pending_repaint = true;
+        }
+        f(&mut self.project);
+        self.history.changed();
+        self.history_group = group;
+        self.finish_frame_edit(group);
     }
 
     fn begin_edit(&mut self, label: &str) {
@@ -1040,11 +1058,10 @@ impl SciApp {
         if layer == &edit.draft {
             return Ok(());
         }
-        self.finish_edit();
-        self.begin_edit("图层内容");
-        self.project.graph_mut(edit.graph).unwrap().page.layers_mut()[edit.index] = edit.draft.clone();
-        self.history.changed();
-        self.finish_edit();
+        self.edit("图层内容", |project| {
+            project.graph_mut(edit.graph).unwrap().page.layers_mut()[edit.index] = edit.draft.clone();
+            Ok(Some(()))
+        });
         if let Some(selected) = self.analysis_curves.get_mut(&(edit.graph, edit.index)) {
             selected.retain(|reference| edit.draft.plot(reference, &|id| self.project.book(id)).is_some());
         }
@@ -2748,19 +2765,20 @@ impl SciApp {
 
     /// 从图层移除一条曲线（一步撤销）。
     pub(crate) fn remove_curve(&mut self, gid: u64, layer: usize, key: &str) {
-        self.begin_edit("移除曲线");
-        if let Some(l) = self
+        let present = self
             .project
-            .graph_mut(gid)
-            .and_then(|g| g.page.layers_mut().get_mut(layer))
-        {
-            if l.plot_keys(true).iter().any(|k| k == key) {
-                l.remove_curve(key);
-                self.history.changed();
-                self.status = "已移除曲线".into();
-            }
+            .graph(gid)
+            .and_then(|g| g.page.layers().get(layer))
+            .is_some_and(|l| l.plot_keys(true).iter().any(|k| k == key));
+        if !present {
+            self.finish_edit();
+            return;
         }
-        self.finish_edit();
+        self.status = "已移除曲线".into();
+        self.edit("移除曲线", |project| {
+            project.graph_mut(gid).unwrap().page.layers_mut()[layer].remove_curve(key);
+            Ok(Some(()))
+        });
     }
 
     fn object_window(&mut self, ctx: &egui::Context) {
@@ -2785,9 +2803,9 @@ impl SciApp {
         );
         if self.project.graph(edit.graph) != Some(&before) {
             let after = std::mem::replace(self.project.graph_mut(edit.graph).unwrap(), before);
-            self.begin_edit("编辑图形对象");
-            *self.project.graph_mut(edit.graph).unwrap() = after;
-            self.history.changed();
+            self.edit_grouped("编辑图形对象", self.history_group, |project| {
+                *project.graph_mut(edit.graph).unwrap() = after;
+            });
             ctx.request_repaint();
         }
         self.object_editor = open.then_some(edit);

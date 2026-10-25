@@ -351,3 +351,151 @@ fn unified_edit_closes_previous_continuous_edits_without_merging_or_undoing_them
         assert!(app.history.undo_label().is_none());
     }
 }
+
+#[test]
+fn grouped_edit_recalculates_live_and_keeps_one_snapshot_until_the_group_ends() {
+    let mut app = app();
+    app.project.set_column_formula(1, "C", "B * 2", true).unwrap();
+    let before = app.project.clone();
+    let group = Some(egui::Id::new("数值连续编辑"));
+    for value in [100, 110, 120] {
+        app.edit_grouped("连续源数据", group, |project| {
+            project.books[0].columns[1].set(0, value.to_string())
+        });
+        assert_eq!(
+            app.project.books[0].column("C").unwrap().data.f64_at(0),
+            Some((value * 2) as f64)
+        );
+        assert!(app.history.is_pending());
+        assert_eq!(app.history.undo_label(), Some("连续源数据"));
+        app.finish_frame_edit(group);
+    }
+    app.finish_edit();
+    roundtrip(&mut app, &before);
+    app.undo();
+    assert!(app.history.undo_label().is_none());
+}
+
+#[test]
+fn grouped_edit_switches_groups_and_separates_discrete_changes() {
+    let mut app = app();
+    let mut states = vec![app.project.clone()];
+    for (id, name) in [
+        (Some(egui::Id::new("a")), "first"),
+        (Some(egui::Id::new("b")), "second"),
+        (None, "third"),
+    ] {
+        app.edit_grouped(name, id, |project| project.books[0].name = name.into());
+        states.push(app.project.clone());
+    }
+    assert!(!app.history.is_pending());
+    for before in states[..3].iter().rev() {
+        app.undo();
+        assert_eq!(&app.project, before);
+    }
+    assert!(app.history.undo_label().is_none());
+    for after in states.iter().skip(1) {
+        app.redo();
+        assert_eq!(&app.project, after);
+    }
+}
+
+#[test]
+fn grouped_edit_returning_to_start_preserves_redo_and_discrete_failure_keeps_the_group() {
+    let mut app = app();
+    app.run_command("book.new");
+    app.undo();
+    let before = app.project.clone();
+    let redo = app.history.redo_label().unwrap().to_string();
+    let group = Some(egui::Id::new("name"));
+    app.edit_grouped("名称", group, |project| project.books[0].name = "temporary".into());
+    app.edit_grouped("名称", group, |project| {
+        project.books[0].name = before.books[0].name.clone()
+    });
+    app.finish_edit();
+    assert_eq!(app.project, before);
+    assert!(app.history.undo_label().is_none());
+    assert_eq!(app.history.redo_label(), Some(redo.as_str()));
+    app.edit_grouped("有效名称", group, |project| project.books[0].name = "kept".into());
+    let kept = app.project.clone();
+    assert_eq!(
+        app.edit::<()>("失败", |project| {
+            project.new_book();
+            Err("失败".into())
+        }),
+        None
+    );
+    assert_eq!(app.project, kept);
+    assert_eq!(app.history.undo_label(), Some("有效名称"));
+    app.undo();
+    assert_eq!(app.project, before);
+}
+
+#[test]
+fn migrated_delete_command_uses_one_step_and_retains_formula_diagnostics() {
+    let mut app = app();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["B".into()]);
+    app.project.set_column_formula(1, "C", "B * 2", true).unwrap();
+    let before = app.project.clone();
+    app.run_command("col.delete");
+    assert_eq!(app.history.undo_label(), Some("删除列 B"));
+    assert!(!app.history.is_pending());
+    assert!(app.status.starts_with("公式重算出错："));
+    roundtrip(&mut app, &before);
+    app.undo();
+    assert!(app.history.undo_label().is_none());
+    app.run_command("book.new");
+    assert!(app.history.undo_label().is_some());
+}
+
+#[test]
+fn migrated_properties_group_real_typing_and_separate_focus_changes() {
+    let mut app = app();
+    app.props_for = Some(2);
+    app.project.graphs[0].first_layer_mut().title = "GroupingTitle".into();
+    app.project.graphs[0].first_layer_mut().x_title = "GroupingAxis".into();
+    let before = app.project.clone();
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    ctx.style_mut(|s| s.animation_time = 0.0);
+    let mut harness = crate::test_ui::Harness::new(
+        ctx.clone(),
+        Some(egui::vec2(1600.0, 1100.0)),
+        |app: &mut SciApp, ctx: &egui::Context| app.ui_frame(ctx),
+    )
+    .with_step(0.02);
+    harness.frame(&mut app, vec![]);
+    harness.frame(&mut app, vec![]);
+    let output = harness.frame(&mut app, vec![]);
+    let at = |output: &egui::FullOutput, text: &str| {
+        let rect = ctx.memory(|m| m.area_rect(egui::Id::new("scicanvas-props"))).unwrap();
+        crate::test_ui::text_positions(output, text)
+            .into_iter()
+            .rfind(|pos| rect.contains(*pos))
+            .unwrap()
+            + egui::vec2(5.0, 5.0)
+    };
+    harness.click(&mut app, at(&output, "GroupingTitle"));
+    harness.frame(&mut app, vec![egui::Event::Text("a".into())]);
+    harness.frame(&mut app, vec![egui::Event::Text("b".into())]);
+    let first = app.project.clone();
+    assert_ne!(first, before);
+    assert!(app.history.is_pending());
+    let output = harness.frame(&mut app, vec![]);
+    harness.click(&mut app, at(&output, "GroupingAxis"));
+    harness.frame(&mut app, vec![egui::Event::Text("x".into())]);
+    let second = app.project.clone();
+    assert_ne!(second, first);
+    app.finish_edit();
+    app.undo();
+    assert_eq!(app.project, first);
+    app.undo();
+    assert_eq!(app.project, before);
+    assert!(app.history.undo_label().is_none());
+    app.redo();
+    app.redo();
+    assert_eq!(app.project, second);
+    let saved = scicanvas_core::project_file::to_scv(&app.project).unwrap();
+    assert_eq!(scicanvas_core::project_file::from_scv(&saved).unwrap(), app.project);
+}

@@ -65,12 +65,10 @@ impl SciApp {
             });
         if self.project.graph(gid).unwrap() != &graph_before {
             ctx.request_repaint();
-            if !self.history.is_pending() {
-                let after = std::mem::replace(self.project.graph_mut(gid).unwrap(), graph_before);
-                self.begin_edit("绘图属性");
-                *self.project.graph_mut(gid).unwrap() = after;
-            }
-            self.history.changed();
+            let after = std::mem::replace(self.project.graph_mut(gid).unwrap(), graph_before);
+            self.edit_grouped("绘图属性", self.history_group, |project| {
+                *project.graph_mut(gid).unwrap() = after;
+            });
         }
         if props_layer != self.layer_index(gid) {
             self.select_layer(gid, props_layer);

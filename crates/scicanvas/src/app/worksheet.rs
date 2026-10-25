@@ -227,10 +227,13 @@ impl SciApp {
             self.status = "请先单击列标题选中要删除的列".into();
             return;
         }
-        self.project.delete_columns(bid, &sel);
+        self.status = format!("已删除 {} 列", sel.join(", "));
+        self.edit(&format!("删除列 {}", sel.join(", ")), |project| {
+            project.delete_columns(bid, &sel);
+            Ok(Some(()))
+        });
         self.selection.remove(&bid);
         self.sheets.remove(&bid);
-        self.status = format!("已删除 {} 列", sel.join(", "));
     }
 
     pub(super) fn track_headers(&mut self, id: u64, edits: &[(usize, usize, String, String)]) {
