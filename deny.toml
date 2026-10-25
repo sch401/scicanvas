@@ -21,11 +21,6 @@ exceptions = [
     { name = "clipboard-win", version = "=5.4.3", allow = ["BSL-1.0"] },
     { name = "error-code", version = "=3.4.0", allow = ["BSL-1.0"] },
     { name = "epaint_default_fonts", version = "=0.29.1", allow = ["OFL-1.1", "LicenseRef-UFL-1.0"] },
-    { name = "resvg", version = "=0.37.0", allow = ["MPL-2.0"] },
-    { name = "usvg", version = "=0.37.0", allow = ["MPL-2.0"] },
-    { name = "usvg-parser", version = "=0.37.0", allow = ["MPL-2.0"] },
-    { name = "usvg-tree", version = "=0.37.0", allow = ["MPL-2.0"] },
-    { name = "usvg-text-layout", version = "=0.37.0", allow = ["MPL-2.0"] },
 ]
 
 [bans]
