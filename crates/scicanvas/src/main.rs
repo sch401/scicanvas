@@ -33,5 +33,15 @@ fn main() -> Result<(), eframe::Error> {
             .with_decorations(false),
         ..Default::default()
     };
+    #[cfg(target_os = "windows")]
+    let options = eframe::NativeOptions {
+        renderer: eframe::Renderer::Wgpu,
+        wgpu_options: eframe::egui_wgpu::WgpuConfiguration {
+            present_mode: eframe::wgpu::PresentMode::Fifo,
+            desired_maximum_frame_latency: Some(1),
+            ..Default::default()
+        },
+        ..options
+    };
     eframe::run_native("SciCanvas", options, Box::new(|cc| Ok(Box::new(app::SciApp::new(cc)))))
 }

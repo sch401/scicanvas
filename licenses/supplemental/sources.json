@@ -82,5 +82,134 @@
     "url": "https://raw.githubusercontent.com/scipy/scipy/v1.17.1/LICENSE.txt",
     "sha256": "221e59f5e910fd7f94e44f0dac77436a11338c285c6346232e4a850a50da0e94",
     "group": "scipy-1.17.1"
+  },
+  {
+    "path": "licenses/supplemental/hexf-parse/DECLARATION.toml",
+    "url": "https://raw.githubusercontent.com/lifthrasiir/hexf/4225763d744183d720f575ae96d04161b4d08ea0/parse/Cargo.toml",
+    "sha256": "4a56dbdbc12054fd33b7a2634a45cbbe6fe12f5e6f4081002cbfa527f7220c70",
+    "group": "hexf-parse"
+  },
+  {
+    "path": "licenses/supplemental/hexf-parse/LICENSE-CC0.txt",
+    "url": "https://raw.githubusercontent.com/spdx/license-list-data/v3.26.0/text/CC0-1.0.txt",
+    "sha256": "a2010f343487d3f7618affe54f789f5487602331c0a8d03f49e9a7c547cf0499",
+    "group": "hexf-parse",
+    "crate": "hexf-parse-0.2.1",
+    "revision": "4225763d744183d720f575ae96d04161b4d08ea0",
+    "license": "CC0-1.0"
+  },
+  {
+    "path": "licenses/supplemental/codespan-reporting/LICENSE",
+    "url": "https://raw.githubusercontent.com/brendanzab/codespan/fd389a13f5bb6d625b71e2e4694b26e127f393f9/LICENSE",
+    "sha256": "c71d239df91726fc519c6eb72d318ec65820627232b2f796219e87dcf35d0ab4",
+    "group": "codespan-reporting"
+  },
+  {
+    "path": "licenses/supplemental/com_macros/LICENSE",
+    "url": "https://raw.githubusercontent.com/microsoft/com-rs/5f6b2d444be909e45c1fc9fa1862777ce0bde0b5/LICENSE",
+    "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383",
+    "group": "com_macros"
+  },
+  {
+    "path": "licenses/supplemental/naga/LICENSE.APACHE",
+    "url": "https://raw.githubusercontent.com/gfx-rs/wgpu/5c5c8b1d4d2d965fbd10b290ee26f4e7eb158d7c/LICENSE.APACHE",
+    "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9",
+    "group": "naga"
+  },
+  {
+    "path": "licenses/supplemental/naga/LICENSE.MIT",
+    "url": "https://raw.githubusercontent.com/gfx-rs/wgpu/5c5c8b1d4d2d965fbd10b290ee26f4e7eb158d7c/LICENSE.MIT",
+    "sha256": "c7fea58d1cfe49634cd92e54fc10a9d871f4b275321a4cd8c09e449122caaeb4",
+    "group": "naga"
+  },
+  {
+    "path": "licenses/supplemental/profiling/LICENSE-APACHE",
+    "url": "https://raw.githubusercontent.com/aclysma/profiling/8271551172eb6fa4cba47369aedd93790c623df9/LICENSE-APACHE",
+    "sha256": "10d30a673cd5e9349bdc02aeb48f14b3386d27d0da32df8f0a555d4aa16aa551",
+    "group": "profiling"
+  },
+  {
+    "path": "licenses/supplemental/profiling/LICENSE-MIT",
+    "url": "https://raw.githubusercontent.com/aclysma/profiling/8271551172eb6fa4cba47369aedd93790c623df9/LICENSE-MIT",
+    "sha256": "c8167fdeeed46d3f244d3f85c5bf998ce889343691c32be2c61a8bc4b5c08333",
+    "group": "profiling"
+  },
+  {
+    "path": "licenses/supplemental/spirv/LICENSE",
+    "url": "https://raw.githubusercontent.com/gfx-rs/rspirv/e91a5debc10c395b36db7721dfff6326d697a1e2/LICENSE",
+    "sha256": "cfc7749b96f63bd31c3c42b5c471bf756814053e847c10f3eb003417bc523d30",
+    "group": "spirv"
+  },
+  {
+    "path": "licenses/supplemental/gpu-alloc/COPYING",
+    "url": "https://raw.githubusercontent.com/zakarumych/gpu-alloc/61020bdcb4eb04fca6bbf748aeb9570e859236e0/COPYING",
+    "sha256": "12121dfa588677007848ab922a45a1e3248868f6ff063598fceb3141d7897314",
+    "group": "gpu-alloc"
+  },
+  {
+    "path": "licenses/supplemental/gpu-alloc/license/APACHE",
+    "url": "https://raw.githubusercontent.com/zakarumych/gpu-alloc/61020bdcb4eb04fca6bbf748aeb9570e859236e0/license/APACHE",
+    "sha256": "58317934bf818c379e4215fad7e8dfb6812edff32c9557b8b039343f69711e08",
+    "group": "gpu-alloc"
+  },
+  {
+    "path": "licenses/supplemental/gpu-alloc/license/MIT",
+    "url": "https://raw.githubusercontent.com/zakarumych/gpu-alloc/61020bdcb4eb04fca6bbf748aeb9570e859236e0/license/MIT",
+    "sha256": "f774bf68151714985324d90adbd59e8f271b7ba518608d871b6ba16464692879",
+    "group": "gpu-alloc"
+  },
+  {
+    "path": "licenses/supplemental/gpu-alloc-types/COPYING",
+    "url": "https://raw.githubusercontent.com/zakarumych/gpu-alloc/7ddd1fe576fcfc503347eb97e476a47581479f22/COPYING",
+    "sha256": "12121dfa588677007848ab922a45a1e3248868f6ff063598fceb3141d7897314",
+    "group": "gpu-alloc-types"
+  },
+  {
+    "path": "licenses/supplemental/gpu-alloc-types/license/APACHE",
+    "url": "https://raw.githubusercontent.com/zakarumych/gpu-alloc/7ddd1fe576fcfc503347eb97e476a47581479f22/license/APACHE",
+    "sha256": "58317934bf818c379e4215fad7e8dfb6812edff32c9557b8b039343f69711e08",
+    "group": "gpu-alloc-types"
+  },
+  {
+    "path": "licenses/supplemental/gpu-alloc-types/license/MIT",
+    "url": "https://raw.githubusercontent.com/zakarumych/gpu-alloc/7ddd1fe576fcfc503347eb97e476a47581479f22/license/MIT",
+    "sha256": "f774bf68151714985324d90adbd59e8f271b7ba518608d871b6ba16464692879",
+    "group": "gpu-alloc-types"
+  },
+  {
+    "path": "licenses/supplemental/gpu-descriptor/COPYING",
+    "url": "https://raw.githubusercontent.com/zakarumych/gpu-descriptor/bb28b4e55b742e0ea3e7a0968e7ee6287ba0e06a/COPYING",
+    "sha256": "f72143f7e9d9fb8bd336b139fa22f825a299591c29f2f7338c5566347b137613",
+    "group": "gpu-descriptor"
+  },
+  {
+    "path": "licenses/supplemental/gpu-descriptor/license/APACHE",
+    "url": "https://raw.githubusercontent.com/zakarumych/gpu-descriptor/bb28b4e55b742e0ea3e7a0968e7ee6287ba0e06a/license/APACHE",
+    "sha256": "6bec8c944a6d4251be50ac86bb4ca360bcce5aea472505dee2800e160bf1cdbf",
+    "group": "gpu-descriptor"
+  },
+  {
+    "path": "licenses/supplemental/gpu-descriptor/license/MIT",
+    "url": "https://raw.githubusercontent.com/zakarumych/gpu-descriptor/bb28b4e55b742e0ea3e7a0968e7ee6287ba0e06a/license/MIT",
+    "sha256": "5226e27d5fbc683db56c52853cdb9d15b69abadb525a60f95c862c2dbd77cdc8",
+    "group": "gpu-descriptor"
+  },
+  {
+    "path": "licenses/supplemental/gpu-descriptor-types/COPYING",
+    "url": "https://raw.githubusercontent.com/zakarumych/gpu-descriptor/9f2fb9546591322e7b77ee1e79385e01effd85e4/COPYING",
+    "sha256": "f72143f7e9d9fb8bd336b139fa22f825a299591c29f2f7338c5566347b137613",
+    "group": "gpu-descriptor-types"
+  },
+  {
+    "path": "licenses/supplemental/gpu-descriptor-types/license/APACHE",
+    "url": "https://raw.githubusercontent.com/zakarumych/gpu-descriptor/9f2fb9546591322e7b77ee1e79385e01effd85e4/license/APACHE",
+    "sha256": "6bec8c944a6d4251be50ac86bb4ca360bcce5aea472505dee2800e160bf1cdbf",
+    "group": "gpu-descriptor-types"
+  },
+  {
+    "path": "licenses/supplemental/gpu-descriptor-types/license/MIT",
+    "url": "https://raw.githubusercontent.com/zakarumych/gpu-descriptor/9f2fb9546591322e7b77ee1e79385e01effd85e4/license/MIT",
+    "sha256": "5226e27d5fbc683db56c52853cdb9d15b69abadb525a60f95c862c2dbd77cdc8",
+    "group": "gpu-descriptor-types"
   }
 ]

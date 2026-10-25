@@ -125,6 +125,63 @@ fn cached_layout(
     scene
 }
 
+/// 图形绘制指令缓存：窗口移动只平移已有矢量图元，设置/数据/视图或显示尺寸变化才重新生成。
+#[derive(Clone)]
+struct CachedPaint {
+    scene: std::sync::Arc<Scene>,
+    size: egui::Vec2,
+    pixels_per_point: f32,
+    shapes: std::sync::Arc<Vec<egui::epaint::ClippedShape>>,
+}
+
+fn cached_paint_shapes(
+    ui: &mut egui::Ui,
+    id: egui::Id,
+    rect: Rect,
+    scene: &std::sync::Arc<Scene>,
+) -> std::sync::Arc<Vec<egui::epaint::ClippedShape>> {
+    let key = id.with("paint-cache");
+    let pixels_per_point = ui.ctx().pixels_per_point();
+    if let Some(cache) = ui.data(|data| data.get_temp::<CachedPaint>(key)) {
+        if std::sync::Arc::ptr_eq(&cache.scene, scene)
+            && (cache.size - rect.size()).abs().max_elem() <= 0.001
+            && cache.pixels_per_point == pixels_per_point
+        {
+            return cache.shapes;
+        }
+    }
+    let local = Rect::from_min_size(Pos2::ZERO, rect.size());
+    let layer = egui::LayerId::new(egui::Order::Background, id.with("paint-source"));
+    let source = egui::Painter::new(ui.ctx().clone(), layer, local);
+    paint_with_painter(source, local, scene);
+    let shapes = ui.ctx().graphics_mut(|graphics| {
+        let list = std::mem::take(graphics.entry(layer));
+        std::sync::Arc::new(list.all_entries().cloned().collect::<Vec<_>>())
+    });
+    ui.data_mut(|data| {
+        data.insert_temp(
+            key,
+            CachedPaint {
+                scene: scene.clone(),
+                size: rect.size(),
+                pixels_per_point,
+                shapes: shapes.clone(),
+            },
+        )
+    });
+    shapes
+}
+
+fn paint_cached(ui: &mut egui::Ui, id: egui::Id, rect: Rect, scene: &std::sync::Arc<Scene>) {
+    for cached in cached_paint_shapes(ui, id, rect, scene).iter() {
+        let mut shape = cached.shape.clone();
+        shape.translate(rect.min.to_vec2());
+        ui.painter()
+            .with_clip_rect(cached.clip_rect.translate(rect.min.to_vec2()))
+            .add(shape);
+    }
+}
+
 fn axis_key(g: &Layer) -> [f64; 8] {
     let b = |v: bool| if v { 1.0 } else { 0.0 };
     [
@@ -564,7 +621,7 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize, ob
         block_pan: object.block_pan,
     };
     let sc = update_saved_view(ui, id, g, project, sc, &mut saved, input);
-    paint(ui, rect, &sc);
+    paint_cached(ui, id, rect, &sc);
     if let Some(layout) = object.selected.and_then(|t| sc.objects.iter().find(|o| o.target == t)) {
         let [x, y, w, h] = layout.bounds;
         let selection = Rect::from_min_size(
@@ -680,11 +737,13 @@ fn update_cursor(
 
 /// 把图元画到 rect 里。
 pub fn paint(ui: &egui::Ui, rect: Rect, sc: &Scene) {
+    paint_with_painter(ui.painter_at(rect), rect, sc);
+}
+
+fn paint_with_painter(free: egui::Painter, rect: Rect, sc: &Scene) {
     let transform = page_transform(rect, [sc.w, sc.h]);
     let scale = transform.scaling;
     let at = |x: f64, y: f64| transform * pos2(x as f32, y as f32);
-    let free = ui.painter_at(rect);
-
     for it in &sc.items {
         let p = match it.clip {
             Some([x, y, w, h]) => free.with_clip_rect(
@@ -930,6 +989,131 @@ mod tests {
         );
         assert!(matches!(deleted.action, Some(ObjectAction::Delete(ObjectTarget::Text(t))) if t == id));
         assert_eq!(sc.plot, scene::layout_page(&p.graphs[0], &p, &[]).plot);
+    }
+
+    #[test]
+    fn cached_paint_reuses_moves_and_matches_direct_vector_output() {
+        use std::sync::Arc;
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        let p = Project::sample();
+        let scene = Arc::new(scene::layout_page(&p.graphs[0], &p, &[]));
+        let id = egui::Id::new("paint-regression");
+        let render = |rect: Rect, cached: bool, scene: &Arc<Scene>| {
+            let out = ctx.run(
+                egui::RawInput {
+                    screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1000.0, 800.0))),
+                    ..Default::default()
+                },
+                |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        if cached {
+                            paint_cached(ui, id, rect, scene);
+                        } else {
+                            paint(ui, rect, scene);
+                        }
+                    });
+                },
+            );
+            ctx.tessellate(out.shapes, out.pixels_per_point)
+        };
+        let first = Rect::from_min_size(pos2(20.0, 25.0), vec2(400.0, 300.0));
+        render(first, false, &scene);
+        render(first, true, &scene);
+        let initial = ctx.data(|d| d.get_temp::<CachedPaint>(id.with("paint-cache"))).unwrap();
+        for origin in [pos2(120.25, 90.5), pos2(-100.0, 75.0)] {
+            let rect = Rect::from_min_size(origin, first.size());
+            let cached = render(rect, true, &scene);
+            let cache = ctx.data(|d| d.get_temp::<CachedPaint>(id.with("paint-cache"))).unwrap();
+            assert!(
+                Arc::ptr_eq(&initial.shapes, &cache.shapes),
+                "moving only reuses vector instructions"
+            );
+            let direct = render(rect, false, &scene);
+            assert_eq!(cached.len(), direct.len());
+            for (a, b) in cached.iter().zip(&direct) {
+                assert!((a.clip_rect.min - b.clip_rect.min).length() < 0.001);
+                assert!((a.clip_rect.max - b.clip_rect.max).length() < 0.001);
+                let (egui::epaint::Primitive::Mesh(a), egui::epaint::Primitive::Mesh(b)) = (&a.primitive, &b.primitive)
+                else {
+                    panic!("graph uses vectors")
+                };
+                assert_eq!(a.texture_id, b.texture_id);
+                assert_eq!(a.indices, b.indices);
+                assert_eq!(a.vertices.len(), b.vertices.len());
+                for (a, b) in a.vertices.iter().zip(&b.vertices) {
+                    assert!(a.pos.distance(b.pos) < 0.001);
+                    assert_eq!(a.color, b.color);
+                    assert_eq!(a.uv, b.uv);
+                }
+            }
+        }
+        let resized = Rect::from_min_size(first.min, vec2(480.0, 360.0));
+        render(resized, true, &scene);
+        let cache = ctx.data(|d| d.get_temp::<CachedPaint>(id.with("paint-cache"))).unwrap();
+        assert!(!Arc::ptr_eq(&initial.shapes, &cache.shapes));
+        ctx.set_pixels_per_point(1.5);
+        render(resized, true, &scene);
+        let dpi = ctx.data(|d| d.get_temp::<CachedPaint>(id.with("paint-cache"))).unwrap();
+        assert!(!Arc::ptr_eq(&cache.shapes, &dpi.shapes));
+        let changed = Arc::new((*scene).clone());
+        render(resized, true, &changed);
+        let cache = ctx.data(|d| d.get_temp::<CachedPaint>(id.with("paint-cache"))).unwrap();
+        assert!(
+            !Arc::ptr_eq(&cache.shapes, &dpi.shapes),
+            "updated content rebuilds paint"
+        );
+    }
+
+    #[test]
+    fn cached_plot_tracks_color_size_and_shape_mapping_data_changes() {
+        use scicanvas_core::{page::CurveStyle, ColumnData, Role};
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        let mut p = Project::sample();
+        let book = &mut p.books[0];
+        let rows = book.nrows();
+        let mut keys = Vec::new();
+        for _ in 0..3 {
+            keys.push(book.push_column(Role::Ignore));
+            book.columns.last_mut().unwrap().data = (0..rows).map(|row| row.to_string()).collect();
+        }
+        book.columns.last_mut().unwrap().data = ColumnData::Category {
+            codes: (0..rows).map(|row| (row % 2) as u32).collect(),
+            levels: vec!["first".into(), "second".into()],
+            ordered: true,
+        };
+        p.graphs[0].first_layer_mut().set_plot_style(
+            "B",
+            Some(CurveStyle {
+                color_column: Some(keys[0].clone()),
+                size_column: Some(keys[1].clone()),
+                symbol_column: Some(keys[2].clone()),
+                ..Default::default()
+            }),
+        );
+        let render = |p: &Project| {
+            let mut result = None;
+            let _ = ctx.run(egui::RawInput::default(), |ctx| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    result = Some(cached_layout(ui, egui::Id::new("mapped-data"), &p.graphs[0], p, vec![]));
+                });
+            });
+            result.unwrap()
+        };
+        let mut before = render(&p);
+        for (key, value) in keys.iter().zip(["200", "100", "second"]) {
+            p.books[0]
+                .columns
+                .iter_mut()
+                .find(|col| col.key == *key)
+                .unwrap()
+                .set(0, value.into());
+            let actual = render(&p);
+            assert!(!std::sync::Arc::ptr_eq(&before, &actual));
+            assert_eq!(*actual, scene::layout_page(&p.graphs[0], &p, &[]));
+            before = actual;
+        }
     }
 
     #[test]

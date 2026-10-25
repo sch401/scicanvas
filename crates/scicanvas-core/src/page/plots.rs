@@ -560,6 +560,13 @@ impl Layer {
             || (local && self.labels.column.as_deref() == Some(key))
             || self.spec.plots.iter().any(|p| {
                 (p.active && matches(&p.source))
+                    || (p.active
+                        && p.source.book.or(self.book_id) == Some(book.id)
+                        && p.style.as_ref().is_some_and(|style| {
+                            [&style.color_column, &style.size_column, &style.symbol_column]
+                                .into_iter()
+                                .any(|column| column.as_deref() == Some(key))
+                        }))
                     || p.x.as_ref().is_some_and(matches)
                     || p.base.as_ref().is_some_and(matches)
                     || (!local

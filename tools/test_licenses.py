@@ -44,6 +44,25 @@ class LicenseTests(unittest.TestCase):
         font = struct.pack(">I4H", 0x10000, 1, 0, 0, 0) + struct.pack(">4sIII", b"name", 0, 28, len(table)) + table
         self.assertEqual(font_names(font), [(0, text)])
 
+    def test_windows_renderer_has_complete_cc0_and_upstream_declaration(self):
+        index = json.loads((ROOT / "licenses/THIRD_PARTY_INDEX.json").read_text(encoding="utf-8"))
+        packages = {p["name"]: p for p in index["packages"]}
+        self.assertIn("egui-wgpu", packages)
+        self.assertIn("wgpu", packages)
+        package = packages["hexf-parse"]
+        self.assertEqual(package["version"], "0.2.1")
+        self.assertEqual(package["license"], "CC0-1.0")
+        files = {Path(f["path"]).name: ROOT / f["path"] for f in package["files"]}
+        declaration = tomllib.loads(files["DECLARATION.toml"].read_text(encoding="utf-8"))
+        self.assertEqual(declaration["package"]["license"], "CC0-1.0")
+        text = files["LICENSE-CC0.txt"].read_text(encoding="utf-8")
+        self.assertIn("CC0 1.0 Universal", text)
+        self.assertIn("4. Limitations and Disclaimers.", text)
+        sources = json.loads((ROOT / "licenses/supplemental/sources.json").read_text(encoding="utf-8"))
+        source = next(s for s in sources if s.get("crate") == "hexf-parse-0.2.1")
+        self.assertEqual(source["revision"], package["revision"])
+        self.assertEqual(hashlib.sha256(files["LICENSE-CC0.txt"].read_bytes()).hexdigest(), source["sha256"])
+
     def test_png_pdf_and_icon_renderers_share_single_generation(self):
         index = json.loads((ROOT / "licenses/THIRD_PARTY_INDEX.json").read_text(encoding="utf-8"))
         packages = {(p["name"], p["version"]) for p in index["packages"]}

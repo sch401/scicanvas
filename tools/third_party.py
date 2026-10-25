@@ -81,7 +81,10 @@ def outputs():
                 if (directory / relative).read_bytes() != data:
                     raise ValueError(f"Modified attribution file: {key}/{relative}")
                 selected[relative] = data
-        candidates = [r for r in supplements if revision and f"/{revision}/" in r["url"]]
+        candidates = [r for r in supplements if revision and (
+            f"/{revision}/" in r["url"]
+            or (r.get("crate") == key and r.get("revision") == revision and r.get("license") == p["license"])
+        )]
         # A nested font license does not replace the containing crate's code license.
         if not candidates and not any(re.search(r"license|licence|copying|unlicense", f, re.I) for f in selected):
             raise ValueError(f"Missing original license text: {key}; fetch its exact upstream revision into licenses/supplemental")
