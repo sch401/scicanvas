@@ -140,10 +140,14 @@ crates/
     nlfit/guess.rs  按类别计算自动初值、共享初值计算与位模式回归
     csv.rs          CSV 解析、编码识别、Excel 粘贴
     ticks.rs        坐标轴范围与刻度（1/2/5 步长、对数轴、刻度标签）
-    scene.rs        图形版面：坐标框、刻度、曲线、图例排成图元，界面绘制和 SVG 导出共用
+    scene.rs        坐标框、图元与整页场景入口
+    scene/layout.rs 页面网格、轴联动和多层对齐
+    scene/legend.rs 图例测量、避让和图例图元
     svg.rs          SVG 导出
   scicanvas/        桌面界面（eframe + egui）
-    app.rs          应用状态、界面调度与分析操作
+    app.rs          应用状态、文件入口与主界面调度
+    app/analysis_ops.rs 拟合、滤波、统计与其他分析命令
+    app/windows.rs  图形窗口、绘图区交互和窗口内操作
     app/props.rs     绘图属性的页面、图层、坐标轴与样式分区
     app/workspace.rs 项目管理器、对象操作与子窗口
     app/worksheet.rs 工作表选区、键盘编辑、事务与列操作
@@ -155,8 +159,8 @@ crates/
     mdi.rs          多文档子窗口（标题栏按钮、移动、改变大小、最小化 / 最大化）
     plot.rs         图形绘制与缩放平移
     dialogs/        按类型拆分的设置、分析对话框与结果报告
-    icons.rs          图标和缩略图 SVG 加载
-        功能区图标（SVG，与网页原型共用）
+    icons.rs          图标/缩略图来源和主题配色
+    icons/loader.rs   SVG 图标加载、尺寸缩放与缓存
     theme.rs        浅色 / 深色主题（控件样式、配色、字号、间距）
     fonts.rs        中文字体与图形字体（Arial）加载
 ```
