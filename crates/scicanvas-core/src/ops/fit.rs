@@ -144,12 +144,23 @@ impl Project {
             .column(&curve.0)
             .ok_or("拟合曲线的列已被删除，请重新拟合")?
             .values();
-        if book.column(&curve.1).is_none() {
-            return Err("拟合曲线的列已被删除，请重新拟合".into());
-        }
+        let ys = book
+            .column(&curve.1)
+            .ok_or("拟合曲线的列已被删除，请重新拟合")?
+            .values();
         let units = book.column(y_key).map(|c| c.units.clone()).unwrap_or_default();
         let pct = fmt_num(level * 100.0);
-        let rows: Vec<(f64, f64, f64)> = xs.iter().map(|x| band(*x)).collect();
+        let rows: Vec<(f64, f64, f64)> = xs
+            .iter()
+            .enumerate()
+            .map(|(i, x)| {
+                if ys.get(i).is_some_and(|y| y.is_finite()) {
+                    band(*x)
+                } else {
+                    (f64::NAN, f64::NAN, f64::NAN)
+                }
+            })
+            .collect();
         let mut columns = vec![];
         // 依次为置信下限、置信上限、预测下限、预测上限
         let value = |i: usize, b: &(f64, f64, f64)| match i {
@@ -317,7 +328,7 @@ impl Project {
             cy.long_name = format!("{name} {} 拟合", fit.model.name());
             cy.units = y_units;
             cy.comment = format!("{}；{}", fit.model.formula(), equation);
-            cy.data = fx.iter().map(|x| fmt_num(fit.eval(*x))).collect();
+            cy.data = fit.sample(&fx).into_iter().map(fmt_num).collect();
             let result = self.write_result(
                 item,
                 vec![cx, cy],

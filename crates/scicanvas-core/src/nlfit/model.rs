@@ -30,13 +30,16 @@ pub enum Model {
     PseudoSecondOrder,
     MichaelisMenten,
     Rational1,
+    Rational12,
+    Rational22,
+    Rational33,
 }
 
 /// 内置函数的最多参数个数（ExpDec3）。
 pub const MAX_PARAMS: usize = 7;
 
 impl Model {
-    pub const ALL: [Model; 25] = [
+    pub const ALL: [Model; 28] = [
         Model::Gauss,
         Model::Lorentz,
         Model::Voigt,
@@ -62,6 +65,9 @@ impl Model {
         Model::PseudoSecondOrder,
         Model::MichaelisMenten,
         Model::Rational1,
+        Model::Rational12,
+        Model::Rational22,
+        Model::Rational33,
     ];
 
     /// 对话框里的类别顺序。
@@ -103,6 +109,9 @@ impl Model {
             Model::PseudoSecondOrder => "准二级动力学",
             Model::MichaelisMenten => "MichaelisMenten",
             Model::Rational1 => "Rational1",
+            Model::Rational12 => "Rational12",
+            Model::Rational22 => "Rational22",
+            Model::Rational33 => "Rational33",
         }
     }
 
@@ -115,7 +124,7 @@ impl Model {
             Model::Langmuir | Model::Freundlich => "吸附等温线",
             Model::PseudoFirstOrder | Model::PseudoSecondOrder => "吸附动力学",
             Model::MichaelisMenten => "酶动力学",
-            Model::Rational1 => "有理函数",
+            Model::Rational1 | Model::Rational12 | Model::Rational22 | Model::Rational33 => "有理函数",
         }
     }
 
@@ -146,6 +155,9 @@ impl Model {
             Model::PseudoSecondOrder => "qt = qe²·k2·t/(1 + qe·k2·t)",
             Model::MichaelisMenten => "v = Vmax·S/(Km + S)",
             Model::Rational1 => "y = (a0 + a1·x)/(1 + b1·x)",
+            Model::Rational12 => "y = (a0 + a1·x)/(1 + b1·x + b2·x²)",
+            Model::Rational22 => "y = (a0 + a1·x + a2·x²)/(1 + b1·x + b2·x²)",
+            Model::Rational33 => "y = (a0 + a1·x + a2·x² + a3·x³)/(1 + b1·x + b2·x² + b3·x³)",
         }
     }
 
@@ -175,7 +187,62 @@ impl Model {
             Model::PseudoSecondOrder => &["qe", "k2"],
             Model::MichaelisMenten => &["Vmax", "Km"],
             Model::Rational1 => &["a0", "a1", "b1"],
+            Model::Rational12 => &["a0", "a1", "b1", "b2"],
+            Model::Rational22 => &["a0", "a1", "a2", "b1", "b2"],
+            Model::Rational33 => &["a0", "a1", "a2", "a3", "b1", "b2", "b3"],
         }
+    }
+
+    // Rational12/22/33 的数字明确表示分子/分母阶数，Rational1 保留既有名称。
+    pub(super) fn rational_degrees(self) -> Option<(usize, usize)> {
+        match self {
+            Self::Rational1 => Some((1, 1)),
+            Self::Rational12 => Some((1, 2)),
+            Self::Rational22 => Some((2, 2)),
+            Self::Rational33 => Some((3, 3)),
+            _ => None,
+        }
+    }
+
+    pub(super) fn rational_denominator(self, x: f64, p: &[f64]) -> (f64, f64) {
+        let (n, _) = self.rational_degrees().unwrap();
+        let (d, magnitude) = p[n + 1..]
+            .iter()
+            .rev()
+            .fold((0.0, 0.0), |(d, s), b| (d * x + b, s * x.abs() + b.abs()));
+        (d * x + 1.0, magnitude * x.abs() + 1.0)
+    }
+
+    /// 在分母驻点处分段检查，识别一次穿越、偶数个极点及偶重根。
+    pub(super) fn crosses_pole(self, from: f64, to: f64, p: &[f64]) -> bool {
+        let Some((n, d)) = self.rational_degrees() else {
+            return false;
+        };
+        let (lo, hi) = (from.min(to), from.max(to));
+        let mut probes = vec![lo, hi];
+        let b = &p[n + 1..];
+        let (a, c) = (if d == 3 { 3.0 * b[2] } else { 0.0 }, b[0]);
+        let middle = if d >= 2 { 2.0 * b[1] } else { 0.0 };
+        if a == 0.0 {
+            if middle != 0.0 {
+                probes.push(-c / middle);
+            }
+        } else {
+            let discriminant = middle * middle - 4.0 * a * c;
+            if discriminant >= 0.0 {
+                // 避免根公式在相消时丢失较小的驻点。
+                let q = -0.5 * (middle + discriminant.sqrt().copysign(middle));
+                probes.push(q / a);
+                if q != 0.0 {
+                    probes.push(c / q);
+                }
+            }
+        }
+        let sign = self.rational_denominator(lo, p).0.is_sign_positive();
+        probes.into_iter().filter(|x| *x >= lo && *x <= hi).any(|x| {
+            let (value, magnitude) = self.rational_denominator(x, p);
+            !value.is_finite() || value.abs() <= 32.0 * f64::EPSILON * magnitude || value.is_sign_positive() != sign
+        })
     }
 
     pub fn eval(self, x: f64, p: &[f64]) -> f64 {
@@ -228,7 +295,16 @@ impl Model {
             Model::PseudoFirstOrder => p[0] * (1.0 - (-p[1] * x).exp()),
             Model::PseudoSecondOrder => p[0] * p[0] * p[1] * x / (1.0 + p[0] * p[1] * x),
             Model::MichaelisMenten => p[0] * x / (p[1] + x),
-            Model::Rational1 => (p[0] + p[1] * x) / (1.0 + p[2] * x),
+            Model::Rational1 | Model::Rational12 | Model::Rational22 | Model::Rational33 => {
+                let (n, _) = self.rational_degrees().unwrap();
+                let numerator = p[..=n].iter().rev().fold(0.0, |sum, a| sum * x + a);
+                let (denominator, magnitude) = self.rational_denominator(x, p);
+                if !denominator.is_finite() || denominator.abs() <= 32.0 * f64::EPSILON * magnitude {
+                    f64::NAN
+                } else {
+                    numerator / denominator
+                }
+            }
         }
     }
 }

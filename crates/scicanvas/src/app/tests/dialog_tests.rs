@@ -1168,3 +1168,120 @@ fn custom_fit_library_dirty_editor_keeps_input_and_rejects_stale_saves() {
     assert!(app.status.contains("别处更改"), "{}", app.status);
     assert!(matches!(&app.dialog,Some(Dialog::CustomNlFit(edit)) if edit.formula=="y = a*x+b+1"));
 }
+
+#[test]
+fn rational_models_run_from_dialog_save_reopen_and_undo() {
+    use scicanvas_core::{nlfit::Model, project_file, svg};
+    for (model, truth) in [
+        (Model::Rational1, vec![2., 1.5, 0.2]),
+        (Model::Rational1, vec![2., 1.5, -0.35]),
+        (Model::Rational12, vec![2., 1.5, 0.2, 0.08]),
+        (Model::Rational22, vec![1.2, -0.7, 0.9, 0.3, 0.15]),
+        (Model::Rational33, vec![1.2, -0.7, 0.9, 0.12, 0.3, 0.15, 0.04]),
+    ] {
+        let mut app = app();
+        let book = app.project.book_mut(1).unwrap();
+        let xs: Vec<f64> = (0..60).map(|row| row as f64 / 12.).collect();
+        book.columns[0].data = xs.iter().map(|x| x.to_string()).collect();
+        book.columns[1].data = xs.iter().map(|x| model.eval(*x, &truth).to_string()).collect();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["B".into()]);
+        let before = app.project.clone();
+        app.open_nlfit_dialog();
+        let Some(Dialog::NlFit { model: selected, .. }) = app.dialog.as_mut() else {
+            panic!("fit dialog");
+        };
+        *selected = Model::Rational1;
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        ctx.style_mut(|style| style.animation_time = 0.0);
+        let mut ui = crate::test_ui::Harness::new(
+            ctx.clone(),
+            Some(egui::vec2(1400., 1000.)),
+            |app: &mut SciApp, ctx: &egui::Context| app.dialogs(ctx),
+        )
+        .with_step(0.02);
+        for _ in 0..5 {
+            ui.frame(&mut app, vec![]);
+        }
+        let output = ui.frame(&mut app, vec![]);
+        ui.click_text(&mut app, &output, model.name());
+        let mut clicked = false;
+        for _ in 0..8 {
+            let output = ui.frame(&mut app, vec![]);
+            if crate::test_ui::find_text(&output, "拟合").is_some() {
+                ui.click_text(&mut app, &output, "拟合");
+                clicked = true;
+                break;
+            }
+            let rect = ctx
+                .memory(|m| m.area_rect(egui::Id::new(("scicanvas-dialog", "非线性拟合"))))
+                .unwrap();
+            ui.frame(
+                &mut app,
+                vec![
+                    egui::Event::PointerMoved(rect.center()),
+                    egui::Event::MouseWheel {
+                        unit: egui::MouseWheelUnit::Point,
+                        delta: egui::vec2(0., -600.),
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+            );
+            for _ in 0..5 {
+                ui.frame(&mut app, vec![]);
+            }
+        }
+        assert!(clicked, "{}: fit action must be reachable by scrolling", model.name());
+        let Some(Dialog::NlFitReport(reports)) = &app.dialog else {
+            panic!("{}: {}", model.name(), app.status);
+        };
+        let reports = reports.clone();
+        assert_eq!(reports.len(), 1);
+        let report = &reports[0];
+        assert_eq!(report.fit.model.name(), model.name());
+        assert!(report.fit.converged);
+        assert!(
+            report.fit.rss < 1e-12,
+            "{} {:?}: {}",
+            model.name(),
+            truth,
+            report.fit.rss
+        );
+        let curve = app.project.book(1).unwrap().column(&report.curve.1).unwrap();
+        assert_eq!(curve.data.len(), 200);
+        if model == Model::Rational1 && truth[2] < 0.0 {
+            assert!(
+                curve.values().iter().any(|value| value.is_nan()),
+                "fit curve breaks at its pole"
+            );
+        }
+        assert!(curve.comment.contains(model.formula()));
+        let saved = project_file::from_scv(&project_file::to_scv(&app.project).unwrap()).unwrap();
+        assert_eq!(saved, app.project);
+        let graph = app.project.graphs.last().unwrap();
+        assert_eq!(
+            svg::render_page(graph, &app.project),
+            svg::render_page(saved.graph(graph.id).unwrap(), &saved)
+        );
+        assert_eq!(app.history.undo_label(), Some("非线性拟合"));
+        roundtrip(&mut app, &before);
+        let before_bands = app.project.clone();
+        app.dialog = Some(Dialog::NlFitReport(reports));
+        press_dialog_button(&mut app, "置信/预测带");
+        let book = app.project.book(1).unwrap();
+        let fit_curve = book.columns[book.columns.len() - 5].values();
+        for column in &book.columns[book.columns.len() - 4..] {
+            for (y, band) in fit_curve.iter().zip(column.values()) {
+                if y.is_nan() {
+                    assert!(band.is_nan(), "bands retain fit gaps");
+                } else {
+                    assert!(band.is_finite());
+                }
+            }
+        }
+        let saved = project_file::from_scv(&project_file::to_scv(&app.project).unwrap()).unwrap();
+        assert_eq!(saved, app.project);
+        roundtrip(&mut app, &before_bands);
+    }
+}

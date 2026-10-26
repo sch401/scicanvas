@@ -262,25 +262,33 @@ impl NlFit {
         self.model.eval(x, &self.params)
     }
 
-    /// 在 x 处的置信带、预测带半宽（Δ 法：var(ŷ) = gᵀ·Cov·g，g 为中心差分梯度）。
+    /// 在 x 处的置信带、预测带半宽（Δ 法：var(ŷ) = gᵀ·Cov·g，g 复用拟合雅可比梯度）。
     pub fn band(&self, x: f64, level: f64) -> (f64, f64) {
         let k = self.params.len();
-        let g: Vec<f64> = (0..k)
-            .map(|j| {
-                if self.fixed[j] {
-                    return 0.0;
-                }
-                let h = 1e-6 * self.params[j].abs().max(1e-6);
-                let (mut up, mut down) = (self.params.clone(), self.params.clone());
-                up[j] += h;
-                down[j] -= h;
-                (self.model.eval(x, &up) - self.model.eval(x, &down)) / (2.0 * h)
-            })
-            .collect();
+        let free: Vec<usize> = (0..k).filter(|&j| !self.fixed[j]).collect();
+        let row = jacobian(&self.model, &[x], &self.params, &free).remove(0);
+        let mut g = vec![0.0; k];
+        for (j, value) in free.into_iter().zip(row) {
+            g[j] = value;
+        }
         let var: f64 = (0..k)
             .map(|i| (0..k).map(|j| g[i] * self.cov[i][j] * g[j]).sum::<f64>())
             .sum();
         crate::analysis::band_half_widths(var, self.reduced_chi2, self.dof, level)
+    }
+
+    /// 写回曲线时在有理函数极点处留缺失值，屏幕和各导出格式共用断线数据。
+    pub fn sample(&self, xs: &[f64]) -> Vec<f64> {
+        xs.iter()
+            .enumerate()
+            .map(|(i, &x)| {
+                if i > 0 && matches!(&self.model, FitFunction::Builtin(m) if m.crosses_pole(xs[i-1],x,&self.params)) {
+                    f64::NAN
+                } else {
+                    self.eval(x)
+                }
+            })
+            .collect()
     }
 
     /// 各参数的 t 值和双侧 p 值（固定参数为 NaN）。
@@ -302,8 +310,29 @@ fn rss(model: &FitFunction, xs: &[f64], ys: &[f64], p: &[f64]) -> f64 {
     }
 }
 
-/// 中心差分雅可比 ∂f/∂p，只对 `free` 中的参数求导，n × free.len()。
+/// 雅可比 ∂f/∂p（有理模型解析求导，其余中心差分），只对 `free` 中的参数求导，n × free.len()。
 fn jacobian(model: &FitFunction, xs: &[f64], p: &[f64], free: &[usize]) -> Vec<Vec<f64>> {
+    if let FitFunction::Builtin(model) = model {
+        if let Some((n, _)) = model.rational_degrees() {
+            // 解析导数避免中心差分的扰动恰好落在有理函数极点上。
+            return xs
+                .iter()
+                .map(|&x| {
+                    let d = model.rational_denominator(x, p).0;
+                    let y = model.eval(x, p);
+                    free.iter()
+                        .map(|&k| {
+                            if k <= n {
+                                x.powi(k as i32) / d
+                            } else {
+                                -y * x.powi((k - n) as i32) / d
+                            }
+                        })
+                        .collect()
+                })
+                .collect();
+        }
+    }
     let mut j = vec![vec![0.0; free.len()]; xs.len()];
     for (col, &k) in free.iter().enumerate() {
         let h = 1e-6 * p[k].abs().max(1e-6);
@@ -659,6 +688,11 @@ impl<'a> FitSession<'a> {
                 n_eq + 1
             ));
         }
+        if matches!(&model, FitFunction::Builtin(m) if m.rational_degrees().is_some())
+            && xs.windows(2).filter(|pair| pair[0] != pair[1]).count() < n_eq
+        {
+            return Err(format!("{} 至少需要 {} 个不同的有效 X 值", model.name(), n_eq + 1));
+        }
         let mut params = match initial {
             Some(v) => v.to_vec(),
             None => model
@@ -780,7 +814,14 @@ impl<'a> FitSession<'a> {
                 self.constrained_step(&a, &g, &open)
             };
             if !stepped {
-                self.converged = true;
+                // 有理模型阻尼耗尽不等于收敛，按剩余可行方向的尺度化梯度判断。
+                self.converged = !self.rows.is_empty()
+                    || !matches!(&self.model, FitFunction::Builtin(m) if m.rational_degrees().is_some())
+                    || self.cost <= f64::EPSILON * self.ys.iter().map(|y| y * y).sum::<f64>()
+                    || open
+                        .iter()
+                        .all(|&u| g[u].abs() <= 1e-6 * (a[u][u] * self.cost).sqrt().max(1e-30));
+                break;
             }
             if self.converged {
                 break;
@@ -1593,7 +1634,7 @@ mod tests {
             }
             close(f.rss, rss, 1e-8);
         }
-        assert_eq!(Model::ALL.len(), 25);
+        assert_eq!(Model::ALL.len(), 28);
         assert!(
             Model::ALL.iter().all(|m| m.params().len() <= MAX_PARAMS),
             "the dialog holds up to MAX_PARAMS parameters"
@@ -1610,6 +1651,262 @@ mod tests {
         assert!(fit.converged);
         for (actual, expected) in fit.params.iter().zip(truth) {
             assert!((actual - expected).abs() < 1e-5, "{actual} != {expected}");
+        }
+    }
+
+    #[test]
+    fn rational_models_match_scipy_parameters_standard_errors_and_rss() {
+        // SciPy 1.17.1 curve_fit (LM), truth as p0, ftol/xtol/gtol=1e-12.
+        let cases: &[Case<'_>] = &[
+            (
+                Model::Rational1,
+                0.0,
+                8.0,
+                &[2.0, 1.5, 0.2],
+                0.03,
+                &[2.0071055689891617, 1.497719878159007, 0.19970195484327713],
+                &[0.010078166985916364, 0.01785721057417291, 0.00335576591150021],
+                0.010795499502041412,
+            ),
+            (
+                Model::Rational12,
+                0.0,
+                8.0,
+                &[2.0, 1.5, 0.2, 0.08],
+                0.01,
+                &[
+                    2.005222897698752,
+                    1.4786863135432924,
+                    0.19484277304441625,
+                    0.07925964599871921,
+                ],
+                &[
+                    0.004346310246490535,
+                    0.021496823321334266,
+                    0.005472821024938503,
+                    0.0007447918727547438,
+                ],
+                0.0011701986072127214,
+            ),
+            (
+                Model::Rational22,
+                -2.0,
+                4.0,
+                &[1.2, -0.7, 0.9, 0.3, 0.15],
+                0.003,
+                &[
+                    1.200310753957403,
+                    -0.6993557070520809,
+                    0.8997781686620413,
+                    0.3001524075835758,
+                    0.14995924206432937,
+                ],
+                &[
+                    0.0006036432447350066,
+                    0.00099203707524957,
+                    0.0008214396171027677,
+                    0.00037667994231782516,
+                    0.00026265222627010556,
+                ],
+                0.00010672710862900706,
+            ),
+            (
+                Model::Rational33,
+                0.0,
+                5.0,
+                &[1.2, -0.7, 0.9, 0.12, 0.3, 0.15, 0.04],
+                0.0001,
+                &[
+                    1.2000638280357157,
+                    -0.700261497061041,
+                    0.9004546635278622,
+                    0.11973771615739744,
+                    0.30007139688404433,
+                    0.1499586416629403,
+                    0.039948132902852256,
+                ],
+                &[
+                    5.4458357672916986e-05,
+                    0.0033117482703237267,
+                    0.0023135457218948583,
+                    0.002234224011968617,
+                    0.0031440950220097638,
+                    0.0005399006932944043,
+                    0.0005885503164424945,
+                ],
+                1.1486720784888452e-07,
+            ),
+        ];
+        for &(model, from, to, truth, amp, params, se, rss) in cases {
+            let (xs, ys) = data(model, from, to, truth, amp);
+            let result = fit(model, &xs, &ys, None, &[]).unwrap();
+            assert!(result.converged, "{}", model.name());
+            for (actual, expected) in result.params.iter().zip(params) {
+                close(*actual, *expected, 2e-4);
+            }
+            for (actual, expected) in result.se.iter().zip(se) {
+                close(*actual, *expected, 2e-3);
+            }
+            close(result.rss, rss, 1e-7);
+        }
+    }
+
+    #[test]
+    fn rational_models_reject_poles_and_handle_repeated_x_without_panicking() {
+        for (model, p) in [
+            (Model::Rational1, vec![2.0, 1.0, -1.0]),
+            (Model::Rational12, vec![2.0, 1.0, -2.0, 1.0]),
+            (Model::Rational22, vec![2.0, 1.0, 0.3, -2.0, 1.0]),
+            (Model::Rational33, vec![2.0, 1.0, 0.3, 0.1, -3.0, 3.0, -1.0]),
+        ] {
+            assert!(model.eval(1.0, &p).is_nan());
+            assert!(model.eval(0.0, &p).is_finite());
+            assert!(model.eval(1.0 + f64::EPSILON, &p).is_nan());
+            let xs = [1.0; 12];
+            let ys = [2.0; 12];
+            assert!(fit(model, &xs, &ys, Some(&p), &[]).is_err());
+            assert!(fit(model, &xs, &ys, None, &[]).is_err());
+        }
+    }
+
+    #[test]
+    fn rational_sampling_breaks_at_simple_double_and_paired_poles() {
+        assert!(Model::Rational1.crosses_pole(-1.1, -0.9, &[2., 1., 1.]));
+        assert!(!Model::Rational1.crosses_pole(0., 1., &[2., 1., 1.]));
+        for b in [[-2., 1.], [-25. / 6., 25. / 6.]] {
+            assert!(Model::Rational12.crosses_pole(0., 1., &[2., 1., b[0], b[1]]));
+            assert!(Model::Rational12.crosses_pole(1., 0., &[2., 1., b[0], b[1]]));
+        }
+        let xs = [-2., -1.8, -1.5, -0.5, -0.2, 0., 0.2, 0.4];
+        let ys: Vec<_> = xs.iter().map(|x| Model::Rational1.eval(*x, &[2., 1., 1.])).collect();
+        let fit = fit(Model::Rational1, &xs, &ys, None, &[]).unwrap();
+        let values = fit.sample(&[-1.1, -0.9, 0.]);
+        assert!(values[0].is_finite());
+        assert!(values[1].is_nan());
+        assert!(values[2].is_finite());
+    }
+
+    #[test]
+    fn rational_derivatives_near_poles_and_exhausted_damping_are_reported() {
+        let p = [2., 1., -1. / (1. + 1e-6)];
+        let j = jacobian(&FitFunction::Builtin(Model::Rational1), &[1.], &p, &[0, 1, 2]);
+        assert!(j.iter().flatten().all(|v| v.is_finite()));
+        let (xs, ys) = data(Model::Rational12, 0., 8., &[2., 1.5, 0.2, 0.08], 0.01);
+        let mut session = FitSession::new(
+            FitFunction::Builtin(Model::Rational12),
+            &xs,
+            &ys,
+            Some(&[1., 1., 0., 0.]),
+            &[],
+            &[],
+        )
+        .unwrap();
+        session.lambda = 1e16;
+        session.optimize();
+        let result = session.finish().unwrap();
+        assert!(!result.converged);
+        assert_eq!(result.iterations, 1);
+        assert!(result.rss.is_finite());
+    }
+
+    #[test]
+    fn rational_models_reuse_fixed_parameters_bounds_and_linear_constraints() {
+        for (model, truth) in [
+            (Model::Rational12, vec![2., 1.5, 0.2, 0.08]),
+            (Model::Rational22, vec![1.2, -0.7, 0.9, 0.3, 0.15]),
+            (Model::Rational33, vec![1.2, -0.7, 0.9, 0.12, 0.3, 0.15, 0.04]),
+        ] {
+            let (xs, ys) = data(model, 0., 5., &truth, 0.0);
+            let mut limits = vec![ParamLimits::default(); truth.len()];
+            limits[0] = ParamLimits::fixed(truth[0]);
+            limits.last_mut().unwrap().lower = Some(0.);
+            limits.last_mut().unwrap().upper = Some(0.5);
+            let constraints = parse_constraints(model, "b1 >= 0").unwrap();
+            let result = fit_constrained(model, &xs, &ys, None, &limits, &constraints).unwrap();
+            assert!(result.converged);
+            assert_eq!(result.params[0], truth[0]);
+            assert!(result.rss < 1e-12);
+            assert!(result.params.last().is_some_and(|p| (0.0..=0.5).contains(p)));
+            assert!(result.constraints.iter().any(|s| s == "b1 >= 0"));
+        }
+    }
+
+    #[test]
+    fn rational33_matches_nist_thurber_certified_values() {
+        // NIST/ITL StRD Thurber, 37 observations, cubic/cubic rational model.
+        // https://www.itl.nist.gov/div898/strd/nls/data/LINKS/DATA/Thurber.dat
+        let points: &[(f64, f64)] = &[
+            (-3.067, 80.574),
+            (-2.981, 84.248),
+            (-2.921, 87.264),
+            (-2.912, 87.195),
+            (-2.84, 89.076),
+            (-2.797, 89.608),
+            (-2.702, 89.868),
+            (-2.699, 90.101),
+            (-2.633, 92.405),
+            (-2.481, 95.854),
+            (-2.363, 100.696),
+            (-2.322, 101.06),
+            (-1.501, 401.672),
+            (-1.46, 390.724),
+            (-1.274, 567.534),
+            (-1.212, 635.316),
+            (-1.1, 733.054),
+            (-1.046, 759.087),
+            (-0.915, 894.206),
+            (-0.714, 990.785),
+            (-0.566, 1090.109),
+            (-0.545, 1080.914),
+            (-0.4, 1122.643),
+            (-0.309, 1178.351),
+            (-0.109, 1260.531),
+            (-0.103, 1273.514),
+            (0.01, 1288.339),
+            (0.119, 1327.543),
+            (0.377, 1353.863),
+            (0.79, 1414.509),
+            (0.963, 1425.208),
+            (1.006, 1421.384),
+            (1.115, 1442.962),
+            (1.572, 1464.35),
+            (1.841, 1468.705),
+            (2.047, 1447.894),
+            (2.2, 1457.628),
+        ];
+        let (xs, ys): (Vec<_>, Vec<_>) = points.iter().copied().unzip();
+        let expected = [
+            1288.1396800,
+            1491.0792535,
+            583.23836877,
+            75.416644291,
+            0.96629502864,
+            0.39797285797,
+            0.049727297349,
+        ];
+        let se = [
+            4.6647963344,
+            39.571156086,
+            28.698696102,
+            5.5675370270,
+            0.031333340687,
+            0.014984928198,
+            0.0065842344623,
+        ];
+        for initial in [
+            None,
+            Some(vec![1000., 1000., 400., 40., 0.7, 0.3, 0.03]),
+            Some(vec![1300., 1500., 500., 75., 1., 0.4, 0.05]),
+        ] {
+            let result = fit(Model::Rational33, &xs, &ys, initial.as_deref(), &[]).unwrap();
+            assert!(result.converged);
+            close(result.rss, 5642.7082397, 1e-8);
+            for (actual, want) in result.params.iter().zip(expected) {
+                close(*actual, want, 1e-4);
+            }
+            for (actual, want) in result.se.iter().zip(se) {
+                close(*actual, want, 2e-4);
+            }
         }
     }
 

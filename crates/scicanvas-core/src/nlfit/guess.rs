@@ -24,11 +24,53 @@ impl Model {
             | Model::Freundlich
             | Model::PseudoFirstOrder
             | Model::PseudoSecondOrder => self.guess_adsorption(xs, ys, hi),
-            Model::Rational1 => {
-                let (slope, intercept) = linreg(xs.iter().zip(ys).map(|(x, y)| (*x, *y)));
-                vec![intercept, slope, 0.0]
+            Model::Rational1 | Model::Rational12 | Model::Rational22 | Model::Rational33 => self.guess_rational(xs, ys),
+        }
+    }
+
+    /// 缩放 X/Y 后线性化 y·D(x)=N(x)，仅用来估计初值，最终仍最小化原始 Y 残差。
+    fn guess_rational(self, xs: &[f64], ys: &[f64]) -> Vec<f64> {
+        let (n, d) = self.rational_degrees().unwrap();
+        let count = n + d + 1;
+        let sx = xs.iter().map(|x| x.abs()).fold(1.0, f64::max);
+        let sy = ys.iter().map(|y| y.abs()).fold(1.0, f64::max);
+        let mut a = vec![vec![0.0; count]; count];
+        let mut rhs = vec![0.0; count];
+        for (&x, &y) in xs.iter().zip(ys) {
+            let (t, v) = (x / sx, y / sy);
+            let row: Vec<f64> = (0..=n)
+                .map(|k| t.powi(k as i32))
+                .chain((1..=d).map(|k| -v * t.powi(k as i32)))
+                .collect();
+            for i in 0..count {
+                rhs[i] += row[i] * v;
+                for j in 0..count {
+                    a[i][j] += row[i] * row[j];
+                }
             }
         }
+        if let Some(inv) = crate::analysis::mat_inv(&a) {
+            let p: Vec<f64> = inv
+                .iter()
+                .enumerate()
+                .map(|(i, row)| {
+                    let value = row.iter().zip(&rhs).map(|(a, b)| a * b).sum::<f64>();
+                    if i <= n {
+                        value * sy / sx.powi(i as i32)
+                    } else {
+                        value / sx.powi((i - n) as i32)
+                    }
+                })
+                .collect();
+            if p.iter().all(|v| v.is_finite()) && xs.iter().all(|x| self.eval(*x, &p).is_finite()) {
+                return p;
+            }
+        }
+        let (slope, intercept) = linreg(xs.iter().zip(ys).map(|(x, y)| (*x, *y)));
+        let mut p = vec![0.0; count];
+        p[0] = intercept;
+        p[1] = slope;
+        p
     }
 
     fn guess_peak(self, xs: &[f64], ys: &[f64], lo: f64) -> Vec<f64> {

@@ -40,7 +40,10 @@ impl Dialog {
                         if !f.converged {
                             ui.colored_label(
                                 egui::Color32::from_rgb(182, 67, 66),
-                                "迭代 500 次仍未收敛，结果仅供参考；可换用其他函数或检查数据",
+                                format!(
+                                    "迭代 {} 次后停止，尚未收敛；可调整初值、参数约束或检查数据",
+                                    f.iterations
+                                ),
                             );
                         }
                         table_grid(ui, ("nlfit-grid", ri), &nlfit_param_rows(f), pal);
