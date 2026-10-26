@@ -1201,3 +1201,49 @@ fn migrated_worksheet_dialogs_match_core_results_and_commit_one_step() {
         assert!(app.history.undo_label().is_none());
     }
 }
+
+#[test]
+fn nonlinear_recalc_uses_column_modes_and_one_undo_step() {
+    use scicanvas_core::{nlfit::Model, ops::RecalcMode, project_file};
+    for mode in [RecalcMode::Auto, RecalcMode::Manual, RecalcMode::None] {
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["C".into()]);
+        app.nlfit(Model::ExpDec1, &[], &[]);
+        let Some(Dialog::NlFitReport(reports)) = &app.dialog else {
+            panic!("report");
+        };
+        let y = reports[0].curve.1.clone();
+        app.selection.insert(1, vec![y.clone()]);
+        app.run_command("col.props");
+        let Some(Dialog::ColumnProps { mut edit, .. }) = app.dialog.take() else {
+            panic!("column props");
+        };
+        assert_eq!(edit.recalc, Some(RecalcMode::Auto));
+        edit.recalc = Some(mode);
+        app.apply_column_props(1, edit).unwrap();
+        let before = app.project.clone();
+        let old = before.book(1).unwrap().column(&y).unwrap().data.clone();
+        app.edit("修改拟合来源", |project| {
+            project.book_mut(1).unwrap().columns[2].set(0, "10".into());
+            Ok(Some(()))
+        })
+        .unwrap();
+        assert_eq!(
+            app.project.book(1).unwrap().column(&y).unwrap().data == old,
+            mode != RecalcMode::Auto
+        );
+        roundtrip(&mut app, &before);
+        let before = app.project.clone();
+        app.run_command("data.recalc");
+        if mode == RecalcMode::Manual {
+            assert_ne!(app.project.book(1).unwrap().column(&y).unwrap().data, old);
+            roundtrip(&mut app, &before);
+        }
+        if mode == RecalcMode::None {
+            assert_eq!(app.project.book(1).unwrap().column(&y).unwrap().data, old);
+        }
+        let saved = project_file::from_scv(&project_file::to_scv(&app.project).unwrap()).unwrap();
+        assert_eq!(saved, app.project);
+    }
+}

@@ -348,6 +348,7 @@ fn jacobian(model: &FitFunction, xs: &[f64], p: &[f64], free: &[usize]) -> Vec<V
 
 /// 单个参数的限制：固定值（优先）、下限、上限。
 #[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct ParamLimits {
     pub fixed: Option<f64>,
     pub lower: Option<f64>,

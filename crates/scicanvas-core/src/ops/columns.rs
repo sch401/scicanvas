@@ -255,7 +255,7 @@ impl Project {
             c.comment = comment;
             c.data = data.into();
             c.op = Some(Operation {
-                kind: op,
+                kind: op.clone(),
                 y: item.y.clone(),
                 x: item.x.clone(),
                 rows: item.rows,

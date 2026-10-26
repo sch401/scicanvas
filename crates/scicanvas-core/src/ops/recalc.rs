@@ -24,9 +24,10 @@ impl RecalcMode {
 }
 
 /// 可重算的逐列分析。
-#[derive(Clone, Copy, Debug, PartialEq)]
+#[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum OpKind {
+    Nonlinear(Box<NonlinearRecipe>),
     Smooth {
         method: SmoothMethod,
         window: usize,
@@ -62,13 +63,238 @@ pub enum OpKind {
     },
 }
 
+/// 拟合时的函数定义快照，与后续修改的项目函数库独立。
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(deny_unknown_fields)
+)]
+pub enum FitMethod {
+    Builtin(crate::nlfit::Model),
+    Custom {
+        name: String,
+        formula: String,
+        parameters: Vec<String>,
+    },
+}
+
+impl FitMethod {
+    pub(super) fn from_function(function: &crate::nlfit::FitFunction) -> Self {
+        match function {
+            crate::nlfit::FitFunction::Builtin(model) => Self::Builtin(*model),
+            _ => Self::Custom {
+                name: function.name().into(),
+                formula: function.formula().into(),
+                parameters: function.params().into_iter().map(str::to_string).collect(),
+            },
+        }
+    }
+
+    pub fn resolve(&self) -> Result<crate::nlfit::FitFunction, String> {
+        Ok(match self {
+            Self::Builtin(model) => crate::nlfit::FitFunction::Builtin(*model),
+            Self::Custom {
+                name,
+                formula,
+                parameters,
+            } => crate::nlfit::FitFunction::Custom(crate::nlfit::CustomFitFunction::new(
+                name,
+                formula,
+                parameters.clone(),
+            )?),
+        })
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(deny_unknown_fields)
+)]
+pub struct FitBands {
+    pub columns: [String; 4],
+    pub level: f64,
+}
+
+/// 结果 Y 列拥有一次拟合的定义，X 和带由同一次计算一起更新。
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(deny_unknown_fields)
+)]
+pub struct NonlinearRecipe {
+    pub function: FitMethod,
+    pub initial: Option<Vec<f64>>,
+    pub limits: Vec<crate::nlfit::ParamLimits>,
+    pub constraints: String,
+    pub output_x: String,
+    pub bands: Vec<FitBands>,
+    pub input_hash: Option<u64>,
+}
+
+impl NonlinearRecipe {
+    pub fn validate(&self) -> Result<(), String> {
+        let function = self.function.resolve()?;
+        let count = function.params().len();
+        if self
+            .initial
+            .as_ref()
+            .is_some_and(|p| p.len() != count || p.iter().any(|v| !v.is_finite()))
+            || self.limits.len() > count
+            || self.constraints.len() > 16384
+        {
+            return Err("非线性重算参数数量、初值或约束无效".into());
+        }
+        for limit in &self.limits {
+            if [limit.fixed, limit.lower, limit.upper]
+                .into_iter()
+                .flatten()
+                .any(|v| !v.is_finite())
+                || matches!((limit.lower,limit.upper),(Some(a),Some(b)) if a>=b)
+            {
+                return Err("非线性重算参数限制无效".into());
+            }
+        }
+        crate::nlfit::parse_constraints_for_function(&function, &self.constraints)?;
+        if self.output_x.is_empty()
+            || self.bands.iter().any(|b| {
+                !b.level.is_finite()
+                    || !(0.0..1.0).contains(&b.level)
+                    || b.level == 0.0
+                    || b.columns.iter().any(String::is_empty)
+            })
+        {
+            return Err("非线性重算输出或置信水平无效".into());
+        }
+        Ok(())
+    }
+
+    pub(super) fn fingerprint(&self, op: &Operation, book: &Book) -> u64 {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        format!("{:?}", (&self.function, &self.initial, &self.limits, &self.constraints)).hash(&mut h);
+        (&op.y, &op.x, op.rows).hash(&mut h);
+        let item = Item {
+            book_id: book.id,
+            y: op.y.clone(),
+            x: op.x.clone(),
+            rows: op.rows,
+        };
+        let (xs, ys, idx) = get_xy(book, &item);
+        idx.hash(&mut h);
+        for value in xs.iter().chain(&ys) {
+            value.to_bits().hash(&mut h);
+        }
+        h.finish()
+    }
+
+    pub(super) fn fit(&self, op: &Operation, book: &Book) -> Result<crate::nlfit::NlFit, String> {
+        self.validate()?;
+        let item = Item {
+            book_id: book.id,
+            y: op.y.clone(),
+            x: op.x.clone(),
+            rows: op.rows,
+        };
+        book.column(&op.y).ok_or("来源 Y 列已删除")?;
+        if let Some(x) = &op.x {
+            book.column(x).ok_or("来源 X 列已删除")?;
+        }
+        let function = self.function.resolve()?;
+        let constraints = crate::nlfit::parse_constraints_for_function(&function, &self.constraints)?;
+        let (xs, ys, _) = get_xy(book, &item);
+        let fit = crate::nlfit::fit_function(function, &xs, &ys, self.initial.as_deref(), &self.limits, &constraints)?;
+        if !fit.converged {
+            return Err("非线性拟合尚未收敛，已保留上次结果".into());
+        }
+        Ok(fit)
+    }
+
+    fn calculate(&self, op: &Operation, book: &Book) -> Result<Vec<(String, crate::ColumnData)>, String> {
+        let fit = self.fit(op, book)?;
+        let grid = interpolate::grid(fit.x_min, fit.x_max, FIT_POINTS);
+        let values = fit.sample(&grid);
+        let data = |values: &[f64]| -> crate::ColumnData { values.iter().map(|v| fmt_num(*v)).collect() };
+        let mut result = vec![(self.output_x.clone(), data(&grid))];
+        // 首次添加带使用已写入 X 列的显示精度，重算沿用同一精度。
+        let rounded: Vec<f64> = grid.iter().map(|x| fmt_num(*x).parse().unwrap_or(f64::NAN)).collect();
+        for bands in &self.bands {
+            let rows: Vec<_> = rounded
+                .iter()
+                .zip(&values)
+                .map(|(&x, &y)| {
+                    let (c, p) = fit.band(x, bands.level);
+                    if y.is_finite() {
+                        (fit.eval(x), c, p)
+                    } else {
+                        (f64::NAN, f64::NAN, f64::NAN)
+                    }
+                })
+                .collect();
+            for (i, key) in bands.columns.iter().enumerate() {
+                let v: Vec<f64> = rows
+                    .iter()
+                    .map(|&(y, c, p)| match i {
+                        0 => y - c,
+                        1 => y + c,
+                        2 => y - p,
+                        _ => y + p,
+                    })
+                    .collect();
+                result.push((key.clone(), data(&v)));
+            }
+        }
+        // Y 的键由拥有此记录的列提供。
+        result.push((String::new(), data(&values)));
+        Ok(result)
+    }
+
+    pub(crate) fn estimated_bytes(&self) -> usize {
+        use std::mem::size_of;
+        let function = match &self.function {
+            FitMethod::Builtin(_) => 0,
+            FitMethod::Custom {
+                name,
+                formula,
+                parameters,
+            } => {
+                name.capacity()
+                    + formula.capacity()
+                    + parameters.capacity() * size_of::<String>()
+                    + parameters.iter().map(String::capacity).sum::<usize>()
+            }
+        };
+        size_of::<Self>()
+            + function
+            + self.initial.as_ref().map_or(0, |p| p.capacity() * size_of::<f64>())
+            + self.limits.capacity() * size_of::<crate::nlfit::ParamLimits>()
+            + self.constraints.capacity()
+            + self.output_x.capacity()
+            + self.bands.capacity() * size_of::<FitBands>()
+            + self
+                .bands
+                .iter()
+                .flat_map(|b| &b.columns)
+                .map(String::capacity)
+                .sum::<usize>()
+    }
+}
+
 /// 拟合曲线的网格点数。
 const FIT_POINTS: usize = 200;
 
 impl OpKind {
     /// 对一组有效点计算结果（与首次分析用同一实现）。
     pub fn compute(&self, xs: &[f64], ys: &[f64]) -> Vec<f64> {
-        match *self {
+        let kind = match self {
+            Self::Nonlinear(_) => return Vec::new(), // 多列结果由事务一起写入。
+            kind => kind.clone(),
+        };
+        match kind {
+            OpKind::Nonlinear(_) => unreachable!(),
             OpKind::Smooth { method, window } => analysis::smooth(xs, ys, method, window),
             OpKind::Normalize { method } => analysis::normalize(ys, method),
             OpKind::Derivative => analysis::derivative(xs, ys),
@@ -199,7 +425,7 @@ fn formula_data(book: &Book, target: &str, formula: &str) -> Result<crate::Colum
 
 /// 需要重算的列（公式列、自动或 `manual` 时手动的分析结果列）按依赖排序（来源先算）；有循环依赖时报错。
 fn computed_order(book: &Book, manual: bool) -> Result<Vec<String>, String> {
-    let deps: std::collections::HashMap<String, Vec<String>> = book
+    let mut deps: std::collections::HashMap<String, Vec<String>> = book
         .columns
         .iter()
         .filter_map(|c| {
@@ -219,6 +445,22 @@ fn computed_order(book: &Book, manual: bool) -> Result<Vec<String>, String> {
             })
         })
         .collect();
+    for col in &book.columns {
+        if deps.contains_key(&col.key) && col.formula.is_none() {
+            if let Some(Operation {
+                kind: OpKind::Nonlinear(recipe),
+                ..
+            }) = &col.op
+            {
+                for key in std::iter::once(&recipe.output_x).chain(recipe.bands.iter().flat_map(|b| &b.columns)) {
+                    if deps.contains_key(key) {
+                        return Err(format!("非线性输出列 {key} 同时有其他计算定义"));
+                    }
+                    deps.insert(key.clone(), vec![col.key.clone()]);
+                }
+            }
+        }
+    }
     // 0 未访问，1 访问中，2 完成
     let mut state: std::collections::HashMap<&str, u8> = Default::default();
     let mut order = vec![];
@@ -319,8 +561,38 @@ impl Project {
             };
             for key in order {
                 let book = &self.books[b];
-                let col = book.column(&key).unwrap();
+                let Some(col) = book.column(&key) else {
+                    continue;
+                };
                 if let Some(op) = col.op.as_ref().filter(|_| col.formula.is_none()) {
+                    if let OpKind::Nonlinear(recipe) = &op.kind {
+                        let fingerprint = recipe.fingerprint(op, book);
+                        if recipe.input_hash == Some(fingerprint) && !manual {
+                            continue;
+                        }
+                        let computed = recipe.calculate(op, book);
+                        match computed {
+                            Ok(mut outputs) => {
+                                outputs.last_mut().unwrap().0 = key.clone();
+                                if outputs.iter().any(|(k, _)| book.column(k).is_none()) {
+                                    problems.push(format!("{} 列 {key}：拟合输出已删除，保留原结果", book.name));
+                                    continue;
+                                }
+                                for (k, data) in outputs {
+                                    self.books[b].columns.iter_mut().find(|c| c.key == k).unwrap().data = data;
+                                }
+                                if let Some(Operation {
+                                    kind: OpKind::Nonlinear(recipe),
+                                    ..
+                                }) = &mut self.books[b].columns.iter_mut().find(|c| c.key == key).unwrap().op
+                                {
+                                    recipe.input_hash = Some(fingerprint);
+                                }
+                            }
+                            Err(e) => problems.push(format!("{} 列 {key}：{e}", book.name)),
+                        }
+                        continue;
+                    }
                     if let Some(data) = op.data(book) {
                         let col = self.books[b].columns.iter_mut().find(|c| c.key == key).unwrap();
                         if col.data != data {
@@ -329,7 +601,9 @@ impl Project {
                     }
                     continue;
                 }
-                let formula = col.formula.clone().unwrap_or_default();
+                let Some(formula) = col.formula.clone() else {
+                    continue;
+                };
                 match formula_data(book, &key, &formula) {
                     Ok(data) => {
                         let col = self.books[b].columns.iter_mut().find(|c| c.key == key).unwrap();

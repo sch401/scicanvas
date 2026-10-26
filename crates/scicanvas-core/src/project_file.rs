@@ -253,8 +253,33 @@ fn validate(project: &Project) -> Result<(), String> {
     }
     for book in &project.books {
         let mut keys = BTreeSet::new();
+        let mut fit_outputs = BTreeSet::new();
         for col in &book.columns {
             col.data.validate()?;
+            if let Some(op) = &col.op {
+                if let crate::ops::OpKind::Nonlinear(recipe) = &op.kind {
+                    recipe.validate()?;
+                    let mut outputs = BTreeSet::from([col.key.as_str()]);
+                    for key in std::iter::once(&recipe.output_x).chain(recipe.bands.iter().flat_map(|b| &b.columns)) {
+                        if !outputs.insert(key.as_str())
+                            || book.column(key).is_none()
+                            || book.column(key).is_some_and(|c| c.formula.is_some() || c.op.is_some())
+                        {
+                            return Err("非线性重算输出列缺失、重复或有其他计算定义".into());
+                        }
+                    }
+                    if outputs.iter().any(|key| !fit_outputs.insert(*key)) {
+                        return Err("多次非线性拟合重复占用同一输出列".into());
+                    }
+                    if outputs.contains(op.y.as_str())
+                        || op.x.as_ref().is_some_and(|x| outputs.contains(x.as_str()))
+                        || book.column(&op.y).is_none()
+                        || op.x.as_ref().is_some_and(|x| book.column(x).is_none())
+                    {
+                        return Err("非线性重算来源缺失或引用自身输出".into());
+                    }
+                }
+            }
             if col.key.is_empty() || !keys.insert(&col.key) {
                 return Err(format!("工作簿 {} 的列标识为空或重复", book.name));
             }

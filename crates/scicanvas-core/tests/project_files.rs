@@ -709,7 +709,7 @@ fn custom_fit_library_v18_roundtrips_and_v17_defaults_to_an_empty_library() {
     assert!(legacy.get("fit_functions").is_none());
     let loaded = project_file::from_json(&legacy.to_string()).unwrap();
     assert!(loaded.fit_functions.is_empty());
-    assert_eq!(loaded.version, 18);
+    assert_eq!(loaded.version, project_file::CURRENT_VERSION);
     assert_eq!(svg::render_page(&loaded.graphs[0], &loaded), old_svg);
     let definition = CustomFitDefinition::from_text("Decay", "a*exp(-b*x)+c", "a,b,c", "2,0.3,0.2", "b >= 0").unwrap();
     let id = project.save_fit_function(None, definition.clone()).unwrap();

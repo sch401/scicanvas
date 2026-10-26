@@ -20,7 +20,7 @@ mod stats;
 pub use calculus::AreaReport;
 pub use columns::{ColumnOp, Operand};
 pub use fit::{FitReport, NlFitReport};
-pub use recalc::{OpKind, Operation, RecalcMode};
+pub use recalc::{FitBands, FitMethod, NonlinearRecipe, OpKind, Operation, RecalcMode};
 pub use resolve::{get_xy, AnalysisColumn, Item, Resolved, Source};
 
 use columns::{analysis_plot, ResultLink};
@@ -923,5 +923,263 @@ mod tests {
         p.sort_book(id, 0, true).unwrap();
         assert_eq!(p.book(id).unwrap().columns[0].data, vec!["1", "3", "b"]);
         assert_eq!(p.book(id).unwrap().columns[1].data, vec!["w", "y", "x", "z"]);
+    }
+}
+
+#[cfg(all(test, feature = "serde"))]
+mod nonlinear_recalc_tests {
+    use super::*;
+    use crate::{
+        nlfit::{self, CustomFitFunction, Model, ParamLimits},
+        project_file,
+    };
+
+    fn source() -> Source {
+        Source::Book {
+            id: 1,
+            selected: vec!["B".into()],
+            rows: None,
+        }
+    }
+    fn project() -> Project {
+        let mut p = Project::sample();
+        let book = p.book_mut(1).unwrap();
+        let xs: Vec<f64> = (0..50).map(|i| i as f64 / 10.).collect();
+        book.columns[0].data = xs.iter().map(ToString::to_string).collect();
+        book.columns[1].data = xs.iter().map(|x| (1.0 + 3.0 * (-x / 1.2).exp()).to_string()).collect();
+        p
+    }
+    fn replace_source(p: &mut Project, offset: f64) {
+        let book = p.book_mut(1).unwrap();
+        let xs = book.columns[0].values();
+        book.columns[1].data = xs
+            .iter()
+            .take(50)
+            .map(|x| (offset + 3.0 * (-x / 1.2).exp()).to_string())
+            .collect();
+    }
+
+    #[test]
+    fn nonlinear_auto_recalc_preserves_keys_styles_bands_and_dependency_order() {
+        let mut p = project();
+        let (_, reports) = p.nlfit(&source(), Model::ExpDec1, &[], &[]).unwrap();
+        let report = &reports[0];
+        let bands = p.nlfit_bands(report, 0.95).unwrap();
+        let y = report.curve.1.clone();
+        let x = report.curve.0.clone();
+        let formula = p.book_mut(1).unwrap().push_column(Role::Ignore);
+        p.set_column_formula(1, &formula, &format!("{x}+{y}"), true).unwrap();
+        assert!(p.recalc_computed(false).is_empty());
+        let old = p.clone();
+        assert!(p.recalc_computed(false).is_empty());
+        assert_eq!(p, old, "unchanged inputs are a complete no-op");
+        let graph_before = p.graphs.clone();
+        let count = p.book(1).unwrap().columns.len();
+        replace_source(&mut p, 2.0);
+        assert!(p.recalc_computed(false).is_empty());
+        assert_eq!(p.book(1).unwrap().columns.len(), count);
+        assert_eq!(p.graphs, graph_before, "curve mappings and styles remain");
+        let book = p.book(1).unwrap();
+        let xx = book.column(&x).unwrap().values();
+        let yy = book.column(&y).unwrap().values();
+        assert!((yy[0] - 5.0).abs() < 1e-5);
+        let sum = book.column(&formula).unwrap().values();
+        assert!((sum[40] - xx[40] - yy[40]).abs() < 1e-6);
+        for key in bands {
+            assert_ne!(
+                book.column(&key).unwrap().data,
+                old.book(1).unwrap().column(&key).unwrap().data
+            );
+        }
+        let saved = project_file::from_scv(&project_file::to_scv(&p).unwrap()).unwrap();
+        assert_eq!(p, saved);
+        let mut reopened = saved.clone();
+        assert!(reopened.recalc_computed(false).is_empty());
+        assert_eq!(reopened, saved);
+    }
+
+    #[test]
+    fn nonlinear_manual_none_and_failed_recalc_keep_last_good_result() {
+        for mode in [RecalcMode::Manual, RecalcMode::None] {
+            let mut p = project();
+            let (_, r) = p.nlfit(&source(), Model::ExpDec1, &[], &[]).unwrap();
+            let (x, y) = &r[0].curve;
+            p.book_mut(1)
+                .unwrap()
+                .columns
+                .iter_mut()
+                .find(|c| c.key == *y)
+                .unwrap()
+                .op
+                .as_mut()
+                .unwrap()
+                .mode = mode;
+            let old = p.book(1).unwrap().column(y).unwrap().data.clone();
+            replace_source(&mut p, 2.);
+            assert!(p.recalc_computed(false).is_empty());
+            assert_eq!(p.book(1).unwrap().column(y).unwrap().data, old);
+            assert!(p.recalc_computed(true).is_empty());
+            assert_eq!(
+                p.book(1).unwrap().column(y).unwrap().data == old,
+                mode == RecalcMode::None
+            );
+            p.book_mut(1)
+                .unwrap()
+                .columns
+                .iter_mut()
+                .find(|c| c.key == *y)
+                .unwrap()
+                .op
+                .as_mut()
+                .unwrap()
+                .mode = RecalcMode::Auto;
+            let old_x = p.book(1).unwrap().column(x).unwrap().data.clone();
+            let old_y = p.book(1).unwrap().column(y).unwrap().data.clone();
+            p.book_mut(1).unwrap().columns[1].data = ["1".to_string()].into_iter().collect();
+            assert!(!p.recalc_computed(false).is_empty());
+            assert_eq!(p.book(1).unwrap().column(x).unwrap().data, old_x);
+            assert_eq!(p.book(1).unwrap().column(y).unwrap().data, old_y);
+        }
+    }
+
+    #[test]
+    fn nonlinear_custom_definition_limits_and_constraints_survive_reopen_and_recalc() {
+        let mut p = project();
+        let function =
+            CustomFitFunction::new("decay", "a+b*exp(-x/t)", vec!["a".into(), "b".into(), "t".into()]).unwrap();
+        let limits = [
+            ParamLimits::default(),
+            ParamLimits::fixed(3.),
+            ParamLimits {
+                lower: Some(0.1),
+                upper: Some(4.),
+                fixed: None,
+            },
+        ];
+        let constraints =
+            nlfit::parse_constraints_for_function(&nlfit::FitFunction::Custom(function.clone()), "a >= 0").unwrap();
+        let (_, r) = p
+            .nlfit_custom(&source(), function, &[1., 3., 1.], &limits, &constraints)
+            .unwrap();
+        let y = r[0].curve.1.clone();
+        let mut p = project_file::from_scv(&project_file::to_scv(&p).unwrap()).unwrap();
+        replace_source(&mut p, 2.);
+        assert!(p.recalc_computed(false).is_empty());
+        assert!((p.book(1).unwrap().column(&y).unwrap().values()[0] - 5.).abs() < 1e-5);
+        let op = p.book(1).unwrap().column(&y).unwrap().op.as_ref().unwrap();
+        let OpKind::Nonlinear(recipe) = &op.kind else {
+            panic!("recipe");
+        };
+        assert_eq!(recipe.initial.as_deref(), Some(&[1., 3., 1.][..]));
+        assert_eq!(recipe.limits, limits);
+        assert_eq!(recipe.constraints, "a >= 0");
+        assert!(matches!(&recipe.function,FitMethod::Custom {name,..} if name=="decay"));
+    }
+
+    #[test]
+    fn nonlinear_delete_cleanup_and_row_changes_do_not_rebind_reused_keys() {
+        for remove_x in [false, true] {
+            let mut p = project();
+            let (_, r) = p.nlfit(&source(), Model::ExpDec1, &[], &[]).unwrap();
+            let y = r[0].curve.1.clone();
+            let key = if remove_x { r[0].curve.0.clone() } else { "B".into() };
+            let snapshot = p.book(1).unwrap().column(&y).unwrap().data.clone();
+            p.delete_columns(1, std::slice::from_ref(&key));
+            assert!(p.book(1).unwrap().column(&y).unwrap().op.is_none());
+            let reused = p.book_mut(1).unwrap().push_column(Role::Y);
+            assert_eq!(reused, key);
+            p.book_mut(1)
+                .unwrap()
+                .columns
+                .iter_mut()
+                .find(|c| c.key == reused)
+                .unwrap()
+                .data = (0..50).map(|_| "100".to_string()).collect();
+            assert!(p.recalc_computed(false).is_empty());
+            assert_eq!(p.book(1).unwrap().column(&y).unwrap().data, snapshot);
+            assert!(p.recalc_computed(true).is_empty());
+            project_file::to_scv(&p).unwrap();
+        }
+        let mut p = project();
+        let (_, r) = p.nlfit(&source(), Model::ExpDec1, &[], &[]).unwrap();
+        let y = r[0].curve.1.clone();
+        p.insert_rows(1, 2, 3);
+        assert!(p.recalc_computed(false).is_empty());
+        assert_eq!(p.book(1).unwrap().column(&y).unwrap().data.len(), 200);
+        p.delete_rows(1, 2, 4);
+        assert!(p.recalc_computed(false).is_empty());
+        assert_eq!(p.book(1).unwrap().column(&y).unwrap().data.len(), 200);
+    }
+
+    #[test]
+    fn nonlinear_file_rejects_invalid_definitions_and_v18_loads_as_snapshots() {
+        let mut p = project();
+        let (_, r) = p.nlfit(&source(), Model::ExpDec1, &[], &[]).unwrap();
+        let y = &r[0].curve.1;
+        let col = p.book_mut(1).unwrap().columns.iter_mut().find(|c| c.key == *y).unwrap();
+        let op = col.op.as_mut().unwrap();
+        let OpKind::Nonlinear(recipe) = &mut op.kind else {
+            panic!("recipe");
+        };
+        recipe.initial = Some(vec![f64::NAN]);
+        assert!(project_file::to_scv(&p).is_err());
+        let mut legacy = project();
+        legacy.nlfit(&source(), Model::ExpDec1, &[], &[]).unwrap();
+        for c in &mut legacy.books[0].columns {
+            c.op = None;
+        }
+        let mut json = serde_json::to_value(&legacy).unwrap();
+        json["version"] = 18.into();
+        let saved = project_file::from_json(&json.to_string()).unwrap();
+        assert_eq!(saved.version, project_file::CURRENT_VERSION);
+        assert_eq!(saved.books, legacy.books);
+        assert!(saved.books[0].columns.iter().all(|c| c.op.is_none()));
+    }
+    #[test]
+    fn nonlinear_foreign_curves_and_selected_row_ranges_keep_their_source() {
+        let mut p = project();
+        let mut foreign = p.books[0].clone();
+        foreign.id = 10;
+        foreign.name = "other".into();
+        p.books.push(foreign);
+        p.next_id = 11;
+        p.add_curves(2, 0, 10, &["B".into()]).unwrap();
+        let original = p.books[0].clone();
+        let selected = Source::Curves {
+            graph_id: 2,
+            index: 0,
+            curves: vec![DataRef::new(10, "B")],
+        };
+        let (_, reports) = p.nlfit(&selected, Model::ExpDec1, &[], &[]).unwrap();
+        let y = reports[0].curve.1.clone();
+        let xs = p.book(10).unwrap().columns[0].values();
+        p.book_mut(10).unwrap().columns[1].data = xs
+            .iter()
+            .take(50)
+            .map(|x| (2. + 3. * (-x / 1.2).exp()).to_string())
+            .collect();
+        assert!(p.recalc_computed(false).is_empty());
+        assert_eq!(p.books[0], original);
+        assert!((p.book(10).unwrap().column(&y).unwrap().values()[0] - 5.).abs() < 1e-5);
+        project_file::to_scv(&p).unwrap();
+
+        let mut p = project();
+        let selected = Source::Book {
+            id: 1,
+            selected: vec!["B".into()],
+            rows: Some((10, 35)),
+        };
+        let (_, r) = p.nlfit(&selected, Model::ExpDec1, &[], &[]).unwrap();
+        let y = r[0].curve.1.clone();
+        let original = p.book(1).unwrap().column(&y).unwrap().data.clone();
+        p.book_mut(1).unwrap().columns[1].set(0, "999".into());
+        assert!(p.recalc_computed(false).is_empty());
+        assert_eq!(p.book(1).unwrap().column(&y).unwrap().data, original);
+        p.insert_rows(1, 0, 2);
+        assert!(p.recalc_computed(false).is_empty());
+        assert_eq!(
+            p.book(1).unwrap().column(&y).unwrap().op.as_ref().unwrap().rows,
+            Some((12, 37))
+        );
     }
 }

@@ -3,7 +3,7 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-pub const PROJECT_VERSION: u32 = 18;
+pub const PROJECT_VERSION: u32 = 19;
 pub const GRAPH_TEMPLATE_VERSION: u32 = 1;
 
 /// 列的绘图角色，对应 Origin 里的 X / Y / 忽略。
@@ -931,6 +931,20 @@ impl Project {
             for col in &mut b.columns {
                 if col.error_for.as_ref().is_some_and(|key| keys.contains(key)) {
                     col.error_for = Some(String::new());
+                }
+            }
+            for col in &mut b.columns {
+                if let Some(op) = &mut col.op {
+                    if let crate::ops::OpKind::Nonlinear(recipe) = &mut op.kind {
+                        if keys.contains(&op.y)
+                            || op.x.as_ref().is_some_and(|x| keys.contains(x))
+                            || keys.contains(&recipe.output_x)
+                        {
+                            col.op = None; // 来源或必要输出删除后成为快照，列标识复用不会重绑。
+                        } else {
+                            recipe.bands.retain(|b| !b.columns.iter().any(|key| keys.contains(key)));
+                        }
+                    }
                 }
             }
             b.columns.retain(|c| !keys.contains(&c.key));

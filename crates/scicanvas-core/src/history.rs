@@ -185,6 +185,15 @@ fn estimated_bytes(p: &Project) -> usize {
             bytes += c.data.estimated_bytes();
             bytes += c.derived_from.as_ref().map_or(0, String::capacity);
             bytes += c.error_for.as_ref().map_or(0, String::capacity);
+            if let Some(crate::ops::Operation {
+                kind: crate::ops::OpKind::Nonlinear(recipe),
+                y,
+                x,
+                ..
+            }) = &c.op
+            {
+                bytes += recipe.estimated_bytes() + y.capacity() + x.as_ref().map_or(0, String::capacity);
+            }
         }
     }
     for g in &p.graphs {
@@ -347,6 +356,15 @@ mod tests {
                 bytes += c.data.estimated_bytes();
                 bytes += c.derived_from.as_ref().map_or(0, String::capacity);
                 bytes += c.error_for.as_ref().map_or(0, String::capacity);
+                if let Some(crate::ops::Operation {
+                    kind: crate::ops::OpKind::Nonlinear(recipe),
+                    y,
+                    x,
+                    ..
+                }) = &c.op
+                {
+                    bytes += recipe.estimated_bytes() + y.capacity() + x.as_ref().map_or(0, String::capacity);
+                }
             }
         }
         for g in &p.graphs {

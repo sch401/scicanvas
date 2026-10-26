@@ -215,11 +215,43 @@ impl Project {
 
     /// 非线性拟合的置信带与预测带（Δ 法）。
     pub fn nlfit_bands(&mut self, r: &NlFitReport, level: f64) -> Result<Vec<String>, String> {
-        let fit = r.fit.clone();
-        self.add_bands(r.book_id, &r.y_key, &r.curve, &r.name, level, |x| {
+        let book = self.book(r.book_id).ok_or("找不到工作簿")?;
+        let fit = match book.column(&r.curve.1).and_then(|c| c.op.as_ref()) {
+            Some(
+                op @ Operation {
+                    kind: OpKind::Nonlinear(recipe),
+                    ..
+                },
+            ) => {
+                if recipe.input_hash != Some(recipe.fingerprint(op, book)) {
+                    return Err("来源已改变，请先重算拟合再添加置信带".into());
+                }
+                recipe.fit(op, book)?
+            }
+            _ => r.fit.clone(),
+        };
+        let keys = self.add_bands(r.book_id, &r.y_key, &r.curve, &r.name, level, |x| {
             let (c, p) = fit.band(x, level);
             (fit.eval(x), c, p)
-        })
+        })?;
+        if let Some(Operation {
+            kind: OpKind::Nonlinear(recipe),
+            ..
+        }) = &mut self
+            .book_mut(r.book_id)
+            .unwrap()
+            .columns
+            .iter_mut()
+            .find(|c| c.key == r.curve.1)
+            .unwrap()
+            .op
+        {
+            recipe.bands.push(FitBands {
+                columns: keys.clone().try_into().unwrap(),
+                level,
+            });
+        }
+        Ok(keys)
     }
 
     /// 残差图：各条拟合的残差对 X 的散点图，新建在工作簿所在目录。
@@ -339,6 +371,38 @@ impl Project {
                 },
             )?;
             let [kx, ky]: [String; 2] = result.columns.try_into().unwrap();
+            let mut operation = Operation {
+                kind: OpKind::Nonlinear(Box::new(NonlinearRecipe {
+                    function: FitMethod::from_function(&function),
+                    initial: initial.map(<[f64]>::to_vec),
+                    limits: limits.to_vec(),
+                    constraints: constraints
+                        .iter()
+                        .map(|c| c.text.clone())
+                        .collect::<Vec<_>>()
+                        .join("\n"),
+                    output_x: kx.clone(),
+                    bands: Vec::new(),
+                    input_hash: None,
+                })),
+                y: item.y.clone(),
+                x: item.x.clone(),
+                rows: item.rows,
+                mode: RecalcMode::Auto,
+            };
+            if let OpKind::Nonlinear(recipe) = &operation.kind {
+                let fingerprint = recipe.fingerprint(&operation, self.book(item.book_id).unwrap());
+                if let OpKind::Nonlinear(recipe) = &mut operation.kind {
+                    recipe.input_hash = Some(fingerprint);
+                }
+            }
+            self.book_mut(item.book_id)
+                .unwrap()
+                .columns
+                .iter_mut()
+                .find(|c| c.key == ky)
+                .unwrap()
+                .op = Some(operation);
             graph = result.graph;
             reports.push(NlFitReport {
                 name,
