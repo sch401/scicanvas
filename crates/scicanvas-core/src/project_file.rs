@@ -181,6 +181,13 @@ pub fn from_json(text: &str) -> Result<Project, String> {
         .chain(project.notes.iter().map(|n| n.id))
         .chain(project.folders.iter().map(|f| f.id))
         .chain(project.fit_functions.iter().map(|f| f.id))
+        .chain(
+            project
+                .books
+                .iter()
+                .flat_map(|b| &b.columns)
+                .filter_map(|c| c.fit_report.as_ref().map(|r| r.id)),
+        )
         .max()
         .unwrap_or(0);
     project.next_id = project.next_id.max(max_id.checked_add(1).ok_or("项目对象编号已用尽")?);
@@ -235,6 +242,13 @@ fn validate(project: &Project) -> Result<(), String> {
         .chain(project.notes.iter().map(|n| n.id))
         .chain(project.folders.iter().map(|f| f.id))
         .chain(project.fit_functions.iter().map(|f| f.id))
+        .chain(
+            project
+                .books
+                .iter()
+                .flat_map(|b| &b.columns)
+                .filter_map(|c| c.fit_report.as_ref().map(|r| r.id)),
+        )
     {
         if id == 0 || id == u64::MAX || !ids.insert(id) {
             return Err(format!("对象编号 {id} 无效或重复"));
@@ -256,6 +270,23 @@ fn validate(project: &Project) -> Result<(), String> {
         let mut fit_outputs = BTreeSet::new();
         for col in &book.columns {
             col.data.validate()?;
+            if let Some(report) = &col.fit_report {
+                report.validate()?;
+                if report.book_id != book.id || report.curve.1 != col.key {
+                    return Err("拟合报告与结果列关联不一致".into());
+                }
+                if let Some(crate::ops::Operation {
+                    kind: crate::ops::OpKind::Nonlinear(recipe),
+                    ..
+                }) = &col.op
+                {
+                    if recipe.output_x != report.curve.0
+                        || recipe.function != crate::ops::FitMethod::from_function(&report.fit.model)
+                    {
+                        return Err("拟合报告与操作定义不一致".into());
+                    }
+                }
+            }
             if let Some(op) = &col.op {
                 if let crate::ops::OpKind::Nonlinear(recipe) = &op.kind {
                     recipe.validate()?;

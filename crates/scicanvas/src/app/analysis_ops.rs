@@ -30,6 +30,8 @@ impl SciApp {
     pub(crate) fn open_nlfit_dialog(&mut self) {
         self.dialog = Some(Dialog::NlFit {
             model: scicanvas_core::nlfit::Model::Gauss,
+            initial: String::new(),
+            target: None,
             limits: [(false, 0.0, false, 0.0, false, 1.0); scicanvas_core::nlfit::MAX_PARAMS],
             constraints: String::new(),
         });
@@ -857,5 +859,106 @@ impl SciApp {
             }
             Err(e) => self.status = e,
         }
+    }
+}
+
+impl SciApp {
+    pub(crate) fn open_nlfit_reports(&mut self) {
+        let reports = self.project.nlfit_reports();
+        if reports.is_empty() {
+            self.status = "项目中尚无保存的非线性拟合报告".into();
+        } else {
+            self.dialog = Some(Dialog::NlFitReport(reports));
+        }
+    }
+
+    pub(super) fn edit_nlfit_report(&mut self, report: scicanvas_core::ops::NlFitReport) {
+        use scicanvas_core::ops::OpKind;
+        let op = match self.project.nlfit_operation(&report) {
+            Ok(op) => op.clone(),
+            Err(e) => {
+                self.status = e;
+                return;
+            }
+        };
+        let OpKind::Nonlinear(recipe) = &op.kind else {
+            unreachable!()
+        };
+        let target = Some(Box::new(dialogs::FitEditTarget {
+            report: report.clone(),
+            before: op.clone(),
+        }));
+        match &recipe.function {
+            scicanvas_core::ops::FitMethod::Builtin(model) => {
+                let mut limits = [(false, 0.0, false, 0.0, false, 1.0); scicanvas_core::nlfit::MAX_PARAMS];
+                for (ui, limit) in limits.iter_mut().zip(&recipe.limits) {
+                    *ui = (
+                        limit.fixed.is_some(),
+                        limit.fixed.unwrap_or(0.0),
+                        limit.lower.is_some(),
+                        limit.lower.unwrap_or(0.0),
+                        limit.upper.is_some(),
+                        limit.upper.unwrap_or(1.0),
+                    );
+                }
+                self.dialog = Some(Dialog::NlFit {
+                    model: *model,
+                    initial: recipe
+                        .initial
+                        .as_ref()
+                        .map(|v| v.iter().map(ToString::to_string).collect::<Vec<_>>().join(", "))
+                        .unwrap_or_default(),
+                    limits,
+                    constraints: recipe.constraints.clone(),
+                    target,
+                });
+            }
+            scicanvas_core::ops::FitMethod::Custom {
+                name,
+                formula,
+                parameters,
+            } => {
+                let definition = scicanvas_core::nlfit::CustomFitDefinition {
+                    name: name.clone(),
+                    formula: formula.clone(),
+                    parameters: parameters.clone(),
+                    initial: recipe.initial.clone().unwrap_or_default(),
+                    constraints: recipe.constraints.clone(),
+                };
+                let mut edit = dialogs::CustomFitEditor::from_definition(&definition);
+                edit.target = target;
+                edit.limits = recipe.limits.clone();
+                self.dialog = Some(Dialog::CustomNlFit(edit));
+            }
+        }
+    }
+
+    pub(super) fn refit_report(
+        &mut self,
+        target: dialogs::FitEditTarget,
+        recipe: Result<scicanvas_core::ops::NonlinearRecipe, String>,
+    ) -> bool {
+        let recipe = match recipe {
+            Ok(r) => r,
+            Err(e) => {
+                self.status = e;
+                return false;
+            }
+        };
+        let reference = target.report;
+        self.edit_with(
+            "修改拟合设置",
+            |project| {
+                if project.nlfit_operation(&reference)? != &target.before {
+                    return Err("拟合设置已改变，请从报告重新打开编辑器".into());
+                }
+                project.edit_nlfit(&reference, recipe).map(Some)
+            },
+            |app, report| {
+                app.status = "已原位更新拟合曲线和报告".into();
+                app.dialog = Some(Dialog::NlFitReport(vec![report]));
+            },
+        )
+        .is_some()
     }
 }

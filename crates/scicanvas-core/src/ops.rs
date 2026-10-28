@@ -1182,4 +1182,209 @@ mod nonlinear_recalc_tests {
             Some((12, 37))
         );
     }
+    #[test]
+    fn report_recalc_reuses_solver_statistics_and_failure_retains_values_and_bands() {
+        let mut p = project();
+        let (_, r) = p.nlfit(&source(), Model::ExpDec1, &[], &[]).unwrap();
+        p.nlfit_bands(&r[0], 0.95).unwrap();
+        replace_source(&mut p, 2.);
+        assert!(p.recalc_computed(false).is_empty());
+        let current = p.nlfit_report(&r[0]).unwrap().clone();
+        assert!(current.current && current.error.is_none());
+        assert!((current.fit.params[0] - 2.).abs() < 1e-6);
+        let book = p.book(1).unwrap();
+        let x = book.column(&current.curve.0).unwrap().values();
+        let y = book.column(&current.curve.1).unwrap().values();
+        assert!((current.fit.eval(x[0]) - y[0]).abs() < 1e-6);
+        let old_columns: Vec<_> = book
+            .columns
+            .iter()
+            .filter(|c| c.derived_from.is_some())
+            .map(|c| (c.key.clone(), c.data.clone()))
+            .collect();
+        p.book_mut(1).unwrap().columns[1].data = ["1".into()].into_iter().collect();
+        assert!(!p.recalc_computed(false).is_empty());
+        let failed = p.nlfit_report(&r[0]).unwrap();
+        assert!(!failed.current && failed.error.is_some());
+        assert_eq!(failed.fit, current.fit);
+        for (key, data) in old_columns {
+            assert_eq!(p.book(1).unwrap().column(&key).unwrap().data, data);
+        }
+        assert!(p.nlfit_bands(&r[0], 0.95).is_err());
+        p = project_file::from_scv(&project_file::to_scv(&p).unwrap()).unwrap();
+        assert!(p.nlfit_report(&r[0]).unwrap().error.is_some());
+        replace_source(&mut p, 2.);
+        assert!(p.recalc_computed(false).is_empty());
+        assert_eq!(p.nlfit_report(&r[0]).unwrap(), &current);
+    }
+
+    #[test]
+    fn report_reedit_preserves_identifiers_styles_and_is_atomic_on_error() {
+        let mut p = project();
+        let (_, reports) = p.nlfit(&source(), Model::ExpDec1, &[], &[]).unwrap();
+        let r = &reports[0];
+        p.nlfit_bands(r, 0.95).unwrap();
+        let before = p.clone();
+        let OpKind::Nonlinear(recipe) = &p.nlfit_operation(r).unwrap().kind else {
+            unreachable!()
+        };
+        let mut recipe = *recipe.clone();
+        recipe.initial = Some(vec![1., 3., 1.]);
+        recipe.limits = vec![
+            ParamLimits::default(),
+            ParamLimits::fixed(2.5),
+            ParamLimits {
+                fixed: None,
+                lower: Some(0.5),
+                upper: Some(2.),
+            },
+        ];
+        recipe.constraints = "y0 + A1 >= 3".into();
+        let result = p.edit_nlfit(r, recipe.clone()).unwrap();
+        assert_eq!(result.id, r.id);
+        assert_eq!(result.fit.params[1], 2.5);
+        assert_eq!(p.graphs, before.graphs);
+        assert_eq!(
+            p.books[0].columns.iter().map(|c| &c.key).collect::<Vec<_>>(),
+            before.books[0].columns.iter().map(|c| &c.key).collect::<Vec<_>>()
+        );
+        assert_eq!(project_file::from_scv(&project_file::to_scv(&p).unwrap()).unwrap(), p);
+        let before = p.clone();
+        recipe.initial = Some(vec![f64::NAN]);
+        assert!(p.edit_nlfit(r, recipe).is_err());
+        assert_eq!(p, before);
+    }
+
+    #[test]
+    fn reports_isolate_foreign_same_keys_and_detach_deleted_source_or_reused_result() {
+        let mut p = project();
+        let mut foreign = p.books[0].clone();
+        foreign.id = 10;
+        p.books.push(foreign);
+        p.next_id = 11;
+        let (_, a) = p.nlfit(&source(), Model::ExpDec1, &[], &[]).unwrap();
+        let (_, b) = p
+            .nlfit(
+                &Source::Book {
+                    id: 10,
+                    selected: vec!["B".into()],
+                    rows: None,
+                },
+                Model::ExpDec1,
+                &[],
+                &[],
+            )
+            .unwrap();
+        assert_eq!(a[0].curve, b[0].curve);
+        assert_ne!(a[0].id, b[0].id);
+        replace_source(&mut p, 2.);
+        assert!(p.recalc_computed(false).is_empty());
+        assert_eq!(p.nlfit_report(&b[0]), Some(&b[0]));
+        assert_ne!(p.nlfit_report(&a[0]).unwrap().fit, a[0].fit);
+        p.delete_columns(1, &["B".into()]);
+        let detached = p.nlfit_report(&a[0]).unwrap();
+        assert!(!detached.current && detached.error.is_some());
+        assert!(p.nlfit_operation(&a[0]).is_err());
+        let mut p = project_file::from_scv(&project_file::to_scv(&p).unwrap()).unwrap();
+        assert_eq!(p.nlfit_reports().len(), 2);
+        p.delete_columns(10, &[b[0].curve.1.clone()]);
+        p.book_mut(10).unwrap().push_column(Role::Y);
+        assert!(p.nlfit_report(&b[0]).is_none());
+        assert!(p.nlfit_bands(&b[0], 0.95).is_err());
+    }
+
+    #[test]
+    fn report_files_validate_dimensions_identity_and_v19_missing_reports() {
+        let mut p = project();
+        p.nlfit(&source(), Model::ExpDec1, &[], &[]).unwrap();
+        let original = project_file::to_json(&p).unwrap();
+        for corrupt in ["identity", "dimensions", "duplicate"] {
+            let mut value: serde_json::Value = serde_json::from_str(&original).unwrap();
+            let columns = value["books"][0]["columns"].as_array_mut().unwrap();
+            let col = columns.iter_mut().find(|c| c.get("fit_report").is_some()).unwrap();
+            let report = &mut col["fit_report"];
+            match corrupt {
+                "identity" => report["book_id"] = 10.into(),
+                "dimensions" => report["fit"]["se"] = serde_json::json!([]),
+                _ => report["id"] = 1.into(),
+            }
+            assert!(project_file::from_json(&value.to_string()).is_err(), "{corrupt}");
+        }
+        for version in [18, 19] {
+            let mut value: serde_json::Value = serde_json::from_str(&original).unwrap();
+            value["version"] = version.into();
+            for col in value["books"][0]["columns"].as_array_mut().unwrap() {
+                col.as_object_mut().unwrap().remove("fit_report");
+                if version == 18 {
+                    col.as_object_mut().unwrap().remove("op");
+                }
+            }
+            let old = project_file::from_json(&value.to_string()).unwrap();
+            assert!(old.nlfit_reports().is_empty());
+            assert_eq!(
+                old.books[0].columns.last().unwrap().data,
+                p.books[0].columns.last().unwrap().data
+            );
+        }
+    }
+
+    #[test]
+    fn undefined_report_errors_roundtrip_and_remain_noop_for_history() {
+        let mut p = project();
+        let (_, reports) = p.nlfit(&source(), Model::ExpDec1, &[], &[]).unwrap();
+        let col = p.books[0]
+            .columns
+            .iter_mut()
+            .find(|c| c.key == reports[0].curve.1)
+            .unwrap();
+        let report = col.fit_report.as_mut().unwrap();
+        report.fit.se[0] = f64::NAN;
+        report.fit.cov[0][0] = f64::NAN;
+        let saved = project_file::from_scv(&project_file::to_scv(&p).unwrap()).unwrap();
+        assert_eq!(p, saved);
+        let mut h = crate::history::History::default();
+        h.begin(&p, "noop");
+        h.changed();
+        assert!(!h.commit(&p));
+    }
+
+    #[test]
+    fn failed_source_revisited_after_restore_is_marked_failed_again() {
+        let mut p = project();
+        let (_, reports) = p.nlfit(&source(), Model::ExpDec1, &[], &[]).unwrap();
+        for _ in 0..2 {
+            p.books[0].columns[1].data = ["1".into()].into_iter().collect();
+            assert!(!p.recalc_computed(false).is_empty());
+            assert!(!p.nlfit_report(&reports[0]).unwrap().current);
+            let failed = p.clone();
+            assert!(p.recalc_computed(false).is_empty());
+            assert_eq!(p, failed);
+            replace_source(&mut p, 1.);
+            assert!(p.recalc_computed(false).is_empty());
+            assert!(p.nlfit_report(&reports[0]).unwrap().current);
+        }
+    }
+    #[test]
+    fn v19_recipe_generates_report_only_after_explicit_or_changed_source_recalculation() {
+        let mut p = project();
+        p.nlfit(&source(), Model::ExpDec1, &[], &[]).unwrap();
+        let mut value = serde_json::to_value(&p).unwrap();
+        value["version"] = 19.into();
+        for col in value["books"][0]["columns"].as_array_mut().unwrap() {
+            col.as_object_mut().unwrap().remove("fit_report");
+        }
+        let old = project_file::from_json(&value.to_string()).unwrap();
+        let mut p = old.clone();
+        assert!(p.recalc_computed(false).is_empty());
+        assert_eq!(p, old);
+        assert!(p.recalc_computed(true).is_empty());
+        assert_eq!(p.nlfit_reports().len(), 1);
+        assert!(p.nlfit_reports()[0].current);
+        assert_eq!(p.books[0].columns.len(), old.books[0].columns.len());
+        let mut changed = old;
+        replace_source(&mut changed, 2.);
+        assert!(changed.recalc_computed(false).is_empty());
+        assert_eq!(changed.nlfit_reports().len(), 1);
+        assert!((changed.nlfit_reports()[0].fit.params[0] - 2.).abs() < 1e-6);
+    }
 }

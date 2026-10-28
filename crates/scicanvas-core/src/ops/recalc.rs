@@ -80,7 +80,7 @@ pub enum FitMethod {
 }
 
 impl FitMethod {
-    pub(super) fn from_function(function: &crate::nlfit::FitFunction) -> Self {
+    pub fn from_function(function: &crate::nlfit::FitFunction) -> Self {
         match function {
             crate::nlfit::FitFunction::Builtin(model) => Self::Builtin(*model),
             _ => Self::Custom {
@@ -133,6 +133,9 @@ pub struct NonlinearRecipe {
     pub output_x: String,
     pub bands: Vec<FitBands>,
     pub input_hash: Option<u64>,
+    /// 相同失败来源在自动编辑收尾时不重复求解，手动重算可重试。
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub attempted_hash: Option<u64>,
 }
 
 impl NonlinearRecipe {
@@ -213,7 +216,11 @@ impl NonlinearRecipe {
         Ok(fit)
     }
 
-    fn calculate(&self, op: &Operation, book: &Book) -> Result<Vec<(String, crate::ColumnData)>, String> {
+    pub(super) fn calculate(
+        &self,
+        op: &Operation,
+        book: &Book,
+    ) -> Result<(Vec<(String, crate::ColumnData)>, crate::nlfit::NlFit), String> {
         let fit = self.fit(op, book)?;
         let grid = interpolate::grid(fit.x_min, fit.x_max, FIT_POINTS);
         let values = fit.sample(&grid);
@@ -249,7 +256,7 @@ impl NonlinearRecipe {
         }
         // Y 的键由拥有此记录的列提供。
         result.push((String::new(), data(&values)));
-        Ok(result)
+        Ok((result, fit))
     }
 
     pub(crate) fn estimated_bytes(&self) -> usize {
@@ -567,29 +574,52 @@ impl Project {
                 if let Some(op) = col.op.as_ref().filter(|_| col.formula.is_none()) {
                     if let OpKind::Nonlinear(recipe) = &op.kind {
                         let fingerprint = recipe.fingerprint(op, book);
-                        if recipe.input_hash == Some(fingerprint) && !manual {
+                        if recipe.input_hash == Some(fingerprint) && (!manual || col.fit_report.is_some()) {
+                            if let Some(Operation {
+                                kind: OpKind::Nonlinear(recipe),
+                                ..
+                            }) = &mut self.books[b].columns.iter_mut().find(|c| c.key == key).unwrap().op
+                            {
+                                recipe.attempted_hash = None;
+                            }
+                            if let Some(r) = &mut self.books[b]
+                                .columns
+                                .iter_mut()
+                                .find(|c| c.key == key)
+                                .unwrap()
+                                .fit_report
+                            {
+                                r.current = r.fit.converged;
+                                r.error = None;
+                            }
                             continue;
                         }
-                        let computed = recipe.calculate(op, book);
-                        match computed {
-                            Ok(mut outputs) => {
-                                outputs.last_mut().unwrap().0 = key.clone();
-                                if outputs.iter().any(|(k, _)| book.column(k).is_none()) {
-                                    problems.push(format!("{} 列 {key}：拟合输出已删除，保留原结果", book.name));
-                                    continue;
-                                }
-                                for (k, data) in outputs {
-                                    self.books[b].columns.iter_mut().find(|c| c.key == k).unwrap().data = data;
-                                }
-                                if let Some(Operation {
-                                    kind: OpKind::Nonlinear(recipe),
-                                    ..
-                                }) = &mut self.books[b].columns.iter_mut().find(|c| c.key == key).unwrap().op
-                                {
-                                    recipe.input_hash = Some(fingerprint);
-                                }
+                        if recipe.attempted_hash == Some(fingerprint) && !manual {
+                            continue;
+                        }
+                        let op = op.clone();
+                        let computed = recipe.calculate(&op, book);
+                        let result = computed
+                            .and_then(|(outputs, fit)| self.write_nlfit(self.books[b].id, &key, op, outputs, fit));
+                        if let Err(e) = result {
+                            if let Some(Operation {
+                                kind: OpKind::Nonlinear(recipe),
+                                ..
+                            }) = &mut self.books[b].columns.iter_mut().find(|c| c.key == key).unwrap().op
+                            {
+                                recipe.attempted_hash = Some(fingerprint);
                             }
-                            Err(e) => problems.push(format!("{} 列 {key}：{e}", book.name)),
+                            problems.push(format!("{} 列 {key}：{e}", self.books[b].name));
+                            if let Some(r) = &mut self.books[b]
+                                .columns
+                                .iter_mut()
+                                .find(|c| c.key == key)
+                                .unwrap()
+                                .fit_report
+                            {
+                                r.current = false;
+                                r.error = Some(e);
+                            }
                         }
                         continue;
                     }
@@ -612,6 +642,33 @@ impl Project {
                         }
                     }
                     Err(e) => problems.push(format!("{} 列 {key}：{e}", self.books[b].name)),
+                }
+            }
+            let book = &self.books[b];
+            let pending: Vec<_> = book
+                .columns
+                .iter()
+                .filter_map(|c| {
+                    let op = c.op.as_ref()?;
+                    let OpKind::Nonlinear(recipe) = &op.kind else {
+                        return None;
+                    };
+                    (op.mode == RecalcMode::None || (op.mode == RecalcMode::Manual && !manual))
+                        .then(|| (c.key.clone(), recipe.input_hash == Some(recipe.fingerprint(op, book))))
+                })
+                .collect();
+            for (key, current) in pending {
+                if let Some(r) = &mut self.books[b]
+                    .columns
+                    .iter_mut()
+                    .find(|c| c.key == key)
+                    .unwrap()
+                    .fit_report
+                {
+                    r.current = current && r.fit.converged;
+                    if r.current {
+                        r.error = None;
+                    }
                 }
             }
         }

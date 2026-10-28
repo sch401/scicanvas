@@ -3,7 +3,7 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-pub const PROJECT_VERSION: u32 = 19;
+pub const PROJECT_VERSION: u32 = 20;
 pub const GRAPH_TEMPLATE_VERSION: u32 = 1;
 
 /// 列的绘图角色，对应 Origin 里的 X / Y / 忽略。
@@ -67,6 +67,9 @@ pub struct Column {
     /// 生成这一列的分析操作（平滑、微分等），按其重算方式随来源更新。
     #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Option::is_none"))]
     pub op: Option<crate::ops::Operation>,
+    /// 结果列拥有的数值报告，来源删除后仍保留上次结果。
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Option::is_none"))]
+    pub fit_report: Option<Box<crate::ops::NlFitReport>>,
     /// 显示格式：只影响工作表里的显示。全部为“原样”时不写入文件。
     #[cfg_attr(
         feature = "serde",
@@ -88,6 +91,7 @@ impl Column {
             error_for: None,
             formula: None,
             op: None,
+            fit_report: None,
             format: Default::default(),
         }
     }
@@ -941,6 +945,10 @@ impl Project {
                             || keys.contains(&recipe.output_x)
                         {
                             col.op = None; // 来源或必要输出删除后成为快照，列标识复用不会重绑。
+                            if let Some(report) = &mut col.fit_report {
+                                report.current = false;
+                                report.error = Some("来源或必要输出已删除，保留上次结果快照".into());
+                            }
                         } else {
                             recipe.bands.retain(|b| !b.columns.iter().any(|key| keys.contains(key)));
                         }

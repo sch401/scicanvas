@@ -972,6 +972,7 @@ impl SciApp {
         self.project = project;
         match &mut self.dialog {
             Some(Dialog::CustomNlFit(edit)) => edit.sync_saved(&self.project.fit_functions),
+            Some(d @ Dialog::NlFitReport(_)) => d.sync_fit_reports(&self.project),
             Some(Dialog::LayerContents(edit)) => {
                 if let Some(layer) = self
                     .project
@@ -1097,6 +1098,8 @@ impl SciApp {
                     | Dialog::ColumnProps { .. }
                     | Dialog::CategoryOrder { .. }
                     | Dialog::CustomNlFit(_)
+                    | Dialog::NlFitReport(_)
+                    | Dialog::NlFit { .. }
             )
         ) {
             self.dialog = None;

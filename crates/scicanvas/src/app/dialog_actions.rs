@@ -13,6 +13,7 @@ impl SciApp {
         // 未改动的实时控件应同步功能区或其他已打开面板中的修改。
         match d {
             Dialog::CustomNlFit(edit) => edit.sync_saved(&self.project.fit_functions),
+            Dialog::NlFitReport(_) => d.sync_fit_reports(&self.project),
             Dialog::LayerContents(edit) if edit.draft == edit.before => {
                 if let Some(layer) = self
                     .project
@@ -112,6 +113,8 @@ impl SciApp {
             dialogs::Action::SaveNote(title, text) => self.apply_save_note_action(title, text),
             dialogs::Action::FitBands(reports) => self.apply_fit_bands_action(reports),
             dialogs::Action::NlFitBands(reports) => self.apply_nlfit_bands_action(reports),
+            dialogs::Action::EditNlFit(report) => self.edit_nlfit_report(*report),
+            dialogs::Action::Refit(target, recipe) => return self.refit_report(*target, recipe),
             dialogs::Action::ResidualPlot(reports) => self.apply_residual_plot_action(reports),
             dialogs::Action::None => {}
             dialogs::Action::Close => self.dialog = None,

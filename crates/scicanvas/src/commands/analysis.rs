@@ -15,6 +15,7 @@ pub(super) fn curve_selection(commands: &mut Vec<Command>) {
 
 pub(super) fn fits(commands: &mut Vec<Command>) {
     commands.extend([
+        c("fit.reports", "拟合报告…", "fitpoly", "", "分析", "report 拟合报告 重新编辑", |_| Ok(()), |a| a.open_nlfit_reports()),
         // 分析
         c(
             "fit.linear",

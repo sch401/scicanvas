@@ -187,6 +187,11 @@ impl CustomFitFunction {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(
+    feature = "serde",
+    derive(serde::Serialize, serde::Deserialize),
+    serde(into = "crate::ops::FitMethod", try_from = "crate::ops::FitMethod")
+)]
 pub enum FitFunction {
     Builtin(Model),
     Custom(CustomFitFunction),
@@ -229,16 +234,33 @@ impl FitFunction {
     }
 }
 
+impl From<FitFunction> for crate::ops::FitMethod {
+    fn from(function: FitFunction) -> Self {
+        Self::from_function(&function)
+    }
+}
+impl TryFrom<crate::ops::FitMethod> for FitFunction {
+    type Error = String;
+    fn try_from(method: crate::ops::FitMethod) -> Result<Self, String> {
+        method.resolve()
+    }
+}
 /// 拟合结果。
-#[derive(Clone, Debug, PartialEq)]
+#[derive(Clone, Debug)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct NlFit {
     pub model: FitFunction,
     pub params: Vec<f64>,
+    #[cfg_attr(feature = "serde", serde(deserialize_with = "report_errors"))]
     pub se: Vec<f64>,
+    #[cfg_attr(feature = "serde", serde(deserialize_with = "report_number"))]
     pub rss: f64,
+    #[cfg_attr(feature = "serde", serde(deserialize_with = "report_number"))]
     pub r2: f64,
+    #[cfg_attr(feature = "serde", serde(deserialize_with = "report_number"))]
     pub adj_r2: f64,
     /// RSS / (n − p)
+    #[cfg_attr(feature = "serde", serde(deserialize_with = "report_number"))]
     pub reduced_chi2: f64,
     pub n: usize,
     pub iterations: usize,
@@ -250,10 +272,13 @@ pub struct NlFit {
     /// 残差自由度 n − 自由参数数。
     pub dof: usize,
     /// 参数协方差（固定参数的行列为 0）。
+    #[cfg_attr(feature = "serde", serde(deserialize_with = "report_covariance"))]
     pub cov: Vec<Vec<f64>>,
     /// 用到的线性约束（用户写法）。
     pub constraints: Vec<String>,
+    #[cfg_attr(feature = "serde", serde(deserialize_with = "report_number"))]
     pub x_min: f64,
+    #[cfg_attr(feature = "serde", serde(deserialize_with = "report_number"))]
     pub x_max: f64,
 }
 
@@ -2276,5 +2301,64 @@ mod function_library_tests {
             assert!(project.save_fit_function(None, bad).is_err());
             assert_eq!(project, changed);
         }
+    }
+}
+
+#[cfg(feature = "serde")]
+fn report_number<'de, D: serde::Deserializer<'de>>(d: D) -> Result<f64, D::Error> {
+    use serde::Deserialize;
+    Ok(Option::<f64>::deserialize(d)?.unwrap_or(f64::NAN))
+}
+#[cfg(feature = "serde")]
+fn report_errors<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<f64>, D::Error> {
+    use serde::Deserialize;
+    Ok(Vec::<Option<f64>>::deserialize(d)?
+        .into_iter()
+        .map(|x| x.unwrap_or(f64::NAN))
+        .collect())
+}
+#[cfg(feature = "serde")]
+fn report_covariance<'de, D: serde::Deserializer<'de>>(d: D) -> Result<Vec<Vec<f64>>, D::Error> {
+    use serde::Deserialize;
+    Ok(Vec::<Vec<Option<f64>>>::deserialize(d)?
+        .into_iter()
+        .map(|row| row.into_iter().map(|x| x.unwrap_or(f64::NAN)).collect())
+        .collect())
+}
+
+impl PartialEq for NlFit {
+    fn eq(&self, other: &Self) -> bool {
+        let number = |a: f64, b: f64| a == b || (a.is_nan() && b.is_nan());
+        let values = |a: &[f64], b: &[f64]| a.len() == b.len() && a.iter().zip(b).all(|(&a, &b)| number(a, b));
+        self.model == other.model
+            && values(&self.params, &other.params)
+            && values(&self.se, &other.se)
+            && values(
+                &[
+                    self.rss,
+                    self.r2,
+                    self.adj_r2,
+                    self.reduced_chi2,
+                    self.x_min,
+                    self.x_max,
+                ],
+                &[
+                    other.rss,
+                    other.r2,
+                    other.adj_r2,
+                    other.reduced_chi2,
+                    other.x_min,
+                    other.x_max,
+                ],
+            )
+            && self.n == other.n
+            && self.iterations == other.iterations
+            && self.converged == other.converged
+            && self.fixed == other.fixed
+            && self.at_bound == other.at_bound
+            && self.dof == other.dof
+            && self.cov.len() == other.cov.len()
+            && self.cov.iter().zip(&other.cov).all(|(a, b)| values(a, b))
+            && self.constraints == other.constraints
     }
 }

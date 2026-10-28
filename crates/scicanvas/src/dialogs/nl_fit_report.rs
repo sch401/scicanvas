@@ -8,6 +8,7 @@ impl Dialog {
         pal: &Palette,
         open: &mut bool,
         _esc: bool,
+        project: &scicanvas_core::Project,
     ) -> Action {
         let Self::NlFitReport(reports) = self else {
             unreachable!()
@@ -18,10 +19,28 @@ impl Dialog {
                 .max_height((ctx.available_rect().height() - 220.0).clamp(100.0, 480.0))
                 .show(ui, |ui| {
                     for (ri, r) in reports.iter().enumerate() {
+                        let live = project.nlfit_report(r);
+                        let r = live.unwrap_or(r);
                         let f = &r.fit;
+                        let status = if live.is_none() {
+                            "结果列已删除，以下为窗口保留的报告快照".into()
+                        } else {
+                            report_status(r)
+                        };
+                        ui.label(RichText::new(status).small().color(pal.weak));
+                        ui.label(
+                            RichText::new(format!("Book {} · 结果 {} · 报告 #{}", r.book_id, r.curve.1, r.id)).small(),
+                        );
+                        if live.is_some()
+                            && project.nlfit_operation(r).is_ok()
+                            && ui.button("重新编辑拟合设置").clicked()
+                        {
+                            action = Action::EditNlFit(Box::new(r.clone()));
+                        }
                         ui.label(RichText::new(format!("{} · {}", r.name, f.model.name())).strong());
                         ui.label(RichText::new(f.model.formula()).monospace().small());
-                        if matches!(f.model, scicanvas_core::nlfit::FitFunction::Custom(_))
+                        if live.is_none()
+                            && matches!(f.model, scicanvas_core::nlfit::FitFunction::Custom(_))
                             && ui.button("重新编辑函数").clicked()
                         {
                             let definition = scicanvas_core::nlfit::CustomFitDefinition {
@@ -130,10 +149,11 @@ fn nlfit_markdown(reports: &[NlFitReport]) -> String {
             let stats: Vec<(String, String)> = nlfit_stats(f).into_iter().map(|(k, v)| (k.to_string(), v)).collect();
             let constraints: String = f.constraints.iter().map(|c| format!("约束：`{c}`\n\n")).collect();
             format!(
-                "## {} — {}\n\n`{}`\n\n{}{}\n{}",
+                "## {} — {}\n\n`{}`\n\n{}\n\n{}{}\n{}",
                 md_cell(&r.name),
                 f.model.name(),
                 f.model.formula(),
+                report_status(r),
                 constraints,
                 md_table(&nlfit_param_rows(f)),
                 md_pairs(["统计量", "值"], &stats)
@@ -150,6 +170,7 @@ fn nlfit_text(reports: &[NlFitReport]) -> String {
     for r in reports {
         let f = &r.fit;
         lines.push(format!("{}\t{}\t{}", r.name, f.model.name(), f.model.formula()));
+        lines.push(report_status(r));
         lines.extend(f.constraints.iter().map(|c| format!("约束\t{c}")));
         lines.extend(nlfit_param_rows(f).iter().map(|row| row.join("\t")));
         for (k, v) in nlfit_stats(f) {
@@ -158,4 +179,33 @@ fn nlfit_text(reports: &[NlFitReport]) -> String {
         lines.push(String::new());
     }
     lines.join("\n")
+}
+
+fn report_status(r: &NlFitReport) -> String {
+    if let Some(error) = &r.error {
+        format!("本次重算失败：{error}。以下为上次成功结果。")
+    } else if !r.current {
+        if r.fit.converged {
+            "上次成功结果 · 来源或设置已改变，等待重算".into()
+        } else {
+            "拟合尚未收敛 · 以下为停止时的数值".into()
+        }
+    } else {
+        "当前有效结果 · 已收敛".into()
+    }
+}
+
+impl Dialog {
+    pub(crate) fn sync_fit_reports(&mut self, project: &scicanvas_core::Project) {
+        if let Self::NlFitReport(reports) = self {
+            for report in reports {
+                if let Some(current) = project.nlfit_report(report) {
+                    *report = current.clone();
+                } else {
+                    report.current = false;
+                    report.error = Some("结果列已删除，当前为窗口保留的报告快照".into());
+                }
+            }
+        }
+    }
 }

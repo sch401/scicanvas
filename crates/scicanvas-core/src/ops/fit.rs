@@ -3,7 +3,11 @@ use super::*;
 
 /// 一条曲线的非线性拟合结果。
 #[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub struct NlFitReport {
+    pub id: u64,
+    pub current: bool,
+    pub error: Option<String>,
     pub name: String,
     pub fit: crate::nlfit::NlFit,
     pub book_id: u64,
@@ -215,21 +219,24 @@ impl Project {
 
     /// 非线性拟合的置信带与预测带（Δ 法）。
     pub fn nlfit_bands(&mut self, r: &NlFitReport, level: f64) -> Result<Vec<String>, String> {
+        self.book(r.book_id).ok_or("找不到工作簿")?;
+        let r = &self.nlfit_report(r).ok_or("拟合结果已删除，请重新打开报告")?.clone();
+        if !r.current || r.error.is_some() {
+            return Err("请先成功重算拟合，再添加置信带".into());
+        }
         let book = self.book(r.book_id).ok_or("找不到工作簿")?;
-        let fit = match book.column(&r.curve.1).and_then(|c| c.op.as_ref()) {
-            Some(
-                op @ Operation {
-                    kind: OpKind::Nonlinear(recipe),
-                    ..
-                },
-            ) => {
-                if recipe.input_hash != Some(recipe.fingerprint(op, book)) {
-                    return Err("来源已改变，请先重算拟合再添加置信带".into());
-                }
-                recipe.fit(op, book)?
+        if let Some(
+            op @ Operation {
+                kind: OpKind::Nonlinear(recipe),
+                ..
+            },
+        ) = book.column(&r.curve.1).and_then(|c| c.op.as_ref())
+        {
+            if recipe.input_hash != Some(recipe.fingerprint(op, book)) {
+                return Err("来源已改变，请先重算拟合再添加置信带".into());
             }
-            _ => r.fit.clone(),
-        };
+        }
+        let fit = r.fit.clone();
         let keys = self.add_bands(r.book_id, &r.y_key, &r.curve, &r.name, level, |x| {
             let (c, p) = fit.band(x, level);
             (fit.eval(x), c, p)
@@ -384,6 +391,7 @@ impl Project {
                     output_x: kx.clone(),
                     bands: Vec::new(),
                     input_hash: None,
+                    attempted_hash: None,
                 })),
                 y: item.y.clone(),
                 x: item.x.clone(),
@@ -404,13 +412,24 @@ impl Project {
                 .unwrap()
                 .op = Some(operation);
             graph = result.graph;
-            reports.push(NlFitReport {
+            let report = NlFitReport {
+                id: self.alloc_id(),
+                current: fit.converged,
+                error: None,
                 name,
                 fit,
                 book_id: item.book_id,
                 y_key: item.y.clone(),
-                curve: (kx, ky),
-            });
+                curve: (kx, ky.clone()),
+            };
+            self.book_mut(item.book_id)
+                .unwrap()
+                .columns
+                .iter_mut()
+                .find(|c| c.key == ky)
+                .unwrap()
+                .fit_report = Some(Box::new(report.clone()));
+            reports.push(report);
         }
         match graph {
             Some(g) => Ok((g, reports)),
@@ -475,5 +494,168 @@ impl Project {
         let result = self.write_result(&item, vec![c0, c1], ResultLink::None)?;
         let [k0, k1]: [String; 2] = result.columns.try_into().unwrap();
         Ok((cal, k0, k1))
+    }
+}
+
+impl Project {
+    pub fn nlfit_reports(&self) -> Vec<NlFitReport> {
+        self.books
+            .iter()
+            .flat_map(|b| &b.columns)
+            .filter_map(|c| c.fit_report.as_deref().cloned())
+            .collect()
+    }
+
+    pub fn nlfit_report(&self, reference: &NlFitReport) -> Option<&NlFitReport> {
+        self.book(reference.book_id)?
+            .column(&reference.curve.1)?
+            .fit_report
+            .as_deref()
+            .filter(|r| r.id == reference.id)
+    }
+
+    pub fn nlfit_operation(&self, reference: &NlFitReport) -> Result<&Operation, String> {
+        self.nlfit_report(reference).ok_or("拟合结果已删除，请重新打开报告")?;
+        let op = self
+            .book(reference.book_id)
+            .unwrap()
+            .column(&reference.curve.1)
+            .unwrap()
+            .op
+            .as_ref()
+            .ok_or("来源或输出已删除，当前报告为快照")?;
+        if !matches!(op.kind, OpKind::Nonlinear(_)) {
+            return Err("该结果已使用其他计算定义".into());
+        }
+        Ok(op)
+    }
+
+    /// 求解及输出准备成功后，一起写入原结果组。
+    pub fn edit_nlfit(&mut self, reference: &NlFitReport, recipe: NonlinearRecipe) -> Result<NlFitReport, String> {
+        let mut op = self.nlfit_operation(reference)?.clone();
+        let OpKind::Nonlinear(old) = &op.kind else {
+            unreachable!()
+        };
+        if recipe.output_x != old.output_x || recipe.bands != old.bands {
+            return Err("拟合输出组已改变，请重新打开设置".into());
+        }
+        op.kind = OpKind::Nonlinear(Box::new(recipe));
+        let book = self.book(reference.book_id).unwrap();
+        let OpKind::Nonlinear(recipe) = &op.kind else {
+            unreachable!()
+        };
+        let (outputs, fit) = recipe.calculate(&op, book)?;
+        self.write_nlfit(reference.book_id, &reference.curve.1, op, outputs, fit)?;
+        Ok(self.nlfit_report(reference).unwrap().clone())
+    }
+
+    pub(super) fn write_nlfit(
+        &mut self,
+        book_id: u64,
+        key: &str,
+        mut op: Operation,
+        mut outputs: Vec<(String, crate::ColumnData)>,
+        fit: crate::nlfit::NlFit,
+    ) -> Result<(), String> {
+        outputs.last_mut().unwrap().0 = key.into();
+        let book = self.book(book_id).ok_or("找不到工作簿")?;
+        if outputs.iter().any(|(k, _)| book.column(k).is_none()) {
+            return Err("拟合输出已删除，保留原结果".into());
+        }
+        let OpKind::Nonlinear(recipe) = &op.kind else {
+            unreachable!()
+        };
+        let hash = recipe.fingerprint(&op, book);
+        let OpKind::Nonlinear(recipe) = &mut op.kind else {
+            unreachable!()
+        };
+        recipe.input_hash = Some(hash);
+        recipe.attempted_hash = None;
+        let source_name = book
+            .column(&op.y)
+            .map(|c| c.display_name().to_owned())
+            .unwrap_or_default();
+        let report_id = book.column(key).and_then(|c| c.fit_report.as_ref()).map(|r| r.id);
+        let report_id = report_id.unwrap_or_else(|| self.alloc_id());
+        let OpKind::Nonlinear(recipe) = &op.kind else {
+            unreachable!()
+        };
+        let curve = (recipe.output_x.clone(), key.into());
+        let y_key = op.y.clone();
+        let book = self.book_mut(book_id).unwrap();
+        for (k, data) in outputs {
+            book.columns.iter_mut().find(|c| c.key == k).unwrap().data = data;
+        }
+        let col = book.columns.iter_mut().find(|c| c.key == key).unwrap();
+        col.comment = format!("{}，RSS = {}", fit.model.formula(), fmt_num(fit.rss));
+        col.op = Some(op);
+        col.fit_report = Some(Box::new(NlFitReport {
+            id: report_id,
+            current: true,
+            error: None,
+            name: source_name,
+            fit,
+            book_id,
+            y_key,
+            curve,
+        }));
+        Ok(())
+    }
+}
+
+impl NlFitReport {
+    pub fn validate(&self) -> Result<(), String> {
+        let f = &self.fit;
+        let n = f.model.params().len();
+        if self.id == 0
+            || self.curve.0.is_empty()
+            || self.curve.1.is_empty()
+            || self.curve.0 == self.curve.1
+            || self.y_key.is_empty()
+            || f.params.len() != n
+            || f.se.len() != n
+            || f.fixed.len() != n
+            || f.at_bound.len() != n
+            || f.cov.len() != n
+            || f.cov.iter().any(|row| row.len() != n)
+            || f.params.iter().any(|v| !v.is_finite())
+            || !f.x_min.is_finite()
+            || !f.x_max.is_finite()
+            || f.x_min > f.x_max
+            || !f.rss.is_finite()
+            || f.rss < 0.0
+            || f.se.iter().any(|v| v.is_infinite() || *v < 0.0)
+            || f.cov.iter().flatten().any(|v| v.is_infinite())
+            || [f.r2, f.adj_r2, f.reduced_chi2].iter().any(|v| v.is_infinite())
+            || f.n == 0
+            || f.dof > f.n
+            || (self.current && (!f.converged || self.error.is_some()))
+            || f.constraints.iter().map(String::len).sum::<usize>() > 16384
+        {
+            return Err("拟合报告的参数、统计量或状态无效".into());
+        }
+        crate::nlfit::parse_constraints_for_function(&f.model, &f.constraints.join("\n"))?;
+        Ok(())
+    }
+
+    pub(crate) fn estimated_bytes(&self) -> usize {
+        use std::mem::size_of;
+        let f = &self.fit;
+        size_of::<Self>()
+            + [&self.name, &self.y_key, &self.curve.0, &self.curve.1]
+                .iter()
+                .map(|s| s.capacity())
+                .sum::<usize>()
+            + self.error.as_ref().map_or(0, String::capacity)
+            + f.model.name().len()
+            + f.model.formula().len()
+            + f.model.params().iter().map(|s| s.len()).sum::<usize>()
+            + (f.params.capacity() + f.se.capacity()) * size_of::<f64>()
+            + f.fixed.capacity()
+            + f.at_bound.capacity()
+            + f.cov.capacity() * size_of::<Vec<f64>>()
+            + f.cov.iter().map(|r| r.capacity() * size_of::<f64>()).sum::<usize>()
+            + f.constraints.capacity() * size_of::<String>()
+            + f.constraints.iter().map(String::capacity).sum::<usize>()
     }
 }

@@ -1091,13 +1091,18 @@ fn custom_fit_library_real_controls_save_rename_reuse_and_reedit_with_history() 
     };
     assert_eq!(reports[0].fit.model.name(), "RenamedDecay");
     assert!(reports[0].fit.converged);
-    let params = reports[0].fit.params.clone();
+    let reference = reports[0].clone();
+    let original_initial = match &app.project.nlfit_operation(&reference).unwrap().kind {
+        scicanvas_core::ops::OpKind::Nonlinear(r) => r.initial.clone().unwrap(),
+        _ => unreachable!(),
+    };
     let after_fit = app.project.clone();
-    press_dialog_button(&mut app, "重新编辑函数");
+    press_dialog_button(&mut app, "重新编辑拟合设置");
     let Some(Dialog::CustomNlFit(editor)) = &app.dialog else {
         panic!("editor should reopen")
     };
-    assert_eq!(editor.definition().unwrap().initial, params);
+    assert_eq!(editor.definition().unwrap().initial, original_initial);
+    assert_eq!(editor.target.as_ref().unwrap().report.id, reference.id);
     assert_eq!(
         app.project, after_fit,
         "reopening an editor leaves fitted output unchanged"
@@ -1284,4 +1289,200 @@ fn rational_models_run_from_dialog_save_reopen_and_undo() {
         assert_eq!(saved, app.project);
         roundtrip(&mut app, &before_bands);
     }
+}
+
+#[test]
+fn persisted_fit_reports_refresh_with_undo_and_keep_notes_as_snapshots() {
+    use scicanvas_core::{nlfit::Model, project_file};
+    let mut app = app();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["C".into()]);
+    app.nlfit(Model::ExpDec1, &[], &[]);
+    press_dialog_button(&mut app, "保存为 Note");
+    let note = app.project.notes.last().unwrap().clone();
+    app.run_command("fit.reports");
+    let before = app.project.clone();
+    let reference = app.project.nlfit_reports()[0].clone();
+    app.edit("来源修改", |p| {
+        p.books[0].columns[2].set(0, "10".into());
+        Ok(Some(()))
+    })
+    .unwrap();
+    let current = app.project.nlfit_report(&reference).unwrap().clone();
+    assert_ne!(current.fit, reference.fit);
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut harness = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1400.0, 1000.0)),
+        |app: &mut SciApp, ctx: &egui::Context| app.dialogs(ctx),
+    );
+    harness.frame(&mut app, vec![]);
+    assert!(matches!(&app.dialog, Some(Dialog::NlFitReport(r)) if r[0] == current));
+    app.undo();
+    assert_eq!(app.project, before);
+    assert!(matches!(&app.dialog, Some(Dialog::NlFitReport(r)) if r[0] == reference));
+    app.redo();
+    assert!(matches!(&app.dialog, Some(Dialog::NlFitReport(r)) if r[0] == current));
+    assert_eq!(app.project.notes.last(), Some(&note));
+    app.project = project_file::from_scv(&project_file::to_scv(&app.project).unwrap()).unwrap();
+    app.dialog = None;
+    app.run_command("fit.reports");
+    assert!(matches!(&app.dialog, Some(Dialog::NlFitReport(r)) if r[0] == current));
+    press_dialog_button(&mut app, "保存为 Note");
+    assert!(app
+        .project
+        .notes
+        .last()
+        .unwrap()
+        .text
+        .contains(&scicanvas_core::fmt_num(current.fit.rss)));
+    assert_eq!(app.project.notes[0], note);
+}
+
+#[test]
+fn builtin_refit_editor_preserves_group_and_keeps_invalid_or_failed_drafts() {
+    use scicanvas_core::{nlfit::Model, ops::OpKind};
+    let mut app = app();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["C".into()]);
+    app.nlfit(Model::ExpDec1, &[], &[]);
+    let before = app.project.clone();
+    press_dialog_button(&mut app, "重新编辑拟合设置");
+    let Some(Dialog::NlFit { initial, target, .. }) = &mut app.dialog else {
+        panic!("editor")
+    };
+    assert!(initial.is_empty());
+    assert!(target.is_some());
+    *initial = "invalid".into();
+    press_dialog_button(&mut app, "拟合");
+    assert_eq!(app.project, before);
+    assert!(matches!(app.dialog, Some(Dialog::NlFit { .. })));
+    let Some(Dialog::NlFit { initial, .. }) = &mut app.dialog else {
+        unreachable!()
+    };
+    *initial = "0, -8, -1e-300".into();
+    press_dialog_button(&mut app, "拟合");
+    assert_eq!(app.project, before);
+    assert!(matches!(app.dialog, Some(Dialog::NlFit { .. })));
+    let Some(Dialog::NlFit {
+        initial,
+        limits,
+        constraints,
+        ..
+    }) = &mut app.dialog
+    else {
+        unreachable!()
+    };
+    *initial = "8, -8, 4".into();
+    limits[2] = (false, 0.0, true, 1.0, true, 3.0);
+    *constraints = "y0 + A1 = 0".into();
+    press_dialog_button(&mut app, "拟合");
+    let Some(Dialog::NlFitReport(reports)) = &app.dialog else {
+        panic!("{}", app.status)
+    };
+    assert_eq!(reports[0].fit.params[2], 3.0);
+    assert_eq!(app.project.books[0].columns.len(), before.books[0].columns.len());
+    assert_eq!(app.project.graphs, before.graphs);
+    assert_eq!(reports[0].id, before.nlfit_reports()[0].id);
+    assert_eq!(app.history.undo_label(), Some("修改拟合设置"));
+    roundtrip(&mut app, &before);
+    press_dialog_button(&mut app, "重新编辑拟合设置");
+    let Some(Dialog::NlFit {
+        initial,
+        target,
+        limits,
+        constraints,
+        ..
+    }) = &app.dialog
+    else {
+        panic!("editor")
+    };
+    assert_eq!(initial, "8, -8, 4");
+    assert_eq!(limits[2], (false, 0.0, true, 1.0, true, 3.0));
+    assert_eq!(constraints, "y0 + A1 = 0");
+    assert!(matches!(&target.as_ref().unwrap().before.kind, OpKind::Nonlinear(_)));
+    let after = app.project.clone();
+    press_dialog_button(&mut app, "取消");
+    assert_eq!(app.project, after);
+}
+
+#[test]
+fn custom_refit_editor_reloads_limits_and_original_initial_and_updates_in_place() {
+    use scicanvas_core::nlfit::{CustomFitFunction, ParamLimits};
+    let mut app = app();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["C".into()]);
+    let f = CustomFitFunction::new("Decay", "a+b*exp(-x/t)", vec!["a".into(), "b".into(), "t".into()]).unwrap();
+    assert!(app.custom_nlfit(
+        f,
+        vec![8., -8., 4.],
+        vec![
+            ParamLimits::default(),
+            ParamLimits::default(),
+            ParamLimits {
+                fixed: None,
+                lower: Some(1.),
+                upper: Some(6.)
+            }
+        ],
+        vec![]
+    ));
+    let before = app.project.clone();
+    press_dialog_button(&mut app, "重新编辑拟合设置");
+    let Some(Dialog::CustomNlFit(edit)) = &mut app.dialog else {
+        panic!("editor")
+    };
+    assert_eq!(edit.initial, "8, -8, 4");
+    assert_eq!(edit.limits[2].upper, Some(6.));
+    edit.limits[2].upper = Some(3.);
+    edit.constraints = "a + b = 0".into();
+    press_dialog_button(&mut app, "拟合");
+    let Some(Dialog::NlFitReport(reports)) = &app.dialog else {
+        panic!("{}", app.status)
+    };
+    assert_eq!(reports[0].fit.params[2], 3.);
+    assert_eq!(reports[0].id, before.nlfit_reports()[0].id);
+    assert_eq!(app.project.books[0].columns.len(), before.books[0].columns.len());
+    assert_eq!(app.project.graphs, before.graphs);
+    roundtrip(&mut app, &before);
+}
+
+#[test]
+fn deleted_report_export_is_a_snapshot_and_stale_editor_preserves_redo() {
+    use scicanvas_core::{nlfit::Model, ops::OpKind};
+    let mut app = app();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["C".into()]);
+    app.nlfit(Model::ExpDec1, &[], &[]);
+    let reference = app.project.nlfit_reports()[0].clone();
+    app.edit_nlfit_report(reference.clone());
+    app.run_command("book.new");
+    app.undo();
+    let before = app.project.clone();
+    let Some(Dialog::NlFit { target, .. }) = app.dialog.take() else {
+        panic!("editor")
+    };
+    let target = target.unwrap();
+    let OpKind::Nonlinear(recipe) = &target.before.kind else {
+        unreachable!()
+    };
+    let recipe = *recipe.clone();
+    app.edit("删除拟合结果", |p| {
+        p.delete_columns(1, std::slice::from_ref(&reference.curve.1));
+        Ok(Some(()))
+    })
+    .unwrap();
+    let deleted = app.project.clone();
+    assert!(!app.refit_report(*target, Ok(recipe)));
+    assert_eq!(app.project, deleted);
+    app.dialog = Some(Dialog::NlFitReport(vec![reference.clone()]));
+    press_dialog_button(&mut app, "保存为 Note");
+    let note = app.project.notes.last().unwrap();
+    assert!(note.text.contains("报告快照"));
+    assert!(!note.text.contains("当前有效结果"));
+    app.undo();
+    app.undo();
+    assert_eq!(app.project, before);
+    assert!(app.project.nlfit_report(&reference).is_some());
 }

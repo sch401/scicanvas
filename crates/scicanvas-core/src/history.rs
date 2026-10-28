@@ -183,6 +183,7 @@ fn estimated_bytes(p: &Project) -> usize {
                 .map(|s| s.capacity())
                 .sum::<usize>();
             bytes += c.data.estimated_bytes();
+            bytes += c.fit_report.as_ref().map_or(0, |r| r.estimated_bytes());
             bytes += c.derived_from.as_ref().map_or(0, String::capacity);
             bytes += c.error_for.as_ref().map_or(0, String::capacity);
             if let Some(crate::ops::Operation {
@@ -306,6 +307,30 @@ mod tests {
         assert!(h.redo(&p).is_none());
     }
     #[test]
+    fn fit_report_memory_is_included_in_snapshot_budget() {
+        let mut p = Project::sample();
+        p.nlfit(
+            &crate::ops::Source::Book {
+                id: 1,
+                selected: vec!["C".into()],
+                rows: None,
+            },
+            crate::nlfit::Model::ExpDec1,
+            &[],
+            &[],
+        )
+        .unwrap();
+        let before = estimated_bytes(&p);
+        p.books[0]
+            .columns
+            .iter_mut()
+            .find_map(|c| c.fit_report.as_mut())
+            .unwrap()
+            .error = Some("x".repeat(8192));
+        assert!(estimated_bytes(&p) >= before + 8192);
+    }
+
+    #[test]
     fn custom_fit_library_memory_is_included_in_snapshot_budget() {
         let mut project = Project::default();
         let empty = estimated_bytes(&project);
@@ -354,6 +379,7 @@ mod tests {
                     .map(|s| s.capacity())
                     .sum::<usize>();
                 bytes += c.data.estimated_bytes();
+                bytes += c.fit_report.as_ref().map_or(0, |r| r.estimated_bytes());
                 bytes += c.derived_from.as_ref().map_or(0, String::capacity);
                 bytes += c.error_for.as_ref().map_or(0, String::capacity);
                 if let Some(crate::ops::Operation {

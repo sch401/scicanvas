@@ -53,7 +53,7 @@ mod window;
 pub use column_props::ColumnEdit;
 pub(crate) use docking::{begin_docks, end_docks, has_docks, place_docks, reset_docks, DockSide};
 pub use layer_contents::LayerContents;
-pub use nl_fit::{CustomFitAction, CustomFitEditor};
+pub use nl_fit::{CustomFitAction, CustomFitEditor, FitEditTarget};
 pub(crate) use plot_object::PlotObjectEditor;
 pub(crate) use scientific_text::{scientific_text, scientific_text_multiline};
 pub(crate) use tables::md_table;
@@ -147,6 +147,8 @@ pub enum Dialog {
     /// 非线性拟合：选择内置函数；每个参数可固定为指定值（最多 4 个参数）。
     NlFit {
         model: Model,
+        initial: String,
+        target: Option<Box<FitEditTarget>>,
         /// 每个参数：(固定?, 固定值, 有下限?, 下限, 有上限?, 上限)。
         limits: [(bool, f64, bool, f64, bool, f64); scicanvas_core::nlfit::MAX_PARAMS],
         /// 参数间线性约束，一行一条。
@@ -243,6 +245,8 @@ pub enum Action {
     ResidualPlot(Vec<FitReport>),
     FitBands(Vec<FitReport>),
     NlFitBands(Vec<NlFitReport>),
+    EditNlFit(Box<NlFitReport>),
+    Refit(Box<FitEditTarget>, Result<scicanvas_core::ops::NonlinearRecipe, String>),
     ColumnProps(u64, ColumnEdit),
     None,
     Close,
@@ -306,7 +310,7 @@ impl Dialog {
             Self::Correlations(..) => self.show_correlations(ctx, pal, &mut open, esc),
             Self::NlFit { .. } => self.show_nl_fit(ctx, pal, &mut open, esc),
             Self::CustomNlFit(..) => self.show_custom_nl_fit(ctx, pal, &mut open, esc, project),
-            Self::NlFitReport(..) => self.show_nl_fit_report(ctx, pal, &mut open, esc),
+            Self::NlFitReport(..) => self.show_nl_fit_report(ctx, pal, &mut open, esc, project),
             Self::FftFilter { .. } => self.show_fft_filter(ctx, pal, &mut open, esc),
             Self::Fill { .. } => self.show_fill(ctx, pal, &mut open, esc),
             Self::Table { .. } => self.show_table(ctx, pal, &mut open, esc),
