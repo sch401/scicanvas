@@ -606,6 +606,7 @@ impl SciApp {
                     (dialogs::ActionKind::Danger, "删除"),
                     (dialogs::ActionKind::Plain, "取消"),
                 ],
+                dialogs::Keys::Modal,
             )
         })
         .flatten();

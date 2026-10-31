@@ -1532,7 +1532,7 @@ fn legacy_library_function_fits_through_the_real_dialog_button() {
 }
 
 #[test]
-fn analysis_actions_accept_enter_and_escape_without_text_focus() {
+fn analysis_dialog_ignores_enter_without_focus() {
     let ctx = egui::Context::default();
     crate::theme::install(&ctx);
     crate::fonts::setup(&ctx);
@@ -1561,8 +1561,12 @@ fn analysis_actions_accept_enter_and_escape_without_text_focus() {
     for _ in 0..3 {
         h.frame(&mut app, vec![]);
     }
+    let before = app.project.clone();
+    let generation = app.history.generation();
     h.frame(&mut app, vec![key(egui::Key::Enter)]);
-    assert!(matches!(app.dialog, Some(Dialog::FitReport(_))), "{}", app.status);
+    assert!(matches!(app.dialog, Some(Dialog::Poly { .. })));
+    assert_eq!(app.project, before);
+    assert_eq!(app.history.generation(), generation);
 }
 #[test]
 fn nonlinear_report_uses_the_book_name() {

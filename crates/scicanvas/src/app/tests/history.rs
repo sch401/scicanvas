@@ -1083,3 +1083,97 @@ fn smoke_test_draws_the_workspace_and_requests_close() {
         .any(|v| v.commands.contains(&egui::ViewportCommand::Close)));
     assert!(crate::test_ui::find_text(&output, "新建工作簿").is_some());
 }
+
+#[test]
+fn modal_caption_controls_remain_live_without_changing_the_project() {
+    let mut app = app();
+    app.sheets.entry(1).or_default().edit = Some(Edit {
+        cell: Cell { c: 0, r: 0 },
+        buf: "123".into(),
+        focused: false,
+    });
+    app.request_discard(PendingDiscard::Quit);
+    let project = app.project.clone();
+    let undo = app.history.undo_label().map(str::to_owned);
+    let ctx = egui::Context::default();
+    crate::theme::install(&ctx);
+    crate::fonts::setup(&ctx);
+    let mut h = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1280., 900.)),
+        |a: &mut SciApp, ctx: &egui::Context| a.ui_frame(ctx),
+    );
+    for _ in 0..4 {
+        h.frame(&mut app, vec![]);
+    }
+    let caption = crate::chrome::caption(&h.ctx).unwrap();
+    let output = h.click(&mut app, egui::pos2(caption.right() - 46. * 2.5, caption.center().y));
+    assert!(output
+        .viewport_output
+        .values()
+        .any(|v| v.commands.contains(&egui::ViewportCommand::Minimized(true))));
+    assert!(app.pending_discard.is_some());
+    let output = h.click(&mut app, egui::pos2(caption.right() - 23., caption.center().y));
+    assert!(output
+        .viewport_output
+        .values()
+        .any(|v| v.commands.contains(&egui::ViewportCommand::Close)));
+    assert!(app.pending_discard.is_some());
+    h.click(&mut app, egui::pos2(caption.left() + 18., caption.center().y));
+    assert_eq!(app.project, project);
+    assert_eq!(app.history.undo_label(), undo.as_deref());
+    assert_eq!(app.sheets[&1].edit.as_ref().unwrap().buf, "123");
+    assert!(!app.quit);
+}
+
+#[test]
+fn modal_keyboard_saves_or_cancels_without_committing_cancelled_drafts() {
+    for save in [false, true] {
+        let mut app = app();
+        let path = std::env::temp_dir().join(format!("scicanvas-modal-keys-{}-{save}.scv", std::process::id()));
+        app.project_path = Some(path.clone());
+        app.sheets.entry(1).or_default().edit = Some(Edit {
+            cell: Cell { c: 0, r: 0 },
+            buf: "123".into(),
+            focused: false,
+        });
+        let project = app.project.clone();
+        app.request_discard(PendingDiscard::New);
+        let ctx = egui::Context::default();
+        crate::theme::install(&ctx);
+        crate::fonts::setup(&ctx);
+        let mut h = crate::test_ui::Harness::new(
+            ctx,
+            Some(egui::vec2(1280., 900.)),
+            |a: &mut SciApp, ctx: &egui::Context| a.ui_frame(ctx),
+        );
+        for _ in 0..4 {
+            h.frame(&mut app, vec![]);
+        }
+        let key = if save { egui::Key::Enter } else { egui::Key::Escape };
+        h.frame(
+            &mut app,
+            vec![egui::Event::Key {
+                key,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+        );
+        assert!(app.pending_discard.is_none());
+        if save {
+            assert_eq!(
+                scicanvas_core::project_file::load(&path).unwrap().books[0].columns[0]
+                    .data
+                    .text_at(0),
+                "123"
+            );
+            assert!(!app.is_dirty());
+            std::fs::remove_file(path).unwrap();
+        } else {
+            assert_eq!(app.project, project);
+            assert_eq!(app.sheets[&1].edit.as_ref().unwrap().buf, "123");
+        }
+    }
+}

@@ -5,6 +5,15 @@ use crate::theme::Palette;
 
 /// 边缘可拖动调整大小的宽度（逻辑像素）。
 const EDGE: f32 = 5.0;
+pub const CAPTION_HEIGHT: f32 = 30.0;
+
+pub fn store_caption(ctx: &egui::Context, rect: Rect) {
+    ctx.data_mut(|d| d.insert_temp(egui::Id::new("window-caption"), rect));
+}
+
+pub fn caption(ctx: &egui::Context) -> Option<Rect> {
+    ctx.data(|d| d.get_temp(egui::Id::new("window-caption")))
+}
 
 fn maximized(ctx: &egui::Context) -> bool {
     ctx.input(|i| i.viewport().maximized.unwrap_or(false))
@@ -62,9 +71,26 @@ pub fn drag_area(ui: &mut egui::Ui, rect: Rect) {
 
 /// 右上角的最小化、最大化 / 还原、关闭按钮（在从右往左的布局里调用）。
 pub fn buttons(ui: &mut egui::Ui, pal: &Palette) -> bool {
+    draw_buttons(ui, pal)
+}
+
+/// 模态期间只恢复窗口按钮与拖动，不激活标题栏中的项目命令。
+pub fn modal_caption(ui: &mut egui::Ui, caption: Rect, pal: &Palette) {
+    ui.spacing_mut().item_spacing = vec2(4., 0.);
+    drag_area(ui, caption);
+    let buttons = Rect::from_min_max(egui::pos2(caption.right() - 3. * 46. - 8., caption.top()), caption.max);
+    ui.painter().rect_filled(buttons, 0., pal.chrome);
+    ui.allocate_ui_with_layout(caption.size(), egui::Layout::right_to_left(egui::Align::Center), |ui| {
+        if draw_buttons(ui, pal) {
+            ui.ctx().send_viewport_cmd(ViewportCommand::Close);
+        }
+    });
+}
+
+fn draw_buttons(ui: &mut egui::Ui, pal: &Palette) -> bool {
     let ctx = ui.ctx().clone();
     let max = maximized(&ctx);
-    let size = vec2(46.0, 30.0);
+    let size = vec2(46.0, CAPTION_HEIGHT);
     let ink = pal.ink;
     let button = |ui: &mut egui::Ui, hover_fill: Color32, tip: &str| {
         let (rect, response) = ui.allocate_exact_size(size, Sense::click());
