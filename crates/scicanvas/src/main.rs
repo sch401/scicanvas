@@ -23,7 +23,7 @@ mod theme;
 
 use eframe::egui;
 
-fn main() -> Result<(), eframe::Error> {
+fn main() {
     scicanvas_core::project_file::session::install_panic_log();
     let settings = scicanvas_core::project_file::session::load_settings();
     let mut viewport = egui::ViewportBuilder::default()
@@ -46,15 +46,58 @@ fn main() -> Result<(), eframe::Error> {
     let options = eframe::NativeOptions {
         renderer: eframe::Renderer::Wgpu,
         wgpu_options: eframe::egui_wgpu::WgpuConfiguration {
-            // Windows 只初始化 Direct3D；默认枚举 GL 会加载 AMD OpenGL 驱动并在退出时崩溃。
-            supported_backends: eframe::wgpu::Backends::DX12,
+            supported_backends: graphics_backends(),
             present_mode: eframe::wgpu::PresentMode::Fifo,
             desired_maximum_frame_latency: Some(1),
             ..Default::default()
         },
         ..options
     };
-    eframe::run_native("SciCanvas", options, Box::new(|cc| Ok(Box::new(app::SciApp::new(cc)))))
+    if let Err(error) = eframe::run_native("SciCanvas", options, Box::new(|cc| Ok(Box::new(app::SciApp::new(cc))))) {
+        let message = format!(
+            "SciCanvas 无法启动：{error}\n\n请更新显卡驱动；如果在远程桌面或虚拟机中运行，请确认已启用图形加速。"
+        );
+        scicanvas_core::project_file::session::append_log(&message);
+        #[cfg(windows)]
+        show_error_box("SciCanvas", &message);
+        std::process::exit(1);
+    }
+}
+
+/// DX12 优先，无适配器时选 Vulkan；不初始化 GL。
+#[cfg(windows)]
+fn graphics_backends() -> eframe::wgpu::Backends {
+    use eframe::wgpu::{Backends, Instance, InstanceDescriptor};
+    let started = std::time::Instant::now();
+    for backends in [Backends::DX12, Backends::VULKAN] {
+        let instance = Instance::new(InstanceDescriptor {
+            backends,
+            ..Default::default()
+        });
+        if let Some(adapter) = instance.enumerate_adapters(backends).into_iter().next() {
+            scicanvas_core::project_file::session::append_log(&format!(
+                "图形后端：{backends:?}；适配器：{}；探测耗时：{:.3} ms",
+                adapter.get_info().name,
+                started.elapsed().as_secs_f64() * 1000.
+            ));
+            return backends;
+        }
+    }
+    Backends::DX12 | Backends::VULKAN
+}
+
+#[cfg(windows)]
+fn show_error_box(title: &str, message: &str) {
+    #[link(name = "user32")]
+    unsafe extern "system" {
+        fn MessageBoxW(window: *mut std::ffi::c_void, text: *const u16, caption: *const u16, kind: u32) -> i32;
+    }
+    let text: Vec<_> = message.encode_utf16().chain(Some(0)).collect();
+    let caption: Vec<_> = title.encode_utf16().chain(Some(0)).collect();
+    // 两个字符串以零结尾，调用期间缓冲区保持有效。
+    unsafe {
+        MessageBoxW(std::ptr::null_mut(), text.as_ptr(), caption.as_ptr(), 0x10);
+    }
 }
 
 /// 原生显示器工作区保留全局原点，按当前窗口的 DPI 转换到 egui 坐标。
@@ -206,5 +249,13 @@ mod monitors {
             .unwrap();
             assert!(areas[1].contains_rect(target));
         }
+    }
+}
+
+#[cfg(all(test, target_os = "windows"))]
+mod renderer_tests {
+    #[test]
+    fn selected_windows_backend_is_compiled_in() {
+        assert!(eframe::wgpu::Instance::enabled_backend_features().contains(eframe::wgpu::Backends::DX12));
     }
 }

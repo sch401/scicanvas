@@ -1156,23 +1156,26 @@ pub mod session {
             self.last_dir = self.last_dir.as_deref().map(normalize_path);
         }
     }
+    pub fn append_log(message: &str) {
+        if let Some(directory) = recovery_dir() {
+            let _ = std::fs::create_dir_all(&directory);
+            if let Ok(mut file) = std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(directory.join("crash.log"))
+            {
+                let stamp = std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_secs();
+                let _ = writeln!(file, "{stamp} PID {}：{message}", std::process::id());
+            }
+        }
+    }
     pub fn install_panic_log() {
         let previous = std::panic::take_hook();
         std::panic::set_hook(Box::new(move |info| {
-            if let Some(directory) = recovery_dir() {
-                let _ = std::fs::create_dir_all(&directory);
-                if let Ok(mut file) = std::fs::OpenOptions::new()
-                    .create(true)
-                    .append(true)
-                    .open(directory.join("crash.log"))
-                {
-                    let stamp = std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .unwrap_or_default()
-                        .as_secs();
-                    let _ = writeln!(file, "{stamp} PID {}：{info}", std::process::id());
-                }
-            }
+            append_log(&info.to_string());
             previous(info);
         }));
     }

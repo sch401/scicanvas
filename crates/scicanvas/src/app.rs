@@ -165,6 +165,7 @@ pub struct SciApp {
     backup_job: Option<std::thread::JoinHandle<Result<(), String>>>,
     window_checked: bool,
     session_enabled: bool,
+    smoke_test: bool,
     saved_generation: Option<u64>,
     pending_discard: Option<PendingDiscard>,
     close_confirmed: bool,
@@ -276,6 +277,7 @@ impl SciApp {
         crate::icons::install_loaders(&cc.egui_ctx);
         let mut app = Self::initial(theme::palette(cc.egui_ctx.theme()));
         app.session_enabled = true;
+        app.smoke_test = std::env::var_os("SCICANVAS_SMOKE_TEST").is_some_and(|v| v == "1");
         app.settings = scicanvas_core::project_file::session::load_settings();
         app.theme_pref = match app.settings.theme.as_str() {
             "light" => egui::ThemePreference::Light,
@@ -302,6 +304,7 @@ impl SciApp {
             backup_job: None,
             window_checked: false,
             session_enabled: false,
+            smoke_test: false,
             saved_generation: Some(0),
             pending_discard: None,
             close_confirmed: false,
@@ -1621,6 +1624,10 @@ impl SciApp {
             self.background_focus = ctx.memory(|m| m.focused());
         }
         self.session_tick(ctx);
+        if self.smoke_test {
+            self.quit = true;
+            self.close_confirmed = true;
+        }
         if self.quit && self.close_confirmed {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
             ctx.request_repaint();

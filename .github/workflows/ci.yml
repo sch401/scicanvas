@@ -56,3 +56,18 @@ jobs:
       - run: cargo test --profile ci --workspace --all-features --locked
       - run: cargo test --profile ci -p scicanvas-core --no-default-features --locked
       - run: cargo clippy --profile ci --workspace --all-targets --all-features --locked -- -D warnings
+
+      - name: 构建 Windows release
+        run: cargo build --release --locked -p scicanvas
+      - name: Windows release 首帧冒烟
+        timeout-minutes: 1
+        run: |
+          $env:SCICANVAS_SMOKE_TEST = '1'
+          $process = Start-Process ./target/release/scicanvas.exe -PassThru
+          $null = $process.Handle
+          if (-not $process.WaitForExit(50000)) {
+            $process.Kill()
+            throw 'SciCanvas 未在首帧后退出'
+          }
+          Get-Content "$env:LOCALAPPDATA/SciCanvas/recovery/crash.log" -ErrorAction SilentlyContinue
+          if ($process.ExitCode -ne 0) { throw "SciCanvas 启动失败：$($process.ExitCode)" }
