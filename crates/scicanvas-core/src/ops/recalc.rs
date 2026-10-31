@@ -400,13 +400,7 @@ impl Operation {
 }
 
 /// 按公式计算目标列的新数据（保持目标列类型）；结果不是有限数的单元格留空，末尾空行去掉。
-fn formula_data(
-    book: &Book,
-    target: &str,
-    formula: &str,
-    limits: &crate::formula::Limits,
-) -> Result<crate::ColumnData, String> {
-    let expr = crate::formula::parse_with(formula, limits)?;
+fn formula_data(book: &Book, target: &str, expr: &crate::formula::Expr) -> Result<crate::ColumnData, String> {
     let mut cols = std::collections::HashMap::new();
     for k in expr.columns() {
         let c = book
@@ -442,16 +436,20 @@ fn formula_data(
 }
 
 /// 需要重算的列（公式列、自动或 `manual` 时手动的分析结果列）按依赖排序（来源先算）；有循环依赖时报错。
-fn computed_order(book: &Book, manual: bool) -> Result<Vec<String>, String> {
+fn computed_order(
+    book: &Book,
+    manual: bool,
+    formulas: &mut std::collections::HashMap<String, Result<crate::formula::Expr, String>>,
+) -> Result<Vec<String>, String> {
     let mut deps: std::collections::HashMap<String, Vec<String>> = book
         .columns
         .iter()
         .filter_map(|c| {
             if let Some(f) = c.formula.as_deref() {
-                return Some((
-                    c.key.clone(),
-                    crate::formula::parse_file(f).map(|e| e.columns()).unwrap_or_default(),
-                ));
+                let expr = crate::formula::parse_file(f);
+                let deps = expr.as_ref().map(|e| e.columns()).unwrap_or_default();
+                formulas.insert(c.key.clone(), expr);
+                return Some((c.key.clone(), deps));
             }
             let op = c.op.as_ref()?;
             let due = op.mode == RecalcMode::Auto || (manual && op.mode == RecalcMode::Manual);
@@ -528,7 +526,8 @@ impl Project {
         } else {
             &crate::formula::INPUT_LIMITS
         };
-        let data = formula_data(book, target, formula, limits)?;
+        let expr = crate::formula::parse_with(formula, limits)?;
+        let data = formula_data(book, target, &expr)?;
         let n = data.len();
         let book = self.book_mut(book_id).unwrap();
         book.freeze_error_sources();
@@ -574,7 +573,7 @@ impl Project {
                 .find(|c| c.key == target)
                 .ok_or("找不到目标列")?
                 .formula = Some(formula.into());
-            computed_order(&trial, true)?;
+            computed_order(&trial, true, &mut Default::default())?;
         }
         let n = self.set_column_values(book_id, target, formula)?;
         let book = self.book_mut(book_id).unwrap();
@@ -599,7 +598,8 @@ impl Project {
             {
                 continue;
             }
-            let order = match computed_order(&self.books[b], manual) {
+            let mut formulas = std::collections::HashMap::new();
+            let order = match computed_order(&self.books[b], manual, &mut formulas) {
                 Ok(order) => order,
                 Err(e) => {
                     problems.push(format!("{}：{e}", self.books[b].name));
@@ -671,10 +671,10 @@ impl Project {
                     }
                     continue;
                 }
-                let Some(formula) = col.formula.clone() else {
+                let Some(expr) = formulas.remove(&key) else {
                     continue;
                 };
-                match formula_data(book, &key, &formula, &crate::formula::FILE_LIMITS) {
+                match expr.and_then(|expr| formula_data(book, &key, &expr)) {
                     Ok(data) => {
                         let col = self.books[b].columns.iter_mut().find(|c| c.key == key).unwrap();
                         if col.data != data {
@@ -820,5 +820,34 @@ impl NonlinearRecipe {
             h.integer(y.to_bits());
         }
         h.0
+    }
+}
+
+#[cfg(test)]
+mod round_three_tests {
+    use super::*;
+    #[test]
+    fn legacy_formulas_recalculate_in_dependency_order_and_keep_errors_local() {
+        let mut p = Project::sample();
+        let book = p.book_mut(1).unwrap();
+        book.columns.iter_mut().find(|c| c.key == "B").unwrap().formula =
+            Some(std::iter::repeat_n("A", 150).collect::<Vec<_>>().join("+"));
+        book.columns.iter_mut().find(|c| c.key == "C").unwrap().formula = Some("B+1".into());
+        assert!(p.recalc_computed(false).is_empty());
+        let book = p.book(1).unwrap();
+        for (a, c) in book
+            .column("A")
+            .unwrap()
+            .values()
+            .iter()
+            .zip(book.column("C").unwrap().values())
+        {
+            assert!((c - (a * 150. + 1.)).abs() < 1e-8);
+        }
+        let book = p.book_mut(1).unwrap();
+        let old = book.column("B").unwrap().data.clone();
+        book.columns.iter_mut().find(|c| c.key == "B").unwrap().formula = Some("sin(".into());
+        assert_eq!(p.recalc_computed(false).len(), 1);
+        assert_eq!(p.book(1).unwrap().column("B").unwrap().data, old);
     }
 }

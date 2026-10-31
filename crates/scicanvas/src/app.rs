@@ -2025,7 +2025,7 @@ impl SciApp {
         if self.window_checked {
             return;
         }
-        let Some(rect) = ctx.input(|i| i.viewport().outer_rect) else {
+        let Some((rect, inner)) = ctx.input(|i| i.viewport().outer_rect.zip(i.viewport().inner_rect)) else {
             return;
         };
         let areas = crate::monitors::work_areas(ctx.pixels_per_point());
@@ -2035,10 +2035,12 @@ impl SciApp {
         self.window_checked = true;
         if let Some(target) = crate::monitors::visible_window(rect, &areas) {
             ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(target.min));
-            ctx.send_viewport_cmd(egui::ViewportCommand::MinInnerSize(
-                egui::vec2(800., 500.).min(target.size()),
-            ));
-            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(target.size()));
+            if let Some(size) = crate::monitors::restore_size(rect, inner, target) {
+                if size.x < 800. || size.y < 500. {
+                    ctx.send_viewport_cmd(egui::ViewportCommand::MinInnerSize(egui::vec2(800., 500.).min(size)));
+                }
+                ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(size));
+            }
         }
     }
 }
