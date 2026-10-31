@@ -38,7 +38,15 @@ impl SciApp {
             }
         }
         // 命令面板打开时，方向键、回车由面板自己处理
-        let keys: [(Modifiers, Key, &str); 9] = [
+        let keys: [(Modifiers, Key, &str); 10] = [
+            (
+                Modifiers {
+                    shift: true,
+                    ..Modifiers::COMMAND
+                },
+                Key::N,
+                "project.new",
+            ),
             (Modifiers::COMMAND, Key::N, "book.new"),
             (Modifiers::COMMAND, Key::O, "file.open"),
             (Modifiers::COMMAND, Key::S, "file.save"),

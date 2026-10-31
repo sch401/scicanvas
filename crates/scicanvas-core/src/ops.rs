@@ -1387,4 +1387,151 @@ mod nonlinear_recalc_tests {
         assert_eq!(changed.nlfit_reports().len(), 1);
         assert!((changed.nlfit_reports()[0].fit.params[0] - 2.).abs() < 1e-6);
     }
+    #[test]
+    fn all_fit_modes_reject_formulas_on_every_owned_output() {
+        for mode in RecalcMode::ALL {
+            let mut p = project();
+            let (_, r) = p.nlfit(&source(), Model::ExpDec1, &[], &[]).unwrap();
+            let bands = p.nlfit_bands(&r[0], 0.95).unwrap();
+            p.books[0]
+                .columns
+                .iter_mut()
+                .find(|c| c.key == r[0].curve.1)
+                .unwrap()
+                .op
+                .as_mut()
+                .unwrap()
+                .mode = mode;
+            for key in [r[0].curve.0.clone(), r[0].curve.1.clone()].into_iter().chain(bands) {
+                let before = p.clone();
+                assert!(p.set_column_formula(1, &key, "A*2", true).is_err());
+                assert_eq!(p, before);
+                project_file::to_json(&p).unwrap();
+            }
+        }
+    }
+    #[test]
+    fn recalculation_keeps_user_comment_and_cross_book_report_name() {
+        let mut p = project();
+        let (_, r) = p.nlfit(&source(), Model::ExpDec1, &[], &[]).unwrap();
+        let col = p.books[0].columns.iter_mut().find(|c| c.key == r[0].curve.1).unwrap();
+        col.comment = "用户备注".into();
+        col.fit_report.as_mut().unwrap().name = "Book1：数据 B".into();
+        replace_source(&mut p, 2.);
+        assert!(p.recalc_computed(false).is_empty());
+        let col = p.book(1).unwrap().column(&r[0].curve.1).unwrap();
+        assert_eq!(col.comment, "用户备注");
+        assert_eq!(col.fit_report.as_ref().unwrap().name, "Book1：数据 B");
+    }
+    #[test]
+    fn manual_recalc_restores_modified_grid_and_settings_ignore_cached_digests() {
+        let mut p = project();
+        let (_, r) = p.nlfit(&source(), Model::ExpDec1, &[], &[]).unwrap();
+        let old = p.nlfit_operation(&r[0]).unwrap().clone();
+        p.books[0]
+            .columns
+            .iter_mut()
+            .find(|c| c.key == r[0].curve.1)
+            .unwrap()
+            .set(0, "999".into());
+        assert!(p.recalc_computed(true).is_empty());
+        assert!((p.book(1).unwrap().column(&r[0].curve.1).unwrap().values()[0] - 4.).abs() < 1e-5);
+        replace_source(&mut p, 2.);
+        assert!(p.recalc_computed(false).is_empty());
+        assert!(old.same_settings(p.nlfit_operation(&r[0]).unwrap()));
+    }
+    #[test]
+    fn row_edits_keep_independent_grids_and_align_residuals() {
+        let mut p = project();
+        let (_, poly) = p.fit_poly(&source(), 2).unwrap();
+        let (_, nl) = p.nlfit(&source(), Model::ExpDec1, &[], &[]).unwrap();
+        let keys = [
+            poly[0].curve.0.clone(),
+            poly[0].curve.1.clone(),
+            nl[0].curve.0.clone(),
+            nl[0].curve.1.clone(),
+        ];
+        let grids: Vec<_> = keys
+            .iter()
+            .map(|k| p.book(1).unwrap().column(k).unwrap().data.clone())
+            .collect();
+        p.sort_rows(1, &[("B".into(), false)], None).unwrap();
+        for (key, data) in keys.iter().zip(&grids) {
+            assert_eq!(&p.book(1).unwrap().column(key).unwrap().data, data);
+        }
+        assert!(p.sort_rows(1, &[(keys[0].clone(), true)], None).is_err());
+        p.insert_rows(1, 3, 2);
+        for (key, data) in keys.iter().zip(&grids) {
+            assert_eq!(&p.book(1).unwrap().column(key).unwrap().data, data);
+        }
+        assert!(p
+            .book(1)
+            .unwrap()
+            .column(&poly[0].residual_key)
+            .unwrap()
+            .data
+            .text_at(3)
+            .is_empty());
+        p.delete_rows(1, 3, 4);
+        for (key, data) in keys.iter().zip(&grids) {
+            assert_eq!(&p.book(1).unwrap().column(key).unwrap().data, data);
+        }
+        project_file::to_json(&p).unwrap();
+    }
+    #[test]
+    fn v20_hash_migration_preserves_current_reports_and_writes_only_stable_digests() {
+        let mut p = project();
+        let (_, r) = p.nlfit(&source(), Model::ExpDec1, &[], &[]).unwrap();
+        let op = p.nlfit_operation(&r[0]).unwrap();
+        let OpKind::Nonlinear(recipe) = &op.kind else {
+            unreachable!()
+        };
+        let hash = recipe.legacy_fingerprint(op, p.book(1).unwrap());
+        let mut value = serde_json::to_value(&p).unwrap();
+        value["version"] = 20.into();
+        let col = value["books"][0]["columns"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .find(|c| c["key"] == r[0].curve.1)
+            .unwrap();
+        let object = col["op"]["kind"]["Nonlinear"].as_object_mut().unwrap();
+        object.remove("input_digest");
+        object.insert("input_hash".into(), hash.into());
+        object.remove("attempted_digest");
+        let migrated = project_file::from_json(&value.to_string()).unwrap();
+        assert!(migrated.nlfit_report(&r[0]).unwrap().current);
+        let saved = project_file::to_json(&migrated).unwrap();
+        assert!(saved.contains("input_digest"));
+        assert!(!saved.contains("input_hash"));
+        assert_eq!(project_file::from_json(&saved).unwrap(), migrated);
+        let OpKind::Nonlinear(new) = &migrated.nlfit_operation(&r[0]).unwrap().kind else {
+            unreachable!()
+        };
+        assert_eq!(new.input_digest, recipe.input_digest);
+    }
+    #[test]
+    fn stable_digest_has_a_fixed_file_format_vector() {
+        let mut p = project();
+        p.books[0].columns[0].data = vec!["0".into(), "1".into(), "2".into(), "3".into()].into();
+        p.books[0].columns[1].data = vec!["1".into(), "3".into(), "5".into(), "7".into()].into();
+        let recipe = NonlinearRecipe {
+            function: FitMethod::Builtin(Model::ExpDec1),
+            initial: None,
+            limits: vec![],
+            constraints: String::new(),
+            output_x: "D".into(),
+            bands: vec![],
+            input_digest: None,
+            attempted_digest: None,
+        };
+        let op = Operation {
+            kind: OpKind::Nonlinear(Box::new(recipe.clone())),
+            y: "B".into(),
+            x: Some("A".into()),
+            rows: None,
+            mode: RecalcMode::Auto,
+        };
+        assert_eq!(recipe.fingerprint(&op, p.book(1).unwrap()), 16_689_633_563_837_365_958);
+    }
 }

@@ -634,3 +634,130 @@ fn nested_edit_reuses_the_outer_step_and_aborts_the_whole_command_on_failure_or_
         }
     }
 }
+
+#[test]
+fn dirty_savepoint_and_discard_confirmations_preserve_user_work() {
+    let mut app = app();
+    assert!(!app.is_dirty());
+    app.run_command("book.new");
+    assert!(app.is_dirty());
+    let current = app.project.clone();
+    app.run_command("project.new");
+    assert_eq!(app.project, current);
+    assert!(matches!(app.pending_discard, Some(PendingDiscard::New)));
+    app.pending_discard = None;
+    app.run_command("app.quit");
+    assert!(!app.quit);
+    assert!(matches!(app.pending_discard, Some(PendingDiscard::Quit)));
+    app.pending_discard = None;
+    let path = std::env::temp_dir().join(format!("scicanvas-savepoint-{}.scv", std::process::id()));
+    assert!(app.save_project_to(&path));
+    assert!(!app.is_dirty());
+    app.run_command("book.new");
+    assert!(app.is_dirty());
+    app.undo();
+    assert!(!app.is_dirty());
+    app.redo();
+    assert!(app.is_dirty());
+    assert!(!app.save_project_to(&path.join("missing.scv")));
+    assert!(app.is_dirty());
+    assert!(app.save_error.is_some());
+    app.execute_discard(PendingDiscard::New);
+    assert_eq!(app.project.books.len(), 1);
+    assert!(app.project.graphs.is_empty());
+    assert!(!app.is_dirty());
+    std::fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn graph_only_edits_reuse_recalculation_inputs() {
+    let mut app = app();
+    app.run_command("book.new");
+    let cached = app.recalc_inputs.clone().unwrap();
+    let identities: Vec<_> = cached
+        .iter()
+        .flat_map(|b| &b.columns)
+        .map(|c| c.data.identity())
+        .collect();
+    app.edit("图形标题", |p| {
+        p.graphs[0].first_layer_mut().title = "拖动与排版".into();
+        Ok(Some(()))
+    })
+    .unwrap();
+    assert_eq!(app.recalc_inputs.as_ref().unwrap(), &cached);
+    assert_eq!(
+        app.recalc_inputs
+            .as_ref()
+            .unwrap()
+            .iter()
+            .flat_map(|b| &b.columns)
+            .map(|c| c.data.identity())
+            .collect::<Vec<_>>(),
+        identities
+    );
+    app.saved_generation = Some(app.history.generation());
+    assert!(app.recovery_file.is_none());
+    app.backup_recovery().unwrap();
+    assert!(app.recovery_file.is_none());
+}
+
+#[test]
+fn actual_discard_buttons_cancel_save_and_discard_the_right_project() {
+    let mut app = app();
+    app.run_command("book.new");
+    let edited = app.project.clone();
+    app.run_command("project.new");
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut harness = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1000., 800.)),
+        |app: &mut SciApp, ctx: &egui::Context| app.session_dialogs(ctx),
+    )
+    .with_step(0.02);
+    for _ in 0..3 {
+        harness.frame(&mut app, vec![]);
+    }
+    let output = harness.frame(&mut app, vec![]);
+    harness.click_text(&mut app, &output, "取消");
+    assert_eq!(app.project, edited);
+    assert!(app.pending_discard.is_none());
+    app.run_command("project.new");
+    for _ in 0..3 {
+        harness.frame(&mut app, vec![]);
+    }
+    let output = harness.frame(&mut app, vec![]);
+    harness.click_text(&mut app, &output, "不保存");
+    assert!(app.project.graphs.is_empty());
+    assert!(!app.is_dirty());
+    app.run_command("book.new");
+    let path = std::env::temp_dir().join(format!("scicanvas-confirm-save-{}.scv", std::process::id()));
+    app.project_path = Some(path.clone());
+    app.run_command("project.new");
+    for _ in 0..3 {
+        harness.frame(&mut app, vec![]);
+    }
+    let output = harness.frame(&mut app, vec![]);
+    harness.click_text(&mut app, &output, "保存");
+    assert!(path.exists());
+    assert!(!app.is_dirty());
+    assert_eq!(app.project.books.len(), 1);
+    std::fs::remove_file(path).unwrap();
+}
+
+#[test]
+fn closing_with_a_cell_draft_keeps_it_in_the_project_and_requires_confirmation() {
+    let mut app = app();
+    let sheet = app.sheets.entry(1).or_default();
+    sheet.edit = Some(Edit {
+        cell: Cell { c: 0, r: 0 },
+        buf: "123".into(),
+        focused: true,
+    });
+    assert!(app.is_dirty());
+    app.request_discard(PendingDiscard::Quit);
+    assert!(app.sheets[&1].edit.is_none());
+    assert_eq!(app.project.books[0].columns[0].data.text_at(0), "123");
+    assert!(app.pending_discard.is_some());
+    assert!(!app.quit);
+}

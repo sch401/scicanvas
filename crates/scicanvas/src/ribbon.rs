@@ -312,6 +312,7 @@ const QAT: &[&str] = &[
     "graph.export",
 ];
 const BACKSTAGE_NAV: &[&str] = &[
+    "project.new",
     "book.new",
     "file.import",
     "file.open",
@@ -339,6 +340,7 @@ pub struct UiState {
     /// 折叠时单击选项卡临时弹出的面板。
     pub flyout: bool,
     pub backstage: bool,
+    pub(crate) recent_open: Option<usize>,
     pub palette: Option<PaletteState>,
     /// 上一帧选项卡栏所在区域，用来判断是否点在弹出面板外面。
     tab_rect: Rect,
@@ -351,6 +353,7 @@ impl Default for UiState {
             collapsed: false,
             flyout: false,
             backstage: false,
+            recent_open: None,
             palette: None,
             tab_rect: Rect::NOTHING,
         }
@@ -407,7 +410,9 @@ pub fn show(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palette, 
                 ui.add_space(6.0);
                 ui.label(RichText::new(app.doc_title()).color(pal.weak));
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    crate::chrome::buttons(ui, pal);
+                    if crate::chrome::buttons(ui, pal) {
+                        *clicked = Some("app.quit");
+                    }
                     ui.add_space(12.0);
                     let text = RichText::new("搜索命令            Ctrl K").color(pal.weak);
                     let b = egui::Button::image_and_text(
@@ -828,6 +833,17 @@ pub fn backstage(
         )
         .show(ctx, |ui| {
             egui::ScrollArea::vertical().show(ui, |ui| {
+                if !app.settings.recent.is_empty() {
+                    ui.heading("最近打开");
+                    for (index, path) in app.settings.recent.iter().enumerate() {
+                        if ui.button(path.display().to_string()).clicked() {
+                            st.recent_open = Some(index);
+                            *clicked = Some("file.recent");
+                            st.backstage = false;
+                        }
+                    }
+                    ui.separator();
+                }
                 ui.heading(RichText::new("当前项目").size(22.0));
                 ui.add_space(14.0);
                 let nb = app.project.books.len();

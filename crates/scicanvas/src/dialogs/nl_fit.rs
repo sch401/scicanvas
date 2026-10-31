@@ -40,6 +40,7 @@ impl FitEditTarget {
 pub struct CustomFitEditor {
     pub target: Option<Box<FitEditTarget>>,
     pub limits: Vec<scicanvas_core::nlfit::ParamLimits>,
+    limit_values: Vec<[f64; 3]>,
     pub name: String,
     pub formula: String,
     pub parameters: String,
@@ -53,6 +54,7 @@ impl Default for CustomFitEditor {
         Self {
             target: None,
             limits: Vec::new(),
+            limit_values: Vec::new(),
             name: "自定义函数".into(),
             formula: "y = a*exp(-b*x)+c".into(),
             parameters: "a, b, c".into(),
@@ -64,10 +66,46 @@ impl Default for CustomFitEditor {
 }
 
 impl CustomFitEditor {
+    fn show_limits(&mut self, ui: &mut egui::Ui) {
+        let names: Vec<_> = self
+            .parameters
+            .split([',', '，'])
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .collect();
+        self.limits
+            .resize(names.len().min(scicanvas_core::nlfit::MAX_PARAMS), Default::default());
+        self.limit_values.resize(self.limits.len(), [0.0; 3]);
+        for ((name, limit), remembered) in names.iter().zip(&mut self.limits).zip(&mut self.limit_values) {
+            ui.strong(*name);
+            for ((label, value), remembered) in [
+                ("固定", &mut limit.fixed),
+                ("下限", &mut limit.lower),
+                ("上限", &mut limit.upper),
+            ]
+            .into_iter()
+            .zip(remembered.iter_mut())
+            {
+                ui.horizontal(|ui| {
+                    if let Some(value) = value {
+                        *remembered = *value;
+                    }
+                    let mut on = value.is_some();
+                    if ui.checkbox(&mut on, label).changed() {
+                        *value = on.then_some(*remembered);
+                    }
+                    if let Some(value) = value {
+                        ui.add(egui::DragValue::new(value).speed(0.01));
+                    }
+                });
+            }
+        }
+    }
     pub fn from_definition(definition: &CustomFitDefinition) -> Self {
         Self {
             target: None,
             limits: Vec::new(),
+            limit_values: Vec::new(),
             name: definition.name.clone(),
             formula: definition.formula.clone(),
             parameters: definition.parameters.join(", "),
@@ -298,32 +336,7 @@ impl Dialog {
                     .hint_text("每行一条，如 a >= 0"),
             );
             if edit.target.is_some() {
-                let names: Vec<_> = edit
-                    .parameters
-                    .split([',', '，'])
-                    .map(str::trim)
-                    .filter(|s| !s.is_empty())
-                    .collect();
-                edit.limits
-                    .resize(names.len().min(scicanvas_core::nlfit::MAX_PARAMS), Default::default());
-                for (name, limit) in names.iter().zip(&mut edit.limits) {
-                    ui.strong(*name);
-                    for (label, value) in [
-                        ("固定", &mut limit.fixed),
-                        ("下限", &mut limit.lower),
-                        ("上限", &mut limit.upper),
-                    ] {
-                        ui.horizontal(|ui| {
-                            let mut on = value.is_some();
-                            if ui.checkbox(&mut on, label).changed() {
-                                *value = on.then_some(0.0);
-                            }
-                            if let Some(value) = value {
-                                ui.add(egui::DragValue::new(value).speed(0.01));
-                            }
-                        });
-                    }
-                }
+                edit.show_limits(ui);
             }
             if edit.target.is_none() {
                 ui.horizontal_wrapped(|ui| {

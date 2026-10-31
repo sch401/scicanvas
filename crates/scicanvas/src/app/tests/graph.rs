@@ -1247,11 +1247,12 @@ fn curve_point_style_properties_map_columns_and_undo_the_changes() {
         let rows = book.nrows();
         let column = book.columns.iter_mut().find(|column| column.key == key).unwrap();
         column.long_name = "批次".into();
-        column.data = scicanvas_core::ColumnData::Category {
+        column.data = (scicanvas_core::ColumnData::Category {
             codes: (0..rows).map(|row| (row % 2) as u32).collect(),
             levels: vec!["A".into(), "B".into()],
             ordered: true,
-        };
+        })
+        .into();
         key
     };
     app.props_for = Some(2);

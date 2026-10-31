@@ -433,7 +433,7 @@ pub fn read(bytes: &[u8]) -> Result<Vec<Sheet>, String> {
                 _ => {}
             }
         }
-        out.push(sheet(name, cells, merged));
+        out.push(sheet(name, cells, merged)?);
     }
     if out.is_empty() {
         return Err("工作簿里没有工作表".into());
@@ -458,16 +458,17 @@ fn formatted_number(
     }
 }
 
-fn sheet(name: String, mut cells: Vec<(usize, usize, String)>, merged: Vec<[usize; 4]>) -> Sheet {
+fn sheet(name: String, mut cells: Vec<(usize, usize, String)>, merged: Vec<[usize; 4]>) -> Result<Sheet, String> {
     cells.retain(|c| !c.2.is_empty());
     let nrows = cells.iter().map(|c| c.0 + 1).max().unwrap_or(0);
     let ncols = cells.iter().map(|c| c.1 + 1).max().unwrap_or(0);
+    crate::xlsx::check_sheet_size(nrows, ncols)?;
     let mut rows = vec![vec![String::new(); ncols]; nrows];
     for (r, c, text) in cells {
         rows[r][c] = text;
     }
     fill_merged(&mut rows, &merged);
-    Sheet { name, rows }
+    Ok(Sheet { name, rows })
 }
 
 #[cfg(test)]

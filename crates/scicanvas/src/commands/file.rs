@@ -3,6 +3,16 @@ use super::*;
 pub(super) fn project(commands: &mut Vec<Command>) {
     commands.extend([
         c(
+            "project.new",
+            "新建项目",
+            "newbook",
+            "Ctrl+Shift+N",
+            "文件",
+            "new blank project 空白项目",
+            always,
+            |a| a.request_discard(crate::app::PendingDiscard::New),
+        ),
+        c(
             "book.new",
             "新建工作簿",
             "newbook",
@@ -126,7 +136,7 @@ pub(super) fn session(commands: &mut Vec<Command>) {
             |a| a.reset_project(),
         ),
         c("app.quit", "退出", "quit", "", "文件", "quit exit", always, |a| {
-            a.quit = true
+            a.request_discard(crate::app::PendingDiscard::Quit)
         }),
     ]);
 }
@@ -146,5 +156,23 @@ pub(super) fn note(commands: &mut Vec<Command>) {
                 .ok_or("请先激活 Note 窗口")
         },
         |a| a.export_note(),
+    ));
+}
+
+pub(super) fn recent(commands: &mut Vec<Command>) {
+    commands.push(c(
+        "file.recent",
+        "打开最近项目",
+        "open",
+        "",
+        "文件",
+        "recent 最近打开",
+        |a| (!a.settings.recent.is_empty()).then_some(()).ok_or("尚无最近项目"),
+        |a| {
+            let index = a.ui.recent_open.take().unwrap_or(0);
+            if let Some(path) = a.settings.recent.get(index).cloned() {
+                a.request_discard(crate::app::PendingDiscard::Open(path));
+            }
+        },
     ));
 }

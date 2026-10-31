@@ -61,7 +61,7 @@ pub fn drag_area(ui: &mut egui::Ui, rect: Rect) {
 }
 
 /// 右上角的最小化、最大化 / 还原、关闭按钮（在从右往左的布局里调用）。
-pub fn buttons(ui: &mut egui::Ui, pal: &Palette) {
+pub fn buttons(ui: &mut egui::Ui, pal: &Palette) -> bool {
     let ctx = ui.ctx().clone();
     let max = maximized(&ctx);
     let size = vec2(46.0, 30.0);
@@ -82,9 +82,6 @@ pub fn buttons(ui: &mut egui::Ui, pal: &Palette) {
     let color = if hovered { Color32::WHITE } else { ink };
     for (a, b) in [(vec2(-5.0, -5.0), vec2(5.0, 5.0)), (vec2(-5.0, 5.0), vec2(5.0, -5.0))] {
         ui.painter().line_segment([c + a, c + b], stroke(color));
-    }
-    if close.clicked() {
-        ctx.send_viewport_cmd(ViewportCommand::Close);
     }
 
     // 最大化 / 还原
@@ -116,4 +113,5 @@ pub fn buttons(ui: &mut egui::Ui, pal: &Palette) {
     if minimize.clicked() {
         ctx.send_viewport_cmd(ViewportCommand::Minimized(true));
     }
+    close.clicked()
 }

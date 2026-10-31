@@ -132,10 +132,10 @@ pub struct NonlinearRecipe {
     pub constraints: String,
     pub output_x: String,
     pub bands: Vec<FitBands>,
-    pub input_hash: Option<u64>,
+    pub input_digest: Option<u64>,
     /// 相同失败来源在自动编辑收尾时不重复求解，手动重算可重试。
     #[cfg_attr(feature = "serde", serde(default))]
-    pub attempted_hash: Option<u64>,
+    pub attempted_digest: Option<u64>,
 }
 
 impl NonlinearRecipe {
@@ -175,7 +175,8 @@ impl NonlinearRecipe {
         Ok(())
     }
 
-    pub(super) fn fingerprint(&self, op: &Operation, book: &Book) -> u64 {
+    #[cfg(feature = "serde")]
+    pub(crate) fn legacy_fingerprint(&self, op: &Operation, book: &Book) -> u64 {
         use std::hash::{Hash, Hasher};
         let mut h = std::collections::hash_map::DefaultHasher::new();
         format!("{:?}", (&self.function, &self.initial, &self.limits, &self.constraints)).hash(&mut h);
@@ -453,16 +454,19 @@ fn computed_order(book: &Book, manual: bool) -> Result<Vec<String>, String> {
         })
         .collect();
     for col in &book.columns {
-        if deps.contains_key(&col.key) && col.formula.is_none() {
-            if let Some(Operation {
-                kind: OpKind::Nonlinear(recipe),
-                ..
-            }) = &col.op
-            {
-                for key in std::iter::once(&recipe.output_x).chain(recipe.bands.iter().flat_map(|b| &b.columns)) {
-                    if deps.contains_key(key) {
-                        return Err(format!("非线性输出列 {key} 同时有其他计算定义"));
-                    }
+        if let Some(Operation {
+            kind: OpKind::Nonlinear(recipe),
+            ..
+        }) = &col.op
+        {
+            if col.formula.is_some() {
+                return Err(format!("拟合结果列 {} 同时有其他计算定义", col.key));
+            }
+            for key in std::iter::once(&recipe.output_x).chain(recipe.bands.iter().flat_map(|b| &b.columns)) {
+                if deps.contains_key(key) {
+                    return Err(format!("非线性输出列 {key} 同时有其他计算定义"));
+                }
+                if deps.contains_key(&col.key) {
                     deps.insert(key.clone(), vec![col.key.clone()]);
                 }
             }
@@ -510,7 +514,7 @@ impl Project {
         let n = data.len();
         let book = self.book_mut(book_id).unwrap();
         book.freeze_error_sources();
-        book.columns.iter_mut().find(|c| c.key == target).unwrap().data = data;
+        book.columns.iter_mut().find(|c| c.key == target).unwrap().data = data.into();
         Ok(n)
     }
 
@@ -524,6 +528,12 @@ impl Project {
     ) -> Result<usize, String> {
         if keep {
             let book = self.book(book_id).ok_or("找不到工作簿")?;
+            if let Some(owner) = book.nonlinear_output_owner(target) {
+                return Err(format!(
+                    "工作簿 {} 列 {target} 属于拟合结果 {owner}，请先解除拟合再保存公式",
+                    book.name
+                ));
+            }
             if crate::formula::parse(formula)?.columns().iter().any(|k| k == target) {
                 return Err("保存的公式不能引用目标列自身（会循环重算）".into());
             }
@@ -574,13 +584,13 @@ impl Project {
                 if let Some(op) = col.op.as_ref().filter(|_| col.formula.is_none()) {
                     if let OpKind::Nonlinear(recipe) = &op.kind {
                         let fingerprint = recipe.fingerprint(op, book);
-                        if recipe.input_hash == Some(fingerprint) && (!manual || col.fit_report.is_some()) {
+                        if recipe.input_digest == Some(fingerprint) && !manual {
                             if let Some(Operation {
                                 kind: OpKind::Nonlinear(recipe),
                                 ..
                             }) = &mut self.books[b].columns.iter_mut().find(|c| c.key == key).unwrap().op
                             {
-                                recipe.attempted_hash = None;
+                                recipe.attempted_digest = None;
                             }
                             if let Some(r) = &mut self.books[b]
                                 .columns
@@ -594,7 +604,7 @@ impl Project {
                             }
                             continue;
                         }
-                        if recipe.attempted_hash == Some(fingerprint) && !manual {
+                        if recipe.attempted_digest == Some(fingerprint) && !manual {
                             continue;
                         }
                         let op = op.clone();
@@ -607,7 +617,7 @@ impl Project {
                                 ..
                             }) = &mut self.books[b].columns.iter_mut().find(|c| c.key == key).unwrap().op
                             {
-                                recipe.attempted_hash = Some(fingerprint);
+                                recipe.attempted_digest = Some(fingerprint);
                             }
                             problems.push(format!("{} 列 {key}：{e}", self.books[b].name));
                             if let Some(r) = &mut self.books[b]
@@ -626,7 +636,7 @@ impl Project {
                     if let Some(data) = op.data(book) {
                         let col = self.books[b].columns.iter_mut().find(|c| c.key == key).unwrap();
                         if col.data != data {
-                            col.data = data;
+                            col.data = data.into();
                         }
                     }
                     continue;
@@ -638,7 +648,7 @@ impl Project {
                     Ok(data) => {
                         let col = self.books[b].columns.iter_mut().find(|c| c.key == key).unwrap();
                         if col.data != data {
-                            col.data = data;
+                            col.data = data.into();
                         }
                     }
                     Err(e) => problems.push(format!("{} 列 {key}：{e}", self.books[b].name)),
@@ -654,7 +664,7 @@ impl Project {
                         return None;
                     };
                     (op.mode == RecalcMode::None || (op.mode == RecalcMode::Manual && !manual))
-                        .then(|| (c.key.clone(), recipe.input_hash == Some(recipe.fingerprint(op, book))))
+                        .then(|| (c.key.clone(), recipe.input_digest == Some(recipe.fingerprint(op, book))))
                 })
                 .collect();
             for (key, current) in pending {
@@ -673,5 +683,112 @@ impl Project {
             }
         }
         problems
+    }
+}
+
+impl Operation {
+    pub fn same_settings(&self, other: &Self) -> bool {
+        if self.y != other.y || self.x != other.x || self.rows != other.rows || self.mode != other.mode {
+            return false;
+        }
+        match (&self.kind, &other.kind) {
+            (OpKind::Nonlinear(a), OpKind::Nonlinear(b)) => {
+                a.function == b.function
+                    && a.initial == b.initial
+                    && a.limits == b.limits
+                    && a.constraints == b.constraints
+                    && a.output_x == b.output_x
+                    && a.bands == b.bands
+            }
+            _ => self.kind == other.kind,
+        }
+    }
+}
+
+/// v21 使用固定 FNV-1a；各字段采用带长度字符串和小端整数编码。
+struct Digest(u64);
+impl Digest {
+    fn bytes(&mut self, bytes: &[u8]) {
+        for b in bytes {
+            self.0 = (self.0 ^ u64::from(*b)).wrapping_mul(0x100000001b3);
+        }
+    }
+    fn integer(&mut self, value: u64) {
+        self.bytes(&value.to_le_bytes());
+    }
+    fn text(&mut self, text: &str) {
+        self.integer(text.len() as u64);
+        self.bytes(text.as_bytes());
+    }
+    fn number(&mut self, value: Option<f64>) {
+        self.integer(u64::from(value.is_some()));
+        if let Some(v) = value {
+            self.integer(v.to_bits());
+        }
+    }
+}
+impl NonlinearRecipe {
+    pub(crate) fn fingerprint(&self, op: &Operation, book: &Book) -> u64 {
+        let mut h = Digest(0xcbf29ce484222325);
+        h.text("SciCanvas-fit-v21");
+        match &self.function {
+            FitMethod::Builtin(model) => {
+                h.integer(0);
+                h.text(model.name());
+            }
+            FitMethod::Custom {
+                name,
+                formula,
+                parameters,
+            } => {
+                h.integer(1);
+                h.text(name);
+                h.text(formula);
+                h.integer(parameters.len() as u64);
+                for p in parameters {
+                    h.text(p);
+                }
+            }
+        }
+        h.integer(u64::from(self.initial.is_some()));
+        if let Some(values) = &self.initial {
+            h.integer(values.len() as u64);
+            for value in values {
+                h.integer(value.to_bits());
+            }
+        }
+        h.integer(self.limits.len() as u64);
+        for limit in &self.limits {
+            h.number(limit.fixed);
+            h.number(limit.lower);
+            h.number(limit.upper);
+        }
+        h.text(&self.constraints);
+        h.text(&op.y);
+        h.integer(u64::from(op.x.is_some()));
+        if let Some(x) = &op.x {
+            h.text(x);
+        }
+        h.integer(u64::from(op.rows.is_some()));
+        if let Some((a, b)) = op.rows {
+            h.integer(a as u64);
+            h.integer(b as u64);
+        }
+        let (xs, ys, rows) = get_xy(
+            book,
+            &Item {
+                book_id: book.id,
+                y: op.y.clone(),
+                x: op.x.clone(),
+                rows: op.rows,
+            },
+        );
+        h.integer(rows.len() as u64);
+        for ((x, y), row) in xs.iter().zip(ys).zip(rows) {
+            h.integer(row as u64);
+            h.integer(x.to_bits());
+            h.integer(y.to_bits());
+        }
+        h.0
     }
 }

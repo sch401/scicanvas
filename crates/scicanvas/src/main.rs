@@ -24,13 +24,22 @@ mod theme;
 use eframe::egui;
 
 fn main() -> Result<(), eframe::Error> {
+    scicanvas_core::project_file::session::install_panic_log();
+    let settings = scicanvas_core::project_file::session::load_settings();
+    let mut viewport = egui::ViewportBuilder::default()
+        .with_title("SciCanvas")
+        .with_inner_size([1280.0, 820.0])
+        .with_min_inner_size([800.0, 500.0])
+        .with_decorations(false);
+    if let Some([x, y, w, h]) = settings
+        .window
+        .filter(|values| values.iter().all(|v| v.is_finite()) && values[2] >= 800.0 && values[3] >= 500.0)
+    {
+        viewport = viewport.with_position([x, y]).with_inner_size([w, h]);
+    }
+    viewport = viewport.with_maximized(settings.maximized);
     let options = eframe::NativeOptions {
-        viewport: egui::ViewportBuilder::default()
-            .with_title("SciCanvas")
-            .with_inner_size([1280.0, 820.0])
-            .with_min_inner_size([800.0, 500.0])
-            // 不用系统标题栏：顶部栏兼作标题栏，窗口按钮画在右上角（见 chrome.rs）
-            .with_decorations(false),
+        viewport,
         ..Default::default()
     };
     #[cfg(target_os = "windows")]

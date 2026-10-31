@@ -97,9 +97,13 @@ impl Project {
     pub(super) fn write_result(
         &mut self,
         item: &Item,
-        columns: Vec<Column>,
+        mut columns: Vec<Column>,
         link: ResultLink<'_>,
     ) -> Result<ResultKeys, String> {
+        if let ResultLink::Auto { x, y, .. } = &link {
+            columns[*x].independent_rows = true;
+            columns[*y].independent_rows = true;
+        }
         let keys = columns
             .into_iter()
             .map(|col| self.insert_result_column(item.book_id, &item.y, col).unwrap())
@@ -294,7 +298,7 @@ impl Project {
             .collect();
         let data = book.column(target).unwrap().data.replaced_texts(data)?;
         book.freeze_error_sources();
-        book.columns.iter_mut().find(|c| c.key == target).unwrap().data = data;
+        book.columns.iter_mut().find(|c| c.key == target).unwrap().data = data.into();
         Ok(())
     }
 
@@ -416,7 +420,9 @@ impl Project {
             return Err("请至少选择一个排序关键字".into());
         }
         let moving: Vec<usize> = match within {
-            None => (0..book.columns.len()).collect(),
+            None => (0..book.columns.len())
+                .filter(|&i| !book.columns[i].independent_rows)
+                .collect(),
             Some(cols) => cols.iter().filter_map(|k| book.column_index(k)).collect(),
         };
         let mut key_cols = vec![];
@@ -439,7 +445,7 @@ impl Project {
         });
         for &c in &moving {
             let c = &mut book.columns[c];
-            c.data = c.data.reordered(&idx);
+            c.data = c.data.reordered(&idx).into();
             while c.data.last().is_some_and(|s| s.trim().is_empty()) {
                 c.data.pop();
             }

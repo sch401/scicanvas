@@ -176,6 +176,7 @@ impl Project {
         for (i, label) in ["置信下限", "置信上限", "预测下限", "预测上限"].into_iter().enumerate() {
             let mut c = Column::new("", Role::Y);
             c.long_name = format!("{name} {pct}% {label}");
+            c.independent_rows = true;
             c.units = units.clone();
             c.comment = "t 分布；置信带为拟合曲线的不确定度，预测带另含残差方差".into();
             c.data = xs
@@ -232,7 +233,7 @@ impl Project {
             },
         ) = book.column(&r.curve.1).and_then(|c| c.op.as_ref())
         {
-            if recipe.input_hash != Some(recipe.fingerprint(op, book)) {
+            if recipe.input_digest != Some(recipe.fingerprint(op, book)) {
                 return Err("来源已改变，请先重算拟合再添加置信带".into());
             }
         }
@@ -349,14 +350,6 @@ impl Project {
                 .map(|c| c.units.clone())
                 .unwrap_or_default();
             let y_units = book.column(&item.y).map(|c| c.units.clone()).unwrap_or_default();
-            let equation = fit
-                .model
-                .params()
-                .iter()
-                .zip(&fit.params)
-                .map(|(n, v)| format!("{n} = {}", fmt_num(round_sig(*v, 6))))
-                .collect::<Vec<_>>()
-                .join("，");
             let fx = interpolate::grid(fit.x_min, fit.x_max, 200);
             let mut cx = Column::new("", Role::X);
             cx.long_name = format!("{name} {} 拟合 X", fit.model.name());
@@ -366,7 +359,7 @@ impl Project {
             let mut cy = Column::new("", Role::Y);
             cy.long_name = format!("{name} {} 拟合", fit.model.name());
             cy.units = y_units;
-            cy.comment = format!("{}；{}", fit.model.formula(), equation);
+            cy.comment = fit_comment(&fit);
             cy.data = fit.sample(&fx).into_iter().map(fmt_num).collect();
             let result = self.write_result(
                 item,
@@ -390,8 +383,8 @@ impl Project {
                         .join("\n"),
                     output_x: kx.clone(),
                     bands: Vec::new(),
-                    input_hash: None,
-                    attempted_hash: None,
+                    input_digest: None,
+                    attempted_digest: None,
                 })),
                 y: item.y.clone(),
                 x: item.x.clone(),
@@ -401,7 +394,7 @@ impl Project {
             if let OpKind::Nonlinear(recipe) = &operation.kind {
                 let fingerprint = recipe.fingerprint(&operation, self.book(item.book_id).unwrap());
                 if let OpKind::Nonlinear(recipe) = &mut operation.kind {
-                    recipe.input_hash = Some(fingerprint);
+                    recipe.input_digest = Some(fingerprint);
                 }
             }
             self.book_mut(item.book_id)
@@ -569,12 +562,17 @@ impl Project {
         let OpKind::Nonlinear(recipe) = &mut op.kind else {
             unreachable!()
         };
-        recipe.input_hash = Some(hash);
-        recipe.attempted_hash = None;
-        let source_name = book
-            .column(&op.y)
-            .map(|c| c.display_name().to_owned())
-            .unwrap_or_default();
+        recipe.input_digest = Some(hash);
+        recipe.attempted_digest = None;
+        let old_report = book.column(key).and_then(|c| c.fit_report.as_deref());
+        let source_name = old_report.map(|r| r.name.clone()).unwrap_or_else(|| {
+            format!(
+                "{}：{}",
+                book.name,
+                book.column(&op.y).map_or(op.y.as_str(), |c| c.display_name())
+            )
+        });
+        let update_comment = old_report.is_some_and(|r| book.column(key).unwrap().comment == fit_comment(&r.fit));
         let report_id = book.column(key).and_then(|c| c.fit_report.as_ref()).map(|r| r.id);
         let report_id = report_id.unwrap_or_else(|| self.alloc_id());
         let OpKind::Nonlinear(recipe) = &op.kind else {
@@ -584,10 +582,12 @@ impl Project {
         let y_key = op.y.clone();
         let book = self.book_mut(book_id).unwrap();
         for (k, data) in outputs {
-            book.columns.iter_mut().find(|c| c.key == k).unwrap().data = data;
+            book.columns.iter_mut().find(|c| c.key == k).unwrap().data = data.into();
         }
         let col = book.columns.iter_mut().find(|c| c.key == key).unwrap();
-        col.comment = format!("{}，RSS = {}", fit.model.formula(), fmt_num(fit.rss));
+        if update_comment {
+            col.comment = fit_comment(&fit);
+        }
         col.op = Some(op);
         col.fit_report = Some(Box::new(NlFitReport {
             id: report_id,
@@ -658,4 +658,16 @@ impl NlFitReport {
             + f.constraints.capacity() * size_of::<String>()
             + f.constraints.iter().map(String::capacity).sum::<usize>()
     }
+}
+
+fn fit_comment(fit: &crate::nlfit::NlFit) -> String {
+    let equation = fit
+        .model
+        .params()
+        .iter()
+        .zip(&fit.params)
+        .map(|(name, value)| format!("{name} = {}", fmt_num(round_sig(*value, 6))))
+        .collect::<Vec<_>>()
+        .join("，");
+    format!("{}；{}", fit.model.formula(), equation)
 }

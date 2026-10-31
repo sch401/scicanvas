@@ -228,11 +228,13 @@ fn column_mappings_drive_point_style_and_independent_symbol_fill_and_border() {
         let book = project.book_mut(1).unwrap();
         let key = book.push_column(Role::Ignore);
         let rows = book.nrows();
-        book.columns.iter_mut().find(|column| column.key == key).unwrap().data = scicanvas_core::ColumnData::Category {
-            codes: (0..rows).map(|row| (row % 3) as u32).collect(),
-            levels: vec!["Alpha".into(), "Beta".into(), "Gamma".into()],
-            ordered: true,
-        };
+        book.columns.iter_mut().find(|column| column.key == key).unwrap().data =
+            (scicanvas_core::ColumnData::Category {
+                codes: (0..rows).map(|row| (row % 3) as u32).collect(),
+                levels: vec!["Alpha".into(), "Beta".into(), "Gamma".into()],
+                ordered: true,
+            })
+            .into();
         key
     };
     project.graph_mut(2).unwrap().first_layer_mut().set_plot_style(

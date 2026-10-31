@@ -394,11 +394,12 @@ fn mapped_area_foreign_categories_survive_mean_and_log_projection() {
     foreign.id = p.alloc_id();
     let bid = foreign.id;
     let key = foreign.push_column(Role::Ignore);
-    foreign.columns.last_mut().unwrap().data = scicanvas_core::ColumnData::Category {
+    foreign.columns.last_mut().unwrap().data = (scicanvas_core::ColumnData::Category {
         codes: vec![0, 0, 1, 1, 2, 2],
         levels: vec!["Z".into(), "A".into(), "B".into()],
         ordered: true,
-    };
+    })
+    .into();
     p.books.push(foreign);
     p.add_curves(id, 0, bid, &["B".into()]).unwrap();
     let layer = p.graph_mut(id).unwrap().first_layer_mut();

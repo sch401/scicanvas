@@ -18,7 +18,7 @@ fn column_preview_updates_sheet_and_plot_reuses_data_and_commits_to_original_boo
     edit.format.number = NumberFormat::from_index(1, 2);
     assert!(app.refresh_book_preview());
     let allocation = |app: &SciApp| {
-        let scicanvas_core::ColumnData::Num { values, .. } = &app
+        let scicanvas_core::ColumnData::Num { values, .. } = &*app
             .book_preview
             .as_ref()
             .unwrap()
@@ -509,11 +509,12 @@ fn data_type_commands_are_atomic_and_undoable() {
         app.selection.insert(1, vec!["A".into()]);
         // 日期列用常见日期写法；其余用带前导零的数字，检查原始写法保留
         let first = if kind == DataKind::DateTime { "2026/10/18" } else { "01" };
-        app.project.books[0].columns[0].data = match kind {
+        app.project.books[0].columns[0].data = (match kind {
             DataKind::Num => ColumnData::Text(vec![first.into(), "2".into()]),
             DataKind::DateTime => ColumnData::Text(vec![first.into(), "2026".into()]),
             _ => vec![first.into(), "2".into()].into(),
-        };
+        })
+        .into();
         let before = app.project.clone();
         app.run_command(command);
         assert_eq!(app.project.books[0].columns[0].data.kind(), kind);
@@ -646,7 +647,7 @@ fn excel_paste_after_column_header_selection_draws_text_x_and_undoes_both_steps(
     let mut app = app();
     app.active = Some(1);
     for c in &mut app.project.books[0].columns {
-        c.data = ColumnData::default();
+        c.data = (ColumnData::default()).into();
         c.long_name.clear();
         c.units.clear();
         c.comment.clear();
@@ -707,10 +708,11 @@ fn excel_block_paste_in_cell_editor_routes_to_grid_and_conflicts_keep_the_edit()
         app.active = Some(1);
         if !valid {
             app.project.books[0].columns[0].data = vec!["2026-10-24".into(), "2026-10-25".into()].into();
-            app.project.books[0].columns[0].data = app.project.books[0].columns[0]
+            app.project.books[0].columns[0].data = (app.project.books[0].columns[0]
                 .data
                 .converted(scicanvas_core::DataKind::DateTime)
-                .unwrap();
+                .unwrap())
+            .into();
         }
         let before = app.project.clone();
         app.sheets.insert(
@@ -851,10 +853,11 @@ fn incompatible_date_grid_paste_keeps_types_headers_and_values() {
     let mut app = app();
     app.active = Some(1);
     app.project.books[0].columns[0].data = vec!["2026-10-24".into(), "2026-10-25".into()].into();
-    app.project.books[0].columns[0].data = app.project.books[0].columns[0]
+    app.project.books[0].columns[0].data = (app.project.books[0].columns[0]
         .data
         .converted(scicanvas_core::DataKind::DateTime)
-        .unwrap();
+        .unwrap())
+    .into();
     let before = app.project.clone();
     let ctx = egui::Context::default();
     let mut state = SheetState {
@@ -970,7 +973,7 @@ fn grouped_column_properties_reject_atomically_without_losing_valid_input_or_cop
     let before = app.project.clone();
     let group = Some(egui::Id::new("column-name"));
     app.history_group = group;
-    let allocation = |app: &SciApp| match &app.project.books[0].columns[1].data {
+    let allocation = |app: &SciApp| match &*app.project.books[0].columns[1].data {
         scicanvas_core::ColumnData::Num { values, .. } => values.as_ptr(),
         _ => panic!("numeric"),
     };
@@ -1010,7 +1013,7 @@ fn worksheet_headers_group_real_typing_and_separate_fields_without_copying_colum
     app.project.books[0].columns[0].long_name = "HeaderOne".into();
     app.project.books[0].columns[1].long_name = "HeaderTwo".into();
     let before = app.project.clone();
-    let scicanvas_core::ColumnData::Num { values, .. } = &app.project.books[0].columns[0].data else {
+    let scicanvas_core::ColumnData::Num { values, .. } = &*app.project.books[0].columns[0].data else {
         panic!("numeric");
     };
     let allocation = values.as_ptr();
@@ -1044,7 +1047,7 @@ fn worksheet_headers_group_real_typing_and_separate_fields_without_copying_colum
     harness.frame(&mut app, vec![egui::Event::Text("c".into())]);
     let second = app.project.clone();
     assert_ne!(second, first);
-    let scicanvas_core::ColumnData::Num { values, .. } = &app.project.books[0].columns[0].data else {
+    let scicanvas_core::ColumnData::Num { values, .. } = &*app.project.books[0].columns[0].data else {
         panic!("numeric");
     };
     assert_eq!(values.as_ptr(), allocation);
@@ -1063,10 +1066,11 @@ fn worksheet_headers_group_real_typing_and_separate_fields_without_copying_colum
 fn rejected_sheet_paste_preserves_redo_editor_selection_and_pending_conversion() {
     let mut app = app();
     app.project.books[0].columns[0].data = vec!["2026-10-25".into(), "2026-10-26".into()].into();
-    app.project.books[0].columns[0].data = app.project.books[0].columns[0]
+    app.project.books[0].columns[0].data = (app.project.books[0].columns[0]
         .data
         .converted(scicanvas_core::DataKind::DateTime)
-        .unwrap();
+        .unwrap())
+    .into();
     app.run_command("book.new");
     app.undo();
     let before = app.project.clone();
@@ -1123,10 +1127,11 @@ fn migrated_worksheet_dialogs_match_core_results_and_commit_one_step() {
         app.active = Some(1);
         if case == 3 {
             app.project.books[0].columns[0].data = vec!["b".into(), "a".into(), "b".into()].into();
-            app.project.books[0].columns[0].data = app.project.books[0].columns[0]
+            app.project.books[0].columns[0].data = (app.project.books[0].columns[0]
                 .data
                 .converted(scicanvas_core::DataKind::Category)
-                .unwrap();
+                .unwrap())
+            .into();
         }
         let before = app.project.clone();
         let mut expected = before.clone();
