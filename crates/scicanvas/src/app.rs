@@ -1713,9 +1713,9 @@ impl SciApp {
         }
     }
     fn clear_recovery(&mut self) {
-        self.recovery_lock = None;
         if let Some(file) = self.recovery_file.take() {
             let _ = std::fs::remove_file(&file);
+            self.recovery_lock = None;
             let _ = std::fs::remove_file(file.with_extension("lock"));
         }
         self.last_recovery = std::time::Instant::now();
@@ -1784,9 +1784,12 @@ impl SciApp {
                 self.recovery_candidates.clear();
             }
             if choice == 2 {
-                let _ = std::fs::remove_file(&path);
-                let _ = std::fs::remove_file(path.with_extension("lock"));
-                self.recovery_candidates.remove(0);
+                match scicanvas_core::project_file::session::discard_recovery(&path) {
+                    Ok(()) => {
+                        self.recovery_candidates.remove(0);
+                    }
+                    Err(error) => self.status = error,
+                }
             }
             if choice == 3 || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
                 self.recovery_candidates.clear();

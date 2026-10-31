@@ -980,6 +980,13 @@ pub mod session {
         }
         options.open(path.with_extension("lock"))
     }
+    pub fn discard_recovery(path: &Path) -> Result<(), String> {
+        let lock = lock_recovery(path).map_err(|e| format!("恢复文件正在其他会话使用：{e}"))?;
+        std::fs::remove_file(path).map_err(|e| e.to_string())?;
+        drop(lock);
+        let _ = std::fs::remove_file(path.with_extension("lock"));
+        Ok(())
+    }
     pub fn save_recovery(path: &Path, project: &Project, source: Option<&Path>) -> Result<(), String> {
         let mut value: Value = serde_json::from_str(&to_json(project)?).map_err(|e| e.to_string())?;
         value["recovery_source"] = serde_json::to_value(source).map_err(|e| e.to_string())?;
@@ -1068,10 +1075,14 @@ mod review_session_tests {
         let lock = session::lock_recovery(&path).unwrap();
         #[cfg(windows)]
         assert!(session::recoveries(&directory).is_empty());
+        #[cfg(windows)]
+        {
+            assert!(session::discard_recovery(&path).is_err());
+            assert!(path.exists());
+        }
         drop(lock);
         assert_eq!(session::recoveries(&directory), vec![path.clone()]);
-        std::fs::remove_file(path).unwrap();
-        std::fs::remove_file(directory.join("session.lock")).unwrap();
+        session::discard_recovery(&path).unwrap();
         std::fs::remove_dir(directory).unwrap();
     }
 }
