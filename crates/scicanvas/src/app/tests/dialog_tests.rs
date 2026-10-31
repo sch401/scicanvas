@@ -1530,3 +1530,70 @@ fn legacy_library_function_fits_through_the_real_dialog_button() {
         app.status
     );
 }
+
+#[test]
+fn analysis_actions_accept_enter_and_escape_without_text_focus() {
+    let ctx = egui::Context::default();
+    crate::theme::install(&ctx);
+    crate::fonts::setup(&ctx);
+    let mut app = app();
+    app.open_poly_dialog();
+    let key = |key| egui::Event::Key {
+        key,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers: egui::Modifiers::NONE,
+    };
+    let mut h = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1280., 900.)),
+        |a: &mut SciApp, c: &egui::Context| a.dialogs(c),
+    );
+    for _ in 0..3 {
+        h.frame(&mut app, vec![]);
+    }
+    h.frame(&mut app, vec![key(egui::Key::Escape)]);
+    assert!(app.dialog.is_none());
+    app.active = Some(1);
+    app.selection.insert(1, vec!["C".into()]);
+    app.open_poly_dialog();
+    for _ in 0..3 {
+        h.frame(&mut app, vec![]);
+    }
+    h.frame(&mut app, vec![key(egui::Key::Enter)]);
+    assert!(matches!(app.dialog, Some(Dialog::FitReport(_))), "{}", app.status);
+}
+#[test]
+fn nonlinear_report_uses_the_book_name() {
+    let mut app = app();
+    app.project.books[0].name = "实验数据".into();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["C".into()]);
+    app.nlfit(scicanvas_core::nlfit::Model::ExpDec1, &[], &[]);
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut h = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1280., 900.)),
+        |a: &mut SciApp, c: &egui::Context| a.dialogs(c),
+    );
+    let mut out = h.frame(&mut app, vec![]);
+    for _ in 0..3 {
+        out = h.frame(&mut app, vec![]);
+    }
+    let text = out
+        .shapes
+        .iter()
+        .filter_map(|s| {
+            if let egui::Shape::Text(t) = &s.shape {
+                Some(t.galley.job.text.as_str())
+            } else {
+                None
+            }
+        })
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(text.contains("实验数据 · 结果列"));
+    assert!(!text.contains("Book 1"));
+}

@@ -461,6 +461,7 @@ impl SciApp {
             .as_ref()
             .and_then(|p| p.result.as_ref().ok())
             .filter(|b| b.id == id);
+        let frozen = self.modal_active();
         let Some(book) = self.project.book_mut(id) else {
             self.sheets.insert(id, st);
             return;
@@ -491,6 +492,7 @@ impl SciApp {
         let view = ui.clip_rect();
         let grid = egui::Stroke::new(1.0_f32, pal.meta_bg);
         let mut frame = SheetFrame {
+            frozen,
             id,
             pal,
             active,

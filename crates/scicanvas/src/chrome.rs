@@ -77,7 +77,7 @@ pub fn buttons(ui: &mut egui::Ui, pal: &Palette) -> bool {
     let stroke = |color| Stroke::new(1.0_f32, color);
 
     // 关闭：悬停时红底白叉
-    let (rect, close, hovered) = button(ui, Color32::from_rgb(0xC4, 0x2B, 0x1C), "关闭");
+    let (rect, close, hovered) = button(ui, pal.danger, "关闭");
     let c = rect.center();
     let color = if hovered { Color32::WHITE } else { ink };
     for (a, b) in [(vec2(-5.0, -5.0), vec2(5.0, 5.0)), (vec2(-5.0, 5.0), vec2(5.0, -5.0))] {
