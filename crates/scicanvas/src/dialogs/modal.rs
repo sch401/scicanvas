@@ -4,17 +4,28 @@ use eframe::egui::{self, Align2, Color32, Id, LayerId, Order, RichText};
 pub(crate) fn modal<R>(ctx: &egui::Context, title: &str, contents: impl FnOnce(&mut egui::Ui) -> R) -> Option<R> {
     let id = Id::new(("scicanvas-modal", title));
     let screen = ctx.screen_rect();
+    let caption = crate::chrome::caption(ctx);
+    let backdrop = caption.map_or(screen, |caption| {
+        egui::Rect::from_min_max(egui::pos2(screen.left(), caption.bottom()), screen.max)
+    });
     egui::Area::new(id.with("backdrop"))
         .order(Order::Foreground)
-        .fixed_pos(screen.min)
+        .fixed_pos(backdrop.min)
         .show(ctx, |ui| {
-            ui.allocate_rect(screen, egui::Sense::click_and_drag());
+            ui.allocate_rect(backdrop, egui::Sense::click_and_drag());
             ui.painter().rect_filled(
-                screen,
+                backdrop,
                 0.,
                 Color32::from_black_alpha(if ctx.style().visuals.dark_mode { 120 } else { 70 }),
             );
         });
+    if let Some(caption) = caption {
+        let pal = crate::theme::palette_for(ctx);
+        egui::Area::new(id.with("caption"))
+            .order(Order::Foreground)
+            .fixed_pos(caption.min)
+            .show(ctx, |ui| crate::chrome::modal_caption(ui, caption, &pal));
+    }
     let out = egui::Area::new(id)
         .order(Order::Foreground)
         .anchor(Align2::CENTER_CENTER, egui::Vec2::ZERO)
