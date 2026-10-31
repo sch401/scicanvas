@@ -747,7 +747,7 @@ fn actual_discard_buttons_cancel_save_and_discard_the_right_project() {
 }
 
 #[test]
-fn closing_with_a_cell_draft_keeps_it_in_the_project_and_requires_confirmation() {
+fn closing_with_a_cell_draft_keeps_it_pending_until_save() {
     let mut app = app();
     let sheet = app.sheets.entry(1).or_default();
     sheet.edit = Some(Edit {
@@ -757,8 +757,8 @@ fn closing_with_a_cell_draft_keeps_it_in_the_project_and_requires_confirmation()
     });
     assert!(app.is_dirty());
     app.request_discard(PendingDiscard::Quit);
-    assert!(app.sheets[&1].edit.is_none());
-    assert_eq!(app.project.books[0].columns[0].data.text_at(0), "123");
+    assert!(app.sheets[&1].edit.is_some());
+    assert_eq!(app.project.books[0].columns[0].data.text_at(0), "0");
     assert!(app.pending_discard.is_some());
     assert!(!app.quit);
 }
@@ -785,6 +785,7 @@ fn background_backup_clear_waits_and_cannot_recreate_deleted_files() {
     assert_eq!(scicanvas_core::project_file::load(&path).unwrap(), app.project);
     app.backup_recovery().unwrap();
     app.clear_recovery();
+    app.finish_cleanup();
     assert!(app.backup_job.is_none());
     assert!(!path.exists());
     assert!(!path.with_extension("source").exists());
@@ -846,5 +847,75 @@ fn backup_keeps_visible_fit_and_restoring_recalculates_drafts() {
     assert_ne!(app.project.nlfit_report(&report).unwrap().fit, report.fit);
     assert!(app.is_dirty());
     app.clear_recovery();
+    app.finish_cleanup();
     std::fs::remove_dir(dir).unwrap();
+}
+
+#[test]
+fn shutdown_does_not_wait_on_the_ui_thread_and_can_return_to_the_project() {
+    for cancel in [false, true] {
+        let mut app = app();
+        let before = app.project.clone();
+        let (release, wait) = std::sync::mpsc::channel();
+        app.backup_job = Some(std::thread::spawn(move || {
+            let _ = wait.recv_timeout(std::time::Duration::from_secs(5));
+            Ok(())
+        }));
+        app.request_discard(PendingDiscard::Quit);
+        assert!(
+            app.cleanup_task.is_some(),
+            "close must return before the backup finishes"
+        );
+        assert!(app.cleanup_blocks_ui());
+        assert!(!app.close_confirmed);
+        assert!(!app.quit);
+        if cancel {
+            app.cancel_cleanup_discard();
+            assert!(!app.cleanup_blocks_ui());
+        }
+        release.send(()).unwrap();
+        app.finish_cleanup();
+        assert_eq!(app.project, before);
+        assert_eq!(app.quit, !cancel);
+        assert_eq!(app.close_confirmed, !cancel);
+    }
+}
+#[test]
+fn clean_system_close_is_not_canceled_and_programmatic_close_requests_a_frame() {
+    let mut app = app();
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut input = egui::RawInput {
+        screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1200., 900.))),
+        ..Default::default()
+    };
+    input
+        .viewports
+        .get_mut(&egui::ViewportId::ROOT)
+        .unwrap()
+        .events
+        .push(egui::ViewportEvent::Close);
+    let out = ctx.run(input, |ctx| app.ui_frame(ctx));
+    let commands = &out.viewport_output[&egui::ViewportId::ROOT].commands;
+    assert!(app.close_confirmed);
+    assert!(commands.contains(&egui::ViewportCommand::Close));
+    assert!(!commands.contains(&egui::ViewportCommand::CancelClose));
+    assert!(out.viewport_output[&egui::ViewportId::ROOT].repaint_delay.is_zero());
+}
+
+#[test]
+fn invalid_draft_save_dismisses_close_confirmation_for_the_conversion_dialog() {
+    let mut app = app();
+    app.sheets.entry(1).or_default().edit = Some(Edit {
+        cell: Cell { c: 0, r: 0 },
+        buf: "invalid".into(),
+        focused: true,
+    });
+    app.request_discard(PendingDiscard::Quit);
+    assert!(app.pending_discard.is_some());
+    assert!(!app.try_save_project(false));
+    assert!(app.pending_discard.is_none());
+    assert!(matches!(app.dialog, Some(Dialog::ConvertText { .. })));
+    assert!(!app.quit);
+    assert!(app.sheets[&1].edit.is_some());
 }

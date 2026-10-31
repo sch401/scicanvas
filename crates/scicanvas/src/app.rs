@@ -118,7 +118,14 @@ impl RecalcInputs {
     }
 }
 
+struct CleanupTask {
+    worker: std::thread::JoinHandle<Result<(), String>>,
+    after: Option<PendingDiscard>,
+}
+
 pub struct SciApp {
+    cleanup_task: Option<CleanupTask>,
+    deferred_discard: Option<PendingDiscard>,
     backup_job: Option<std::thread::JoinHandle<Result<(), String>>>,
     window_checked: bool,
     session_enabled: bool,
@@ -246,6 +253,8 @@ impl SciApp {
 
     fn initial(pal: Palette) -> Self {
         let mut app = SciApp {
+            cleanup_task: None,
+            deferred_discard: None,
             backup_job: None,
             window_checked: false,
             session_enabled: false,
@@ -1537,9 +1546,8 @@ impl eframe::App for SciApp {
 
 impl SciApp {
     fn ui_frame(&mut self, ctx: &egui::Context) {
-        if ctx.input(|i| i.viewport().close_requested()) && !self.close_confirmed {
-            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-            self.request_discard(PendingDiscard::Quit);
+        if self.closing_frame(ctx) {
+            return;
         }
         let reset = egui::Modifiers {
             shift: true,
@@ -1580,6 +1588,12 @@ impl SciApp {
         let mut ui_state = std::mem::take(&mut self.ui);
         let pal = self.pal;
         ribbon::show(ctx, self, &mut ui_state, &pal, &mut clicked);
+        if clicked == Some("app.quit") {
+            self.ui = ui_state;
+            self.run_command("app.quit");
+            self.closing_frame(ctx);
+            return;
+        }
 
         let style = ctx.style();
         let bar = egui::Frame::side_top_panel(&style).inner_margin(egui::Margin::symmetric(8.0, 3.0));
@@ -1675,6 +1689,7 @@ impl SciApp {
         self.session_tick(ctx);
         if self.quit && self.close_confirmed {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            ctx.request_repaint();
         }
     }
 }
@@ -1705,9 +1720,7 @@ impl SciApp {
             })
     }
     pub(crate) fn request_discard(&mut self, action: PendingDiscard) {
-        if !self.flush_sheet_edits() {
-            return;
-        }
+        // 未提交的单元格草稿也参与 dirty 判断；只有选择保存时才提交和重算。
         self.finish_edit();
         if self.is_dirty() {
             self.pending_discard = Some(action);
@@ -1717,26 +1730,29 @@ impl SciApp {
     }
     fn execute_discard(&mut self, action: PendingDiscard) {
         self.pending_discard = None;
+        if self.cleanup_task.is_some() {
+            self.deferred_discard = Some(action);
+            return;
+        }
+        self.start_cleanup(Some(action));
+    }
+    fn complete_discard(&mut self, action: PendingDiscard) {
+        self.pending_discard = None;
         match action {
             PendingDiscard::Quit => {
-                self.clear_recovery();
-                self.persist_settings();
                 self.close_confirmed = true;
                 self.quit = true;
             }
             PendingDiscard::Open(path) => self.open_path_now(&path),
             PendingDiscard::Recover(path) => {
-                self.clear_recovery();
                 self.restore_recovery(&path);
             }
             PendingDiscard::OpenDialog => self.pick_project(),
             PendingDiscard::Reset => {
-                self.clear_recovery();
                 self.load_project(Project::sample(), None);
                 self.status = "已恢复示例项目，撤销历史已清空".into();
             }
             PendingDiscard::New => {
-                self.clear_recovery();
                 let mut p = Project::default();
                 p.new_book();
                 self.load_project(p, None);
@@ -1764,20 +1780,7 @@ impl SciApp {
         })
     }
     fn clear_recovery(&mut self) {
-        if let Err(error) = self.finish_backup() {
-            self.status = error;
-        }
-        if let Some(file) = self.recovery_file.take() {
-            let _ = scicanvas_core::project_file::session::retire_recovery(&file);
-            let removed =
-                std::fs::remove_file(&file).map_or_else(|e| e.kind() == std::io::ErrorKind::NotFound, |_| true);
-            self.recovery_lock = None;
-            let _ = std::fs::remove_file(file.with_extension("lock"));
-            if removed {
-                let _ = std::fs::remove_file(file.with_extension("source"));
-            }
-        }
-        self.last_recovery = std::time::Instant::now();
+        self.start_cleanup(None);
     }
     fn session_dialogs(&mut self, ctx: &egui::Context) {
         if self.pending_discard.is_some() {
@@ -1802,7 +1805,6 @@ impl SciApp {
             if choice == 3 {
                 self.pending_discard = None;
             } else if choice == 2 || (choice == 1 && self.try_save_project(false)) {
-                self.clear_recovery();
                 if let Some(action) = self.pending_discard.take() {
                     self.execute_discard(action);
                 }
@@ -1878,7 +1880,7 @@ impl SciApp {
     }
     fn backup_recovery(&mut self) -> Result<(), String> {
         use scicanvas_core::project_file::session;
-        if !self.is_dirty() || self.backup_job.is_some() {
+        if !self.is_dirty() || self.backup_job.is_some() || self.cleanup_task.is_some() {
             return Ok(());
         }
         if self.recovery_file.is_none() {
@@ -1919,6 +1921,9 @@ impl SciApp {
         Ok(())
     }
     fn session_tick(&mut self, ctx: &egui::Context) {
+        if self.cleanup_task.is_some() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(50));
+        }
         self.check_window_position(ctx);
         if self.backup_job.as_ref().is_some_and(|j| j.is_finished()) {
             if let Err(error) = self.finish_backup() {
@@ -1968,6 +1973,7 @@ impl SciApp {
                         row: edit.cell.r,
                         value: edit.buf.clone(),
                     });
+                    self.pending_discard = None;
                     self.status = "请先确认当前单元格的类型转换，再保存或切换项目".into();
                     return false;
                 }
@@ -2036,8 +2042,146 @@ impl SciApp {
         }
     }
 }
-impl Drop for SciApp {
-    fn drop(&mut self) {
-        let _ = self.finish_backup();
+
+impl SciApp {
+    /// 完成备份、文件清理和退出偏好写入都在工作线程；界面只轮询结果。
+    fn start_cleanup(&mut self, after: Option<PendingDiscard>) {
+        if self.cleanup_task.is_some() {
+            return;
+        }
+        let preferences = if self.session_enabled && matches!(after, Some(PendingDiscard::Quit)) {
+            let mut settings = self.settings.clone();
+            settings.theme = match self.theme_pref {
+                egui::ThemePreference::Light => "light",
+                egui::ThemePreference::Dark => "dark",
+                _ => "system",
+            }
+            .into();
+            Some(settings)
+        } else {
+            None
+        };
+        if self.backup_job.is_none() && self.recovery_file.is_none() && preferences.is_none() {
+            if let Some(action) = after {
+                self.complete_discard(action);
+            }
+            return;
+        }
+        let backup = self.backup_job.take();
+        let file = self.recovery_file.take();
+        let lock = self.recovery_lock.take();
+        let worker = std::thread::Builder::new()
+            .name("scicanvas-cleanup".into())
+            .spawn(move || {
+                use scicanvas_core::project_file::session;
+                let result = backup.map_or(Ok(()), |job| {
+                    job.join().unwrap_or_else(|_| Err("自动备份任务中断".into()))
+                });
+                let removed = file.as_ref().is_some_and(|path| {
+                    let _ = session::retire_recovery(path);
+                    std::fs::remove_file(path).map_or_else(|e| e.kind() == std::io::ErrorKind::NotFound, |_| true)
+                });
+                drop(lock);
+                if let Some(path) = file {
+                    let _ = std::fs::remove_file(path.with_extension("lock"));
+                    if removed {
+                        let _ = std::fs::remove_file(path.with_extension("source"));
+                    }
+                }
+                preferences
+                    .map_or(Ok(()), |settings| session::save_settings(&settings))
+                    .and(result)
+            });
+        match worker {
+            Ok(worker) => {
+                self.cleanup_task = Some(CleanupTask { worker, after });
+                self.pending_repaint = true;
+            }
+            Err(error) => self.status = format!("启动退出清理失败：{error}"),
+        }
+        self.last_recovery = std::time::Instant::now();
+    }
+    fn finish_cleanup(&mut self) {
+        let Some(task) = self.cleanup_task.take() else { return };
+        if let Err(error) = task
+            .worker
+            .join()
+            .unwrap_or_else(|_| Err("恢复文件清理任务中断".into()))
+        {
+            self.status = error;
+        }
+        self.last_recovery = std::time::Instant::now();
+        if let Some(action) = self.deferred_discard.take() {
+            self.execute_discard(action);
+        } else if let Some(action) = task.after {
+            self.complete_discard(action);
+        }
+    }
+    fn poll_cleanup(&mut self, ctx: &egui::Context) {
+        if self.cleanup_task.as_ref().is_some_and(|t| t.worker.is_finished()) {
+            self.finish_cleanup();
+        }
+        if self.cleanup_task.is_some() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(50));
+        }
+    }
+    fn cleanup_blocks_ui(&self) -> bool {
+        self.deferred_discard.is_some() || self.cleanup_task.as_ref().is_some_and(|t| t.after.is_some())
+    }
+    fn cancel_cleanup_discard(&mut self) {
+        self.deferred_discard = None;
+        if let Some(task) = &mut self.cleanup_task {
+            task.after = None;
+        }
+    }
+    fn cleanup_progress(&mut self, ctx: &egui::Context) {
+        egui::CentralPanel::default().show(ctx, |ui| {
+            ui.vertical_centered(|ui| {
+                ui.add_space(ui.available_height() * 0.35);
+                ui.spinner();
+                ui.label("正在完成自动备份和恢复文件清理…");
+                if ui.button("返回项目").clicked() {
+                    self.cancel_cleanup_discard();
+                }
+            });
+        });
+        ctx.request_repaint_after(std::time::Duration::from_millis(50));
+    }
+}
+
+impl SciApp {
+    fn closing_frame(&mut self, ctx: &egui::Context) -> bool {
+        self.poll_cleanup(ctx);
+        if self.cleanup_blocks_ui() {
+            if ctx.input(|i| i.viewport().close_requested()) {
+                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            }
+            self.cleanup_progress(ctx);
+            return true;
+        }
+        if ctx.input(|i| i.viewport().close_requested()) && !self.close_confirmed {
+            self.request_discard(PendingDiscard::Quit);
+            if !self.close_confirmed {
+                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            }
+        }
+        if self.quit && self.close_confirmed {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            ctx.request_repaint();
+            return true;
+        }
+        if self.pending_discard.is_some() {
+            // 确认期间暂停底层编辑器，避免失焦自动提交草稿并启动拟合。
+            egui::CentralPanel::default().show(ctx, |_| {});
+            self.session_dialogs(ctx);
+            if self.cleanup_task.is_some() {
+                ctx.request_repaint_after(std::time::Duration::from_millis(50));
+            }
+            if self.pending_discard.is_none() {
+                ctx.request_repaint();
+            }
+            return true;
+        }
+        false
     }
 }
