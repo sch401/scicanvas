@@ -29,36 +29,23 @@ impl Dialog {
                         };
                         ui.label(RichText::new(status).small().color(pal.weak));
                         ui.label(
-                            RichText::new(format!("Book {} · 结果 {} · 报告 #{}", r.book_id, r.curve.1, r.id)).small(),
+                            RichText::new(format!(
+                                "{} · 结果列 {} · 报告 #{}",
+                                project.name_of(r.book_id).unwrap_or("已删除的工作簿"),
+                                r.curve.1,
+                                r.id
+                            ))
+                            .small()
+                            .color(pal.weak),
                         );
-                        if live.is_some()
-                            && project.nlfit_operation(r).is_ok()
-                            && ui.button("重新编辑拟合设置").clicked()
-                        {
-                            action = Action::EditNlFit(Box::new(r.clone()));
-                        }
                         ui.label(RichText::new(format!("{} · {}", r.name, f.model.name())).strong());
                         ui.label(RichText::new(f.model.formula()).monospace().small());
-                        if live.is_none()
-                            && matches!(f.model, scicanvas_core::nlfit::FitFunction::Custom(_))
-                            && ui.button("重新编辑函数").clicked()
-                        {
-                            let definition = scicanvas_core::nlfit::CustomFitDefinition {
-                                name: f.model.name().into(),
-                                formula: f.model.formula().into(),
-                                parameters: f.model.params().into_iter().map(str::to_owned).collect(),
-                                initial: f.params.clone(),
-                                constraints: f.constraints.join("\n"),
-                            };
-                            action = Action::CustomFitLibrary(Box::new(CustomFitAction::Edit(definition)));
-                        }
-
                         for c in &f.constraints {
                             ui.label(RichText::new(format!("约束：{c}")).small().color(pal.weak));
                         }
                         if !f.converged {
                             ui.colored_label(
-                                egui::Color32::from_rgb(182, 67, 66),
+                                pal.error,
                                 format!(
                                     "迭代 {} 次后停止，尚未收敛；可调整初值、参数约束或检查数据",
                                     f.iterations
@@ -72,6 +59,26 @@ impl Dialog {
                             .chain(nlfit_stats(f).into_iter().map(|(k, v)| vec![k.to_string(), v]))
                             .collect();
                         table_grid(ui, ("nlfit-stats", ri), &stats, pal);
+                        if live.is_some()
+                            && project.nlfit_operation(r).is_ok()
+                            && ui.add(plain("重新编辑拟合设置")).clicked()
+                        {
+                            action = Action::EditNlFit(Box::new(r.clone()));
+                        }
+                        if live.is_none()
+                            && matches!(f.model, scicanvas_core::nlfit::FitFunction::Custom(_))
+                            && ui.add(plain("重新编辑函数")).clicked()
+                        {
+                            let definition = scicanvas_core::nlfit::CustomFitDefinition {
+                                name: f.model.name().into(),
+                                formula: f.model.formula().into(),
+                                parameters: f.model.params().into_iter().map(str::to_owned).collect(),
+                                initial: f.params.clone(),
+                                constraints: f.constraints.join("\n"),
+                            };
+                            action = Action::CustomFitLibrary(Box::new(CustomFitAction::Edit(definition)));
+                        }
+
                         ui.add_space(10.0);
                     }
                 });

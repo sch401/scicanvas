@@ -31,6 +31,7 @@ mod frequency;
 mod ifft;
 mod interpolate;
 mod layer_contents;
+mod modal;
 mod nl_fit;
 mod nl_fit_report;
 mod normalize;
@@ -53,13 +54,14 @@ mod window;
 pub use column_props::ColumnEdit;
 pub(crate) use docking::{begin_docks, end_docks, has_docks, place_docks, reset_docks, DockSide};
 pub use layer_contents::LayerContents;
+pub(crate) use modal::modal;
 pub use nl_fit::{CustomFitAction, CustomFitEditor, FitEditTarget};
 pub(crate) use plot_object::PlotObjectEditor;
 pub(crate) use scientific_text::{scientific_text, scientific_text_multiline};
 pub(crate) use tables::md_table;
 use tables::{md_cell, md_pairs, table_grid};
 use widgets::buttons;
-pub(crate) use widgets::{center_buttons, edit_group, plain, primary, BUTTON};
+pub(crate) use widgets::{actions, center_buttons, edit_group, plain, primary, ActionKind, BUTTON};
 pub(crate) use window::{floating_bounds, window};
 
 pub enum Dialog {
@@ -290,7 +292,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
 impl Dialog {
     fn show(&mut self, ctx: &egui::Context, pal: &Palette, project: &scicanvas_core::Project) -> Action {
         let mut open = true;
-        let esc = ctx.input(|i| i.key_pressed(egui::Key::Escape));
+        let esc = ctx.input(|i| i.key_pressed(egui::Key::Escape)) && ctx.memory(|m| m.focused().is_none());
         let mut action = match self {
             Self::LayerContents(contents) => contents.show(ctx, project, pal),
             Self::AnalysisCurves { .. } => self.show_analysis_curves(ctx, pal, &mut open, esc),

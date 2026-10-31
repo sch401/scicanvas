@@ -171,7 +171,7 @@ fn title_button(ui: &mut egui::Ui, id: egui::Id, r: Rect, kind: Btn, state: WinS
     let p = ui.painter();
     if resp.hovered() {
         let bg = if kind == Btn::Close {
-            Color32::from_rgb(0xC4, 0x2B, 0x1C)
+            crate::theme::palette_for(ui.ctx()).danger
         } else {
             Color32::from_white_alpha(56)
         };
@@ -301,7 +301,11 @@ pub fn window(
                 pos2(ic.right() + 6.0, bar.top()),
                 pos2(btn_rect(2).left() - 4.0, bar.bottom()),
             );
-            let galley = painter.layout_no_wrap(title.to_string(), egui::FontId::proportional(13.0), fg);
+            let galley = painter.layout_no_wrap(
+                title.to_string(),
+                egui::FontId::proportional(crate::theme::size::BODY),
+                fg,
+            );
             painter
                 .with_clip_rect(title_clip)
                 .galley(pos2(title_clip.left(), by - galley.size().y / 2.0), galley, fg);

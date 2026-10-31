@@ -1,0 +1,51 @@
+//! 确认框独立于可停靠设置面板，始终居中并阻挡背后指针。
+use eframe::egui::{self, Align2, Color32, Id, LayerId, Order, RichText};
+
+pub(crate) fn modal<R>(ctx: &egui::Context, title: &str, contents: impl FnOnce(&mut egui::Ui) -> R) -> Option<R> {
+    let id = Id::new(("scicanvas-modal", title));
+    let screen = ctx.screen_rect();
+    egui::Area::new(id.with("backdrop"))
+        .order(Order::Foreground)
+        .fixed_pos(screen.min)
+        .show(ctx, |ui| {
+            ui.allocate_rect(screen, egui::Sense::click_and_drag());
+            ui.painter().rect_filled(
+                screen,
+                0.,
+                Color32::from_black_alpha(if ctx.style().visuals.dark_mode { 120 } else { 70 }),
+            );
+        });
+    let out = egui::Area::new(id)
+        .order(Order::Foreground)
+        .anchor(Align2::CENTER_CENTER, egui::Vec2::ZERO)
+        .movable(false)
+        .show(ctx, |ui| {
+            egui::Frame::window(ui.style())
+                .inner_margin(egui::Margin::same(14.))
+                .show(ui, |ui| {
+                    ui.set_min_width(320.);
+                    ui.set_max_width(460.);
+                    ui.heading(RichText::new(title).strong());
+                    ui.add_space(6.);
+                    contents(ui)
+                })
+                .inner
+        });
+    ctx.move_to_top(LayerId::new(Order::Foreground, id));
+    Some(out.inner)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn modal_does_not_register_dock_state() {
+        let ctx = egui::Context::default();
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            modal(ctx, "未保存的修改", |ui| {
+                ui.label("内容");
+            });
+        });
+        assert!(super::super::docking::docks(&ctx).panels.is_empty());
+    }
+}

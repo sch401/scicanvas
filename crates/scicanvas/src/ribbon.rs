@@ -553,11 +553,7 @@ fn group(ui: &mut egui::Ui, app: &SciApp, g: &Group, pal: &Palette, clicked: &mu
                     }
                     Gallery(ids) => {
                         egui::Frame::none()
-                            .fill(if pal.dark {
-                                Color32::from_rgb(27, 31, 37)
-                            } else {
-                                Color32::WHITE
-                            })
+                            .fill(ui.visuals().extreme_bg_color)
                             .stroke(Stroke::new(1.0_f32, pal.line))
                             .rounding(4.0)
                             .inner_margin(2.0)
@@ -583,7 +579,7 @@ fn group(ui: &mut egui::Ui, app: &SciApp, g: &Group, pal: &Palette, clicked: &mu
             rect.center(),
             Align2::CENTER_CENTER,
             g.label,
-            FontId::proportional(11.0),
+            FontId::proportional(crate::theme::size::SMALL),
             pal.weak,
         );
     });
@@ -623,7 +619,7 @@ fn big_button(ui: &mut egui::Ui, app: &SciApp, c: &Command, pal: &Palette) -> eg
     let checked = c.checked.is_some_and(|f| f(app));
     let galley = ui.painter().layout_no_wrap(
         c.label.to_string(),
-        FontId::proportional(12.0),
+        FontId::proportional(crate::theme::size::COMPACT),
         text_color(enabled, pal),
     );
     let size = vec2((galley.size().x + 14.0).max(58.0), 70.0);
@@ -647,7 +643,7 @@ fn small_button(
     let checked = c.checked.is_some_and(|f| f(app));
     let galley = ui.painter().layout_no_wrap(
         c.label.to_string(),
-        FontId::proportional(12.0),
+        FontId::proportional(crate::theme::size::COMPACT),
         text_color(enabled, pal),
     );
     let size = vec2(galley.size().x + 34.0, 23.0);
@@ -691,9 +687,11 @@ fn gallery_tile(
     clicked: &mut Option<&'static str>,
 ) -> egui::Response {
     let enabled = (c.when)(app).is_ok();
-    let label = ui
-        .painter()
-        .layout_no_wrap(c.label.to_owned(), FontId::proportional(11.5), text_color(enabled, pal));
+    let label = ui.painter().layout_no_wrap(
+        c.label.to_owned(),
+        FontId::proportional(crate::theme::size::LABEL),
+        text_color(enabled, pal),
+    );
     let width = (label.size().x + 12.0).max(72.0);
     let (rect, resp) = ui.allocate_exact_size(vec2(width, 62.0), if enabled { Sense::click() } else { Sense::hover() });
     button_bg(ui, rect, &resp, enabled, false, pal);
@@ -704,7 +702,7 @@ fn gallery_tile(
         egui::pos2(rect.center().x, rect.bottom() - 9.0),
         Align2::CENTER_CENTER,
         c.label,
-        FontId::proportional(11.5),
+        FontId::proportional(crate::theme::size::LABEL),
         text_color(enabled, pal),
     );
     resp.on_hover_ui(|ui| plot_hover(ui, app, c, clicked))
@@ -724,9 +722,11 @@ fn icon_button(ui: &mut egui::Ui, app: &SciApp, c: &Command, dark: bool, pal: &P
 }
 
 fn file_tab(ui: &mut egui::Ui, pal: &Palette) -> egui::Response {
-    let galley = ui
-        .painter()
-        .layout_no_wrap("文件".to_string(), FontId::proportional(13.0), Color32::WHITE);
+    let galley = ui.painter().layout_no_wrap(
+        "文件".to_string(),
+        FontId::proportional(crate::theme::size::BODY),
+        Color32::WHITE,
+    );
     let (rect, resp) = ui.allocate_exact_size(vec2(galley.size().x + 28.0, 26.0), Sense::click());
     let fill = if resp.hovered() {
         pal.accent.gamma_multiply(1.15)
@@ -747,7 +747,7 @@ fn tab_button(ui: &mut egui::Ui, t: &Tab, selected: bool, pal: &Palette) -> egui
     } else {
         pal.ink
     };
-    let font = FontId::proportional(13.0);
+    let font = FontId::proportional(crate::theme::size::BODY);
     let galley = ui.painter().layout_no_wrap(t.label.to_string(), font, color);
     let (rect, resp) = ui.allocate_exact_size(vec2(galley.size().x + 28.0, 30.0), Sense::click());
     let p = ui.painter();
@@ -844,7 +844,7 @@ pub fn backstage(
                     }
                     ui.separator();
                 }
-                ui.heading(RichText::new("当前项目").size(22.0));
+                ui.heading(RichText::new("当前项目").size(crate::theme::size::TITLE));
                 ui.add_space(14.0);
                 let nb = app.project.books.len();
                 let ng = app.project.graphs.len();
@@ -931,7 +931,7 @@ fn nav_item(ui: &mut egui::Ui, icon: &str, label: &str, keys: &str, enabled: boo
         egui::pos2(rect.left() + 46.0, rect.center().y),
         Align2::LEFT_CENTER,
         label,
-        FontId::proportional(13.5),
+        FontId::proportional(crate::theme::size::MENU),
         white,
     );
     if !keys.is_empty() {
@@ -939,7 +939,7 @@ fn nav_item(ui: &mut egui::Ui, icon: &str, label: &str, keys: &str, enabled: boo
             egui::pos2(rect.right() - 14.0, rect.center().y),
             Align2::RIGHT_CENTER,
             keys,
-            FontId::proportional(11.0),
+            FontId::proportional(crate::theme::size::SMALL),
             Color32::from_rgba_unmultiplied(255, 255, 255, alpha / 2 + 40),
         );
     }
@@ -958,14 +958,14 @@ fn project_card(ui: &mut egui::Ui, icon: &str, name: &str, sub: &str, dark: bool
         egui::pos2(rect.left() + 44.0, rect.top() + 17.0),
         Align2::LEFT_CENTER,
         name,
-        FontId::proportional(13.0),
+        FontId::proportional(crate::theme::size::BODY),
         pal.ink,
     );
     ui.painter().text(
         egui::pos2(rect.left() + 44.0, rect.top() + 35.0),
         Align2::LEFT_CENTER,
         sub,
-        FontId::proportional(11.0),
+        FontId::proportional(crate::theme::size::SMALL),
         pal.weak,
     );
     resp
@@ -1030,7 +1030,7 @@ pub fn palette(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palett
                 egui::TextEdit::singleline(&mut ps.query)
                     .hint_text("输入功能名称，例如 拟合、排序、导出")
                     .desired_width(f32::INFINITY)
-                    .font(FontId::proportional(15.0)),
+                    .font(FontId::proportional(crate::theme::size::INPUT)),
             );
             if ps.focus {
                 te.request_focus();
@@ -1079,7 +1079,7 @@ pub fn palette(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palett
                         egui::pos2(rect.left() + 38.0, rect.top() + 12.0),
                         Align2::LEFT_CENTER,
                         c.label,
-                        FontId::proportional(13.5),
+                        FontId::proportional(crate::theme::size::MENU),
                         fg,
                     );
                     let detail = match ok {
@@ -1090,7 +1090,7 @@ pub fn palette(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palett
                         egui::pos2(rect.left() + 38.0, rect.top() + 28.0),
                         Align2::LEFT_CENTER,
                         detail,
-                        FontId::proportional(11.0),
+                        FontId::proportional(crate::theme::size::SMALL),
                         sub,
                     );
                     if !c.keys.is_empty() {
@@ -1098,7 +1098,7 @@ pub fn palette(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palett
                             egui::pos2(rect.right() - 10.0, rect.center().y),
                             Align2::RIGHT_CENTER,
                             c.keys,
-                            FontId::monospace(11.0),
+                            FontId::monospace(crate::theme::size::SMALL),
                             sub,
                         );
                     }
