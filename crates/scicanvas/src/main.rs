@@ -54,3 +54,137 @@ fn main() -> Result<(), eframe::Error> {
     };
     eframe::run_native("SciCanvas", options, Box::new(|cc| Ok(Box::new(app::SciApp::new(cc)))))
 }
+
+/// 原生显示器工作区保留全局原点，按当前窗口的 DPI 转换到 egui 坐标。
+mod monitors {
+    use eframe::egui::{self, Rect};
+    pub fn visible_window(rect: Rect, areas: &[Rect]) -> Option<Rect> {
+        let title = Rect::from_min_size(rect.min, egui::vec2(rect.width(), 32.0_f32.min(rect.height())));
+        if areas.iter().any(|area| {
+            let visible = area.intersect(title);
+            visible.width() >= 100.0_f32.min(title.width()) && visible.height() >= 16.0_f32.min(title.height())
+        }) {
+            return None;
+        }
+        let area = areas.iter().min_by(|a, b| {
+            a.center()
+                .distance_sq(rect.center())
+                .total_cmp(&b.center().distance_sq(rect.center()))
+        })?;
+        let margin = egui::vec2(40., 40.).min(area.size() / 4.);
+        Some(Rect::from_min_size(
+            area.min + margin,
+            rect.size().min(area.size() - 2. * margin),
+        ))
+    }
+    pub fn work_areas(scale: f32) -> Vec<Rect> {
+        #[cfg(windows)]
+        {
+            use std::ffi::c_void;
+            #[repr(C)]
+            #[derive(Default)]
+            struct NativeRect {
+                left: i32,
+                top: i32,
+                right: i32,
+                bottom: i32,
+            }
+            #[repr(C)]
+            #[derive(Default)]
+            struct Info {
+                size: u32,
+                monitor: NativeRect,
+                work: NativeRect,
+                flags: u32,
+            }
+            #[link(name = "user32")]
+            unsafe extern "system" {
+                fn EnumDisplayMonitors(
+                    hdc: *mut c_void,
+                    clip: *const NativeRect,
+                    callback: Option<
+                        unsafe extern "system" fn(*mut c_void, *mut c_void, *mut NativeRect, isize) -> i32,
+                    >,
+                    data: isize,
+                ) -> i32;
+                fn GetMonitorInfoW(monitor: *mut c_void, info: *mut Info) -> i32;
+            }
+            unsafe extern "system" fn collect(
+                monitor: *mut c_void,
+                _hdc: *mut c_void,
+                _clip: *mut NativeRect,
+                data: isize,
+            ) -> i32 {
+                let mut info = Info {
+                    size: std::mem::size_of::<Info>() as u32,
+                    ..Default::default()
+                };
+                // EnumDisplayMonitors 同步调用；data 指向本次枚举期间独占的 Vec。
+                if unsafe { GetMonitorInfoW(monitor, &mut info) } != 0 {
+                    let output = unsafe { &mut *(data as *mut Vec<Rect>) };
+                    output.push(Rect::from_min_max(
+                        egui::pos2(info.work.left as f32, info.work.top as f32),
+                        egui::pos2(info.work.right as f32, info.work.bottom as f32),
+                    ));
+                }
+                1
+            }
+            let mut result: Vec<Rect> = Vec::new();
+            // 回调和 MONITORINFO 布局与 Win32 API 一致。
+            unsafe {
+                EnumDisplayMonitors(
+                    std::ptr::null_mut(),
+                    std::ptr::null(),
+                    Some(collect),
+                    &mut result as *mut Vec<Rect> as isize,
+                );
+            }
+            result
+                .into_iter()
+                .map(|r| Rect::from_min_max((r.min.to_vec2() / scale).to_pos2(), (r.max.to_vec2() / scale).to_pos2()))
+                .collect()
+        }
+        #[cfg(not(windows))]
+        {
+            let _ = scale;
+            Vec::new()
+        }
+    }
+    #[cfg(test)]
+    mod tests {
+        use super::*;
+        #[test]
+        fn monitor_origins_and_title_visibility_control_recovery() {
+            let areas = [
+                Rect::from_min_max(egui::pos2(-1920., 0.), egui::pos2(0., 1080.)),
+                Rect::from_min_max(egui::pos2(0., 0.), egui::pos2(1920., 1080.)),
+            ];
+            assert!(visible_window(
+                Rect::from_min_size(egui::pos2(-1800., 40.), egui::vec2(900., 600.)),
+                &areas
+            )
+            .is_none());
+            assert!(visible_window(
+                Rect::from_min_size(egui::pos2(1850., 40.), egui::vec2(900., 600.)),
+                &areas
+            )
+            .is_some());
+            assert!(visible_window(
+                Rect::from_min_size(egui::pos2(1750., 40.), egui::vec2(900., 600.)),
+                &areas
+            )
+            .is_none());
+            assert!(visible_window(
+                Rect::from_min_size(egui::pos2(20., -200.), egui::vec2(900., 600.)),
+                &areas
+            )
+            .is_some());
+            let target = visible_window(
+                Rect::from_min_size(egui::pos2(8000., 8000.), egui::vec2(4000., 3000.)),
+                &areas,
+            )
+            .unwrap();
+            assert!(areas[1].contains_rect(target));
+        }
+    }
+}

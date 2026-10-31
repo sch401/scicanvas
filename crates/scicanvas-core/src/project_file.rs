@@ -218,6 +218,10 @@ pub fn from_json(text: &str) -> Result<Project, String> {
 }
 
 pub fn to_json(project: &Project) -> Result<String, String> {
+    serde_json::to_string_pretty(&project_value(project)?).map_err(|e| e.to_string())
+}
+
+fn project_value(project: &Project) -> Result<Value, String> {
     validate(project)?;
     let mut value = serde_json::to_value(project).map_err(|e| e.to_string())?;
     for (graph, wire) in project.graphs.iter().zip(value["graphs"].as_array_mut().unwrap()) {
@@ -245,7 +249,7 @@ pub fn to_json(project: &Project) -> Result<String, String> {
         }
     }
     value["version"] = CURRENT_VERSION.into();
-    serde_json::to_string_pretty(&value).map_err(|e| e.to_string())
+    Ok(value)
 }
 
 fn validate(project: &Project) -> Result<(), String> {
@@ -820,6 +824,16 @@ pub fn save(path: &Path, project: &Project) -> Result<(), String> {
 }
 
 fn write_atomic(path: &Path, content: &[u8], missing_name: &str, failure_prefix: &str) -> Result<(), String> {
+    write_atomic_with(path, missing_name, failure_prefix, |file| {
+        file.write_all(content).map_err(|e| e.to_string())
+    })
+}
+fn write_atomic_with(
+    path: &Path,
+    missing_name: &str,
+    failure_prefix: &str,
+    write: impl FnOnce(&mut std::fs::File) -> Result<(), String>,
+) -> Result<(), String> {
     let name = path.file_name().ok_or(missing_name)?.to_string_lossy();
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
@@ -827,12 +841,9 @@ fn write_atomic(path: &Path, content: &[u8], missing_name: &str, failure_prefix:
         .as_nanos();
     let temporary = path.with_file_name(format!(".{name}.{}.{stamp}.tmp", std::process::id()));
     let mut file = std::fs::File::create_new(&temporary).map_err(|e| e.to_string())?;
-    let result = (|| {
-        file.write_all(content)?;
-        file.sync_all()?;
-        drop(file);
-        std::fs::rename(&temporary, path)
-    })();
+    let result = write(&mut file).and_then(|_| file.sync_all().map_err(|e| e.to_string()));
+    drop(file);
+    let result = result.and_then(|_| std::fs::rename(&temporary, path).map_err(|e| e.to_string()));
     if result.is_err() {
         let _ = std::fs::remove_file(&temporary);
     }
@@ -939,9 +950,9 @@ pub mod session {
     }
     impl Settings {
         pub fn remember(&mut self, path: &Path) {
-            let path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+            let path = normalize_path(path);
             self.last_dir = path.parent().map(Path::to_path_buf);
-            self.recent.retain(|p| p != &path);
+            self.recent.retain(|p| !same_path(p, &path));
             self.recent.insert(0, path);
             self.recent.truncate(10);
         }
@@ -954,7 +965,7 @@ pub mod session {
             .and_then(|p| std::fs::read(p).ok())
             .and_then(|s| serde_json::from_slice(&s).ok())
             .unwrap_or_default();
-        settings.recent.truncate(10);
+        settings.normalize();
         settings
     }
     pub fn save_settings(settings: &Settings) -> Result<(), String> {
@@ -980,48 +991,149 @@ pub mod session {
         }
         options.open(path.with_extension("lock"))
     }
-    pub fn discard_recovery(path: &Path) -> Result<(), String> {
-        let lock = lock_recovery(path).map_err(|e| format!("恢复文件正在其他会话使用：{e}"))?;
+    #[derive(Default, serde::Serialize, serde::Deserialize)]
+    #[serde(default)]
+    struct RecoveryMeta {
+        source: Option<std::path::PathBuf>,
+        retired: bool,
+    }
+    pub const RECOVERY_MAX_AGE: std::time::Duration = std::time::Duration::from_secs(30 * 24 * 60 * 60);
+    fn recovery_meta(path: &Path) -> RecoveryMeta {
+        std::fs::read(path.with_extension("source"))
+            .ok()
+            .and_then(|s| serde_json::from_slice(&s).ok())
+            .unwrap_or_default()
+    }
+    fn write_meta(path: &Path, meta: &RecoveryMeta) -> Result<(), String> {
+        write_atomic(
+            &path.with_extension("source"),
+            &serde_json::to_vec(meta).map_err(|e| e.to_string())?,
+            "恢复信息文件名为空",
+            "保存恢复信息失败：",
+        )
+    }
+    pub fn retire_recovery(path: &Path) -> Result<(), String> {
+        let meta = RecoveryMeta {
+            source: recovery_source(path),
+            retired: true,
+        };
+        write_meta(path, &meta)
+    }
+    fn remove_locked(path: &Path, lock: std::fs::File) -> Result<(), String> {
         std::fs::remove_file(path).map_err(|e| e.to_string())?;
         drop(lock);
+        let _ = std::fs::remove_file(path.with_extension("source"));
         let _ = std::fs::remove_file(path.with_extension("lock"));
         Ok(())
     }
+    pub fn discard_recovery(path: &Path) -> Result<(), String> {
+        let lock = lock_recovery(path).map_err(|e| format!("恢复文件正在其他会话使用：{e}"))?;
+        retire_recovery(path)?;
+        remove_locked(path, lock)
+    }
     pub fn save_recovery(path: &Path, project: &Project, source: Option<&Path>) -> Result<(), String> {
-        let mut value: Value = serde_json::from_str(&to_json(project)?).map_err(|e| e.to_string())?;
-        value["recovery_source"] = serde_json::to_value(source).map_err(|e| e.to_string())?;
-        write_atomic(
+        let value = project_value(project)?;
+        write_meta(
             path,
-            &serde_json::to_vec(&value).map_err(|e| e.to_string())?,
-            "恢复文件名为空",
-            "自动备份失败：",
-        )
+            &RecoveryMeta {
+                source: source.map(normalize_path),
+                retired: false,
+            },
+        )?;
+        write_atomic_with(path, "恢复文件名为空", "自动备份失败：", |file| {
+            let mut writer = std::io::BufWriter::with_capacity(64 * 1024, file);
+            serde_json::to_writer(&mut writer, &value).map_err(|e| e.to_string())?;
+            writer.flush().map_err(|e| e.to_string())
+        })
     }
     pub fn recovery_source(path: &Path) -> Option<std::path::PathBuf> {
-        let value: Value = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
-        serde_json::from_value(value.get("recovery_source")?.clone()).ok()
+        if let Ok(bytes) = std::fs::read(path.with_extension("source")) {
+            if let Ok(meta) = serde_json::from_slice::<RecoveryMeta>(&bytes) {
+                return meta.source.map(|p| normalize_path(&p));
+            }
+        }
+        #[derive(serde::Deserialize)]
+        struct Legacy {
+            recovery_source: Option<std::path::PathBuf>,
+        }
+        let file = std::fs::File::open(path).ok()?;
+        serde_json::from_reader::<_, Legacy>(std::io::BufReader::new(file))
+            .ok()?
+            .recovery_source
+            .map(|p| normalize_path(&p))
+    }
+    pub fn recovery_notice(path: &Path) -> Option<&'static str> {
+        let backup = path.metadata().and_then(|m| m.modified()).ok()?;
+        if backup.elapsed().ok().is_some_and(|age| age > RECOVERY_MAX_AGE) {
+            return Some("这份备份已超过 30 天，恢复或确认放弃后清理");
+        }
+        if recovery_source(path)
+            .and_then(|p| p.metadata().ok())
+            .and_then(|m| m.modified().ok())
+            .is_some_and(|saved| saved >= backup)
+        {
+            return Some("源文件在备份后有更新，请选择需要保留的版本");
+        }
+        None
     }
     pub fn recoveries(directory: &Path) -> Vec<std::path::PathBuf> {
-        let mut files: Vec<_> = std::fs::read_dir(directory)
+        let mut files = Vec::new();
+        for entry in std::fs::read_dir(directory)
             .into_iter()
             .flatten()
             .filter_map(Result::ok)
-            .map(|f| f.path())
-            .filter(|p| p.extension().is_some_and(|e| e == "scproj"))
-            .filter(|p| {
-                // Windows 的独占句柄区分正在运行的会话和已退出的会话。
-                if lock_recovery(p).is_err() {
-                    return false;
-                }
-                let backup = p.metadata().and_then(|m| m.modified()).ok();
-                let saved = recovery_source(p)
-                    .and_then(|p| p.metadata().ok())
-                    .and_then(|m| m.modified().ok());
-                saved.is_none() || backup > saved
-            })
-            .collect();
+        {
+            let path = entry.path();
+            if !path.extension().is_some_and(|e| e == "scproj") {
+                continue;
+            }
+            let Ok(lock) = lock_recovery(&path) else { continue };
+            // 只自动清理已保存/明确放弃的会话，时间较旧的唯一未保存副本仍可恢复。
+            if recovery_meta(&path).retired {
+                let _ = remove_locked(&path, lock);
+            } else {
+                drop(lock);
+                files.push(path);
+            }
+        }
         files.sort_by_key(|p| std::cmp::Reverse(p.metadata().and_then(|m| m.modified()).ok()));
         files
+    }
+    pub fn normalize_path(path: &Path) -> std::path::PathBuf {
+        let path = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
+        #[cfg(windows)]
+        if let Some(rest) = path.to_str().and_then(|p| p.strip_prefix(r"\\?\")) {
+            if rest.as_bytes().get(1) == Some(&b':') {
+                return rest.into();
+            }
+        }
+        path
+    }
+    fn same_path(a: &Path, b: &Path) -> bool {
+        #[cfg(windows)]
+        {
+            a.to_string_lossy().to_lowercase() == b.to_string_lossy().to_lowercase()
+        }
+        #[cfg(not(windows))]
+        {
+            a == b
+        }
+    }
+    impl Settings {
+        pub fn normalize(&mut self) {
+            let mut recent: Vec<std::path::PathBuf> = Vec::new();
+            for path in std::mem::take(&mut self.recent) {
+                let path = normalize_path(&path);
+                if !recent.iter().any(|p| same_path(p, &path)) {
+                    recent.push(path);
+                }
+                if recent.len() == 10 {
+                    break;
+                }
+            }
+            self.recent = recent;
+            self.last_dir = self.last_dir.as_deref().map(normalize_path);
+        }
     }
     pub fn install_panic_log() {
         let previous = std::panic::take_hook();
@@ -1121,5 +1233,131 @@ mod review_legacy_versions {
             assert_eq!(loaded.books, p.books, "v{version}");
             assert_eq!(from_json(&to_json(&loaded).unwrap()).unwrap(), loaded);
         }
+    }
+}
+
+#[cfg(test)]
+mod round_two_tests {
+    use super::*;
+    #[test]
+    #[cfg(windows)]
+    fn paths_normalize_old_prefixes_and_deduplicate() {
+        use session::*;
+        assert_eq!(
+            normalize_path(Path::new(r"\\?\D:\a\b.scv")),
+            std::path::PathBuf::from(r"D:\a\b.scv")
+        );
+        assert_eq!(
+            normalize_path(Path::new(r"\\?\UNC\server\share\x.scv")),
+            std::path::PathBuf::from(r"\\?\UNC\server\share\x.scv")
+        );
+        let mut settings = Settings {
+            recent: vec![r"\\?\D:\a\b.scv".into(), r"d:\A\B.SCV".into()],
+            last_dir: Some(r"\\?\D:\a".into()),
+            ..Default::default()
+        };
+        settings.normalize();
+        assert_eq!(settings.recent.len(), 1);
+        assert_eq!(settings.last_dir, Some(r"D:\a".into()));
+        settings.remember(Path::new(r"d:\A\B.SCV"));
+        assert_eq!(settings.recent.len(), 1);
+    }
+    #[test]
+    fn recovery_cleanup_respects_ownership_and_preserves_unique_old_work() {
+        use session::*;
+        let dir = std::env::temp_dir().join(format!(
+            "scicanvas-round2-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&dir).unwrap();
+        let p = Project::sample();
+        let source = dir.join("saved.scv");
+        save(&source, &p).unwrap();
+        let backup = dir.join("active.scproj");
+        save_recovery(&backup, &p, Some(&source)).unwrap();
+        assert_eq!(load(&backup).unwrap(), p);
+        assert_eq!(recovery_source(&backup), Some(source.clone()));
+        let old = std::time::SystemTime::now() - std::time::Duration::from_secs(31 * 24 * 3600);
+        std::fs::File::options()
+            .write(true)
+            .open(&backup)
+            .unwrap()
+            .set_times(std::fs::FileTimes::new().set_modified(old))
+            .unwrap();
+        assert!(recovery_notice(&backup).unwrap().contains("30"));
+        assert!(recoveries(&dir).contains(&backup));
+        let retired = dir.join("retired.scproj");
+        save_recovery(&retired, &p, None).unwrap();
+        retire_recovery(&retired).unwrap();
+        let lock = lock_recovery(&retired).unwrap();
+        #[cfg(windows)]
+        {
+            assert!(!recoveries(&dir).contains(&retired));
+            assert!(retired.exists());
+        }
+        drop(lock);
+        assert!(!recoveries(&dir).contains(&retired));
+        assert!(!retired.exists());
+        assert!(!retired.with_extension("source").exists());
+        discard_recovery(&backup).unwrap();
+        std::fs::remove_file(source).unwrap();
+        std::fs::remove_dir(&dir).unwrap();
+    }
+    #[test]
+    fn long_legacy_custom_function_reopens_resolves_and_refits() {
+        use crate::{
+            nlfit::CustomFitDefinition,
+            ops::{OpKind, Source},
+        };
+        let mut p = Project::sample();
+        let formula = std::iter::repeat_n("a*x", 150).collect::<Vec<_>>().join("+");
+        let definition =
+            CustomFitDefinition::from_text_with("legacy", &formula, "a", "1", "", &crate::formula::FILE_LIMITS)
+                .unwrap();
+        p.save_fit_function(None, definition.clone()).unwrap();
+        let mut wire: Value = serde_json::from_str(&to_json(&p).unwrap()).unwrap();
+        wire["version"] = 21.into();
+        let mut p = from_json(&wire.to_string()).unwrap();
+        assert_eq!(p.fit_functions[0].definition, definition);
+        let (f, cs) = p.fit_functions[0].definition.resolve().unwrap();
+        let (_, reports) = p
+            .nlfit_custom(
+                &Source::Book {
+                    id: 1,
+                    selected: vec!["C".into()],
+                    rows: None,
+                },
+                f,
+                &[1.],
+                &[],
+                &cs,
+            )
+            .unwrap();
+        assert_eq!(reports.len(), 1);
+        let reopened = from_json(&to_json(&p).unwrap()).unwrap();
+        let r = &reopened.nlfit_reports()[0];
+        assert!(matches!(
+            reopened.nlfit_operation(r).unwrap().kind,
+            OpKind::Nonlinear(_)
+        ));
+    }
+}
+
+#[cfg(test)]
+mod round_two_column_formula_tests {
+    use super::*;
+    #[test]
+    fn unchanged_legacy_column_formula_can_be_applied_again() {
+        let mut p = Project::sample();
+        let formula = std::iter::repeat_n("A", 150).collect::<Vec<_>>().join("+");
+        p.books[0].columns[1].formula = Some(formula.clone());
+        let mut p = from_json(&to_json(&p).unwrap()).unwrap();
+        p.set_column_formula(1, "B", &formula, true).unwrap();
+        assert_eq!(p.books[0].columns[1].values()[2], 150.);
+        assert!(p.set_column_formula(1, "B", &format!("{formula}+A"), true).is_err());
     }
 }

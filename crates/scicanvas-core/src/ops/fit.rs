@@ -630,11 +630,15 @@ impl NlFitReport {
             || f.n == 0
             || f.dof > f.n
             || (self.current && (!f.converged || self.error.is_some()))
-            || f.constraints.iter().map(String::len).sum::<usize>() > 16384
+            || f.constraints.iter().map(String::len).sum::<usize>() > crate::formula::FILE_LIMITS.bytes
         {
             return Err("拟合报告的参数、统计量或状态无效".into());
         }
-        crate::nlfit::parse_constraints_for_function(&f.model, &f.constraints.join("\n"))?;
+        crate::nlfit::parse_constraints_for_function_with(
+            &f.model,
+            &f.constraints.join("\n"),
+            &crate::formula::FILE_LIMITS,
+        )?;
         Ok(())
     }
 

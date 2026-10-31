@@ -3,6 +3,15 @@ use scicanvas_core::{csv, scene, PlotType, Project};
 use std::{fmt::Write, hint::black_box, time::Instant};
 
 fn main() {
+    if std::env::args().any(|a| a == "--continuous-review") {
+        continuous_review();
+        return;
+    }
+    #[cfg(feature = "serde")]
+    if std::env::args().any(|a| a == "--recovery-review") {
+        recovery_review();
+        return;
+    }
     if std::env::args().any(|a| a == "--history-only") {
         history_benchmark();
         return;
@@ -112,4 +121,112 @@ fn history_benchmark() {
         "shared_book_snapshot_and_equality_100_ms={:.3}",
         start.elapsed().as_secs_f64() * 1000.
     );
+}
+
+fn review_project() -> Project {
+    use scicanvas_core::{Column, ColumnData, Role};
+    let mut p = Project::default();
+    let id = p.new_book();
+    let book = p.book_mut(id).unwrap();
+    book.columns.clear();
+    for index in 0..10 {
+        let mut c = Column::new(format!("C{index}"), Role::Y);
+        c.data = ColumnData::Num {
+            values: (0..1_000_000).map(|i| i as f64).collect(),
+            missing: vec![0; 1_000_000_usize.div_ceil(64)],
+            lexemes: Default::default(),
+        }
+        .into();
+        book.columns.push(c);
+    }
+    p
+}
+fn continuous_review() {
+    let mut p = review_project();
+    let mut h = scicanvas_core::history::History::default();
+    h.begin(&p, "continuous");
+    let signature = |p: &Project| {
+        p.books
+            .iter()
+            .map(|b| (b.id, b.columns.iter().map(|c| c.data.version()).collect::<Vec<_>>()))
+            .collect::<Vec<_>>()
+    };
+    let mut cache = signature(&p);
+    let mut copies = 0;
+    let start = Instant::now();
+    for i in 0..60 {
+        let before = p.books[0].columns[0].data.identity();
+        p.books[0].columns[0].set(999_999, (2_000_000 + i).to_string());
+        copies += usize::from(before != p.books[0].columns[0].data.identity());
+        let current = signature(&p);
+        if cache != current {
+            cache = current;
+        }
+        black_box(&cache);
+    }
+    h.changed();
+    h.commit(&p);
+    println!(
+        "continuous_60_ms={:.3} changed_allocations={copies}",
+        start.elapsed().as_secs_f64() * 1000.
+    );
+}
+#[cfg(feature = "serde")]
+fn recovery_review() {
+    let p = review_project();
+    let path = std::env::temp_dir().join(format!("scicanvas-recovery-bench-{}.scproj", std::process::id()));
+    let before = peak_memory();
+    let start = Instant::now();
+    scicanvas_core::project_file::session::save_recovery(&path, &p, None).unwrap();
+    let elapsed = start.elapsed();
+    let after = peak_memory();
+    println!(
+        "recovery_ms={:.3} initial_working_set={} peak_working_set={} bytes={}",
+        elapsed.as_secs_f64() * 1000.,
+        before.0,
+        after.1,
+        std::fs::metadata(&path).unwrap().len()
+    );
+    std::fs::remove_file(&path).unwrap();
+    let _ = std::fs::remove_file(path.with_extension("source"));
+}
+#[cfg(feature = "serde")]
+fn peak_memory() -> (usize, usize) {
+    #[cfg(windows)]
+    {
+        #[repr(C)]
+        struct Counters {
+            cb: u32,
+            faults: u32,
+            peak: usize,
+            current: usize,
+            peak_paged: usize,
+            paged: usize,
+            peak_nonpaged: usize,
+            nonpaged: usize,
+            pagefile: usize,
+            peak_pagefile: usize,
+        }
+        #[link(name = "psapi")]
+        unsafe extern "system" {
+            fn GetProcessMemoryInfo(handle: *mut std::ffi::c_void, data: *mut Counters, size: u32) -> i32;
+        }
+        let mut c = Counters {
+            cb: std::mem::size_of::<Counters>() as u32,
+            faults: 0,
+            peak: 0,
+            current: 0,
+            peak_paged: 0,
+            paged: 0,
+            peak_nonpaged: 0,
+            nonpaged: 0,
+            pagefile: 0,
+            peak_pagefile: 0,
+        };
+        // 伪句柄 -1 表示当前进程，结构使用 Win32 PROCESS_MEMORY_COUNTERS 的布局。
+        if unsafe { GetProcessMemoryInfo(-1isize as *mut _, &mut c, std::mem::size_of::<Counters>() as u32) } != 0 {
+            return (c.current, c.peak);
+        }
+    }
+    (0, 0)
 }

@@ -306,13 +306,37 @@ fn lex(src: &str) -> Result<Vec<Tok>, String> {
     Ok(out)
 }
 
-struct Parser {
+#[derive(Clone, Copy, Debug)]
+pub struct Limits {
+    pub depth: usize,
+    pub chain: usize,
+    pub nodes: usize,
+    pub bytes: usize,
+    pub tree_depth: usize,
+}
+pub const INPUT_LIMITS: Limits = Limits {
+    depth: 64,
+    chain: 120,
+    nodes: 4096,
+    bytes: 16_384,
+    tree_depth: 128,
+};
+pub const FILE_LIMITS: Limits = Limits {
+    depth: 200,
+    chain: 200,
+    nodes: 65_536,
+    bytes: 262_144,
+    tree_depth: 256,
+};
+
+struct Parser<'a> {
+    limits: &'a Limits,
     toks: Vec<Tok>,
     pos: usize,
     depth: usize,
 }
 
-impl Parser {
+impl Parser<'_> {
     fn peek(&self) -> Option<&Tok> {
         self.toks.get(self.pos)
     }
@@ -348,7 +372,7 @@ impl Parser {
     // sum := term (('+' | '-') term)*
     fn sum(&mut self) -> Result<Expr, String> {
         let mut e = self.term()?;
-        let mut terms = 0;
+        let mut terms = 1;
         loop {
             let op = if self.eat('+') {
                 '+'
@@ -358,18 +382,18 @@ impl Parser {
                 return Ok(e);
             };
             terms += 1;
-            if terms > 64 {
+            if terms > self.limits.chain {
                 return Err("公式连续运算过长，请拆分为多列".into());
             }
             e = Expr::Bin(op, Box::new(e), Box::new(self.term()?));
-            expression_size(&e)?;
+            expression_size(&e, self.limits)?;
         }
     }
 
     // term := unary (('*' | '/') unary)*
     fn term(&mut self) -> Result<Expr, String> {
         let mut e = self.unary()?;
-        let mut terms = 0;
+        let mut terms = 1;
         loop {
             let op = if self.eat('*') {
                 '*'
@@ -379,24 +403,24 @@ impl Parser {
                 return Ok(e);
             };
             terms += 1;
-            if terms > 64 {
+            if terms > self.limits.chain {
                 return Err("公式连续运算过长，请拆分为多列".into());
             }
             e = Expr::Bin(op, Box::new(e), Box::new(self.unary()?));
-            expression_size(&e)?;
+            expression_size(&e, self.limits)?;
         }
     }
 
     // unary := ('-' | '+') unary | power
     fn unary(&mut self) -> Result<Expr, String> {
-        if self.depth >= 64 {
-            return Err("公式嵌套过深（最多 64 层）".into());
+        if self.depth > self.limits.depth {
+            return Err("公式嵌套过深".into());
         }
         self.depth += 1;
         let result = self.unary_inner();
         self.depth -= 1;
         result.and_then(|e| {
-            expression_size(&e)?;
+            expression_size(&e, self.limits)?;
             Ok(e)
         })
     }
@@ -479,22 +503,49 @@ impl Parser {
 
 /// 解析公式。
 pub fn parse(src: &str) -> Result<Expr, String> {
-    if src.len() > 16_384 {
-        return Err("公式过长（最多 16 KiB）".into());
+    parse_with(src, &INPUT_LIMITS)
+}
+pub fn parse_file(src: &str) -> Result<Expr, String> {
+    parse_with(src, &FILE_LIMITS)
+}
+pub fn parse_with(src: &str, limits: &Limits) -> Result<Expr, String> {
+    if src.len() > limits.bytes {
+        return Err(format!("公式过长（最多 {} 字节）", limits.bytes));
     }
     let toks = lex(src)?;
-    if toks.len() > 4096 {
-        return Err("公式节点过多，请拆分为多列".into());
+    if toks.len() > limits.nodes {
+        return Err("公式记号过多，请拆分为多列".into());
     }
     if toks.is_empty() {
         return Err("公式为空".into());
     }
-    let mut p = Parser { toks, pos: 0, depth: 0 };
+    // 长旧表达式使用有界的独立解析栈，主线程和调用方的小栈保持可用。
+    if limits.depth > INPUT_LIMITS.depth && toks.len() > 128 {
+        return std::thread::scope(|scope| {
+            std::thread::Builder::new()
+                .name("scicanvas-formula".into())
+                .stack_size(8 << 20)
+                .spawn_scoped(scope, move || parse_tokens(toks, limits))
+                .map_err(|e| e.to_string())?
+                .join()
+                .map_err(|_| "旧公式解析任务中断".to_string())?
+        });
+    }
+    parse_tokens(toks, limits)
+}
+fn parse_tokens(toks: Vec<Tok>, limits: &Limits) -> Result<Expr, String> {
+    let mut p = Parser {
+        toks,
+        pos: 0,
+        depth: 0,
+        limits,
+    };
     let e = p.compare()?;
+    expression_size(&e, limits)?;
     match p.peek() {
         None => Ok(e),
         Some(Tok::Op(c)) => Err(format!("“{c}”的位置不对")),
-        Some(Tok::Num(_)) | Some(Tok::Ident(_)) => Err("两个值之间缺少运算符".into()),
+        _ => Err("两个值之间缺少运算符".into()),
     }
 }
 
@@ -1413,12 +1464,12 @@ mod tests {
     }
 }
 
-fn expression_size(root: &Expr) -> Result<(), String> {
+fn expression_size(root: &Expr, limits: &Limits) -> Result<(), String> {
     let mut pending = vec![(root, 1)];
     let mut count = 0;
     while let Some((e, depth)) = pending.pop() {
         count += 1;
-        if depth > 128 || count > 4096 {
+        if depth > limits.tree_depth || count > limits.nodes {
             return Err("公式结构过深或节点过多，请拆分为多列".into());
         }
         match e {
@@ -1447,5 +1498,37 @@ mod review_limits_tests {
             assert!(parse(&source).is_err());
         }
         assert!(parse("sin(A)+sqrt(abs(B))+2^3").is_ok());
+    }
+}
+
+#[cfg(test)]
+mod round_two_tests {
+    use super::*;
+    #[test]
+    fn file_limits_fit_a_one_megabyte_stack() {
+        std::thread::Builder::new()
+            .stack_size(1 << 20)
+            .spawn(|| {
+                let src = format!("{}1{}", "(".repeat(200), ")".repeat(200));
+                let expr = parse_file(&src).unwrap();
+                assert_eq!(expr.eval(0, &|_, _| 0.), 1.);
+                let calls = format!("{}0{}", "sin(".repeat(200), ")".repeat(200));
+                assert_eq!(parse_file(&calls).unwrap().eval(0, &|_, _| 0.), 0.);
+                let chain = std::iter::repeat_n("1", 200).collect::<Vec<_>>().join("+");
+                assert_eq!(parse_file(&chain).unwrap().eval(0, &|_, _| 0.), 200.);
+            })
+            .unwrap()
+            .join()
+            .unwrap();
+    }
+    #[test]
+    fn input_and_file_limits_count_operands() {
+        let chain = |n| std::iter::repeat_n("1", n).collect::<Vec<_>>().join("+");
+        assert!(parse(&chain(65)).is_ok());
+        assert!(parse(&chain(120)).is_ok());
+        assert!(parse(&chain(121)).is_err());
+        assert!(parse_file(&chain(150)).is_ok());
+        assert!(parse_file(&chain(201)).is_err());
+        assert!(parse_file(&" ".repeat(FILE_LIMITS.bytes + 1)).is_err());
     }
 }

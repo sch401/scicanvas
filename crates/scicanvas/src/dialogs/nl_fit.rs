@@ -38,6 +38,7 @@ impl FitEditTarget {
 }
 
 pub struct CustomFitEditor {
+    loaded_definition: Option<CustomFitDefinition>,
     pub target: Option<Box<FitEditTarget>>,
     pub limits: Vec<scicanvas_core::nlfit::ParamLimits>,
     limit_values: Vec<[f64; 3]>,
@@ -53,6 +54,7 @@ impl Default for CustomFitEditor {
     fn default() -> Self {
         Self {
             target: None,
+            loaded_definition: None,
             limits: Vec::new(),
             limit_values: Vec::new(),
             name: "自定义函数".into(),
@@ -104,6 +106,7 @@ impl CustomFitEditor {
     pub fn from_definition(definition: &CustomFitDefinition) -> Self {
         Self {
             target: None,
+            loaded_definition: Some(definition.clone()),
             limits: Vec::new(),
             limit_values: Vec::new(),
             name: definition.name.clone(),
@@ -127,12 +130,21 @@ impl CustomFitEditor {
     }
 
     pub fn definition(&self) -> Result<CustomFitDefinition, String> {
-        CustomFitDefinition::from_text(
+        let unchanged = self.loaded_definition.as_ref().is_some_and(|d| {
+            self.formula == d.formula && self.parameters == d.parameters.join(", ") && self.constraints == d.constraints
+        });
+        let limits = if unchanged {
+            &scicanvas_core::formula::FILE_LIMITS
+        } else {
+            &scicanvas_core::formula::INPUT_LIMITS
+        };
+        CustomFitDefinition::from_text_with(
             &self.name,
             &self.formula,
             &self.parameters,
             &self.initial,
             &self.constraints,
+            limits,
         )
     }
 

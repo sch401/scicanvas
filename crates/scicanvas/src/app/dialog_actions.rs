@@ -448,14 +448,25 @@ impl SciApp {
         initial: String,
         constraint_text: String,
     ) -> bool {
-        let result = scicanvas_core::nlfit::CustomFitDefinition::from_text(
-            &name,
-            &formula,
-            &parameters,
-            &initial,
-            &constraint_text,
-        )
-        .and_then(|definition| {
+        let definition = match &self.dialog {
+            Some(Dialog::CustomNlFit(edit))
+                if edit.name == name
+                    && edit.formula == formula
+                    && edit.parameters == parameters
+                    && edit.initial == initial
+                    && edit.constraints == constraint_text =>
+            {
+                edit.definition()
+            }
+            _ => scicanvas_core::nlfit::CustomFitDefinition::from_text(
+                &name,
+                &formula,
+                &parameters,
+                &initial,
+                &constraint_text,
+            ),
+        };
+        let result = definition.and_then(|definition| {
             let (function, constraints) = definition.resolve()?;
             Ok((function, definition.initial, constraints))
         });

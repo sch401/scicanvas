@@ -674,7 +674,9 @@ fn graph_only_edits_reuse_recalculation_inputs() {
     let mut app = app();
     app.run_command("book.new");
     let cached = app.recalc_inputs.clone().unwrap();
-    let identities: Vec<_> = cached
+    let identities: Vec<_> = app
+        .project
+        .books
         .iter()
         .flat_map(|b| &b.columns)
         .map(|c| c.data.identity())
@@ -686,9 +688,8 @@ fn graph_only_edits_reuse_recalculation_inputs() {
     .unwrap();
     assert_eq!(app.recalc_inputs.as_ref().unwrap(), &cached);
     assert_eq!(
-        app.recalc_inputs
-            .as_ref()
-            .unwrap()
+        app.project
+            .books
             .iter()
             .flat_map(|b| &b.columns)
             .map(|c| c.data.identity())
@@ -746,7 +747,7 @@ fn actual_discard_buttons_cancel_save_and_discard_the_right_project() {
 }
 
 #[test]
-fn closing_with_a_cell_draft_keeps_it_in_the_project_and_requires_confirmation() {
+fn closing_with_a_cell_draft_keeps_it_pending_until_save() {
     let mut app = app();
     let sheet = app.sheets.entry(1).or_default();
     sheet.edit = Some(Edit {
@@ -756,8 +757,165 @@ fn closing_with_a_cell_draft_keeps_it_in_the_project_and_requires_confirmation()
     });
     assert!(app.is_dirty());
     app.request_discard(PendingDiscard::Quit);
-    assert!(app.sheets[&1].edit.is_none());
-    assert_eq!(app.project.books[0].columns[0].data.text_at(0), "123");
+    assert!(app.sheets[&1].edit.is_some());
+    assert_eq!(app.project.books[0].columns[0].data.text_at(0), "0");
     assert!(app.pending_discard.is_some());
     assert!(!app.quit);
+}
+
+#[test]
+fn background_backup_clear_waits_and_cannot_recreate_deleted_files() {
+    let mut app = app();
+    app.run_command("book.new");
+    let dir = std::env::temp_dir().join(format!(
+        "scicanvas-job-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("backup.scproj");
+    app.recovery_lock = Some(scicanvas_core::project_file::session::lock_recovery(&path).unwrap());
+    app.recovery_file = Some(path.clone());
+    app.backup_recovery().unwrap();
+    assert!(app.backup_job.is_some());
+    app.finish_backup().unwrap();
+    assert_eq!(scicanvas_core::project_file::load(&path).unwrap(), app.project);
+    app.backup_recovery().unwrap();
+    app.clear_recovery();
+    app.finish_cleanup();
+    assert!(app.backup_job.is_none());
+    assert!(!path.exists());
+    assert!(!path.with_extension("source").exists());
+    std::fs::remove_dir(dir).unwrap();
+}
+#[test]
+fn continuous_edit_cache_does_not_hold_column_data() {
+    let mut app = app();
+    app.run_command("book.new");
+    app.begin_edit("continuous");
+    let mut identities = std::collections::HashSet::new();
+    for i in 0..60 {
+        app.project.books[0].columns[0].set(0, (i + 100).to_string());
+        app.history.changed();
+        app.recalc_formulas();
+        identities.insert(app.project.books[0].columns[0].data.identity());
+    }
+    assert_eq!(identities.len(), 1);
+    app.finish_edit();
+}
+
+#[test]
+fn backup_keeps_visible_fit_and_restoring_recalculates_drafts() {
+    use scicanvas_core::{
+        nlfit::Model,
+        project_file::{self, session},
+    };
+    let mut app = app();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["C".into()]);
+    app.nlfit(Model::ExpDec1, &[], &[]);
+    let report = app.project.nlfit_reports()[0].clone();
+    app.sheets.entry(1).or_default().edit = Some(Edit {
+        cell: Cell { c: 2, r: 0 },
+        buf: "10".into(),
+        focused: true,
+    });
+    let dir = std::env::temp_dir().join(format!(
+        "scicanvas-visible-backup-{}-{}",
+        std::process::id(),
+        std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap()
+            .as_nanos()
+    ));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("backup.scproj");
+    app.recovery_lock = Some(session::lock_recovery(&path).unwrap());
+    app.recovery_file = Some(path.clone());
+    app.backup_recovery().unwrap();
+    app.finish_backup().unwrap();
+    let backup = project_file::load(&path).unwrap();
+    assert_eq!(backup.nlfit_report(&report).unwrap().fit, report.fit);
+    assert_eq!(backup.books[0].column("C").unwrap().data.text_at(0), "10");
+    assert_ne!(app.project.books[0].column("C").unwrap().data.text_at(0), "10");
+    app.recovery_lock = None;
+    app.recovery_file = None;
+    app.restore_recovery(&path);
+    assert_ne!(app.project.nlfit_report(&report).unwrap().fit, report.fit);
+    assert!(app.is_dirty());
+    app.clear_recovery();
+    app.finish_cleanup();
+    std::fs::remove_dir(dir).unwrap();
+}
+
+#[test]
+fn shutdown_does_not_wait_on_the_ui_thread_and_can_return_to_the_project() {
+    for cancel in [false, true] {
+        let mut app = app();
+        let before = app.project.clone();
+        let (release, wait) = std::sync::mpsc::channel();
+        app.backup_job = Some(std::thread::spawn(move || {
+            let _ = wait.recv_timeout(std::time::Duration::from_secs(5));
+            Ok(())
+        }));
+        app.request_discard(PendingDiscard::Quit);
+        assert!(
+            app.cleanup_task.is_some(),
+            "close must return before the backup finishes"
+        );
+        assert!(app.cleanup_blocks_ui());
+        assert!(!app.close_confirmed);
+        assert!(!app.quit);
+        if cancel {
+            app.cancel_cleanup_discard();
+            assert!(!app.cleanup_blocks_ui());
+        }
+        release.send(()).unwrap();
+        app.finish_cleanup();
+        assert_eq!(app.project, before);
+        assert_eq!(app.quit, !cancel);
+        assert_eq!(app.close_confirmed, !cancel);
+    }
+}
+#[test]
+fn clean_system_close_is_not_canceled_and_programmatic_close_requests_a_frame() {
+    let mut app = app();
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut input = egui::RawInput {
+        screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1200., 900.))),
+        ..Default::default()
+    };
+    input
+        .viewports
+        .get_mut(&egui::ViewportId::ROOT)
+        .unwrap()
+        .events
+        .push(egui::ViewportEvent::Close);
+    let out = ctx.run(input, |ctx| app.ui_frame(ctx));
+    let commands = &out.viewport_output[&egui::ViewportId::ROOT].commands;
+    assert!(app.close_confirmed);
+    assert!(commands.contains(&egui::ViewportCommand::Close));
+    assert!(!commands.contains(&egui::ViewportCommand::CancelClose));
+    assert!(out.viewport_output[&egui::ViewportId::ROOT].repaint_delay.is_zero());
+}
+
+#[test]
+fn invalid_draft_save_dismisses_close_confirmation_for_the_conversion_dialog() {
+    let mut app = app();
+    app.sheets.entry(1).or_default().edit = Some(Edit {
+        cell: Cell { c: 0, r: 0 },
+        buf: "invalid".into(),
+        focused: true,
+    });
+    app.request_discard(PendingDiscard::Quit);
+    assert!(app.pending_discard.is_some());
+    assert!(!app.try_save_project(false));
+    assert!(app.pending_discard.is_none());
+    assert!(matches!(app.dialog, Some(Dialog::ConvertText { .. })));
+    assert!(!app.quit);
+    assert!(app.sheets[&1].edit.is_some());
 }

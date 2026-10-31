@@ -741,7 +741,9 @@ impl Layer {
         let main = self.book_id;
         if main == Some(book) {
             for plot in &mut self.spec.plots {
-                if affected.contains(&plot.source.col) && plot.rows.is_none() {
+                if resolved(&plot.source, main).is_some_and(|r| r.book == book && affected.contains(&r.col))
+                    && plot.rows.is_none()
+                {
                     plot.rows = Some(self.spec.rows);
                 }
             }

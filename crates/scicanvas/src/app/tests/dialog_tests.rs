@@ -1486,3 +1486,47 @@ fn deleted_report_export_is_a_snapshot_and_stale_editor_preserves_redo() {
     assert_eq!(app.project, before);
     assert!(app.project.nlfit_report(&reference).is_some());
 }
+
+#[test]
+fn legacy_editor_keeps_file_limits_for_unchanged_loaded_expressions() {
+    let formula = std::iter::repeat_n("a*x", 150).collect::<Vec<_>>().join("+");
+    let definition = scicanvas_core::nlfit::CustomFitDefinition::from_text_with(
+        "old",
+        &formula,
+        "a",
+        "1",
+        "",
+        &scicanvas_core::formula::FILE_LIMITS,
+    )
+    .unwrap();
+    let mut edit = dialogs::CustomFitEditor::from_definition(&definition);
+    edit.initial = "2".into();
+    assert_eq!(edit.definition().unwrap().initial, vec![2.]);
+    edit.formula.push_str("+a*x");
+    assert!(edit.definition().is_err());
+}
+
+#[test]
+fn legacy_library_function_fits_through_the_real_dialog_button() {
+    let mut app = app();
+    let formula = std::iter::repeat_n("a*x", 150).collect::<Vec<_>>().join("+");
+    let definition = scicanvas_core::nlfit::CustomFitDefinition::from_text_with(
+        "legacy",
+        &formula,
+        "a",
+        "1",
+        "",
+        &scicanvas_core::formula::FILE_LIMITS,
+    )
+    .unwrap();
+    app.project.save_fit_function(None, definition).unwrap();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["C".into()]);
+    app.open_custom_nlfit_dialog();
+    press_dialog_button(&mut app, "拟合");
+    assert!(
+        matches!(&app.dialog,Some(Dialog::NlFitReport(r)) if r.len()==1),
+        "{}",
+        app.status
+    );
+}

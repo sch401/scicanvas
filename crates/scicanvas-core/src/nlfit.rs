@@ -41,6 +41,23 @@ impl CustomFitDefinition {
         initial: &str,
         constraints: &str,
     ) -> Result<Self, String> {
+        Self::from_text_with(
+            name,
+            formula,
+            parameters,
+            initial,
+            constraints,
+            &crate::formula::INPUT_LIMITS,
+        )
+    }
+    pub fn from_text_with(
+        name: &str,
+        formula: &str,
+        parameters: &str,
+        initial: &str,
+        constraints: &str,
+        limits: &crate::formula::Limits,
+    ) -> Result<Self, String> {
         let split = |text: &str| {
             text.split([',', '，', ';', '；'])
                 .map(str::trim)
@@ -59,21 +76,28 @@ impl CustomFitDefinition {
             initial,
             constraints: constraints.trim().into(),
         };
-        let (function, _) = definition.resolve()?;
+        let (function, _) = definition.resolve_with(limits)?;
         definition.name = function.name.clone();
         definition.formula = function.formula.clone();
         Ok(definition)
     }
 
     pub fn resolve(&self) -> Result<(CustomFitFunction, Vec<LinearConstraint>), String> {
-        let function = CustomFitFunction::new(&self.name, &self.formula, self.parameters.clone())?;
+        self.resolve_with(&crate::formula::FILE_LIMITS)
+    }
+    fn resolve_with(
+        &self,
+        limits: &crate::formula::Limits,
+    ) -> Result<(CustomFitFunction, Vec<LinearConstraint>), String> {
+        let function = CustomFitFunction::new_with(&self.name, &self.formula, self.parameters.clone(), limits)?;
         if self.initial.len() != self.parameters.len() || self.initial.iter().any(|value| !value.is_finite()) {
             return Err(format!("请为 {} 个参数各填写一个有限初始值", self.parameters.len()));
         }
-        if self.constraints.len() > 16384 {
+        if self.constraints.len() > limits.bytes {
             return Err("参数约束过长".into());
         }
-        let constraints = parse_constraints_for_function(&FitFunction::Custom(function.clone()), &self.constraints)?;
+        let constraints =
+            parse_constraints_for_function_with(&FitFunction::Custom(function.clone()), &self.constraints, limits)?;
         Ok((function, constraints))
     }
 }
@@ -121,9 +145,17 @@ pub struct CustomFitFunction {
 
 impl CustomFitFunction {
     pub fn new(name: &str, formula: &str, parameters: Vec<String>) -> Result<Self, String> {
+        Self::new_with(name, formula, parameters, &crate::formula::INPUT_LIMITS)
+    }
+    pub fn new_with(
+        name: &str,
+        formula: &str,
+        parameters: Vec<String>,
+        limits: &crate::formula::Limits,
+    ) -> Result<Self, String> {
         let name = name.trim();
         let formula = formula.trim();
-        if name.is_empty() || name.len() > 64 || formula.is_empty() || formula.len() > 4096 {
+        if name.is_empty() || name.len() > 64 || formula.is_empty() || formula.len() > limits.bytes {
             return Err("函数名称或表达式为空、过长".into());
         }
         if parameters.is_empty() || parameters.len() > MAX_PARAMS {
@@ -148,7 +180,7 @@ impl CustomFitFunction {
             Some(_) => return Err("表达式等号左侧只能写 y".into()),
             None => formula,
         };
-        let expression = crate::formula::parse(body)?;
+        let expression = crate::formula::parse_with(body, limits)?;
         let variables = expression.scalar_variables()?;
         for variable in variables {
             if variable != "x" && !unique.contains(&variable) {
@@ -415,10 +447,23 @@ pub struct LinearConstraint {
 /// 解析参数约束：每行（或用分号隔开）一条，如 `A1 + A2 = 1`、`t2 >= t1 + 3`、`2*w <= 5`。
 /// 两边都必须是参数的线性式（参数只能乘、除常数）。
 pub fn parse_constraints(model: Model, text: &str) -> Result<Vec<LinearConstraint>, String> {
+    if text.len() > crate::formula::INPUT_LIMITS.bytes {
+        return Err("参数约束过长".into());
+    }
     parse_constraints_for_names(model.params(), text)
 }
 
 pub fn parse_constraints_for_function(function: &FitFunction, text: &str) -> Result<Vec<LinearConstraint>, String> {
+    parse_constraints_for_function_with(function, text, &crate::formula::INPUT_LIMITS)
+}
+pub fn parse_constraints_for_function_with(
+    function: &FitFunction,
+    text: &str,
+    limits: &crate::formula::Limits,
+) -> Result<Vec<LinearConstraint>, String> {
+    if text.len() > limits.bytes {
+        return Err("参数约束过长".into());
+    }
     parse_constraints_for_names(&function.params(), text)
 }
 
