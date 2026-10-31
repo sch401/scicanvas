@@ -1,16 +1,17 @@
-"""Run the same required Rust checks locally as Windows CI."""
+"""运行与 Windows CI 对应的完整检查。"""
 import pathlib
 import subprocess
+import sys
 from install_cargo_deny import install
 
 
 def main():
     root = pathlib.Path(__file__).resolve().parents[1]
     subprocess.run([str(install()), "--locked", "check", "--hide-inclusion-graph"], cwd=root, check=True)
-    subprocess.run(["python", "tools/third_party.py", "--check"], cwd=root, check=True)
-    subprocess.run(["python", "-m", "unittest", "discover", "-s", "tools", "-p", "test_*.py"], cwd=root, check=True)
-    subprocess.run(["python", "docs/parity/build_parity.py", "--check"], cwd=root, check=True)
-    subprocess.run(["python", "-m", "unittest", "discover", "-s", "docs/parity", "-p", "test_*.py"], cwd=root, check=True)
+    subprocess.run([sys.executable, "tools/third_party.py", "--check"], cwd=root, check=True)
+    subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tools", "-p", "test_*.py"], cwd=root, check=True)
+    subprocess.run([sys.executable, "tools/sync_docs.py", "--check"], cwd=root, check=True)
+    subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "docs/parity", "-p", "test_*.py"], cwd=root, check=True)
     subprocess.run(["node", "--test", "docs/parity/parity.test.cjs"], cwd=root, check=True)
     checks = [
         ["fmt", "--all", "--", "--check"],

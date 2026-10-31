@@ -121,6 +121,26 @@ fn prim(out: &mut String, p: &Prim) {
             }
             let _ = write!(out, r#"<path d="{d}" fill="{}"/>"#, hex(*color));
         }
+        Prim::StyledSymbols { symbols } => {
+            for symbol in symbols {
+                let d = symbol_path(symbol.symbol, symbol.at[0], symbol.at[1], symbol.radius);
+                let fill = symbol.fill.map_or_else(|| "none".to_owned(), hex);
+                let stroke = symbol.stroke.map_or_else(String::new, |(color, width)| {
+                    format!(" stroke=\"{}\" stroke-width=\"{width}\"", hex(color))
+                });
+                let _ = write!(out, "<path d=\"{d}\" fill=\"{fill}\"{stroke}/>");
+            }
+        }
+        Prim::ColoredSegments { segments, width } => {
+            for segment in segments {
+                let [x1, y1, x2, y2] = segment.points;
+                let _ = write!(
+                    out,
+                    "<path d=\"M{x1:.2},{y1:.2}L{x2:.2},{y2:.2}\" fill=\"none\" stroke=\"{}\" stroke-width=\"{width}\" stroke-linecap=\"round\"/>",
+                    hex(segment.color)
+                );
+            }
+        }
         Prim::Text {
             x,
             y,
@@ -129,25 +149,39 @@ fn prim(out: &mut String, p: &Prim) {
             anchor,
             vertical,
             bold,
+            rich,
             color,
         } => {
-            let a = match anchor {
-                Anchor::Start => "start",
-                Anchor::Middle => "middle",
-                Anchor::End => "end",
+            let layout = crate::text::layout_formatted(text, *size, *bold, *rich);
+            let factor = match anchor {
+                Anchor::Start => 0.0,
+                Anchor::Middle => 0.5,
+                Anchor::End => 1.0,
             };
-            let pos = if *vertical {
-                format!(r#"transform="translate({x:.2},{y:.2}) rotate(-90)""#)
+            let _ = write!(out, r#"<g aria-label="{}""#, esc(&crate::text::plain_text(text, *rich)));
+            let (origin_x, origin_y) = if *vertical {
+                let _ = write!(out, r#" transform="translate({x:.2},{y:.2}) rotate(-90)""#);
+                (0.0, 0.0)
             } else {
-                format!(r#"x="{x:.2}" y="{y:.2}""#)
+                (*x, *y)
             };
-            let weight = if *bold { r#" font-weight="700""# } else { "" };
-            let _ = write!(
-                out,
-                r#"<text {pos} text-anchor="{a}" dominant-baseline="central" font-size="{size}"{weight} fill="{}">{}</text>"#,
-                hex(*color),
-                esc(text)
-            );
+            out.push('>');
+            for run in &layout.runs {
+                let face = &crate::text::fonts().faces()[run.font];
+                let xx = origin_x + run.x - layout.widths[run.line] * factor;
+                let yy = origin_y - layout.height / 2.0 + layout.ascent + run.line as f64 * layout.line_height + run.dy;
+                let size = run.size;
+                let italic = if face.italic { "font-style=\"italic\" " } else { "" };
+                let _ = write!(
+                    out,
+                    r#"<text x="{xx:.4}" y="{yy:.4}" font-family="{}" font-size="{size}" font-weight="{}" {italic}xml:space="preserve" fill="{}">{}</text>"#,
+                    esc(&face.family),
+                    face.weight,
+                    hex(*color),
+                    esc(&run.text)
+                );
+            }
+            out.push_str("</g>");
         }
     }
 }

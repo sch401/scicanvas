@@ -23,8 +23,6 @@ pub struct Palette {
     pub sel_bg: Color32,
     pub meta_sel_bg: Color32,
     /// 项目管理器里“表”“图”标记的颜色。
-    pub book: Color32,
-    pub graph: Color32,
     /// 次要文字。
     pub weak: Color32,
     /// 正文文字。
@@ -71,8 +69,6 @@ struct Tokens {
     meta_bg: Color32,
     sel_bg: Color32,
     meta_sel_bg: Color32,
-    book: Color32,
-    graph: Color32,
     shadow: u8,
 }
 
@@ -99,8 +95,6 @@ const LIGHT: Tokens = Tokens {
     meta_bg: hex(0xEEF2F7),
     sel_bg: hex(0xE0EBFC),
     meta_sel_bg: hex(0xD2E1F8),
-    book: hex(0x2F6DB8),
-    graph: hex(0xC2453A),
     shadow: 38,
 };
 
@@ -127,8 +121,6 @@ const DARK: Tokens = Tokens {
     meta_bg: hex(0x2C323B),
     sel_bg: hex(0x23395C),
     meta_sel_bg: hex(0x2B4670),
-    book: hex(0x79A7E8),
-    graph: hex(0xF08A80),
     shadow: 110,
 };
 
@@ -148,8 +140,6 @@ pub fn palette(theme: Theme) -> Palette {
         meta_bg: t.meta_bg,
         sel_bg: t.sel_bg,
         meta_sel_bg: t.meta_sel_bg,
-        book: t.book,
-        graph: t.graph,
         weak: t.weak,
         ink: t.ink,
         panel: if t.dark { hex(0x2B3039) } else { hex(0xFBFCFE) },
@@ -163,7 +153,7 @@ pub fn palette(theme: Theme) -> Palette {
         window: t.window,
         title: if t.dark { hex(0x2F5F9E) } else { hex(0x2C5D9F) },
         title2: if t.dark { hex(0x3A6FB4) } else { hex(0x3F78C2) },
-        title_in: if t.dark { hex(0x3B434F) } else { hex(0x9AA5B4) },
+        title_in: if t.dark { hex(0x3B434F) } else { hex(0xE7ECF3) },
     }
 }
 

@@ -1,4 +1,4 @@
-# egui 内嵌字体原始声明
+# SciCanvas / egui 内嵌字体原始声明
 
 以下内容直接读取 epaint_default_fonts 包中四个字体的 name 表，保留版权、商标和许可文字；另附 fonts/*.txt 的原始完整声明。系统字体不在此清单中。
 

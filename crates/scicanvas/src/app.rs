@@ -1,10 +1,15 @@
 //! 应用状态与界面调度、图形属性和分析操作。
 //! 项目管理与子窗口位于 workspace，工作表显示与编辑位于 worksheet。
 
+mod analysis_ops;
+mod dialog_actions;
+mod notes;
+mod props;
+mod windows;
 mod worksheet;
 mod workspace;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::path::PathBuf;
 
 use eframe::egui::{self, RichText};
@@ -15,7 +20,7 @@ use scicanvas_core::ops::Source;
 use scicanvas_core::{csv, fmt_num, round_sig, svg, PlotType, Project, Role};
 
 use crate::commands;
-use crate::dialogs::{self, Dialog};
+use crate::dialogs::{self, edit_group, Dialog, PlotObjectEditor as ObjectEditor};
 use crate::mdi::{self, Geom, WinState};
 use crate::plot;
 use crate::ribbon::{self, Ctx, UiState};
@@ -27,6 +32,19 @@ const META_ROWS: [&str; 3] = ["长名称", "单位", "注释"];
 #[derive(Clone, Copy)]
 struct ProjectDrag(u64);
 
+#[derive(Clone, PartialEq)]
+enum BookPreviewEdit {
+    Properties(u64, dialogs::ColumnEdit),
+    Categories(u64, String, Vec<String>),
+    Sort(u64, Vec<(String, bool)>, Option<Vec<String>>),
+}
+
+struct BookPreview {
+    applied: bool,
+    edit: BookPreviewEdit,
+    result: Result<scicanvas_core::Book, String>,
+}
+
 /// 列标题右键菜单里的操作。
 #[derive(Clone, Copy)]
 enum ColAction {
@@ -34,16 +52,28 @@ enum ColAction {
     SetRole(Role),
     SetDataKind(scicanvas_core::DataKind),
     InsertRight,
+    CategoryOrder,
+    Move(scicanvas_core::ColumnMove),
     Clear,
     Delete,
     Plot(PlotType),
+    AddToGraph(u64),
+}
+
+// 嵌套操作共享最外层事务，内部取消或失败使整次命令回滚。
+enum EditAbort {
+    Cancelled,
+    Failed(String),
 }
 
 pub struct SciApp {
+    analysis_curves: HashMap<(u64, usize), Vec<scicanvas_core::plotspec::DataRef>>,
     pub(crate) project: Project,
     pub(crate) history: History,
     history_group: Option<egui::Id>,
     last_history_group: Option<egui::Id>,
+    edit_depth: usize,
+    edit_abort: Option<EditAbort>,
     /// 每个工作簿/图形的窗口是否显示。
     pub(crate) open: HashMap<u64, bool>,
     /// 每个工作簿里选中的列（保持点击顺序）。
@@ -51,6 +81,12 @@ pub struct SciApp {
     /// 当前激活的窗口。
     pub(crate) active: Option<u64>,
     pub(crate) explorer_target: Option<u64>,
+    explorer_selection: Vec<u64>,
+    explorer_anchor: Option<u64>,
+    explorer_visible: Vec<u64>,
+    explorer_sort: workspace::ExplorerSort,
+    /// 处于编辑状态的 Note（其余显示 Markdown 预览）。
+    note_editing: HashSet<u64>,
     pub(crate) folder_destination: Option<u64>,
     pub(crate) project_name: String,
     explorer_click: Option<(u64, f64)>,
@@ -60,6 +96,9 @@ pub struct SciApp {
     explorer_focus: bool,
     /// 正在编辑属性的图形。
     pub(crate) props_for: Option<u64>,
+    adding_text: Option<u64>,
+    object_editor: Option<ObjectEditor>,
+    plot_epoch: u64,
     active_layers: HashMap<u64, usize>,
     pub(crate) plot_draft: Option<scicanvas_core::plotspec::PlotSpec>,
     pub(crate) status: String,
@@ -78,10 +117,13 @@ pub struct SciApp {
     pub(crate) theme_pref: egui::ThemePreference,
     /// 命令改了主题后，下一帧交给 egui。
     pub(crate) pending_theme: Option<egui::ThemePreference>,
+    pub(crate) pending_window_reset: bool,
+    pending_repaint: bool,
     /// 功能区、文件页、命令面板的界面状态。
     pub(crate) ui: UiState,
     /// 当前打开的分析对话框。
     pub(crate) dialog: Option<Dialog>,
+    book_preview: Option<BookPreview>,
     pub(crate) quit: bool,
     /// 子窗口的位置、大小和最小化 / 最大化状态。
     pub(crate) geoms: HashMap<u64, Geom>,
@@ -113,33 +155,37 @@ fn header_field(column: &mut scicanvas_core::Column, row: usize) -> &mut String 
     }
 }
 
-/// 同一文字框焦点周期或一次鼠标拖动共享一个历史记录。
-fn edit_group(response: &egui::Response, group: &mut Option<egui::Id>) {
-    let text_focus = response.has_focus() && egui::TextEdit::load_state(&response.ctx, response.id).is_some();
-    if text_focus || response.is_pointer_button_down_on() || response.dragged() || response.drag_stopped() {
-        *group = Some(response.id);
-    }
-}
-
 impl SciApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         crate::fonts::setup(&cc.egui_ctx);
         theme::install(&cc.egui_ctx);
-        // 功能区图标是 SVG，需要 egui_extras 的图片加载器
-        egui_extras::install_image_loaders(&cc.egui_ctx);
+        // 功能区图标经共用渲染栈加载。
+        crate::icons::install_loaders(&cc.egui_ctx);
         Self::initial(theme::palette(cc.egui_ctx.theme()))
     }
 
     fn initial(pal: Palette) -> Self {
         let mut app = SciApp {
+            analysis_curves: HashMap::new(),
+            book_preview: None,
             project: Project::default(),
             history: History::default(),
             history_group: None,
             last_history_group: None,
+            edit_depth: 0,
+            edit_abort: None,
+            adding_text: None,
+            object_editor: None,
+            plot_epoch: 0,
             open: HashMap::new(),
             selection: HashMap::new(),
             active: None,
             explorer_target: None,
+            explorer_selection: Vec::new(),
+            explorer_anchor: None,
+            explorer_visible: Vec::new(),
+            explorer_sort: workspace::ExplorerSort::default(),
+            note_editing: HashSet::new(),
             folder_destination: None,
             project_name: String::new(),
             explorer_click: None,
@@ -159,6 +205,8 @@ impl SciApp {
             pal,
             theme_pref: egui::ThemePreference::System,
             pending_theme: None,
+            pending_window_reset: false,
+            pending_repaint: false,
             ui: UiState::default(),
             dialog: None,
             quit: false,
@@ -167,12 +215,17 @@ impl SciApp {
             ws: egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1000.0, 650.0)),
         };
         app.load_project(Project::sample(), None);
-        app.status = "就绪 — 单击列标题选列，再点功能区里的绘图按钮；Ctrl+K 搜索任何命令，F1 查看快速上手".into();
+        app.status = "就绪".into();
         app
     }
 
     fn load_project(&mut self, project: Project, path: Option<PathBuf>) {
+        self.book_preview = None;
+        self.analysis_curves.clear();
         self.active_layers.clear();
+        self.adding_text = None;
+        self.object_editor = None;
+        self.plot_epoch = self.plot_epoch.wrapping_add(1);
         self.plot_draft = None;
         self.history = History::default();
         self.history_group = None;
@@ -187,13 +240,20 @@ impl SciApp {
         for g in &project.graphs {
             self.open.insert(g.id, true);
         }
+        for note in &project.notes {
+            self.open.insert(note.id, true);
+        }
         self.active = project
             .graphs
             .last()
             .map(|g| g.id)
-            .or(project.books.last().map(|b| b.id));
+            .or(project.books.last().map(|b| b.id))
+            .or(project.notes.last().map(|n| n.id));
         self.project = project;
         self.explorer_target = self.active;
+        self.explorer_selection = self.active.into_iter().collect();
+        self.explorer_anchor = self.active;
+        self.explorer_visible.clear();
         self.folder_destination = None;
         self.project_name.clear();
         self.explorer_click = None;
@@ -282,8 +342,8 @@ impl SciApp {
     pub(crate) fn import_csv(&mut self) {
         let Some(path) = rfd::FileDialog::new()
             .set_title("导入数据")
-            .add_filter("数据文件", &["csv", "txt", "tsv", "dat", "xlsx", "xlsm"])
-            .add_filter("Excel 工作簿", &["xlsx", "xlsm"])
+            .add_filter("数据文件", &["csv", "txt", "tsv", "dat", "xlsx", "xlsm", "xls"])
+            .add_filter("Excel 工作簿", &["xlsx", "xlsm", "xls"])
             .add_filter("所有文件", &["*"])
             .pick_file()
         else {
@@ -294,11 +354,45 @@ impl SciApp {
 
     /// 把一个数据文件导入成新工作簿，放在当前文件夹里。Excel 工作簿的每张非空工作表各成一个工作簿。
     fn import_path(&mut self, path: &std::path::Path) {
+        self.import_paths(&[path.to_path_buf()]);
+    }
+
+    fn import_paths(&mut self, paths: &[PathBuf]) {
+        let parent = self.current_folder();
+        self.edit_with(
+            "导入数据",
+            |project| {
+                let mut shown = Vec::new();
+                let mut messages = Vec::new();
+                for path in paths {
+                    match Self::import_into(project, path, parent) {
+                        Ok((id, message)) => {
+                            shown.push(id);
+                            messages.push(message);
+                        }
+                        Err(error) => messages.push(error),
+                    }
+                }
+                Ok(Some((shown, messages)))
+            },
+            |app, (shown, messages)| {
+                for id in shown {
+                    app.show_item(id);
+                }
+                app.status = messages.join("；");
+            },
+        );
+    }
+
+    fn import_into(
+        project: &mut Project,
+        path: &std::path::Path,
+        parent: Option<u64>,
+    ) -> Result<(u64, String), String> {
         let bytes = match std::fs::read(path) {
             Ok(b) => b,
             Err(e) => {
-                self.status = format!("无法读取 {}：{}", path.display(), e);
-                return;
+                return Err(format!("无法读取 {}：{}", path.display(), e));
             }
         };
         let stem = path
@@ -309,7 +403,12 @@ impl SciApp {
             .extension()
             .and_then(|e| e.to_str())
             .is_some_and(|e| ["xlsx", "xlsm", "xls"].iter().any(|x| e.eq_ignore_ascii_case(x)));
-        let tables: Vec<(String, Vec<Vec<String>>)> = if excel {
+        // Excel 读成行表；CSV 直接由文本建表（流式写入类型化列，大文件占内存少）
+        enum Table {
+            Rows(Vec<Vec<String>>),
+            Text(String),
+        }
+        let tables: Vec<(String, Table)> = if excel {
             match scicanvas_core::xlsx::read(&bytes) {
                 Ok(sheets) => {
                     let sheets: Vec<_> = sheets.into_iter().filter(|s| !s.rows.is_empty()).collect();
@@ -322,43 +421,46 @@ impl SciApp {
                             } else {
                                 format!("{stem}-{}", s.name)
                             };
-                            (name, s.rows)
+                            (name, Table::Rows(s.rows))
                         })
                         .collect()
                 }
                 Err(e) => {
-                    self.status = format!("无法导入 {}：{e}", path.display());
-                    return;
+                    return Err(format!("无法导入 {}：{e}", path.display()));
                 }
             }
         } else {
-            vec![(stem, csv::parse_table(&csv::decode(&bytes)))]
+            vec![(stem, Table::Text(csv::decode(&bytes)))]
         };
-        let tables: Vec<_> = tables.into_iter().filter(|(_, rows)| !rows.is_empty()).collect();
+        let tables: Vec<_> = tables
+            .into_iter()
+            .filter(|(_, t)| match t {
+                Table::Rows(rows) => !rows.is_empty(),
+                Table::Text(text) => !text.trim().is_empty(),
+            })
+            .collect();
         if tables.is_empty() {
-            self.status = "文件里没有数据".into();
-            return;
+            return Err("文件里没有数据".into());
         }
         let mut done = vec![];
         let mut last = None;
-        for (base, rows) in tables {
-            let name = if self.project.books.iter().any(|b| b.name == base) {
-                self.project.unique_name(&format!("{}_", base))
+        for (base, table) in tables {
+            let name = if project.books.iter().any(|b| b.name == base) {
+                project.unique_name(&format!("{}_", base))
             } else {
                 base
             };
-            let id = self.project.alloc_id();
-            let book = csv::book_from_table(id, &name, rows);
+            let id = project.alloc_id();
+            let book = match table {
+                Table::Rows(rows) => csv::book_from_table(id, &name, rows),
+                Table::Text(text) => csv::book_from_text(id, &name, &text),
+            };
             done.push(format!("{}（{} 行 × {} 列）", name, book.nrows(), book.columns.len()));
-            self.project.books.push(book);
-            let parent = self.current_folder();
-            self.project.move_project_item(id, parent).unwrap();
+            project.books.push(book);
+            project.move_project_item(id, parent)?;
             last = Some(id);
         }
-        if let Some(id) = last {
-            self.show_item(id);
-        }
-        self.status = format!("已导入 {}：{}", path.display(), done.join("、"));
+        Ok((last.unwrap(), format!("已导入 {}：{}", path.display(), done.join("、"))))
     }
 
     pub(crate) fn open_project(&mut self) {
@@ -370,6 +472,66 @@ impl SciApp {
             return;
         };
         self.open_path(&path);
+    }
+
+    pub(crate) fn save_graph_template(&mut self) {
+        let Some(gid) = self.target_graph() else { return };
+        let Some(graph) = self.project.graph(gid).cloned() else {
+            return;
+        };
+        let template = match scicanvas_core::project_file::graph_template_from_graph(&graph, &self.project) {
+            Ok(template) => template,
+            Err(error) => {
+                self.status = error;
+                return;
+            }
+        };
+        let Some(path) = rfd::FileDialog::new()
+            .set_title("保存图形模板")
+            .add_filter("SciCanvas 图形模板", &["scgt"])
+            .set_file_name(format!("{}.scgt", graph.name))
+            .save_file()
+        else {
+            return;
+        };
+        self.status = match scicanvas_core::project_file::save_graph_template(&path, &template) {
+            Ok(()) => format!("已保存图形模板 {}", path.display()),
+            Err(error) => format!("保存图形模板失败：{error}"),
+        };
+    }
+
+    pub(crate) fn apply_graph_template_dialog(&mut self) {
+        let Some(book_id) = self.active_book_id() else { return };
+        let Some(path) = rfd::FileDialog::new()
+            .set_title("应用图形模板")
+            .add_filter("SciCanvas 图形模板", &["scgt"])
+            .pick_file()
+        else {
+            return;
+        };
+        match scicanvas_core::project_file::load_graph_template(&path) {
+            Ok(template) => {
+                self.apply_graph_template_to_book(template, book_id);
+            }
+            Err(error) => self.status = format!("无法应用图形模板：{error}"),
+        }
+    }
+
+    pub(crate) fn apply_graph_template_to_book(
+        &mut self,
+        template: scicanvas_core::GraphTemplate,
+        book_id: u64,
+    ) -> Option<u64> {
+        let template_name = template.name.clone();
+        self.edit_with(
+            "应用图形模板",
+            |project| project.apply_graph_template(&template, book_id).map(Some),
+            move |app, id| {
+                app.show_item(id);
+                app.status = format!("已应用图形模板：{template_name}");
+                id
+            },
+        )
     }
 
     fn open_path(&mut self, path: &std::path::Path) {
@@ -400,16 +562,7 @@ impl SciApp {
         if paths.is_empty() {
             return;
         }
-        self.finish_edit();
-        self.begin_edit("导入数据");
-        let mut done = Vec::new();
-        for path in &paths {
-            self.import_path(path);
-            done.push(std::mem::take(&mut self.status));
-        }
-        self.history.changed();
-        self.finish_edit();
-        self.status = done.join("；");
+        self.import_paths(&paths);
     }
 
     /// 处理拖入窗口的文件，拖动经过时显示提示层。
@@ -502,6 +655,26 @@ impl SciApp {
         };
     }
 
+    pub(crate) fn export_pdf(&mut self) {
+        let Some(gid) = self.target_graph() else { return };
+        let Some(g) = self.project.graph(gid) else { return };
+        let Some(path) = rfd::FileDialog::new()
+            .set_title("导出 PDF")
+            .add_filter("PDF 矢量图（嵌入字体）", &["pdf"])
+            .set_file_name(format!("{}.pdf", g.name))
+            .save_file()
+        else {
+            return;
+        };
+        // Finish conversion and font checks before opening/replacing the chosen output file.
+        let result = crate::export::pdf_bytes(&svg::render_page(g, &self.project))
+            .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
+        self.status = match result {
+            Ok(()) => format!("已导出 {}（矢量 PDF，已嵌入字体）", path.display()),
+            Err(e) => format!("导出失败：{e}"),
+        };
+    }
+
     pub(crate) fn export_png_dialog(&mut self) {
         let Some(gid) = self.target_graph() else { return };
         let Some(g) = self.project.graph(gid) else { return };
@@ -575,6 +748,7 @@ impl SciApp {
     /// 执行一条命令（功能区、快捷键、命令面板都走这里）。不能执行时在状态栏说明原因。
     pub(crate) fn run_command(&mut self, id: &str) {
         let Some(c) = commands::find(id) else { return };
+        self.pending_repaint = true;
         self.finish_edit();
         match (c.when)(self) {
             Ok(()) => {
@@ -588,28 +762,174 @@ impl SciApp {
                     c.label.to_string()
                 };
                 if c.modifies {
-                    self.begin_edit(&label);
-                }
-                (c.run)(self);
-                if c.modifies {
-                    self.history.changed();
-                    self.finish_edit();
+                    self.edit_action_with(
+                        &label,
+                        |app| {
+                            (c.run)(app);
+                            Ok(Some(()))
+                        },
+                        |_, ()| {},
+                    );
+                } else {
+                    (c.run)(self);
                 }
             }
             Err(why) => self.status = why.to_string(),
         }
     }
 
+    /// 一次性项目编辑：Some 返回结果，None 取消，Err 回滚并显示原因。
+    /// 实际改变才重算并记一步；重算诊断继续沿用既有 finish_edit 规则。
+    fn edit<T>(&mut self, label: &str, f: impl FnOnce(&mut Project) -> Result<Option<T>, String>) -> Option<T> {
+        self.edit_with(label, f, |_, value| value)
+    }
+
+    /// 展示成功结果后统一重算和提交，保留状态提示优先级；show 只更新界面。
+    fn edit_with<T, R>(
+        &mut self,
+        label: &str,
+        f: impl FnOnce(&mut Project) -> Result<Option<T>, String>,
+        show: impl FnOnce(&mut Self, T) -> R,
+    ) -> Option<R> {
+        self.edit_action_with(label, |app| f(&mut app.project), show)
+    }
+
+    /// 旧命令包含界面副作用，适配到同一事务实现；嵌套入口复用原快照。
+    fn edit_action_with<T, R>(
+        &mut self,
+        label: &str,
+        f: impl FnOnce(&mut Self) -> Result<Option<T>, String>,
+        show: impl FnOnce(&mut Self, T) -> R,
+    ) -> Option<R> {
+        let outer = self.edit_depth == 0;
+        if outer {
+            self.finish_edit();
+            self.history_group = None;
+            self.edit_abort = None;
+            self.begin_edit(label);
+        } else if self.edit_abort.is_some() {
+            return None;
+        }
+        self.edit_depth += 1;
+        let outcome = f(self);
+        self.edit_depth -= 1;
+        let result = match outcome {
+            Ok(Some(value)) if self.edit_abort.is_none() => {
+                self.history.changed_if_different(&self.project);
+                Some(show(self, value))
+            }
+            Ok(_) => {
+                if self.edit_abort.is_none() {
+                    self.edit_abort = Some(EditAbort::Cancelled);
+                }
+                None
+            }
+            Err(error) => {
+                self.status = error.clone();
+                if self.edit_abort.is_none() {
+                    self.edit_abort = Some(EditAbort::Failed(error));
+                }
+                None
+            }
+        };
+        if outer {
+            if let Some(abort) = self.edit_abort.take() {
+                self.project = self.history.rollback().unwrap();
+                if let EditAbort::Failed(error) = abort {
+                    self.status = error;
+                }
+            } else {
+                self.finish_edit();
+            }
+        }
+        result
+    }
+
+    /// 连续编辑只接收已验证的实际修改；同组复用快照，换组或离散操作分步。
+    /// 校验留在原草稿/局部编辑视图中，避免每帧复制整个项目来处理失败。
+    fn edit_grouped(&mut self, label: &str, group: Option<egui::Id>, f: impl FnOnce(&mut Project)) {
+        self.edit_grouped_with(
+            label,
+            group,
+            |project| {
+                f(project);
+                Ok(())
+            },
+            |_, ()| {},
+        )
+        .unwrap();
+    }
+
+    /// 原子校验失败不写项目，保留组内此前的有效输入；成功展示先于重算。
+    /// f 返回 Err 时须保持项目原样，适用于既有的原子列属性操作。
+    fn edit_grouped_with<T>(
+        &mut self,
+        label: &str,
+        group: Option<egui::Id>,
+        f: impl FnOnce(&mut Project) -> Result<T, String>,
+        show: impl FnOnce(&mut Self, T),
+    ) -> Result<(), String> {
+        if self.history.is_pending() && (group.is_none() || self.last_history_group != group) {
+            self.finish_edit();
+        }
+        let fresh = !self.history.is_pending();
+        if fresh {
+            self.begin_edit(label);
+        } else {
+            self.pending_repaint = true;
+        }
+        self.history_group = group;
+        match f(&mut self.project) {
+            Ok(value) => {
+                self.history.changed();
+                show(self, value);
+                self.finish_frame_edit(group);
+                Ok(())
+            }
+            Err(error) => {
+                if fresh {
+                    self.project = self.history.rollback().unwrap();
+                }
+                Err(error)
+            }
+        }
+    }
+
     fn begin_edit(&mut self, label: &str) {
+        self.pending_repaint = true;
+        self.book_preview = None;
         self.history.begin(&self.project, label);
     }
 
     fn finish_edit(&mut self) {
+        self.recalc_formulas();
         self.history.commit(&self.project);
         self.last_history_group = None;
     }
 
+    /// “重算”命令：公式列和全部分析结果列（含手动的）按依赖顺序重算，一步撤销。
+    pub(crate) fn recalc_all(&mut self) {
+        let problems = self.project.recalc_computed(true);
+        self.status = if problems.is_empty() {
+            "已重算公式列和分析结果".into()
+        } else {
+            format!("重算出错：{}", problems.join("；"))
+        };
+    }
+
+    /// 有改动时按保存的列公式重算（并入同一步撤销）；出错时在状态栏说明。
+    fn recalc_formulas(&mut self) {
+        if self.history.has_changes() {
+            let problems = self.project.recalc_computed(false);
+            if !problems.is_empty() {
+                self.status = format!("公式重算出错：{}", problems.join("；"));
+            }
+        }
+    }
+
     fn finish_frame_edit(&mut self, group: Option<egui::Id>) {
+        // 连续输入时每帧重算，结果即时更新
+        self.recalc_formulas();
         if group.is_none() {
             self.finish_edit();
         } else {
@@ -636,7 +956,78 @@ impl SciApp {
     }
 
     fn restore_history(&mut self, project: Project) {
+        self.adding_text = None;
+        self.plot_epoch = self.plot_epoch.wrapping_add(1);
+        self.object_editor = self.object_editor.filter(|edit| match edit.target {
+            plot::ObjectTarget::Text(id) => project.graph(edit.graph).is_some_and(|g| g.page.text(id).is_some()),
+            plot::ObjectTarget::Legend(index) => project.graph(edit.graph).is_some_and(|g| {
+                g.page.layers().get(index).is_some_and(|l| l.legend)
+                    && self
+                        .project
+                        .graph(edit.graph)
+                        .is_some_and(|old| old.page.layers().len() == g.page.layers().len())
+            }),
+        });
+        self.book_preview = None;
         self.project = project;
+        match &mut self.dialog {
+            Some(Dialog::CustomNlFit(edit)) => edit.sync_saved(&self.project.fit_functions),
+            Some(d @ Dialog::NlFitReport(_)) => d.sync_fit_reports(&self.project),
+            Some(Dialog::LayerContents(edit)) => {
+                if let Some(layer) = self
+                    .project
+                    .graph(edit.graph)
+                    .and_then(|g| g.page.layers().get(edit.index))
+                {
+                    edit.before = layer.clone();
+                    edit.draft = layer.clone();
+                    edit.error = None;
+                } else {
+                    self.dialog = None;
+                }
+            }
+            Some(Dialog::ColumnProps {
+                book,
+                before,
+                edit,
+                error,
+                ..
+            }) => {
+                if let Some(column) = self.project.book(*book).and_then(|b| b.column(&edit.key)) {
+                    *edit = dialogs::ColumnEdit::from(column);
+                    *before = edit.clone();
+                    *error = None;
+                } else {
+                    self.dialog = None;
+                }
+            }
+            Some(Dialog::CategoryOrder {
+                book,
+                key,
+                levels,
+                error,
+            }) => {
+                if let Some(current) = self
+                    .project
+                    .book(*book)
+                    .and_then(|b| b.column(key))
+                    .and_then(|c| c.data.category_levels())
+                {
+                    *levels = current;
+                    *error = None;
+                } else {
+                    self.dialog = None;
+                }
+            }
+            _ => {}
+        }
+        self.analysis_curves.retain(|(graph, index), curves| {
+            let Some(layer) = self.project.graph(*graph).and_then(|g| g.page.layers().get(*index)) else {
+                return false;
+            };
+            curves.retain(|r| layer.plot(r, &|id| self.project.book(id)).is_some());
+            true
+        });
         self.active_layers.retain(|id, index| {
             if let Some(graph) = self.project.graph(*id) {
                 *index = (*index).min(graph.page.layers().len() - 1);
@@ -680,6 +1071,7 @@ impl SciApp {
             self.props_for = None;
         }
         self.confirm_delete = None;
+        self.explorer_selection.retain(|id| self.project.name_of(*id).is_some());
         self.explorer_click = None;
         self.explorer_rename = None;
         self.project_name = self
@@ -699,7 +1091,19 @@ impl SciApp {
         {
             self.folder_destination = None;
         }
-        self.dialog = None;
+        if !matches!(
+            self.dialog,
+            Some(
+                Dialog::LayerContents(_)
+                    | Dialog::ColumnProps { .. }
+                    | Dialog::CategoryOrder { .. }
+                    | Dialog::CustomNlFit(_)
+                    | Dialog::NlFitReport(_)
+                    | Dialog::NlFit { .. }
+            )
+        ) {
+            self.dialog = None;
+        }
         self.history_group = None;
         self.last_history_group = None;
     }
@@ -763,6 +1167,7 @@ impl SciApp {
     pub(crate) fn doc_title(&self) -> String {
         match self.active.and_then(|id| self.project.name_of(id).map(|n| (id, n))) {
             Some((id, n)) if self.project.book(id).is_some() => format!("{} · 工作簿", n),
+            Some((id, n)) if self.project.note(id).is_some() => format!("{} · Note", n),
             Some((_, n)) => format!("{} · 图形", n),
             None => "未选中窗口".to_string(),
         }
@@ -771,6 +1176,14 @@ impl SciApp {
     /// 分析的输入：当前图形里的数据曲线，或当前工作簿里选中的列。
     pub(crate) fn analysis_source(&self) -> Option<Source> {
         if let Some(g) = self.active_graph_id() {
+            let index = self.layer_index(g);
+            if let Some(curves) = self.analysis_curves.get(&(g, index)) {
+                return Some(Source::Curves {
+                    graph_id: g,
+                    index,
+                    curves: curves.clone(),
+                });
+            }
             return self
                 .active_layer()
                 .and_then(|layer| layer.book_id)
@@ -790,6 +1203,54 @@ impl SciApp {
         self.status = "已恢复示例项目".into();
     }
 
+    pub(crate) fn open_layer_contents(&mut self) {
+        let Some(graph) = self.any_open_graph() else { return };
+        let index = self.layer_index(graph);
+        let layer = self.project.graph(graph).unwrap().page.layers()[index].clone();
+        let active = layer.plot_keys(true).first().cloned();
+        self.dialog = Some(Dialog::LayerContents(Box::new(dialogs::LayerContents {
+            graph,
+            index,
+            before: layer.clone(),
+            draft: layer,
+            selected: Vec::new(),
+            active,
+            error: None,
+        })));
+    }
+
+    fn apply_layer_contents(&mut self, edit: &dialogs::LayerContents) -> Result<(), String> {
+        let layer = self
+            .project
+            .graph(edit.graph)
+            .and_then(|g| g.page.layers().get(edit.index))
+            .ok_or("找不到目标图层")?;
+        if layer != &edit.before {
+            return Err("图层已更新，请重新打开图层内容".into());
+        }
+        if !edit.draft.plot_keys(true).is_empty() {
+            let book = edit
+                .draft
+                .book_id
+                .and_then(|id| self.project.book(id))
+                .ok_or("找不到来源表")?;
+            edit.draft.validate_in(book, &|id| self.project.book(id))?;
+        }
+        if layer == &edit.draft {
+            return Ok(());
+        }
+        self.edit("图层内容", |project| {
+            project.graph_mut(edit.graph).unwrap().page.layers_mut()[edit.index] = edit.draft.clone();
+            Ok(Some(()))
+        });
+        if let Some(selected) = self.analysis_curves.get_mut(&(edit.graph, edit.index)) {
+            selected.retain(|reference| edit.draft.plot(reference, &|id| self.project.book(id)).is_some());
+        }
+        self.show_item(edit.graph);
+        self.status = "图层内容已更新".into();
+        Ok(())
+    }
+
     pub(crate) fn open_props(&mut self) {
         if let Some(g) = self.any_open_graph() {
             self.props_for = Some(g);
@@ -798,10 +1259,15 @@ impl SciApp {
 
     pub(crate) fn add_layer(&mut self) {
         let Some(id) = self.active_graph_id() else { return };
+        self.plot_epoch = self.plot_epoch.wrapping_add(1);
+        self.object_editor = self
+            .object_editor
+            .filter(|e| e.graph != id || matches!(e.target, plot::ObjectTarget::Text(_)));
         let index = self.layer_index(id);
         let graph = self.project.graph_mut(id).unwrap();
         let mut layer = graph.page.layers()[index].clone();
         layer.placement = None;
+        layer.legend_position = None;
         graph.page.add_layer(layer);
         let n = graph.page.layers().len();
         graph.page.columns = (n as f64).sqrt().ceil() as usize;
@@ -825,11 +1291,7 @@ impl SciApp {
                 Err(e) => self.status = e,
             }
         } else if let Some(id) = self.active_graph_id() {
-            self.plot_draft = Some(
-                self.project.graph(id).unwrap().page.layers()[self.layer_index(id)]
-                    .spec
-                    .clone(),
-            );
+            self.plot_draft = Some(self.project.graph(id).unwrap().page.layers()[self.layer_index(id)].draft());
         }
     }
 
@@ -851,6 +1313,11 @@ impl SciApp {
         let graph = self.project.graph_mut(id).unwrap();
         match graph.page.remove_layer(index) {
             Ok(_) => {
+                self.plot_epoch = self.plot_epoch.wrapping_add(1);
+                self.object_editor = self
+                    .object_editor
+                    .filter(|e| e.graph != id || matches!(e.target, plot::ObjectTarget::Text(_)));
+                self.analysis_curves.retain(|(graph_id, _), _| *graph_id != id);
                 self.active_layers.insert(id, index.min(graph.page.layers().len() - 1));
                 self.status = "已删除图层".into();
             }
@@ -868,6 +1335,26 @@ impl SciApp {
         }
     }
 
+    pub(crate) fn add_reference_line(&mut self, axis: scicanvas_core::page::ReferenceAxis) {
+        let Some(gid) = self.active_graph_id() else { return };
+        let index = self.layer_index(gid);
+        let layer = &mut self.project.graph_mut(gid).unwrap().page.layers_mut()[index];
+        if axis == scicanvas_core::page::ReferenceAxis::YRight && !layer.has_right_axis_style() {
+            self.status = "请先把一条曲线设置为右 Y 轴".into();
+            return;
+        }
+        let log = match axis {
+            scicanvas_core::page::ReferenceAxis::X => layer.x_log,
+            scicanvas_core::page::ReferenceAxis::YLeft | scicanvas_core::page::ReferenceAxis::YRight => layer.y_log,
+        };
+        layer.reference_lines.push(scicanvas_core::page::ReferenceLine {
+            axis,
+            value: if log { 1.0 } else { 0.0 },
+            ..Default::default()
+        });
+        self.status = format!("已添加{}参考线", axis.label());
+    }
+
     pub(crate) fn set_theme(&mut self, pref: egui::ThemePreference) {
         self.theme_pref = pref;
         self.pending_theme = Some(pref);
@@ -877,1395 +1364,6 @@ impl SciApp {
             egui::ThemePreference::System => "主题跟随系统",
         }
         .into();
-    }
-
-    /// 结果写进工作簿后，确保相关窗口可见。
-    fn after_analysis(&mut self, graph: Option<u64>) {
-        if let Some(g) = graph {
-            if !self.open.get(&g).copied().unwrap_or(false) {
-                self.show_item(g);
-            }
-        }
-    }
-
-    pub(crate) fn fit(&mut self, order: usize) {
-        let Some(src) = self.analysis_source() else { return };
-        match self.project.fit_poly(&src, order) {
-            Ok((gid, reports)) => {
-                self.after_analysis(Some(gid));
-                self.status = format!("已完成 {} 条数据的{}", reports.len(), reports[0].kind);
-                self.dialog = Some(Dialog::FitReport(reports));
-            }
-            Err(e) => self.status = e,
-        }
-    }
-
-    pub(crate) fn open_nlfit_dialog(&mut self) {
-        self.dialog = Some(Dialog::NlFit {
-            model: scicanvas_core::nlfit::Model::Gauss,
-            fixed: [(false, 0.0); 4],
-        });
-    }
-
-    fn nlfit(&mut self, model: scicanvas_core::nlfit::Model, fixed: &[Option<f64>]) {
-        let Some(src) = self.analysis_source() else { return };
-        match self.project.nlfit(&src, model, fixed) {
-            Ok((gid, reports)) => {
-                self.after_analysis(Some(gid));
-                let unconverged = reports.iter().filter(|r| !r.fit.converged).count();
-                self.status = if unconverged == 0 {
-                    format!("已完成 {} 条数据的 {} 拟合", reports.len(), model.name())
-                } else {
-                    format!("{} 拟合有 {unconverged} 条未收敛，请查看结果", model.name())
-                };
-                self.dialog = Some(Dialog::NlFitReport(reports));
-            }
-            Err(e) => self.status = e,
-        }
-    }
-
-    pub(crate) fn open_poly_dialog(&mut self) {
-        self.dialog = Some(Dialog::Poly { order: 2 });
-    }
-
-    pub(crate) fn open_smooth_dialog(&mut self) {
-        self.dialog = Some(Dialog::Smooth {
-            method: SmoothMethod::SavitzkyGolay,
-            window: 7,
-        });
-    }
-
-    pub(crate) fn open_baseline_dialog(&mut self) {
-        self.dialog = Some(Dialog::Baseline {
-            als: true,
-            log_lambda: 5.0,
-            p: 0.01,
-        });
-    }
-
-    fn subtract_baseline(&mut self, method: scicanvas_core::baseline::BaselineMethod) {
-        let Some(src) = self.analysis_source() else { return };
-        match self.project.subtract_baseline(&src, method) {
-            Ok(made) => {
-                let keys: Vec<&str> = made.iter().map(|(_, k)| k.as_str()).collect();
-                self.status = format!("已扣除基线（{}），结果在新列 {}", method.label(), keys.join(", "));
-            }
-            Err(e) => self.status = e,
-        }
-    }
-
-    pub(crate) fn open_peaks_dialog(&mut self) {
-        self.dialog = Some(Dialog::Peaks { percent: 5.0 });
-    }
-
-    fn find_peaks(&mut self, min_prominence: f64) {
-        let Some(src) = self.analysis_source() else { return };
-        match self.project.find_peaks(&src, min_prominence) {
-            Ok(made) => {
-                let mut parts = vec![];
-                for id in &made {
-                    if let Some(book) = self.project.book(*id) {
-                        parts.push(format!("{}（{} 个峰）", book.name, book.columns[0].data.len()));
-                    }
-                }
-                if let Some(id) = made.last() {
-                    self.show_item(*id);
-                }
-                self.status = format!("峰表在 {}", parts.join("、"));
-            }
-            Err(e) => self.status = e,
-        }
-    }
-
-    pub(crate) fn open_fft_dialog(&mut self) {
-        self.dialog = Some(Dialog::Fft {
-            window: scicanvas_core::fft::Window::Hann,
-        });
-    }
-
-    fn fft(&mut self, window: scicanvas_core::fft::Window) {
-        let Some(src) = self.analysis_source() else { return };
-        match self.project.fft(&src, window) {
-            Ok(made) => {
-                let names: Vec<String> = made
-                    .iter()
-                    .filter_map(|(b, _)| self.project.name_of(*b).map(str::to_owned))
-                    .collect();
-                if let Some((_, g)) = made.last() {
-                    self.show_item(*g);
-                }
-                self.status = format!("FFT 结果在 {}，幅值谱已画成图", names.join("、"));
-            }
-            Err(e) => self.status = e,
-        }
-    }
-
-    pub(crate) fn open_column_math_dialog(&mut self) {
-        let Some((id, keys)) = self.ttest_columns() else { return };
-        let Some(book) = self.project.book(id) else { return };
-        let name = |k: Option<&String>| k.and_then(|k| book.column(k)).map(|c| c.display_name().to_owned());
-        let Some(a) = name(keys.first()) else {
-            self.status = "请先单击列标题选中一列或两列".into();
-            return;
-        };
-        let b = name(keys.get(1));
-        self.dialog = Some(Dialog::ColumnMath {
-            a,
-            use_constant: b.is_none(),
-            b,
-            op: scicanvas_core::ops::ColumnOp::Sub,
-            constant: 1.0,
-        });
-    }
-
-    fn column_math(&mut self, op: scicanvas_core::ops::ColumnOp, constant: Option<f64>) {
-        use scicanvas_core::ops::Operand;
-        let Some((id, keys)) = self.ttest_columns() else { return };
-        let Some(a) = keys.first().cloned() else { return };
-        let operand = match (constant, keys.get(1)) {
-            (Some(c), _) => Operand::Constant(c),
-            (None, Some(b)) => Operand::Column(b.clone()),
-            (None, None) => {
-                self.status = "请再选中第二列，或改用常数".into();
-                return;
-            }
-        };
-        match self.project.column_math(id, &a, op, &operand) {
-            Ok(key) => self.status = format!("列运算结果在新列 {key}"),
-            Err(e) => self.status = e,
-        }
-    }
-
-    pub(crate) fn open_frequency_dialog(&mut self) {
-        // 默认范围：要统计的各列里全部数值的最小、最大值
-        let (from, to) = self
-            .analysis_source()
-            .and_then(|src| self.project.value_range(&src))
-            .unwrap_or((0.0, 1.0));
-        self.dialog = Some(Dialog::Frequency {
-            auto: true,
-            bins: 10,
-            custom: false,
-            from,
-            to,
-        });
-    }
-
-    fn frequency_counts(&mut self, bins: Option<usize>, range: Option<(f64, f64)>) {
-        let Some(src) = self.analysis_source() else { return };
-        match self.project.frequency_counts(&src, bins, range) {
-            Ok(ids) => {
-                let names: Vec<String> = ids
-                    .iter()
-                    .filter_map(|id| self.project.name_of(*id).map(str::to_owned))
-                    .collect();
-                if let Some(last) = ids.last() {
-                    self.show_item(*last);
-                }
-                self.status = format!("频数统计结果在 {}", names.join("、"));
-            }
-            Err(e) => self.status = e,
-        }
-    }
-
-    /// 当前工作簿里按点选顺序参与检验的列（没有点选列时用单元格选区覆盖的列）。
-    fn ttest_columns(&self) -> Option<(u64, Vec<String>)> {
-        let id = self.active_book_id()?;
-        let book = self.project.book(id)?;
-        let keys: Vec<String> = self
-            .picked(id)
-            .0
-            .into_iter()
-            .filter(|k| book.column(k).is_some())
-            .collect();
-        Some((id, keys))
-    }
-
-    pub(crate) fn open_fft_filter_dialog(&mut self) {
-        // 用第一条曲线的采样间隔估计奈奎斯特频率，给出默认截止频率
-        let dt = self
-            .analysis_source()
-            .and_then(|src| self.project.resolve(&src).ok())
-            .and_then(|r| {
-                let book = self.project.book(r.book_id)?;
-                let item = r.items.first()?;
-                let (xs, _, _) = scicanvas_core::ops::get_xy(book, item);
-                match item.x {
-                    Some(_) => scicanvas_core::fft::sample_interval(&xs).ok(),
-                    None => Some(1.0),
-                }
-            })
-            .unwrap_or(1.0);
-        let nyquist = 0.5 / dt;
-        self.dialog = Some(Dialog::FftFilter {
-            kind: 0,
-            lo: round_sig(nyquist / 10.0, 3),
-            hi: round_sig(nyquist / 4.0, 3),
-            nyquist,
-        });
-    }
-
-    fn fft_filter(&mut self, kind: scicanvas_core::fft::FilterKind) {
-        let Some(src) = self.analysis_source() else { return };
-        match self.project.fft_filter(&src, kind) {
-            Ok(keys) => self.status = format!("已 FFT 滤波（{}），结果在新列 {}", kind.label(), keys.join(", ")),
-            Err(e) => self.status = e,
-        }
-    }
-
-    /// 自相关（选一列）或互相关（选两列）。
-    pub(crate) fn correlation_function(&mut self) {
-        let Some((id, keys)) = self.ttest_columns() else { return };
-        match self.project.correlation_function(id, &keys) {
-            Ok((bid, gid)) => {
-                let name = self.project.name_of(bid).unwrap_or_default().to_owned();
-                self.show_item(gid);
-                self.status = format!("相关函数结果在 {name}，已画成图");
-            }
-            Err(e) => self.status = e,
-        }
-    }
-
-    /// 当前图形的各条曲线（或选中的 Y 列）插值到公共 X 上求平均。
-    pub(crate) fn average_curves(&mut self) {
-        let Some(src) = self.analysis_source() else { return };
-        match self.project.average_curves(&src) {
-            Ok((bid, gid)) => {
-                let name = self.project.name_of(bid).unwrap_or_default().to_owned();
-                self.show_item(gid);
-                self.status = format!("平均曲线在 {name}（标准差为 Y 误差列）");
-            }
-            Err(e) => self.status = e,
-        }
-    }
-
-    /// 对点选的各列逐行统计（平行样的均值、标准差等）。
-    pub(crate) fn row_stats(&mut self) {
-        let Some((id, keys)) = self.ttest_columns() else { return };
-        match self.project.row_stats(id, &keys) {
-            Ok(made) => self.status = format!("行统计结果在新列 {}（标准差已设为 Y 误差列）", made.join(", ")),
-            Err(e) => self.status = format!("{e}：请 Ctrl+单击选中平行样的各列"),
-        }
-    }
-
-    /// 多元线性回归：最后点选的列为因变量，其余为自变量。
-    pub(crate) fn regression(&mut self) {
-        let Some((id, keys)) = self.ttest_columns() else { return };
-        if keys.len() < 2 {
-            self.status = "请先点选自变量列，最后点选因变量（Y）列".into();
-            return;
-        }
-        let book = self.project.book(id).unwrap();
-        let (ykey, xkeys) = keys.split_last().unwrap();
-        let xs: Vec<Vec<f64>> = xkeys.iter().map(|k| book.column(k).unwrap().values()).collect();
-        let y = book.column(ykey).unwrap();
-        match scicanvas_core::stats::multiple_regression(&xs, &y.values()) {
-            Ok(r) => {
-                let mut rows = vec![["参数", "值", "标准误", "t", "p"].map(String::from).to_vec()];
-                let names = std::iter::once("截距".to_owned())
-                    .chain(xkeys.iter().map(|k| book.column(k).unwrap().display_name().to_owned()));
-                for (i, name) in names.enumerate() {
-                    rows.push(vec![
-                        name,
-                        fmt_num(round_sig(r.coef[i], 8)),
-                        fmt_num(round_sig(r.se[i], 6)),
-                        fmt_num(round_sig(r.t[i], 6)),
-                        fmt_num(round_sig(r.p[i], 6)),
-                    ]);
-                }
-                let note = format!(
-                    "因变量 {}，N = {}。R² = {}，调整 R² = {}，残差标准差 = {}；\nF = {}，p = {}（检验所有斜率是否同时为 0）。参数的 p 为双侧 t 检验；任一变量缺失的行已跳过。",
-                    y.display_name(),
-                    r.n,
-                    fmt_num(round_sig(r.r2, 6)),
-                    fmt_num(round_sig(r.adj_r2, 6)),
-                    fmt_num(round_sig(r.s, 6)),
-                    fmt_num(round_sig(r.f, 6)),
-                    fmt_num(round_sig(r.f_p, 6))
-                );
-                self.status = format!("多元线性回归：R² = {}", fmt_num(round_sig(r.r2, 6)));
-                self.dialog = Some(Dialog::Table {
-                    title: "多元线性回归".into(),
-                    rows,
-                    note,
-                });
-            }
-            Err(e) => self.status = e,
-        }
-    }
-
-    /// 点选的各列分别做 Shapiro–Wilk 正态性检验。
-    pub(crate) fn normality(&mut self) {
-        let Some((id, keys)) = self.ttest_columns() else { return };
-        if keys.is_empty() {
-            self.status = "请先在工作表里单击选中要检验的列".into();
-            return;
-        }
-        let book = self.project.book(id).unwrap();
-        let mut rows = vec![["列", "N", "W", "p", "α = 0.05"].map(String::from).to_vec()];
-        let mut problems = vec![];
-        for k in &keys {
-            let c = book.column(k).unwrap();
-            match scicanvas_core::stats::shapiro_wilk(&c.values()) {
-                Ok(r) => rows.push(vec![
-                    c.display_name().to_owned(),
-                    r.n.to_string(),
-                    fmt_num(round_sig(r.w, 6)),
-                    fmt_num(round_sig(r.p, 6)),
-                    if r.p < 0.05 {
-                        "偏离正态"
-                    } else {
-                        "不能拒绝正态"
-                    }
-                    .into(),
-                ]),
-                Err(e) => problems.push(format!("{}：{e}", c.display_name())),
-            }
-        }
-        if rows.len() == 1 {
-            self.status = problems.join("；");
-            return;
-        }
-        self.status = if problems.is_empty() {
-            format!("已对 {} 列做正态性检验", rows.len() - 1)
-        } else {
-            problems.join("；")
-        };
-        self.dialog = Some(Dialog::Table {
-            title: "正态性检验（Shapiro–Wilk）".into(),
-            rows,
-            note: "原假设：数据来自正态分布。p < 0.05 时认为偏离正态；缺失值已跳过，3 ≤ N ≤ 5000。".into(),
-        });
-    }
-
-    /// 点选的各列分别做 Grubbs 异常值检验（双侧，α = 0.05）。
-    pub(crate) fn grubbs(&mut self) {
-        let Some((id, keys)) = self.ttest_columns() else { return };
-        if keys.is_empty() {
-            self.status = "请先在工作表里单击选中要检验的列".into();
-            return;
-        }
-        let book = self.project.book(id).unwrap();
-        let mut rows = vec![["列", "N", "可疑值", "所在行", "G", "临界值 G(0.05)", "p", "结论"]
-            .map(String::from)
-            .to_vec()];
-        let mut problems = vec![];
-        for k in &keys {
-            let c = book.column(k).unwrap();
-            match scicanvas_core::stats::grubbs(&c.values(), 0.05) {
-                Ok(r) => rows.push(vec![
-                    c.display_name().to_owned(),
-                    r.n.to_string(),
-                    fmt_num(r.value),
-                    (r.index + 1).to_string(),
-                    fmt_num(round_sig(r.g, 6)),
-                    fmt_num(round_sig(r.critical, 6)),
-                    fmt_num(round_sig(r.p, 6)),
-                    if r.g > r.critical {
-                        "是异常值"
-                    } else {
-                        "不是异常值"
-                    }
-                    .into(),
-                ]),
-                Err(e) => problems.push(format!("{}：{e}", c.display_name())),
-            }
-        }
-        if rows.len() == 1 {
-            self.status = problems.join("；");
-            return;
-        }
-        self.status = if problems.is_empty() {
-            format!("已对 {} 列做 Grubbs 检验", rows.len() - 1)
-        } else {
-            problems.join("；")
-        };
-        self.dialog = Some(Dialog::Table {
-            title: "Grubbs 异常值检验".into(),
-            rows,
-            note: "检验离均值最远的一个点（双侧，α = 0.05），假设其余数据近似正态。\n剔除异常值后如需继续检验，请再运行一次。".into(),
-        });
-    }
-
-    /// 标准曲线反查：按点选顺序取标准浓度、标准响应、样品响应三列。
-    pub(crate) fn calibrate(&mut self) {
-        let Some((id, keys)) = self.ttest_columns() else { return };
-        if keys.len() != 3 {
-            self.status = "请按顺序 Ctrl+单击选中三列：标准浓度（X）、标准响应（Y）、样品响应".into();
-            return;
-        }
-        match self.project.calibrate(id, &keys[0], &keys[1], &keys[2]) {
-            Ok((cal, k0, k1)) => {
-                self.status = format!(
-                    "标准曲线 y = {} + {}·x，R² = {}；反查结果在新列 {k0}、{k1}",
-                    fmt_num(round_sig(cal.intercept, 6)),
-                    fmt_num(round_sig(cal.slope, 6)),
-                    fmt_num(round_sig(cal.r2, 6))
-                );
-            }
-            Err(e) => self.status = e,
-        }
-    }
-
-    /// 每个点选的列作为一组做单因素方差分析。
-    pub(crate) fn anova(&mut self) {
-        let Some((id, keys)) = self.ttest_columns() else { return };
-        if keys.len() < 2 {
-            self.status = "请先在工作表里单击选中至少两列（每列一组）".into();
-            return;
-        }
-        let book = self.project.book(id).unwrap();
-        let groups: Vec<Vec<f64>> = keys.iter().map(|k| book.column(k).unwrap().values()).collect();
-        let names: Vec<String> = keys
-            .iter()
-            .map(|k| book.column(k).unwrap().display_name().to_owned())
-            .collect();
-        match scicanvas_core::stats::one_way_anova(&groups) {
-            Ok(result) => {
-                self.status = format!(
-                    "单因素方差分析：F = {}，p = {}",
-                    round_sig(result.f, 4),
-                    round_sig(result.p, 4)
-                );
-                let tukey = scicanvas_core::stats::tukey_hsd(&result, 0.95);
-                self.dialog = Some(Dialog::Anova { result, names, tukey });
-            }
-            Err(e) => self.status = e,
-        }
-    }
-
-    /// 点选的列两两计算 Pearson、Spearman、Kendall 相关系数。
-    pub(crate) fn correlations(&mut self) {
-        use scicanvas_core::stats::{correlation, CorrMethod};
-        let Some((id, keys)) = self.ttest_columns() else { return };
-        if keys.len() < 2 {
-            self.status = "请先在工作表里单击选中至少两列（Ctrl+单击多选）".into();
-            return;
-        }
-        let book = self.project.book(id).unwrap();
-        let mut pairs = vec![];
-        let mut problems = vec![];
-        for i in 0..keys.len() {
-            for j in i + 1..keys.len() {
-                let (a, b) = (book.column(&keys[i]).unwrap(), book.column(&keys[j]).unwrap());
-                let found: Result<Vec<_>, String> = CorrMethod::ALL
-                    .iter()
-                    .map(|m| correlation(&a.values(), &b.values(), *m))
-                    .collect();
-                match found {
-                    Ok(cs) => pairs.push((a.display_name().to_owned(), b.display_name().to_owned(), cs)),
-                    Err(e) => problems.push(format!("{} 与 {}：{e}", a.display_name(), b.display_name())),
-                }
-            }
-        }
-        if pairs.is_empty() {
-            self.status = problems.join("；");
-            return;
-        }
-        self.status = if problems.is_empty() {
-            format!("已计算 {} 对列的相关系数", pairs.len())
-        } else {
-            format!("已计算 {} 对列；{}", pairs.len(), problems.join("；"))
-        };
-        self.dialog = Some(Dialog::Correlations(pairs));
-    }
-
-    pub(crate) fn open_ttest_dialog(&mut self) {
-        let Some((id, keys)) = self.ttest_columns() else { return };
-        let book = self.project.book(id).unwrap();
-        let columns = keys
-            .iter()
-            .take(2)
-            .map(|k| book.column(k).unwrap().display_name().to_owned())
-            .collect();
-        self.dialog = Some(Dialog::TTest {
-            columns,
-            kind: if keys.len() >= 2 { 1 } else { 0 },
-            mu: 0.0,
-            equal_var: false,
-            level: 0.95,
-        });
-    }
-
-    fn run_ttest(&mut self, kind: scicanvas_core::stats::TTestKind, level: f64) {
-        let Some((id, keys)) = self.ttest_columns() else { return };
-        let book = self.project.book(id).unwrap();
-        let values = |k: Option<&String>| k.and_then(|k| book.column(k)).map(|c| c.values()).unwrap_or_default();
-        let names = keys
-            .iter()
-            .take(2)
-            .map(|k| book.column(k).unwrap().display_name().to_owned())
-            .collect();
-        match scicanvas_core::stats::t_test(kind, &values(keys.first()), &values(keys.get(1)), level) {
-            Ok(result) => {
-                self.status = format!(
-                    "{}：t = {}，p = {}",
-                    kind.label(),
-                    round_sig(result.t, 4),
-                    round_sig(result.p, 4)
-                );
-                self.dialog = Some(Dialog::TTestReport { result, names });
-            }
-            Err(e) => self.status = e,
-        }
-    }
-
-    pub(crate) fn open_interpolate_dialog(&mut self) {
-        let (from, to) = self
-            .analysis_source()
-            .and_then(|src| self.project.x_range(&src))
-            .unwrap_or((0.0, 1.0));
-        self.dialog = Some(Dialog::Interpolate {
-            method: scicanvas_core::interpolate::InterpMethod::Spline,
-            points: 100,
-            custom: false,
-            from,
-            to,
-        });
-    }
-
-    fn interpolate(
-        &mut self,
-        method: scicanvas_core::interpolate::InterpMethod,
-        points: usize,
-        range: Option<(f64, f64)>,
-    ) {
-        let Some(src) = self.analysis_source() else { return };
-        match self.project.interpolate(&src, method, points, range) {
-            Ok((gid, keys)) => {
-                self.show_item(gid);
-                self.status = format!("已{}插值，结果在新列 {}", method.label(), keys.join(", "));
-            }
-            Err(e) => self.status = e,
-        }
-    }
-
-    pub(crate) fn open_normalize_dialog(&mut self) {
-        self.dialog = Some(Dialog::Normalize {
-            method: NormalizeMethod::MinMax,
-        });
-    }
-
-    fn smooth(&mut self, method: SmoothMethod, window: usize) {
-        let Some(src) = self.analysis_source() else { return };
-        match self.project.smooth(&src, method, window) {
-            Ok(keys) => self.status = format!("已平滑，结果在新列 {}", keys.join(", ")),
-            Err(e) => self.status = e,
-        }
-    }
-
-    pub(crate) fn differentiate(&mut self) {
-        let Some(src) = self.analysis_source() else { return };
-        match self.project.differentiate(&src) {
-            Ok(keys) => self.status = format!("已求导数，结果在新列 {}", keys.join(", ")),
-            Err(e) => self.status = e,
-        }
-    }
-
-    pub(crate) fn integrate(&mut self) {
-        let Some(src) = self.analysis_source() else { return };
-        match self.project.integrate(&src) {
-            Ok((keys, areas)) => {
-                self.status = format!("已积分，累积积分在新列 {}", keys.join(", "));
-                self.dialog = Some(Dialog::Areas(areas));
-            }
-            Err(e) => self.status = e,
-        }
-    }
-
-    fn normalize(&mut self, method: NormalizeMethod) {
-        let Some(src) = self.analysis_source() else { return };
-        match self.project.normalize(&src, method) {
-            Ok(keys) => self.status = format!("已归一化，结果在新列 {}", keys.join(", ")),
-            Err(e) => self.status = e,
-        }
-    }
-
-    pub(crate) fn stats_on_columns(&mut self) {
-        let Some(src) = self.analysis_source() else { return };
-        match self.project.stats_on_columns(&src) {
-            Ok(id) => {
-                let name = self.project.name_of(id).unwrap_or("").to_string();
-                self.show_item(id);
-                self.status = format!("统计结果在 {}（标准差为样本标准差，分位数用线性插值）", name);
-            }
-            Err(e) => self.status = e,
-        }
-    }
-
-    fn dialogs(&mut self, ctx: &egui::Context) {
-        let Some(d) = self.dialog.as_mut() else { return };
-        match dialogs::show(ctx, d, &self.pal) {
-            dialogs::Action::None => {}
-            dialogs::Action::Close => self.dialog = None,
-            dialogs::Action::ColumnProps(edit) => {
-                self.finish_edit();
-                self.begin_edit("列属性");
-                match self.apply_column_props(edit) {
-                    Ok(()) => {
-                        self.dialog = None;
-                        self.history.changed();
-                    }
-                    Err(e) => {
-                        if let Some(Dialog::ColumnProps { error, .. }) = &mut self.dialog {
-                            *error = Some(e);
-                        }
-                    }
-                }
-                self.finish_edit();
-            }
-            dialogs::Action::ConvertText(book, key, row, value) => {
-                self.finish_edit();
-                self.begin_edit("转换为文本列并写入");
-                if let Some(column) = self
-                    .project
-                    .book_mut(book)
-                    .and_then(|b| b.columns.iter_mut().find(|c| c.key == key))
-                {
-                    column.data = column.data.converted(scicanvas_core::DataKind::Text).unwrap();
-                    column.set(row, value);
-                    self.history.changed();
-                    self.status = format!("列 {key} 已转换为文本；已有内容保留");
-                }
-                self.dialog = None;
-                self.finish_edit();
-            }
-            dialogs::Action::Fit(order) => {
-                self.finish_edit();
-                self.begin_edit("多项式拟合");
-                self.dialog = None;
-                self.fit(order);
-                self.history.changed();
-                self.finish_edit();
-            }
-            dialogs::Action::Smooth(m, w) => {
-                self.finish_edit();
-                self.begin_edit("平滑");
-                self.dialog = None;
-                self.smooth(m, w);
-                self.history.changed();
-                self.finish_edit();
-            }
-            dialogs::Action::Interpolate(method, points, range) => {
-                self.finish_edit();
-                self.begin_edit("插值");
-                self.dialog = None;
-                self.interpolate(method, points, range);
-                self.history.changed();
-                self.finish_edit();
-            }
-            dialogs::Action::TTest(kind, level) => self.run_ttest(kind, level),
-            dialogs::Action::NlFit(model, fixed) => {
-                self.finish_edit();
-                self.begin_edit("非线性拟合");
-                self.dialog = None;
-                self.nlfit(model, &fixed);
-                self.history.changed();
-                self.finish_edit();
-            }
-            dialogs::Action::SetValues(formula) => {
-                self.finish_edit();
-                self.begin_edit("设置列值");
-                if self.set_column_values(&formula) {
-                    self.dialog = None;
-                    self.history.changed();
-                }
-                self.finish_edit();
-            }
-            dialogs::Action::Fill(kind, rows) => {
-                self.finish_edit();
-                self.begin_edit("填充数据序列");
-                self.dialog = None;
-                self.fill_sequence(kind, rows);
-                self.history.changed();
-                self.finish_edit();
-            }
-            dialogs::Action::FftFilter(kind) => {
-                self.finish_edit();
-                self.begin_edit("FFT 滤波");
-                self.dialog = None;
-                self.fft_filter(kind);
-                self.history.changed();
-                self.finish_edit();
-            }
-            dialogs::Action::Baseline(method) => {
-                self.finish_edit();
-                self.begin_edit("扣除基线");
-                self.dialog = None;
-                self.subtract_baseline(method);
-                self.history.changed();
-                self.finish_edit();
-            }
-            dialogs::Action::Peaks(min_prominence) => {
-                self.finish_edit();
-                self.begin_edit("寻峰");
-                self.dialog = None;
-                self.find_peaks(min_prominence);
-                self.history.changed();
-                self.finish_edit();
-            }
-            dialogs::Action::Fft(window) => {
-                self.finish_edit();
-                self.begin_edit("FFT");
-                self.dialog = None;
-                self.fft(window);
-                self.history.changed();
-                self.finish_edit();
-            }
-            dialogs::Action::ColumnMath(op, constant) => {
-                self.finish_edit();
-                self.begin_edit("列运算");
-                self.dialog = None;
-                self.column_math(op, constant);
-                self.history.changed();
-                self.finish_edit();
-            }
-            dialogs::Action::Frequency(bins, range) => {
-                self.finish_edit();
-                self.begin_edit("频数统计");
-                self.dialog = None;
-                self.frequency_counts(bins, range);
-                self.history.changed();
-                self.finish_edit();
-            }
-            dialogs::Action::ExportPng(dpi) => {
-                self.dialog = None;
-                self.export_png(dpi);
-            }
-            dialogs::Action::Normalize(m) => {
-                self.finish_edit();
-                self.begin_edit("归一化");
-                self.dialog = None;
-                self.normalize(m);
-                self.history.changed();
-                self.finish_edit();
-            }
-        }
-    }
-
-    // ---------------------------------------------------------------- 输入
-
-    fn shortcuts(&mut self, ctx: &egui::Context) {
-        use egui::{Key, Modifiers};
-        // 正在输入文字时，Ctrl+Z 留给 TextEdit 自己的文字历史。
-        let text_focus = ctx
-            .memory(|m| m.focused())
-            .is_some_and(|id| egui::TextEdit::load_state(ctx, id).is_some());
-        if !text_focus {
-            let redo_mod = Modifiers {
-                shift: true,
-                ..Modifiers::COMMAND
-            };
-            let action = ctx.input_mut(|i| {
-                if i.consume_key(redo_mod, Key::Z) || i.consume_key(Modifiers::COMMAND, Key::Y) {
-                    Some("edit.redo")
-                } else if i.consume_key(Modifiers::COMMAND, Key::Z) {
-                    Some("edit.undo")
-                } else {
-                    None
-                }
-            });
-            if let Some(id) = action {
-                self.run_command(id);
-            }
-        }
-        // 命令面板打开时，方向键、回车由面板自己处理
-        let keys: [(Modifiers, Key, &str); 9] = [
-            (Modifiers::COMMAND, Key::N, "book.new"),
-            (Modifiers::COMMAND, Key::O, "file.open"),
-            (Modifiers::COMMAND, Key::S, "file.save"),
-            (Modifiers::COMMAND, Key::I, "file.import"),
-            (Modifiers::COMMAND, Key::E, "graph.export"),
-            (Modifiers::COMMAND, Key::J, "graph.copy"),
-            (Modifiers::COMMAND, Key::K, "palette.open"),
-            (Modifiers::COMMAND, Key::F1, "ribbon.toggle"),
-            (Modifiers::NONE, Key::F1, "help.show"),
-        ];
-        let hit: Vec<&str> = ctx.input_mut(|inp| {
-            keys.iter()
-                .filter(|(m, k, _)| inp.consume_key(*m, *k))
-                .map(|(_, _, id)| *id)
-                .collect()
-        });
-        for id in hit {
-            self.run_command(id);
-        }
-        if self.ui.backstage && ctx.input(|i| i.key_pressed(Key::Escape)) {
-            self.ui.backstage = false;
-        }
-    }
-
-    // ---------------------------------------------------------------- 界面
-
-    fn stats_text(&self) -> String {
-        let Some(id) = self.active else { return String::new() };
-        let Some(b) = self.project.book(id) else {
-            return String::new();
-        };
-        let sel = self.selected_keys(id);
-        let v: Vec<f64> = match self.multi_range(id) {
-            Some(r) if sel.is_empty() && !b.columns.is_empty() => b.columns[r.c0()..=r.c1().min(b.columns.len() - 1)]
-                .iter()
-                .flat_map(|c| (r.r0()..=r.r1()).map(move |i| c.data.f64_at(i).unwrap_or(f64::NAN)))
-                .filter(|x| x.is_finite())
-                .collect(),
-            _ => b
-                .columns
-                .iter()
-                .filter(|c| sel.contains(&c.key))
-                .flat_map(|c| c.values())
-                .filter(|x| x.is_finite())
-                .collect(),
-        };
-        if v.is_empty() {
-            return String::new();
-        }
-        let sum: f64 = v.iter().sum();
-        let min = v.iter().copied().fold(f64::INFINITY, f64::min);
-        let max = v.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-        format!(
-            "平均值 = {}   总和 = {}   计数 = {}   最小 = {}   最大 = {}",
-            scicanvas_core::fmt_num(sum / v.len() as f64),
-            scicanvas_core::fmt_num(sum),
-            v.len(),
-            scicanvas_core::fmt_num(min),
-            scicanvas_core::fmt_num(max)
-        )
-    }
-
-    fn status_bar(&mut self, ui: &mut egui::Ui) {
-        let stats = self.stats_text();
-        ui.horizontal(|ui| {
-            ui.label(self.status.as_str());
-            ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                ui.label(RichText::new(stats).monospace().weak());
-            });
-        });
-    }
-
-    fn graph_ui(&mut self, ui: &mut egui::Ui, id: u64) {
-        let Some(g) = self.project.graph(id) else {
-            return;
-        };
-        let out = plot::show(ui, g, &self.project, self.layer_index(id));
-        if let Some(index) = out.selected_layer {
-            self.select_layer(id, index);
-        }
-        let rect = out.response.rect;
-
-        // 右下角显示鼠标处的坐标
-        if let Some((x, y)) = out.hover {
-            let text = format!(
-                "图层 {} · x = {}   y = {}",
-                out.hover_layer.unwrap_or(0) + 1,
-                round_sig(x, 4),
-                round_sig(y, 4)
-            );
-            ui.painter().text(
-                rect.right_bottom() + egui::vec2(-8.0, -6.0),
-                egui::Align2::RIGHT_BOTTOM,
-                text,
-                egui::FontId::proportional(11.5),
-                egui::Color32::from_gray(110),
-            );
-        } else if out.zoomed {
-            ui.painter().text(
-                rect.right_bottom() + egui::vec2(-8.0, -6.0),
-                egui::Align2::RIGHT_BOTTOM,
-                "双击恢复原始范围",
-                egui::FontId::proportional(11.5),
-                egui::Color32::from_gray(140),
-            );
-        }
-
-        let mut act: Option<&'static str> = None;
-        let resp = out.response;
-        resp.context_menu(|ui| {
-            for (cid, label) in [
-                ("graph.props", "绘图属性…"),
-                ("graph.copy", "复制图形"),
-                ("graph.export", "导出 SVG…"),
-                ("graph.export_png", "导出 PNG…"),
-                ("", ""),
-                ("graph.legend", "图例"),
-                ("graph.grid", "网格线"),
-                ("graph.logx", "X 对数刻度"),
-                ("graph.logy", "Y 对数刻度"),
-            ] {
-                if cid.is_empty() {
-                    ui.separator();
-                    continue;
-                }
-                if ui.button(label).clicked() {
-                    act = Some(cid);
-                    ui.close_menu();
-                }
-            }
-            ui.separator();
-            if ui.button("恢复原始范围").clicked() {
-                plot::reset_view(ui.ctx(), id, self.layer_index(id));
-                ui.close_menu();
-            }
-        });
-        if let Some(cid) = act {
-            self.active = Some(id);
-            self.run_command(cid);
-        }
-    }
-
-    fn props_window(&mut self, ctx: &egui::Context) {
-        let Some(gid) = self.props_for else { return };
-        let Some(g0) = self.project.graph(gid) else {
-            self.props_for = None;
-            return;
-        };
-        let graph_before = g0.clone();
-        let column_options: HashMap<u64, Vec<(String, String)>> = self
-            .project
-            .books
-            .iter()
-            .map(|b| {
-                (
-                    b.id,
-                    b.columns
-                        .iter()
-                        .map(|c| {
-                            let label = if c.long_name.trim().is_empty() {
-                                c.key.clone()
-                            } else {
-                                format!("{} · {}", c.key, c.long_name.trim())
-                            };
-                            (c.key.clone(), label)
-                        })
-                        .collect(),
-                )
-            })
-            .collect();
-        let mut props_layer = self.layer_index(gid);
-        let title = format!("绘图属性 — {}", g0.name);
-        let history_group = &mut self.history_group;
-        let project = &mut self.project;
-
-        let mut open = true;
-        let mut close = false;
-        egui::Window::new(title)
-            .id(egui::Id::new("scicanvas-props"))
-            .open(&mut open)
-            .collapsible(false)
-            .resizable(false)
-            .default_width(360.0)
-            // 内容较长：默认高到屏幕高度的 85%，再长时滚动
-            .default_height(ctx.screen_rect().height() * 0.85)
-            .vscroll(true)
-            .show(ctx, |ui| {
-                let Some(graph) = project.graph_mut(gid) else { return };
-                ui.horizontal(|ui| {
-                    ui.label("页面 mm");
-                    edit_group(
-                        &ui.add(
-                            egui::DragValue::new(&mut graph.page.width_mm)
-                                .range(1.0..=1000.0)
-                                .speed(0.5),
-                        ),
-                        history_group,
-                    );
-                    ui.label("×");
-                    edit_group(
-                        &ui.add(
-                            egui::DragValue::new(&mut graph.page.height_mm)
-                                .range(1.0..=1000.0)
-                                .speed(0.5),
-                        ),
-                        history_group,
-                    );
-                });
-                ui.horizontal(|ui| {
-                    ui.label("排版列数");
-                    let n = graph.page.layers().len();
-                    edit_group(
-                        &ui.add(egui::DragValue::new(&mut graph.page.columns).range(1..=n)),
-                        history_group,
-                    );
-                    egui::ComboBox::from_id_salt("props-layer")
-                        .selected_text(format!("图层 {}", props_layer + 1))
-                        .show_ui(ui, |ui| {
-                            for i in 0..graph.page.layers().len() {
-                                ui.selectable_value(&mut props_layer, i, format!("图层 {}", i + 1));
-                            }
-                        });
-                });
-                let g = &mut graph.page.layers_mut()[props_layer];
-                ui.horizontal(|ui| {
-                    let mut custom = g.placement.is_some();
-                    if ui.checkbox(&mut custom, "自定义图层位置").changed() {
-                        g.placement = custom.then(scicanvas_core::page::LayerRect::default);
-                    }
-                    ui.checkbox(&mut g.transparent, "透明图层背景");
-                });
-                if let Some(rect) = &mut g.placement {
-                    ui.label("位置和尺寸（页面比例，0–1）");
-                    egui::Grid::new(("layer-rectangle", gid, props_layer))
-                        .num_columns(4)
-                        .show(ui, |ui| {
-                            let min_width = f64::MIN_POSITIVE.min(rect.width);
-                            let min_height = f64::MIN_POSITIVE.min(rect.height);
-                            ui.label("X");
-                            edit_group(
-                                &ui.add(
-                                    egui::DragValue::new(&mut rect.x)
-                                        .range(0.0..=1.0 - rect.width)
-                                        .speed(0.01),
-                                ),
-                                history_group,
-                            );
-                            ui.label("Y");
-                            edit_group(
-                                &ui.add(
-                                    egui::DragValue::new(&mut rect.y)
-                                        .range(0.0..=1.0 - rect.height)
-                                        .speed(0.01),
-                                ),
-                                history_group,
-                            );
-                            ui.end_row();
-                            ui.label("宽");
-                            edit_group(
-                                &ui.add(
-                                    egui::DragValue::new(&mut rect.width)
-                                        .range(min_width..=1.0 - rect.x)
-                                        .speed(0.01),
-                                ),
-                                history_group,
-                            );
-                            ui.label("高");
-                            edit_group(
-                                &ui.add(
-                                    egui::DragValue::new(&mut rect.height)
-                                        .range(min_height..=1.0 - rect.y)
-                                        .speed(0.01),
-                                ),
-                                history_group,
-                            );
-                            ui.end_row();
-                        });
-                }
-                let cols = g
-                    .book_id
-                    .and_then(|id| column_options.get(&id))
-                    .cloned()
-                    .unwrap_or_default();
-                egui::Grid::new(("props-grid", gid, props_layer))
-                    .num_columns(2)
-                    .spacing([12.0, 8.0])
-                    .show(ui, |ui| {
-                        ui.label("图类型");
-                        egui::ComboBox::from_id_salt("props-type")
-                            .selected_text(g.plot_type.label())
-                            .show_ui(ui, |ui| {
-                                for t in PlotType::ALL {
-                                    let mut next = g.spec.clone();
-                                    let valid = next.set_plot_type(t);
-                                    if ui
-                                        .add_enabled(
-                                            valid.is_ok(),
-                                            egui::SelectableLabel::new(g.plot_type == t, t.label()),
-                                        )
-                                        .on_hover_text(valid.as_ref().err().map_or(t.label(), String::as_str))
-                                        .clicked()
-                                    {
-                                        g.spec = next;
-                                    }
-                                }
-                            });
-                        ui.end_row();
-
-                        if g.plot_type == PlotType::HorizontalBar {
-                            ui.label("条形方向");
-                            ui.label("X 列为纵向位置，Y 列为横向数值");
-                            ui.end_row();
-                        }
-                        ui.label("统计变换");
-                        egui::ComboBox::from_id_salt("props-transform")
-                            .selected_text(if g.transform == scicanvas_core::plotspec::Transform::Mean {
-                                "按 X 求均值"
-                            } else {
-                                "原始数据"
-                            })
-                            .show_ui(ui, |ui| {
-                                ui.selectable_value(
-                                    &mut g.transform,
-                                    scicanvas_core::plotspec::Transform::Identity,
-                                    "原始数据",
-                                );
-                                ui.selectable_value(
-                                    &mut g.transform,
-                                    scicanvas_core::plotspec::Transform::Mean,
-                                    "按 X 求均值",
-                                );
-                            });
-                        ui.end_row();
-
-                        ui.label("X 列");
-                        let x_text = g
-                            .x_key
-                            .as_ref()
-                            .and_then(|k| cols.iter().find(|(kk, _)| kk == k))
-                            .map(|(_, l)| l.clone())
-                            .unwrap_or_else(|| "行号".into());
-                        egui::ComboBox::from_id_salt("props-x")
-                            .selected_text(x_text)
-                            .show_ui(ui, |ui| {
-                                ui.selectable_value(&mut g.x_key, None, "行号");
-                                for (k, l) in &cols {
-                                    ui.selectable_value(&mut g.x_key, Some(k.clone()), l.as_str());
-                                }
-                            });
-                        ui.end_row();
-
-                        ui.label("Y 列");
-                        ui.vertical(|ui| {
-                            for (k, l) in &cols {
-                                let mut on = g.y_keys.contains(k);
-                                if ui.checkbox(&mut on, l.as_str()).changed() {
-                                    if on {
-                                        g.y_keys.push(k.clone());
-                                    } else {
-                                        g.y_keys.retain(|x| x != k);
-                                    }
-                                }
-                            }
-                        });
-                        ui.end_row();
-
-                        if g.plot_type == PlotType::FloatingBar {
-                            ui.label("浮动柱下端");
-                            crate::builder::floating_columns(ui, &mut g.spec, &cols);
-                            ui.end_row();
-                        }
-                        ui.label("图标题");
-                        edit_group(
-                            &ui.add(egui::TextEdit::singleline(&mut g.title).hint_text("（无）")),
-                            history_group,
-                        );
-                        ui.end_row();
-                        ui.label("X 轴标题");
-                        edit_group(
-                            &ui.add(egui::TextEdit::singleline(&mut g.x_title).hint_text("自动：长名称 (单位)")),
-                            history_group,
-                        );
-                        ui.end_row();
-                        ui.label("Y 轴标题");
-                        edit_group(
-                            &ui.add(egui::TextEdit::singleline(&mut g.y_title).hint_text("自动：长名称 (单位)")),
-                            history_group,
-                        );
-                        ui.end_row();
-
-                        ui.label("X 范围");
-                        ui.horizontal(|ui| {
-                            ui.checkbox(&mut g.x_auto, "自动");
-                            edit_group(
-                                &ui.add_enabled(!g.x_auto, egui::DragValue::new(&mut g.x_min).speed(0.1)),
-                                history_group,
-                            );
-                            ui.label("到");
-                            edit_group(
-                                &ui.add_enabled(!g.x_auto, egui::DragValue::new(&mut g.x_max).speed(0.1)),
-                                history_group,
-                            );
-                            ui.checkbox(&mut g.x_log, "对数");
-                        });
-                        ui.end_row();
-                        ui.label("Y 范围");
-                        ui.horizontal(|ui| {
-                            ui.checkbox(&mut g.y_auto, "自动");
-                            edit_group(
-                                &ui.add_enabled(!g.y_auto, egui::DragValue::new(&mut g.y_min).speed(0.1)),
-                                history_group,
-                            );
-                            ui.label("到");
-                            edit_group(
-                                &ui.add_enabled(!g.y_auto, egui::DragValue::new(&mut g.y_max).speed(0.1)),
-                                history_group,
-                            );
-                            ui.checkbox(&mut g.y_log, "对数");
-                        });
-                        ui.end_row();
-
-                        ui.label("线宽");
-                        edit_group(&ui.add(egui::Slider::new(&mut g.line_width, 0.5..=6.0)), history_group);
-                        ui.end_row();
-                        ui.label("符号大小");
-                        edit_group(
-                            &ui.add(egui::Slider::new(&mut g.symbol_size, 2.0..=20.0)),
-                            history_group,
-                        );
-                        ui.end_row();
-                        if g.plot_type == PlotType::Area {
-                            ui.label("填充透明度");
-                            edit_group(
-                                &ui.add(egui::Slider::new(&mut g.area_opacity, 0.0..=1.0).text("面积填充")),
-                                history_group,
-                            );
-                            ui.end_row();
-                        }
-                        ui.label("显示");
-                        ui.horizontal(|ui| {
-                            ui.checkbox(&mut g.grid, "网格线");
-                            ui.checkbox(&mut g.legend, "图例");
-                            ui.checkbox(&mut g.labels.visible, "数据标签");
-                        });
-                        ui.end_row();
-                        if g.labels.visible {
-                            ui.label("标签来源");
-                            use scicanvas_core::page::LabelSource;
-                            egui::ComboBox::from_id_salt("label-source")
-                                .selected_text(match g.labels.source {
-                                    LabelSource::Value => "Y 数值",
-                                    LabelSource::XY => "X / Y",
-                                    LabelSource::Row => "原始行号",
-                                    LabelSource::Column => "指定列文本",
-                                })
-                                .show_ui(ui, |ui| {
-                                    for (value, label) in [
-                                        (LabelSource::Value, "Y 数值"),
-                                        (LabelSource::XY, "X / Y"),
-                                        (LabelSource::Row, "原始行号"),
-                                        (LabelSource::Column, "指定列文本"),
-                                    ] {
-                                        ui.selectable_value(&mut g.labels.source, value, label);
-                                    }
-                                });
-                            ui.end_row();
-                            if g.labels.source == LabelSource::Column {
-                                ui.label("标签列");
-                                egui::ComboBox::from_id_salt("label-column")
-                                    .selected_text(g.labels.column.as_deref().unwrap_or("请选择"))
-                                    .show_ui(ui, |ui| {
-                                        for (k, name) in &cols {
-                                            ui.selectable_value(&mut g.labels.column, Some(k.clone()), name);
-                                        }
-                                    });
-                                ui.end_row();
-                            }
-                            if g.transform == scicanvas_core::plotspec::Transform::Mean {
-                                ui.label("均值视图");
-                                ui.label("使用数值或 X/Y 标签");
-                                ui.end_row();
-                            }
-                            ui.label("标签字号");
-                            edit_group(
-                                &ui.add(egui::Slider::new(&mut g.labels.size, 6.0..=32.0)),
-                                history_group,
-                            );
-                            ui.end_row();
-                            ui.label("标签偏移");
-                            edit_group(
-                                &ui.add(egui::Slider::new(&mut g.labels.offset, 0.0..=40.0)),
-                                history_group,
-                            );
-                            ui.end_row();
-                        }
-                        ui.label("误差棒");
-                        ui.checkbox(&mut g.error_bars.visible, "显示 X / Y 误差");
-                        ui.end_row();
-                        ui.label("误差端帽");
-                        edit_group(
-                            &ui.add(egui::Slider::new(&mut g.error_bars.cap, 0.0..=20.0)),
-                            history_group,
-                        );
-                        ui.end_row();
-                        ui.label("误差线宽");
-                        edit_group(
-                            &ui.add(egui::Slider::new(&mut g.error_bars.width, 0.5..=6.0)),
-                            history_group,
-                        );
-                        ui.end_row();
-                    });
-                ui.add_space(6.0);
-                ui.label(
-                    RichText::new("修改即时生效。导出 SVG 时使用这里的设置。")
-                        .small()
-                        .weak(),
-                );
-                ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
-                    if ui.button("关闭").clicked() {
-                        close = true;
-                    }
-                });
-            });
-        if self.project.graph(gid).unwrap() != &graph_before {
-            if !self.history.is_pending() {
-                let after = std::mem::replace(self.project.graph_mut(gid).unwrap(), graph_before);
-                self.begin_edit("绘图属性");
-                *self.project.graph_mut(gid).unwrap() = after;
-            }
-            self.history.changed();
-        }
-        if props_layer != self.layer_index(gid) {
-            self.select_layer(gid, props_layer);
-        }
-        if !open || close {
-            self.props_for = None;
-        }
-    }
-
-    fn help_window(&mut self, ctx: &egui::Context) {
-        egui::Window::new("快速上手")
-            .id(egui::Id::new("scicanvas-help"))
-            .open(&mut self.show_help)
-            .collapsible(false)
-            .default_width(460.0)
-            .show(ctx, |ui| {
-                ui.label("1. 功能区：顶部选项卡按任务分组。激活工作簿时出现紫色的“工作表”选项卡，激活图形时出现“图形”选项卡。双击选项卡或按 Ctrl+F1 折叠功能区；Ctrl+K 搜索任何命令。");
-                ui.label("2. 输入数据：在工作簿里直接键入；或从 Excel 复制一块区域，单击单元格后 Ctrl+V，首行是文字时自动作为长名称。也可以 文件 → 导入数据。");
-                ui.label("3. 选列与绘图：单击列标题，Ctrl 或 Shift 多选；再点“绘图”选项卡里的图类型。没有选列时使用全部 Y 列。");
-                ui.label("4. 分析：“分析”选项卡里有线性 / 多项式拟合、平滑、微分、积分、归一化，“统计”选项卡里有列统计。对当前图形的曲线，或工作簿里选中的 Y 列计算，结果写进紧挨原列的新列。");
-                ui.label("5. 导出与保存：文件 → 导出图形（SVG）；文件 → 保存项目（.scv，可用解压软件查看其中的表格和图）。");
-            });
-    }
-
-    fn confirm_window(&mut self, ctx: &egui::Context) {
-        let Some(id) = self.confirm_delete else { return };
-        let name = self.project.name_of(id).unwrap_or("").to_string();
-        let mut decision: Option<bool> = None;
-        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            decision = Some(false);
-        }
-        let weak = self.pal.weak;
-        dialogs::window(ctx, "删除").show(ctx, |ui| {
-            ui.vertical_centered(|ui| {
-                ui.add_space(4.0);
-                ui.label(RichText::new(format!("确定删除“{name}”吗？")).size(14.0).strong());
-                ui.add_space(4.0);
-                ui.label(RichText::new("删除后可以用“撤销”（Ctrl+Z）恢复。").color(weak));
-            });
-            ui.add_space(10.0);
-            ui.separator();
-            ui.add_space(4.0);
-            ui.horizontal(|ui| {
-                dialogs::center_buttons(ui, 2);
-                let danger = egui::Button::new(RichText::new("删除").color(egui::Color32::WHITE).strong())
-                    .fill(egui::Color32::from_rgb(0xC4, 0x2B, 0x1C))
-                    .min_size(dialogs::BUTTON);
-                if ui.add(danger).clicked() {
-                    decision = Some(true);
-                }
-                if ui.add(dialogs::plain("取消")).clicked() {
-                    decision = Some(false);
-                }
-            });
-        });
-        match decision {
-            Some(true) => {
-                self.finish_edit();
-                self.confirm_delete = None;
-                self.delete_item(id);
-                self.finish_edit();
-            }
-            Some(false) => self.confirm_delete = None,
-            None => {}
-        }
     }
 }
 
@@ -2277,6 +1375,19 @@ impl eframe::App for SciApp {
 
 impl SciApp {
     fn ui_frame(&mut self, ctx: &egui::Context) {
+        let reset = egui::Modifiers {
+            shift: true,
+            ..egui::Modifiers::COMMAND
+        };
+        if ctx.input_mut(|input| input.consume_key(reset, egui::Key::R)) {
+            self.run_command("win.reset");
+        }
+        if std::mem::take(&mut self.pending_window_reset) {
+            dialogs::reset_docks(ctx);
+            ctx.memory_mut(|memory| memory.reset_areas());
+        }
+        dialogs::begin_docks(ctx);
+        crate::chrome::edges(ctx, &self.pal);
         self.dropped_files(ctx);
         if self.last_history_group.is_some()
             && ctx.input(|i| {
@@ -2316,20 +1427,55 @@ impl SciApp {
                 self.show_item(id);
             }
         } else {
-            if self.show_explorer {
+            let left_docked = dialogs::has_docks(ctx, dialogs::DockSide::Left);
+            if self.show_explorer || left_docked {
+                let explorer = self.show_explorer;
                 egui::SidePanel::left("explorer")
                     .frame(
                         egui::Frame::side_top_panel(&style)
                             .fill(style.visuals.window_fill)
-                            .inner_margin(egui::Margin::symmetric(10.0, 6.0)),
+                            .inner_margin(egui::Margin::symmetric(6.0, 4.0)),
                     )
                     .resizable(true)
                     .default_width(190.0)
-                    .show(ctx, |ui| self.explorer(ui));
+                    .width_range(if left_docked { 320.0..=600.0 } else { 140.0..=600.0 })
+                    .show(ctx, |ui| {
+                        if explorer {
+                            if left_docked {
+                                egui::TopBottomPanel::top("explorer-tree")
+                                    .resizable(true)
+                                    .default_height(200.0)
+                                    .height_range(80.0..=(ui.available_height() * 0.65).max(80.0))
+                                    .show_inside(ui, |ui| {
+                                        egui::ScrollArea::vertical().show(ui, |ui| self.explorer(ui));
+                                    });
+                            } else {
+                                self.explorer(ui);
+                            }
+                        } else {
+                            self.explorer_focus = false;
+                        }
+                        let mut rect = ui.available_rect_before_wrap();
+                        if !left_docked {
+                            rect = ui.max_rect();
+                            rect.min.y += rect.height().min(200.0);
+                        }
+                        dialogs::place_docks(ui, dialogs::DockSide::Left, rect);
+                    });
             } else {
                 self.explorer_focus = false;
             }
+            if dialogs::has_docks(ctx, dialogs::DockSide::Right) {
+                egui::SidePanel::right("settings-right")
+                    .resizable(true)
+                    .default_width(360.0)
+                    .width_range(320.0..=600.0)
+                    .show(ctx, |ui| {
+                        dialogs::place_docks(ui, dialogs::DockSide::Right, ui.available_rect_before_wrap())
+                    });
+            }
             // 子窗口放在面板之间剩下的区域里（Origin 的 MDI 工作区）
+            self.refresh_book_preview();
             self.child_windows(ctx);
             egui::CentralPanel::default()
                 .frame(egui::Frame::none().fill(self.pal.workspace))
@@ -2346,13 +1492,18 @@ impl SciApp {
         }
 
         self.props_window(ctx);
+        self.object_window(ctx);
         self.help_window(ctx);
         self.confirm_window(ctx);
         self.dialogs(ctx);
         if crate::builder::show(ctx, &self.project, &mut self.plot_draft) {
             self.run_command("plot.apply_spec");
         }
+        dialogs::end_docks(ctx);
         self.finish_frame_edit(self.history_group);
+        if std::mem::take(&mut self.pending_repaint) {
+            ctx.request_repaint();
+        }
 
         if self.quit {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
@@ -2361,2005 +1512,13 @@ impl SciApp {
 }
 
 #[cfg(test)]
-mod history_tests {
-    use super::*;
-
-    fn app() -> SciApp {
-        SciApp::initial(theme::palette(egui::Theme::Light))
-    }
-
-    fn roundtrip(app: &mut SciApp, before: &Project) {
-        let after = app.project.clone();
-        assert_ne!(&after, before);
-        app.run_command("edit.undo");
-        assert_eq!(&app.project, before);
-        app.run_command("edit.redo");
-        assert_eq!(app.project, after);
-    }
-
-    struct ExplorerUi {
-        ctx: egui::Context,
-        time: f64,
-        /// Draws the explorer as a side panel followed by this active sheet, as the app does.
-        sheet: Option<SheetState>,
-    }
-
-    impl ExplorerUi {
-        fn new() -> Self {
-            let ctx = egui::Context::default();
-            crate::fonts::setup(&ctx);
-            ctx.style_mut(|s| s.animation_time = 0.0);
-            Self {
-                ctx,
-                time: 0.0,
-                sheet: None,
-            }
-        }
-
-        fn frame(&mut self, app: &mut SciApp, events: Vec<egui::Event>) -> egui::FullOutput {
-            self.time += 0.02;
-            self.ctx.run(
-                egui::RawInput {
-                    time: Some(self.time),
-                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(400.0, 600.0))),
-                    events,
-                    ..Default::default()
-                },
-                |ctx| match &mut self.sheet {
-                    Some(sheet) => {
-                        egui::SidePanel::left("explorer")
-                            .exact_width(190.0)
-                            .show(ctx, |ui| app.explorer(ui));
-                        app.sheet_keys(ctx, 1, sheet);
-                    }
-                    None => {
-                        egui::CentralPanel::default().show(ctx, |ui| app.explorer(ui));
-                    }
-                },
-            )
-        }
-
-        fn at(&mut self, app: &mut SciApp, name: &str) -> egui::Pos2 {
-            self.frame(app, vec![]);
-            self.frame(app, vec![])
-                .shapes
-                .iter()
-                .find_map(|shape| match &shape.shape {
-                    egui::Shape::Text(t) if t.galley.job.text == name => Some(t.pos + egui::vec2(4.0, 4.0)),
-                    _ => None,
-                })
-                .unwrap_or_else(|| panic!("Missing explorer label: {name}"))
-        }
-
-        fn button(&mut self, app: &mut SciApp, pos: egui::Pos2, pressed: bool) {
-            self.frame(
-                app,
-                vec![
-                    egui::Event::PointerMoved(pos),
-                    egui::Event::PointerButton {
-                        pos,
-                        button: egui::PointerButton::Primary,
-                        pressed,
-                        modifiers: egui::Modifiers::NONE,
-                    },
-                ],
-            );
-        }
-
-        fn click(&mut self, app: &mut SciApp, pos: egui::Pos2) {
-            self.button(app, pos, true);
-            self.button(app, pos, false);
-        }
-
-        fn key(&mut self, app: &mut SciApp, key: egui::Key) {
-            self.frame(
-                app,
-                vec![egui::Event::Key {
-                    key,
-                    physical_key: None,
-                    pressed: true,
-                    repeat: false,
-                    modifiers: egui::Modifiers::NONE,
-                }],
-            );
-            self.frame(
-                app,
-                vec![egui::Event::Key {
-                    key,
-                    physical_key: None,
-                    pressed: false,
-                    repeat: false,
-                    modifiers: egui::Modifiers::NONE,
-                }],
-            );
-        }
-
-        fn drag(&mut self, app: &mut SciApp, source: &str, destination: &str) {
-            let from = self.at(app, source);
-            let to = self.at(app, destination);
-            self.frame(app, vec![egui::Event::PointerMoved(from)]);
-            self.button(app, from, true);
-            self.frame(app, vec![egui::Event::PointerMoved(from + egui::vec2(12.0, 0.0))]);
-            self.frame(app, vec![egui::Event::PointerMoved(to)]);
-            self.button(app, to, false);
-            self.frame(app, vec![]);
-        }
-    }
-
-    #[test]
-    fn explorer_slow_second_click_renames_folders_books_and_graphs_with_history() {
-        for id in [1, 2, 3] {
-            let mut app = app();
-            assert_eq!(app.project.add_folder(None).unwrap(), 3);
-            let before = app.project.clone();
-            let name = app.project.name_of(id).unwrap().to_owned();
-            let mut ui = ExplorerUi::new();
-            let at = ui.at(&mut app, &name);
-            ui.click(&mut app, at);
-            ui.time += 0.7;
-            ui.click(&mut app, at);
-            assert_eq!(app.explorer_rename.map(|r| r.0), Some(id));
-            ui.frame(&mut app, vec![]);
-            ui.frame(&mut app, vec![egui::Event::Text("重命名 α".into())]);
-            ui.key(&mut app, egui::Key::Enter);
-            assert_eq!(app.project.name_of(id), Some("重命名 α"));
-            assert!(app.explorer_rename.is_none());
-            roundtrip(&mut app, &before);
-        }
-    }
-
-    #[test]
-    fn explorer_fast_double_click_escape_and_focus_commit_have_distinct_behavior() {
-        let mut app = app();
-        let before = app.project.clone();
-        let mut ui = ExplorerUi::new();
-        let at = ui.at(&mut app, "Book1");
-        ui.click(&mut app, at);
-        ui.click(&mut app, at);
-        assert!(app.explorer_rename.is_none());
-        ui.key(&mut app, egui::Key::F2);
-        ui.frame(&mut app, vec![egui::Event::Text("取消的名称".into())]);
-        ui.key(&mut app, egui::Key::Escape);
-        assert_eq!(app.project, before);
-        assert!(app.history.undo_label().is_none());
-        ui.key(&mut app, egui::Key::F2);
-        ui.key(&mut app, egui::Key::Backspace);
-        ui.key(&mut app, egui::Key::Enter);
-        assert_eq!(app.project, before);
-        assert!(app.history.undo_label().is_none());
-        ui.key(&mut app, egui::Key::F2);
-        ui.frame(&mut app, vec![egui::Event::Text("失焦提交".into())]);
-        let root = ui.at(&mut app, "项目根目录");
-        ui.click(&mut app, root);
-        assert_eq!(app.project.name_of(1), Some("失焦提交"));
-        assert_eq!(app.explorer_target, None);
-        roundtrip(&mut app, &before);
-    }
-
-    #[test]
-    fn f2_goes_to_the_focused_explorer_or_sheet_but_not_both() {
-        let mut app = app();
-        app.active = Some(1);
-        app.explorer_target = Some(1);
-        let mut ui = ExplorerUi::new();
-        ui.sheet = Some(SheetState {
-            range: Some(Range::single(0, 0)),
-            ..Default::default()
-        });
-        ui.click(&mut app, egui::pos2(300.0, 300.0));
-        ui.key(&mut app, egui::Key::F2);
-        assert!(app.explorer_rename.is_none());
-        assert!(ui.sheet.as_mut().unwrap().edit.take().is_some());
-
-        let at = ui.at(&mut app, "Book1");
-        ui.click(&mut app, at);
-        ui.key(&mut app, egui::Key::F2);
-        assert_eq!(app.explorer_rename.map(|r| r.0), Some(1));
-        assert!(ui.sheet.as_ref().unwrap().edit.is_none());
-    }
-
-    #[test]
-    fn sheet_keys_only_apply_after_clicking_the_sheet_not_the_explorer() {
-        let mut app = app();
-        app.active = Some(1);
-        app.explorer_target = Some(1);
-        let before = app.project.clone();
-        let mut ui = ExplorerUi::new();
-        ui.sheet = Some(SheetState {
-            range: Some(Range::single(0, 0)),
-            ..Default::default()
-        });
-        let at = ui.at(&mut app, "Book1");
-        ui.click(&mut app, at);
-        ui.key(&mut app, egui::Key::Delete);
-        ui.key(&mut app, egui::Key::ArrowDown);
-        ui.frame(&mut app, vec![egui::Event::Text("9".into())]);
-        assert_eq!(app.project, before);
-        let sheet = ui.sheet.as_ref().unwrap();
-        assert_eq!(sheet.range, Some(Range::single(0, 0)));
-        assert!(sheet.edit.is_none());
-
-        ui.click(&mut app, egui::pos2(300.0, 300.0));
-        ui.key(&mut app, egui::Key::Delete);
-        assert_ne!(app.project, before);
-        app.run_command("edit.undo");
-        assert_eq!(app.project, before);
-    }
-
-    #[test]
-    fn explorer_drag_moves_all_object_types_to_folders_and_root_with_history() {
-        for id in [1, 2, 3] {
-            let mut app = app();
-            assert_eq!(app.project.add_folder(None).unwrap(), 3);
-            let destination = app.project.add_folder(None).unwrap();
-            app.project.rename_project_item(destination, "目标").unwrap();
-            let source = app.project.name_of(id).unwrap().to_owned();
-            let before = app.project.clone();
-            let mut ui = ExplorerUi::new();
-            ui.drag(&mut app, &source, "目标");
-            let parent = if id == 3 {
-                app.project.folder(id).unwrap().parent
-            } else {
-                app.project.folder_of(id)
-            };
-            assert_eq!(parent, Some(destination));
-            roundtrip(&mut app, &before);
-            ui.drag(&mut app, &source, "项目根目录");
-            assert_eq!(app.project, before);
-            app.run_command("edit.undo");
-            let parent = if id == 3 {
-                app.project.folder(id).unwrap().parent
-            } else {
-                app.project.folder_of(id)
-            };
-            assert_eq!(parent, Some(destination));
-        }
-    }
-
-    #[test]
-    fn explorer_invalid_folder_drop_and_same_parent_drop_leave_history_unchanged() {
-        let mut app = app();
-        let parent = app.project.add_folder(None).unwrap();
-        let child = app.project.add_folder(Some(parent)).unwrap();
-        app.project.rename_project_item(parent, "上级").unwrap();
-        app.project.rename_project_item(child, "下级").unwrap();
-        let before = app.project.clone();
-        let mut ui = ExplorerUi::new();
-        ui.drag(&mut app, "上级", "下级");
-        assert_eq!(app.project, before);
-        assert!(app.history.undo_label().is_none());
-        ui.drag(&mut app, "上级", "上级");
-        ui.drag(&mut app, "Book1", "项目根目录");
-        assert_eq!(app.project, before);
-        assert!(app.history.undo_label().is_none());
-    }
-
-    #[test]
-    fn workspace_folder_commands_share_history_and_keep_window_actions_in_session() {
-        let mut app = app();
-        app.explorer_target = None;
-        let before = app.project.clone();
-        app.run_command("project.folder.new");
-        let folder = app.explorer_target.unwrap();
-        roundtrip(&mut app, &before);
-        app.explorer_target = Some(folder);
-        app.project_name = "实验一".into();
-        let before = app.project.clone();
-        app.run_command("project.rename");
-        roundtrip(&mut app, &before);
-        app.explorer_target = Some(folder);
-        app.run_command("book.new");
-        let book = app.active.unwrap();
-        assert_eq!(app.project.folder_of(book), Some(folder));
-        app.explorer_target = Some(2);
-        app.folder_destination = Some(folder);
-        let before = app.project.clone();
-        app.run_command("project.move");
-        roundtrip(&mut app, &before);
-        app.explorer_target = Some(folder);
-        let before = app.project.clone();
-        app.run_command("project.folder.remove");
-        assert!(app.project.book(book).is_some());
-        roundtrip(&mut app, &before);
-        app.history = History::default();
-        app.explorer_target = Some(book);
-        let before = app.project.clone();
-        for (cmd, state) in [
-            ("window.minimize", WinState::Min),
-            ("window.maximize", WinState::Max),
-            ("window.restore", WinState::Normal),
-        ] {
-            app.run_command(cmd);
-            assert_eq!(app.geoms[&book].state, state);
-        }
-        app.run_command("project.hide");
-        assert!(!app.open[&book]);
-        app.run_command("project.show");
-        assert!(app.open[&book]);
-        assert_eq!(app.active, Some(book));
-        assert_eq!(app.project, before);
-        assert!(app.history.undo_label().is_none());
-    }
-
-    #[test]
-    fn workspace_command_ids_and_theme_actions_are_consistent() {
-        let mut ids = std::collections::BTreeSet::new();
-        for c in commands::commands() {
-            assert!(ids.insert(c.id), "重复命令 {}", c.id);
-            assert!(!c.label.is_empty());
-        }
-        let mut app = app();
-        let before = app.project.clone();
-        for (cmd, pref) in [
-            ("theme.dark", egui::ThemePreference::Dark),
-            ("theme.light", egui::ThemePreference::Light),
-            ("theme.system", egui::ThemePreference::System),
-        ] {
-            app.run_command(cmd);
-            assert_eq!(app.theme_pref, pref);
-        }
-        app.explorer_target = None;
-        app.project_name = "根目录选择不应重命名活动窗口".into();
-        app.run_command("project.rename");
-        assert_eq!(app.project, before);
-        app.active = None;
-        app.run_command("window.minimize");
-        assert_eq!(app.project, before);
-        assert!(app.history.undo_label().is_none());
-    }
-
-    #[test]
-    fn explorer_new_folder_button_and_tree_render_real_project_data() {
-        let ctx = egui::Context::default();
-        crate::fonts::setup(&ctx);
-        let mut app = app();
-        app.explorer_target = None;
-        let frame = |app: &mut SciApp, events| {
-            ctx.run(
-                egui::RawInput {
-                    events,
-                    ..Default::default()
-                },
-                |ctx| {
-                    egui::CentralPanel::default().show(ctx, |ui| app.explorer(ui));
-                },
-            )
-        };
-        frame(&mut app, vec![]);
-        let output = frame(&mut app, vec![]);
-        let at = output
-            .shapes
-            .iter()
-            .find_map(|s| match &s.shape {
-                egui::Shape::Text(t) if t.galley.job.text == "新建文件夹" => {
-                    Some(t.pos + t.galley.rect.center().to_vec2())
-                }
-                _ => None,
-            })
-            .unwrap();
-        let before = app.project.clone();
-        for pressed in [true, false] {
-            frame(
-                &mut app,
-                vec![
-                    egui::Event::PointerMoved(at),
-                    egui::Event::PointerButton {
-                        pos: at,
-                        button: egui::PointerButton::Primary,
-                        pressed,
-                        modifiers: egui::Modifiers::NONE,
-                    },
-                ],
-            );
-        }
-        assert_eq!(app.project.folders.len(), 1);
-        roundtrip(&mut app, &before);
-        let output = frame(&mut app, vec![]);
-        assert!(output
-            .shapes
-            .iter()
-            .any(|s| matches!(&s.shape,egui::Shape::Text(t) if t.galley.job.text=="文件夹1")));
-    }
-
-    #[test]
-    fn commands_restore_columns_graphs_fits_and_sorting() {
-        for command in [
-            "col.delete",
-            "sort.desc",
-            "fit.linear",
-            "plot.bar",
-            "plot.stacked_bar",
-            "plot.percent_stacked_bar",
-            "plot.horizontal_bar",
-            "plot.area",
-            "plot.spline",
-            "plot.spline_symbol",
-            "plot.vertical_drop",
-            "plot.step_horizontal",
-            "plot.step_vertical",
-            "col.setXError",
-            "col.setYError",
-            "book.new",
-        ] {
-            let mut app = app();
-            app.active = Some(1);
-            app.selection.insert(1, vec!["B".into()]);
-            let before = app.project.clone();
-            app.run_command(command);
-            roundtrip(&mut app, &before);
-        }
-    }
-
-    #[test]
-    fn deleted_workbook_returns_and_new_windows_are_cleaned_up() {
-        let mut app = app();
-        let before = app.project.clone();
-        app.active = Some(1);
-        app.sheets.insert(1, SheetState::default());
-        app.delete_item(1);
-        app.finish_edit();
-        app.run_command("edit.undo");
-        assert_eq!(app.project, before);
-        assert_eq!(app.open.get(&1), Some(&true));
-        app.run_command("book.new");
-        let id = app.active.unwrap();
-        app.geoms
-            .insert(id, Geom::new(egui::Pos2::ZERO, egui::vec2(300.0, 200.0)));
-        app.sheets.insert(id, SheetState::default());
-        app.run_command("edit.undo");
-        assert!(!app.open.contains_key(&id));
-        assert!(!app.geoms.contains_key(&id));
-        assert!(!app.sheets.contains_key(&id));
-        assert_ne!(app.active, Some(id));
-        app.run_command("edit.redo");
-        assert_eq!(app.open.get(&id), Some(&true));
-    }
-
-    #[test]
-    fn nonlinear_fit_opens_a_report_and_undoes_as_one_step() {
-        use scicanvas_core::nlfit::Model;
-        let mut app = app();
-        app.active = Some(1);
-        app.selection.insert(1, vec!["C".into()]);
-        let before = app.project.clone();
-        app.open_nlfit_dialog();
-        assert!(matches!(
-            app.dialog,
-            Some(Dialog::NlFit {
-                model: Model::Gauss,
-                ..
-            })
-        ));
-        app.finish_edit();
-        app.begin_edit("非线性拟合");
-        app.dialog = None;
-        app.nlfit(Model::ExpDec1, &[]);
-        app.history.changed();
-        app.finish_edit();
-        match &app.dialog {
-            Some(Dialog::NlFitReport(reports)) => {
-                assert_eq!(reports.len(), 1);
-                assert!(reports[0].fit.converged);
-            }
-            _ => panic!("report should open"),
-        }
-        assert_eq!(app.history.undo_label(), Some("非线性拟合"));
-        roundtrip(&mut app, &before);
-    }
-
-    #[test]
-    fn column_math_dialog_follows_the_picked_columns_and_undoes() {
-        use scicanvas_core::ops::ColumnOp;
-        let mut app = app();
-        app.active = Some(1);
-        let before = app.project.clone();
-        app.selection.insert(1, vec!["C".into(), "B".into()]);
-        app.open_column_math_dialog();
-        assert!(matches!(
-            &app.dialog,
-            Some(Dialog::ColumnMath { a, b: Some(b), use_constant: false, .. }) if a == "电压 B" && b == "电压 A"
-        ));
-        app.finish_edit();
-        app.begin_edit("列运算");
-        app.column_math(ColumnOp::Sub, None);
-        app.history.changed();
-        app.finish_edit();
-        let book = app.project.book(1).unwrap();
-        let result = book.columns.iter().find(|c| c.long_name == "电压 B − 电压 A").unwrap();
-        let want = book.column("C").unwrap().values()[3] - book.column("B").unwrap().values()[3];
-        assert!((result.values()[3] - want).abs() < 1e-9);
-        roundtrip(&mut app, &before);
-
-        app.selection.insert(1, vec!["B".into()]);
-        app.open_column_math_dialog();
-        assert!(matches!(
-            app.dialog,
-            Some(Dialog::ColumnMath {
-                b: None,
-                use_constant: true,
-                ..
-            })
-        ));
-    }
-
-    #[test]
-    fn frequency_dialog_defaults_to_the_picked_columns_value_range() {
-        let mut app = app();
-        app.active = Some(1);
-        app.selection.insert(1, vec!["A".into()]);
-        app.open_frequency_dialog();
-        assert!(matches!(
-            app.dialog,
-            Some(Dialog::Frequency { auto: true, custom: false, from, to, .. }) if from == 0.0 && to == 20.0
-        ));
-        let before = app.project.clone();
-        app.frequency_counts(Some(4), None);
-        assert_eq!(app.project.books.len(), before.books.len() + 1);
-        assert_eq!(
-            app.active,
-            app.project.books.last().map(|b| b.id),
-            "the new table is shown"
-        );
-    }
-
-    #[test]
-    fn set_values_keeps_the_dialog_open_on_errors_and_undoes_in_one_step() {
-        let mut app = app();
-        app.active = Some(1);
-        app.selection.insert(1, vec!["C".into()]);
-        app.open_set_values_dialog();
-        assert!(matches!(&app.dialog, Some(Dialog::SetValues { target, .. }) if target.starts_with('C')));
-        assert!(!app.set_column_values("B *"));
-        assert!(matches!(&app.dialog, Some(Dialog::SetValues { error: Some(_), .. })));
-        let before = app.project.book(1).unwrap().columns[2].data.clone();
-        app.begin_edit("设置列值");
-        assert!(app.set_column_values("B * 2"));
-        app.history.changed();
-        app.finish_edit();
-        let book = app.project.book(1).unwrap();
-        let b = book.column("B").unwrap().values();
-        let c = book.column("C").unwrap().values();
-        assert!(b
-            .iter()
-            .zip(&c)
-            .all(|(b, c)| (b * 2.0 - c).abs() < 1e-9 * b.abs().max(1.0)));
-        app.undo();
-        assert_eq!(app.project.book(1).unwrap().columns[2].data, before);
-    }
-
-    #[test]
-    fn baseline_subtraction_runs_on_picked_columns_in_one_undo_step() {
-        let mut app = app();
-        app.active = Some(1);
-        app.selection.insert(1, vec!["B".into()]);
-        let cols = app.project.book(1).unwrap().columns.len();
-        app.begin_edit("扣除基线");
-        app.subtract_baseline(scicanvas_core::baseline::BaselineMethod::Line);
-        app.history.changed();
-        app.finish_edit();
-        let book = app.project.book(1).unwrap();
-        assert_eq!(book.columns.len(), cols + 2);
-        assert_eq!(book.columns[3].long_name, "电压 A 扣除基线");
-        assert!(app.status.contains("两端连线"), "{}", app.status);
-        app.undo();
-        assert_eq!(app.project.book(1).unwrap().columns.len(), cols);
-    }
-
-    #[test]
-    fn peaks_open_a_table_per_curve_in_one_undo_step() {
-        let mut app = app();
-        app.active = Some(1);
-        let book = app.project.book_mut(1).unwrap();
-        book.columns[0].data = (0..61).map(|i| scicanvas_core::model::fmt_num(i as f64)).collect();
-        book.columns[1].data = (0..61)
-            .map(|i| {
-                scicanvas_core::model::fmt_num(
-                    3.0 * (-((i as f64 - 20.0) / 3.0).powi(2)).exp() + (-((i as f64 - 45.0) / 4.0).powi(2)).exp(),
-                )
-            })
-            .collect();
-        app.selection.insert(1, vec!["B".into()]);
-        let books = app.project.books.len();
-        app.begin_edit("寻峰");
-        app.find_peaks(0.05);
-        app.history.changed();
-        app.finish_edit();
-        assert_eq!(app.project.books.len(), books + 1);
-        let table = app.project.books.last().unwrap();
-        assert_eq!(table.columns[0].values(), [20.0, 45.0]);
-        assert!(app.status.contains("2 个峰"), "{}", app.status);
-        app.undo();
-        assert_eq!(app.project.books.len(), books);
-    }
-
-    #[test]
-    fn correlation_fill_and_average_create_results() {
-        let mut app = app();
-        app.active = Some(1);
-        app.selection.insert(1, vec!["B".into(), "C".into()]);
-        let (books, graphs) = (app.project.books.len(), app.project.graphs.len());
-        app.correlation_function();
-        assert_eq!(
-            (app.project.books.len(), app.project.graphs.len()),
-            (books + 1, graphs + 1),
-            "{}",
-            app.status
-        );
-        app.active = Some(1);
-        app.average_curves();
-        assert_eq!(app.project.books.len(), books + 2, "{}", app.status);
-
-        app.active = Some(1);
-        app.selection.insert(1, vec!["C".into()]);
-        app.open_fill_dialog();
-        assert!(matches!(&app.dialog, Some(Dialog::Fill { target, .. }) if target.starts_with('C')));
-        app.dialog = None;
-        app.fill_sequence(scicanvas_core::stats::Sequence::Arithmetic { start: 0.0, step: 0.5 }, 3);
-        assert_eq!(
-            app.project.book(1).unwrap().column("C").unwrap().data,
-            ["0", "0.5", "1"]
-        );
-    }
-
-    #[test]
-    fn regression_uses_the_last_picked_column_as_y() {
-        let mut app = app();
-        app.active = Some(1);
-        app.selection.insert(1, vec!["A".into(), "C".into(), "B".into()]);
-        app.regression();
-        let book = app.project.book(1).unwrap();
-        let want = scicanvas_core::stats::multiple_regression(
-            &[book.column("A").unwrap().values(), book.column("C").unwrap().values()],
-            &book.column("B").unwrap().values(),
-        );
-        match (&app.dialog, want) {
-            (Some(Dialog::Table { rows, note, .. }), Ok(r)) => {
-                assert_eq!(rows.len(), 4);
-                assert_eq!(rows[2][0], book.column("A").unwrap().display_name());
-                assert_eq!(rows[1][1], fmt_num(round_sig(r.coef[0], 8)));
-                assert!(note.contains(book.column("B").unwrap().display_name()));
-            }
-            (d, w) => panic!("unexpected {:?} / {:?}", d.is_some(), w),
-        }
-    }
-
-    #[test]
-    fn row_stats_and_fft_filter_add_columns_in_one_undo_step() {
-        let mut app = app();
-        app.active = Some(1);
-        app.selection.insert(1, vec!["B".into(), "C".into()]);
-        let cols = app.project.book(1).unwrap().columns.len();
-        app.begin_edit("行统计");
-        app.row_stats();
-        app.history.changed();
-        app.finish_edit();
-        assert_eq!(app.project.book(1).unwrap().columns.len(), cols + 4, "{}", app.status);
-        app.undo();
-        assert_eq!(app.project.book(1).unwrap().columns.len(), cols);
-
-        app.selection.insert(1, vec!["B".into()]);
-        app.open_fft_filter_dialog();
-        let Some(Dialog::FftFilter { lo, nyquist, .. }) = &app.dialog else {
-            panic!("filter dialog should open")
-        };
-        let (lo, nyquist) = (*lo, *nyquist);
-        assert!(lo > 0.0 && lo < nyquist);
-        app.dialog = None;
-        app.fft_filter(scicanvas_core::fft::FilterKind::LowPass(lo));
-        assert_eq!(app.project.book(1).unwrap().columns.len(), cols + 1, "{}", app.status);
-    }
-
-    #[test]
-    fn normality_and_grubbs_report_one_row_per_picked_column() {
-        let mut app = app();
-        app.active = Some(1);
-        app.selection.insert(1, vec!["B".into(), "C".into()]);
-        app.normality();
-        match &app.dialog {
-            Some(Dialog::Table { rows, .. }) => {
-                assert_eq!(rows.len(), 3);
-                let w =
-                    scicanvas_core::stats::shapiro_wilk(&app.project.book(1).unwrap().column("B").unwrap().values())
-                        .unwrap();
-                assert_eq!(rows[1][2], fmt_num(round_sig(w.w, 6)));
-            }
-            _ => panic!("normality report should open"),
-        }
-        app.dialog = None;
-        app.grubbs();
-        assert!(matches!(&app.dialog, Some(Dialog::Table { rows, .. }) if rows.len() == 3 && rows[0].len() == 8));
-        app.dialog = None;
-        app.selection.insert(1, vec![]);
-        app.normality();
-        assert!(app.dialog.is_none() && app.status.contains("选中"));
-    }
-
-    #[test]
-    fn calibrate_needs_three_columns_in_click_order() {
-        let mut app = app();
-        app.active = Some(1);
-        app.selection.insert(1, vec!["A".into(), "B".into()]);
-        app.calibrate();
-        assert!(app.status.contains("三列"));
-        let cols = app.project.book(1).unwrap().columns.len();
-        app.selection.insert(1, vec!["A".into(), "B".into(), "C".into()]);
-        app.begin_edit("标准曲线反查");
-        app.calibrate();
-        app.history.changed();
-        app.finish_edit();
-        assert_eq!(app.project.book(1).unwrap().columns.len(), cols + 2, "{}", app.status);
-        assert!(app.status.contains("R²"));
-        app.undo();
-        assert_eq!(app.project.book(1).unwrap().columns.len(), cols);
-    }
-
-    #[test]
-    fn anova_treats_each_picked_column_as_a_group() {
-        let mut app = app();
-        app.active = Some(1);
-        app.selection.insert(1, vec!["B".into(), "C".into()]);
-        app.anova();
-        let book = app.project.book(1).unwrap();
-        let want = scicanvas_core::stats::one_way_anova(&[
-            book.column("B").unwrap().values(),
-            book.column("C").unwrap().values(),
-        ])
-        .unwrap();
-        match &app.dialog {
-            Some(Dialog::Anova { result, names, tukey }) => {
-                assert_eq!(result, &want);
-                assert_eq!(tukey, &scicanvas_core::stats::tukey_hsd(&want, 0.95));
-                assert_eq!(names, &["电压 A", "电压 B"]);
-            }
-            _ => panic!("report should open"),
-        }
-        app.dialog = None;
-        app.selection.insert(1, vec!["B".into()]);
-        app.anova();
-        assert!(app.dialog.is_none() && app.status.contains("至少两列"));
-    }
-
-    #[test]
-    fn correlations_cover_every_pair_of_picked_columns() {
-        use scicanvas_core::stats::{correlation, CorrMethod};
-        let mut app = app();
-        app.active = Some(1);
-        app.selection.insert(1, vec!["A".into(), "B".into(), "C".into()]);
-        app.correlations();
-        let Some(Dialog::Correlations(pairs)) = &app.dialog else {
-            panic!("report should open")
-        };
-        let names: Vec<_> = pairs.iter().map(|(a, b, _)| (a.as_str(), b.as_str())).collect();
-        assert_eq!(names, [("时间", "电压 A"), ("时间", "电压 B"), ("电压 A", "电压 B")]);
-        let book = app.project.book(1).unwrap();
-        let want = correlation(
-            &book.column("A").unwrap().values(),
-            &book.column("C").unwrap().values(),
-            CorrMethod::Spearman,
-        )
-        .unwrap();
-        assert_eq!(pairs[1].2[1], want);
-        app.dialog = None;
-        app.selection.insert(1, vec!["A".into()]);
-        app.correlations();
-        assert!(app.dialog.is_none() && app.status.contains("至少两列"));
-    }
-
-    #[test]
-    fn ttest_uses_the_picked_columns_in_click_order_and_leaves_data_alone() {
-        use scicanvas_core::stats::{t_test, TTestKind};
-        let mut app = app();
-        app.active = Some(1);
-        let before = app.project.clone();
-        app.selection.insert(1, vec!["C".into(), "B".into()]);
-        app.open_ttest_dialog();
-        match &app.dialog {
-            Some(Dialog::TTest { columns, kind, .. }) => {
-                assert_eq!(columns, &["电压 B", "电压 A"]);
-                assert_eq!(*kind, 1, "two picked columns default to a two-sample test");
-            }
-            _ => panic!("t-test dialog should open"),
-        }
-        let kind = TTestKind::TwoSample { equal_var: false };
-        app.run_ttest(kind, 0.95);
-        let book = app.project.book(1).unwrap();
-        let col = |k: &str| book.column(k).unwrap().values();
-        let want = t_test(kind, &col("C"), &col("B"), 0.95).unwrap();
-        match &app.dialog {
-            Some(Dialog::TTestReport { result, names }) => {
-                assert_eq!(result, &want);
-                assert_eq!(names, &["电压 B", "电压 A"]);
-            }
-            _ => panic!("report should open"),
-        }
-        assert_eq!(app.project, before);
-        assert!(app.history.undo_label().is_none());
-
-        app.selection.insert(1, vec!["B".into()]);
-        app.open_ttest_dialog();
-        assert!(matches!(app.dialog, Some(Dialog::TTest { kind: 0, .. })));
-    }
-
-    #[test]
-    fn excel_workbooks_import_each_non_empty_sheet() {
-        let path =
-            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../scicanvas-core/tests/fixtures/sample.xlsx");
-        let mut app = app();
-        let before = app.project.clone();
-        app.open_dropped(vec![path]);
-        let names: Vec<_> = app.project.books.iter().map(|b| b.name.as_str()).collect();
-        assert_eq!(
-            names,
-            ["Book1", "sample-测量", "sample-对照"],
-            "the empty sheet is skipped"
-        );
-        let book = &app.project.books[1];
-        let head: Vec<_> = book
-            .columns
-            .iter()
-            .map(|c| (c.long_name.as_str(), c.units.as_str()))
-            .collect();
-        assert_eq!(head, [("时间", "s"), ("电压", "mV"), ("备注", "")]);
-        assert_eq!(book.columns[1].data.text_at(5), "0.3");
-        assert!(app.status.contains("sample-测量（6 行 × 3 列）"));
-        roundtrip(&mut app, &before);
-    }
-
-    #[test]
-    fn dropped_data_files_import_as_one_step_and_project_files_open() {
-        let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
-            .join("../../target/file-tests")
-            .join(format!("drop-{}", std::process::id()));
-        std::fs::create_dir_all(&dir).unwrap();
-        let a = dir.join("温度.csv");
-        let b = dir.join("压力.txt");
-        std::fs::write(&a, "时间 (s),温度 (°C)\n0,20\n1,21.5\n").unwrap();
-        std::fs::write(&b, "1\t2\n3\t4\n5\t6\n").unwrap();
-
-        let mut app = app();
-        let before = app.project.clone();
-        let ctx = egui::Context::default();
-        let drop = |app: &mut SciApp, paths: &[&std::path::Path]| {
-            let input = egui::RawInput {
-                dropped_files: paths
-                    .iter()
-                    .map(|p| egui::DroppedFile {
-                        path: Some(p.to_path_buf()),
-                        ..Default::default()
-                    })
-                    .collect(),
-                ..Default::default()
-            };
-            let _ = ctx.run(input, |ctx| app.dropped_files(ctx));
-        };
-        drop(&mut app, &[&a, &b]);
-        let names: Vec<_> = app.project.books.iter().map(|b| b.name.as_str()).collect();
-        assert_eq!(names, ["Book1", "温度", "压力"]);
-        let t = app.project.books[1].clone();
-        assert_eq!(
-            (t.columns[1].long_name.as_str(), t.columns[1].units.as_str()),
-            ("温度", "°C")
-        );
-        assert_eq!(app.project.books[2].nrows(), 3);
-        assert_eq!(app.history.undo_label(), Some("导入数据"));
-        roundtrip(&mut app, &before);
-
-        let scv = dir.join("项目.scv");
-        let mut other = Project::sample();
-        other.books[0].name = "拖入的项目".into();
-        scicanvas_core::project_file::save(&scv, &other).unwrap();
-        drop(&mut app, &[&a, &scv]);
-        assert_eq!(app.project, other, "a project file wins over data files");
-        assert_eq!(app.project_path.as_deref(), Some(scv.as_path()));
-        assert!(app.history.undo_label().is_none());
-        std::fs::remove_dir_all(dir).unwrap();
-    }
-
-    #[test]
-    fn row_commands_follow_the_selection_and_undo_as_one_step() {
-        let mut app = app();
-        app.active = Some(1);
-        let before = app.project.clone();
-        let rows = |app: &SciApp| {
-            app.project.book(1).unwrap().columns[0]
-                .data
-                .iter()
-                .map(std::borrow::Cow::into_owned)
-                .collect::<Vec<_>>()
-        };
-        let original = rows(&app);
-        let select = |app: &mut SciApp| {
-            app.sheets.insert(
-                1,
-                SheetState {
-                    range: Some(Range {
-                        a: Cell { c: 1, r: 2 },
-                        b: Cell { c: 2, r: 4 },
-                    }),
-                    ..Default::default()
-                },
-            );
-        };
-
-        select(&mut app);
-        app.run_command("row.insert");
-        assert_eq!(rows(&app).len(), original.len() + 3);
-        assert_eq!(rows(&app)[2..5], [String::new(), String::new(), String::new()]);
-        assert_eq!(app.history.undo_label(), Some("插入行"));
-        roundtrip(&mut app, &before);
-        app.run_command("edit.undo");
-
-        select(&mut app);
-        app.run_command("row.delete");
-        assert_eq!(
-            rows(&app)[2],
-            original[5],
-            "whole rows go, whatever columns were selected"
-        );
-        assert_eq!(app.sheets[&1].range, Some(Range::single(1, 2)));
-        roundtrip(&mut app, &before);
-    }
-
-    #[test]
-    fn paste_cut_and_clear_use_project_history() {
-        let ctx = egui::Context::default();
-        for event in [
-            egui::Event::Paste("1\t2\n3\t4".into()),
-            egui::Event::Cut,
-            egui::Event::Key {
-                key: egui::Key::Delete,
-                physical_key: None,
-                pressed: true,
-                repeat: false,
-                modifiers: egui::Modifiers::NONE,
-            },
-        ] {
-            let mut app = app();
-            app.active = Some(1);
-            let before = app.project.clone();
-            let mut sheet = SheetState {
-                range: Some(Range::single(0, 0)),
-                ..Default::default()
-            };
-            let input = egui::RawInput {
-                events: vec![event],
-                ..Default::default()
-            };
-            let _ = ctx.run(input, |ctx| app.sheet_keys(ctx, 1, &mut sheet));
-            app.finish_edit();
-            roundtrip(&mut app, &before);
-        }
-    }
-
-    #[test]
-    fn cell_enter_commits_one_undoable_edit() {
-        let ctx = egui::Context::default();
-        let mut app = app();
-        app.active = Some(1);
-        let before = app.project.clone();
-        app.sheets.insert(
-            1,
-            SheetState {
-                range: Some(Range::single(0, 0)),
-                edit: Some(Edit {
-                    cell: Cell { c: 0, r: 0 },
-                    buf: "123".into(),
-                    focused: false,
-                }),
-                ..Default::default()
-            },
-        );
-        for events in [
-            vec![],
-            vec![egui::Event::Key {
-                key: egui::Key::Enter,
-                physical_key: None,
-                pressed: true,
-                repeat: false,
-                modifiers: egui::Modifiers::NONE,
-            }],
-        ] {
-            let _ = ctx.run(
-                egui::RawInput {
-                    events,
-                    ..Default::default()
-                },
-                |ctx| {
-                    egui::CentralPanel::default().show(ctx, |ui| app.book_ui(ui, 1));
-                },
-            );
-            app.finish_edit();
-        }
-        assert_eq!(app.project.books[0].columns[0].data.text_at(0), "123");
-        roundtrip(&mut app, &before);
-    }
-
-    #[test]
-    fn undo_shortcut_respects_text_focus_and_accepts_button_focus() {
-        let ctx = egui::Context::default();
-        let mut app = app();
-        let before = app.project.clone();
-        app.run_command("book.new");
-        let after = app.project.clone();
-        let text_id = egui::Id::new("文字框");
-        egui::TextEdit::store_state(&ctx, text_id, Default::default());
-        for (id, expected) in [(text_id, &after), (egui::Id::new("按钮"), &before)] {
-            let input = egui::RawInput {
-                events: vec![egui::Event::Key {
-                    key: egui::Key::Z,
-                    physical_key: None,
-                    pressed: true,
-                    repeat: false,
-                    modifiers: egui::Modifiers::COMMAND,
-                }],
-                ..Default::default()
-            };
-            let _ = ctx.run(input, |ctx| {
-                ctx.memory_mut(|m| m.request_focus(id));
-                app.shortcuts(ctx);
-            });
-            assert_eq!(&app.project, expected);
-        }
-    }
-
-    #[test]
-    fn continuous_edit_is_one_step_and_noop_preserves_redo() {
-        let mut app = app();
-        let before = app.project.clone();
-        let group = Some(egui::Id::new("名称"));
-        app.begin_edit("修改长名称");
-        app.project.books[0].columns[0].long_name = "时".into();
-        app.history.changed();
-        app.finish_frame_edit(group);
-        app.project.books[0].columns[0].long_name = "时间轴".into();
-        app.history.changed();
-        app.finish_frame_edit(group);
-        roundtrip(&mut app, &before);
-        app.run_command("edit.undo");
-        assert!(app.history.undo_label().is_none());
-        app.run_command("col.delete"); // 当前图形，没有工作簿，命令不可用
-        assert!(app.history.redo_label().is_some());
-        app.load_project(Project::sample(), None);
-        assert!(app.history.redo_label().is_none());
-        assert!(app.history.undo_label().is_none());
-    }
-
-    #[test]
-    fn separate_slider_drags_are_separate_undo_steps() {
-        let ctx = egui::Context::default();
-        let mut app = app();
-        let initial = app.project.clone();
-        let mut rect = egui::Rect::NOTHING;
-        let mut frame = |app: &mut SciApp, events: Vec<egui::Event>| {
-            app.begin_edit("线宽");
-            let before = app.project.graphs[0].first_layer().line_width;
-            app.history_group = None;
-            let _ = ctx.run(
-                egui::RawInput {
-                    events,
-                    ..Default::default()
-                },
-                |ctx| {
-                    egui::CentralPanel::default().show(ctx, |ui| {
-                        let response = ui.add(
-                            egui::Slider::new(&mut app.project.graphs[0].first_layer_mut().line_width, 0.5..=6.0)
-                                .show_value(false),
-                        );
-                        rect = response.rect;
-                        edit_group(&response, &mut app.history_group);
-                    });
-                },
-            );
-            if app.project.graphs[0].first_layer().line_width != before {
-                app.history.changed();
-            }
-            app.finish_frame_edit(app.history_group);
-            rect
-        };
-        let r = frame(&mut app, vec![]);
-        let mut states = vec![initial];
-        for (start, end) in [(0.2, 0.5), (0.6, 0.9)] {
-            let at = |f: f32| egui::pos2(r.left() + r.width() * f, r.center().y);
-            let button = |pos, pressed| egui::Event::PointerButton {
-                pos,
-                button: egui::PointerButton::Primary,
-                pressed,
-                modifiers: egui::Modifiers::NONE,
-            };
-            frame(
-                &mut app,
-                vec![egui::Event::PointerMoved(at(start)), button(at(start), true)],
-            );
-            frame(&mut app, vec![egui::Event::PointerMoved(at(end))]);
-            frame(&mut app, vec![button(at(end), false)]);
-            frame(&mut app, vec![]);
-            states.push(app.project.clone());
-        }
-        assert_ne!(states[0], states[1]);
-        assert_ne!(states[1], states[2]);
-        app.run_command("edit.undo");
-        assert_eq!(app.project, states[1]);
-        app.run_command("edit.undo");
-        assert_eq!(app.project, states[0]);
-        assert!(app.history.undo_label().is_none());
-    }
-
-    #[test]
-    fn dialog_confirmation_is_recorded_and_cancellation_is_empty() {
-        let mut app = app();
-        let before = app.project.clone();
-        app.run_command("fit.poly");
-        assert!(app.history.undo_label().is_none());
-        app.dialog = None;
-        app.begin_edit("多项式拟合");
-        app.fit(2);
-        app.history.changed();
-        app.finish_edit();
-        roundtrip(&mut app, &before);
-    }
-
-    #[test]
-    fn headless_frames_and_history_shortcuts() {
-        let ctx = egui::Context::default();
-        crate::fonts::setup(&ctx);
-        egui_extras::install_image_loaders(&ctx);
-        theme::install(&ctx);
-        let mut app = app();
-        let before = app.project.clone();
-        app.run_command("book.new");
-        let input = egui::RawInput {
-            screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280.0, 900.0))),
-            events: vec![egui::Event::Key {
-                key: egui::Key::Z,
-                physical_key: None,
-                pressed: true,
-                repeat: false,
-                modifiers: egui::Modifiers::COMMAND,
-            }],
-            ..Default::default()
-        };
-        let output = ctx.run(input, |ctx| app.ui_frame(ctx));
-        assert!(!output.shapes.is_empty());
-        assert_eq!(app.project, before);
-        assert!(app.history.redo_label().is_some());
-    }
-
-    #[test]
-    fn layers_builder_and_saved_project_share_history_and_headless_ui() {
-        let ctx = egui::Context::default();
-        crate::fonts::setup(&ctx);
-        theme::install(&ctx);
-        egui_extras::install_image_loaders(&ctx);
-        let mut app = app();
-        let before = app.project.clone();
-        app.run_command("layer.add");
-        assert_eq!(app.project.graphs[0].page.layers().len(), 2);
-        let _ = ctx.run(egui::RawInput::default(), |ctx| app.ui_frame(ctx));
-        roundtrip(&mut app, &before);
-        let two_layers = app.project.clone();
-        app.run_command("layer.remove");
-        roundtrip(&mut app, &two_layers);
-        app.props_for = None;
-        app.active = Some(1);
-        let before = app.project.clone();
-        app.run_command("plot.builder");
-        assert_eq!(app.project, before);
-        let output = ctx.run(egui::RawInput::default(), |ctx| app.ui_frame(ctx));
-        assert!(!output.shapes.is_empty());
-        app.run_command("plot.apply_spec");
-        roundtrip(&mut app, &before);
-        let text = scicanvas_core::project_file::to_json(&app.project).unwrap();
-        assert_eq!(scicanvas_core::project_file::from_json(&text).unwrap(), app.project);
-    }
-
-    #[test]
-    fn selecting_layer_is_session_state_and_commands_follow_that_layer() {
-        let mut app = app();
-        app.run_command("layer.add");
-        app.history = History::default();
-        app.select_layer(2, 0);
-        app.select_layer(2, 1);
-        app.finish_edit();
-        assert!(app.history.undo_label().is_none());
-        assert_eq!(app.analysis_source(), Some(Source::Layer { graph_id: 2, index: 1 }));
-        let before = app.project.clone();
-        app.run_command("graph.grid");
-        assert!(!app.project.graphs[0].page.layers()[0].grid);
-        assert!(app.project.graphs[0].page.layers()[1].grid);
-        roundtrip(&mut app, &before);
-        app.run_command("plot.bar");
-        assert_eq!(app.project.graphs[0].page.layers()[0].plot_type, PlotType::LineSymbol);
-        assert_eq!(app.project.graphs[0].page.layers()[1].plot_type, PlotType::Bar);
-        app.run_command("layer.remove");
-        assert_eq!(app.layer_index(2), 0);
-        app.run_command("edit.undo");
-        assert_eq!(app.project.graphs[0].page.layers().len(), 2);
-    }
-
-    fn editor_frame(app: &mut SciApp, ctx: &egui::Context, events: Vec<egui::Event>, props: bool) -> egui::FullOutput {
-        app.history_group = None;
-        let output = ctx.run(
-            egui::RawInput {
-                screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1000.0, 900.0))),
-                events,
-                ..Default::default()
-            },
-            |ctx| {
-                if props {
-                    app.props_window(ctx);
-                } else {
-                    egui::CentralPanel::default().show(ctx, |ui| app.book_ui(ui, 1));
-                }
-            },
-        );
-        app.finish_frame_edit(app.history_group);
-        output
-    }
-
-    #[test]
-    fn bar_variant_commands_preserve_layer_targets_pairing_and_history() {
-        for command in [
-            "plot.stacked_bar",
-            "plot.percent_stacked_bar",
-            "plot.floating_bar",
-            "plot.horizontal_bar",
-            "plot.area",
-        ] {
-            let mut app = app();
-            app.active = Some(1);
-            app.selection.insert(1, vec!["B".into(), "C".into()]);
-            let before = app.project.clone();
-            app.run_command(command);
-            let id = app.active.unwrap();
-            assert_ne!(id, 1);
-            roundtrip(&mut app, &before);
-            let one_layer = app.project.graph(id).unwrap().first_layer().clone();
-            app.run_command("layer.add");
-            let before = app.project.clone();
-            app.run_command(if command == "plot.stacked_bar" {
-                "plot.percent_stacked_bar"
-            } else {
-                "plot.stacked_bar"
-            });
-            assert_eq!(*app.project.graph(id).unwrap().first_layer(), one_layer);
-            roundtrip(&mut app, &before);
-        }
-        let mut app = app();
-        app.active = Some(1);
-        app.selection.insert(1, vec!["B".into()]);
-        let before = app.project.clone();
-        app.run_command("plot.floating_bar");
-        assert_eq!(app.project, before);
-        assert!(app.status.contains("成对"));
-        assert!(app.history.undo_label().is_none());
-    }
-
-    #[test]
-    fn floating_baseline_dropdown_is_an_undoable_property_edit() {
-        let ctx = egui::Context::default();
-        crate::fonts::setup(&ctx);
-        let mut app = app();
-        app.active = Some(1);
-        app.selection.insert(1, vec!["B".into(), "C".into()]);
-        app.run_command("plot.floating_bar");
-        let id = app.active.unwrap();
-        app.props_for = Some(id);
-        editor_frame(&mut app, &ctx, vec![], true);
-        let output = editor_frame(&mut app, &ctx, vec![], true);
-        let at = output
-            .shapes
-            .iter()
-            .find_map(|s| match &s.shape {
-                egui::Shape::Text(t) if t.galley.job.text.starts_with("C 的下端：B") => {
-                    Some(t.pos + egui::vec2(4.0, 4.0))
-                }
-                _ => None,
-            })
-            .unwrap();
-        let click = |pos, pressed| egui::Event::PointerButton {
-            pos,
-            button: egui::PointerButton::Primary,
-            pressed,
-            modifiers: egui::Modifiers::NONE,
-        };
-        editor_frame(
-            &mut app,
-            &ctx,
-            vec![egui::Event::PointerMoved(at), click(at, true)],
-            true,
-        );
-        editor_frame(&mut app, &ctx, vec![click(at, false)], true);
-        let output = editor_frame(&mut app, &ctx, vec![], true);
-        let at = output
-            .shapes
-            .iter()
-            .filter_map(|s| match &s.shape {
-                egui::Shape::Text(t) if t.galley.job.text.starts_with("A ·") => Some(t.pos + egui::vec2(4.0, 4.0)),
-                _ => None,
-            })
-            .next_back()
-            .unwrap();
-        let before = app.project.clone();
-        editor_frame(
-            &mut app,
-            &ctx,
-            vec![egui::Event::PointerMoved(at), click(at, true)],
-            true,
-        );
-        editor_frame(&mut app, &ctx, vec![click(at, false)], true);
-        assert_eq!(
-            app.project
-                .graph(id)
-                .unwrap()
-                .first_layer()
-                .base_by_y
-                .get("C")
-                .map(String::as_str),
-            Some("A")
-        );
-        roundtrip(&mut app, &before);
-    }
-
-    #[test]
-    fn area_opacity_slider_is_an_undoable_property_edit() {
-        let ctx = egui::Context::default();
-        crate::fonts::setup(&ctx);
-        let mut app = app();
-        app.active = Some(1);
-        app.selection.insert(1, vec!["B".into()]);
-        app.run_command("plot.area");
-        let id = app.active.unwrap();
-        app.props_for = Some(id);
-        editor_frame(&mut app, &ctx, vec![], true);
-        let output = editor_frame(&mut app, &ctx, vec![], true);
-        let y = output
-            .shapes
-            .iter()
-            .find_map(|s| match &s.shape {
-                egui::Shape::Text(t) if t.galley.job.text == "面积填充" => Some(t.pos.y + t.galley.size().y / 2.0),
-                _ => None,
-            })
-            .unwrap();
-        let at = output
-            .shapes
-            .iter()
-            .find_map(|s| match &s.shape {
-                egui::Shape::Circle(c) if (c.center.y - y).abs() < 3.0 => Some(c.center),
-                _ => None,
-            })
-            .unwrap();
-        let before = app.project.clone();
-        let click = |pos, pressed| egui::Event::PointerButton {
-            pos,
-            button: egui::PointerButton::Primary,
-            pressed,
-            modifiers: egui::Modifiers::NONE,
-        };
-        editor_frame(
-            &mut app,
-            &ctx,
-            vec![egui::Event::PointerMoved(at), click(at, true)],
-            true,
-        );
-        let end = at + egui::vec2(20.0, 0.0);
-        editor_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)], true);
-        editor_frame(&mut app, &ctx, vec![click(end, false)], true);
-        assert!(app.project.graph(id).unwrap().first_layer().area_opacity > 0.35);
-        roundtrip(&mut app, &before);
-    }
-
-    #[test]
-    fn data_label_command_and_actual_checkbox_are_undoable() {
-        let ctx = egui::Context::default();
-        crate::fonts::setup(&ctx);
-        let mut app = app();
-        app.active = Some(2);
-        let before = app.project.clone();
-        app.run_command("graph.labels");
-        assert!(app.project.graph(2).unwrap().first_layer().labels.visible);
-        roundtrip(&mut app, &before);
-        app.props_for = Some(2);
-        editor_frame(&mut app, &ctx, vec![], true);
-        let output = editor_frame(&mut app, &ctx, vec![], true);
-        let at = output
-            .shapes
-            .iter()
-            .find_map(|s| match &s.shape {
-                egui::Shape::Text(t) if t.galley.job.text == "数据标签" => {
-                    Some(t.pos + t.galley.rect.center().to_vec2())
-                }
-                _ => None,
-            })
-            .unwrap();
-        let before = app.project.clone();
-        for pressed in [true, false] {
-            editor_frame(
-                &mut app,
-                &ctx,
-                vec![
-                    egui::Event::PointerMoved(at),
-                    egui::Event::PointerButton {
-                        pos: at,
-                        button: egui::PointerButton::Primary,
-                        pressed,
-                        modifiers: egui::Modifiers::NONE,
-                    },
-                ],
-                true,
-            );
-        }
-        assert!(!app.project.graph(2).unwrap().first_layer().labels.visible);
-        roundtrip(&mut app, &before);
-    }
-
-    #[test]
-    fn error_role_commands_and_visibility_control_are_undoable() {
-        let ctx = egui::Context::default();
-        crate::fonts::setup(&ctx);
-        let mut app = app();
-        app.active = Some(1);
-        app.selection.insert(1, vec!["C".into()]);
-        let before = app.project.clone();
-        app.run_command("col.setYError");
-        let b = app.project.book(1).unwrap();
-        assert_eq!(b.columns[2].role, Role::YError);
-        assert_eq!(b.columns[2].error_for.as_deref(), Some("B"));
-        let (_, series) = app.project.graph(2).unwrap().first_layer().series(b);
-        assert_eq!(series.len(), 1);
-        assert_eq!(app.project.resolve(&Source::Graph(2)).unwrap().items.len(), 1);
-        roundtrip(&mut app, &before);
-        app.props_for = Some(2);
-        editor_frame(&mut app, &ctx, vec![], true);
-        let output = editor_frame(&mut app, &ctx, vec![], true);
-        let at = output
-            .shapes
-            .iter()
-            .find_map(|s| match &s.shape {
-                egui::Shape::Text(t) if t.galley.job.text == "显示 X / Y 误差" => {
-                    Some(t.pos + t.galley.rect.center().to_vec2())
-                }
-                _ => None,
-            })
-            .unwrap();
-        let before = app.project.clone();
-        let before_svg = scicanvas_core::svg::render_page(app.project.graph(2).unwrap(), &app.project);
-        for pressed in [true, false] {
-            editor_frame(
-                &mut app,
-                &ctx,
-                vec![
-                    egui::Event::PointerMoved(at),
-                    egui::Event::PointerButton {
-                        pos: at,
-                        button: egui::PointerButton::Primary,
-                        pressed,
-                        modifiers: egui::Modifiers::NONE,
-                    },
-                ],
-                true,
-            );
-        }
-        assert!(!app.project.graph(2).unwrap().first_layer().error_bars.visible);
-        assert_ne!(
-            scicanvas_core::svg::render_page(app.project.graph(2).unwrap(), &app.project),
-            before_svg
-        );
-        roundtrip(&mut app, &before);
-    }
-
-    #[test]
-    fn actual_header_and_property_text_edits_form_one_transaction_each() {
-        for props in [false, true] {
-            let ctx = egui::Context::default();
-            crate::fonts::setup(&ctx);
-            let mut app = app();
-            let mut p = Project::sample();
-            p.graphs[0].first_layer_mut().title = "原图".into();
-            app.load_project(p, None);
-            app.active = Some(1);
-            if props {
-                app.props_for = Some(2);
-            }
-            let before = app.project.clone();
-            editor_frame(&mut app, &ctx, vec![], props);
-            let output = editor_frame(&mut app, &ctx, vec![], props);
-            assert!(!app.history.is_pending());
-            let text = if props { "原图" } else { "时间" };
-            let at = output
-                .shapes
-                .iter()
-                .find_map(|s| match &s.shape {
-                    egui::Shape::Text(t) if t.galley.job.text == text => Some(t.pos + t.galley.rect.center().to_vec2()),
-                    _ => None,
-                })
-                .unwrap_or_else(|| {
-                    panic!(
-                        "未找到 {text}，当前文字：{:?}",
-                        output
-                            .shapes
-                            .iter()
-                            .filter_map(|s| match &s.shape {
-                                egui::Shape::Text(t) => Some(t.galley.job.text.clone()),
-                                _ => None,
-                            })
-                            .collect::<Vec<_>>()
-                    )
-                });
-            let button = |pressed| egui::Event::PointerButton {
-                pos: at,
-                button: egui::PointerButton::Primary,
-                pressed,
-                modifiers: egui::Modifiers::NONE,
-            };
-            editor_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(at), button(true)], props);
-            editor_frame(&mut app, &ctx, vec![button(false)], props);
-            editor_frame(
-                &mut app,
-                &ctx,
-                vec![egui::Event::Key {
-                    key: egui::Key::A,
-                    physical_key: None,
-                    pressed: true,
-                    repeat: false,
-                    modifiers: egui::Modifiers::COMMAND,
-                }],
-                props,
-            );
-            for text in ["a", "b", "c"] {
-                editor_frame(&mut app, &ctx, vec![egui::Event::Text(text.into())], props);
-            }
-            assert!(app.history.is_pending());
-            if props {
-                assert_eq!(app.project.graphs[0].first_layer().title, "abc");
-            } else {
-                assert_eq!(app.project.books[0].columns[0].long_name, "abc");
-            }
-            roundtrip(&mut app, &before);
-            app.run_command("edit.undo");
-            assert!(app.history.undo_label().is_none());
-        }
-    }
-
-    #[test]
-    fn column_properties_apply_in_one_step_and_failed_conversions_change_nothing() {
-        use scicanvas_core::format::{DisplayFormat, NumberFormat};
-        use scicanvas_core::DataKind;
-        let mut app = app();
-        app.active = Some(1);
-        app.selection.insert(1, vec!["B".into()]);
-        app.run_command("col.props");
-        let Some(Dialog::ColumnProps { edit, sample, .. }) = &app.dialog else {
-            panic!("column properties should open")
-        };
-        let col = app.project.book(1).unwrap().column("B").unwrap();
-        assert_eq!(
-            (edit.key.as_str(), edit.long_name.as_str(), edit.kind),
-            ("B", col.long_name.as_str(), DataKind::Num)
-        );
-        assert_eq!(*sample, col.data.f64_at(0));
-        let mut edit = edit.clone();
-        let raw = col.data.text_at(0).into_owned();
-
-        // 一次确定：名称、单位、注释、角色、格式一起改，作为一步撤销
-        let before = app.project.clone();
-        edit.long_name = "电压".into();
-        edit.units = "V".into();
-        edit.comment = "换算后".into();
-        edit.role = Role::Ignore;
-        edit.format = DisplayFormat {
-            number: NumberFormat::Decimal { places: 1 },
-            ..Default::default()
-        };
-        app.dialog = None;
-        app.begin_edit("列属性");
-        app.apply_column_props(edit.clone()).unwrap();
-        app.history.changed();
-        app.finish_edit();
-        let col = app.project.book(1).unwrap().column("B").unwrap();
-        assert_eq!(
-            (col.long_name.as_str(), col.units.as_str(), col.comment.as_str()),
-            ("电压", "V", "换算后")
-        );
-        assert_eq!(col.role, Role::Ignore);
-        assert_eq!(col.data.text_at(0), raw, "原始写法不变");
-        assert_eq!(col.display_at(0), format!("{:.1}", col.data.f64_at(0).unwrap()));
-        assert_eq!(app.history.undo_label(), Some("列属性"));
-        roundtrip(&mut app, &before);
-
-        // 数值列转日期失败：整次不改，错误留在对话框
-        let before = app.project.clone();
-        let label = app.history.undo_label().map(str::to_owned);
-        edit.kind = DataKind::DateTime;
-        app.open_column_props();
-        app.finish_edit();
-        app.begin_edit("列属性");
-        let err = app.apply_column_props(edit).unwrap_err();
-        app.finish_edit();
-        assert!(err.contains("无法转换"), "{err}");
-        assert_eq!(app.project, before);
-        assert_eq!(
-            app.history.undo_label().map(str::to_owned),
-            label,
-            "失败时不产生撤销步骤"
-        );
-    }
-
-    #[test]
-    fn data_type_commands_are_atomic_and_undoable() {
-        use scicanvas_core::{ColumnData, DataKind};
-        for (command, kind) in [
-            ("col.type.num", DataKind::Num),
-            ("col.type.text", DataKind::Text),
-            ("col.type.category", DataKind::Category),
-            ("col.type.datetime", DataKind::DateTime),
-        ] {
-            let mut app = app();
-            app.active = Some(1);
-            app.selection.insert(1, vec!["A".into()]);
-            // 日期列用常见日期写法；其余用带前导零的数字，检查原始写法保留
-            let first = if kind == DataKind::DateTime { "2026/10/18" } else { "01" };
-            app.project.books[0].columns[0].data = match kind {
-                DataKind::Num => ColumnData::Text(vec![first.into(), "2".into()]),
-                DataKind::DateTime => ColumnData::Text(vec![first.into(), "2026".into()]),
-                _ => vec![first.into(), "2".into()].into(),
-            };
-            let before = app.project.clone();
-            app.run_command(command);
-            assert_eq!(app.project.books[0].columns[0].data.kind(), kind);
-            assert_eq!(app.project.books[0].columns[0].data.text_at(0), first);
-            roundtrip(&mut app, &before);
-        }
-        let mut app = app();
-        app.active = Some(1);
-        app.selection.insert(1, vec!["A".into(), "B".into()]);
-        let before = app.project.clone();
-        app.run_command("col.type.datetime"); // fractional B cells are not millisecond timestamps
-        assert_eq!(app.project, before);
-        assert!(app.history.undo_label().is_none());
-    }
-
-    #[test]
-    fn non_numeric_cell_requires_confirmation_and_can_cancel_or_undo_conversion() {
-        use scicanvas_core::DataKind;
-        for confirm in [false, true] {
-            let ctx = egui::Context::default();
-            crate::fonts::setup(&ctx);
-            let mut app = app();
-            app.active = Some(1);
-            let before = app.project.clone();
-            app.sheets.insert(
-                1,
-                SheetState {
-                    range: Some(Range::single(0, 0)),
-                    edit: Some(Edit {
-                        cell: Cell { c: 0, r: 0 },
-                        buf: "text input".into(),
-                        focused: false,
-                    }),
-                    ..Default::default()
-                },
-            );
-            editor_frame(&mut app, &ctx, vec![], false);
-            editor_frame(
-                &mut app,
-                &ctx,
-                vec![egui::Event::Key {
-                    key: egui::Key::Enter,
-                    physical_key: None,
-                    pressed: true,
-                    repeat: false,
-                    modifiers: egui::Modifiers::NONE,
-                }],
-                false,
-            );
-            assert!(matches!(app.dialog, Some(Dialog::ConvertText { .. })));
-            assert_eq!(app.project, before);
-            let frame = |app: &mut SciApp, events| {
-                ctx.run(
-                    egui::RawInput {
-                        events,
-                        screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1000.0, 900.0))),
-                        ..Default::default()
-                    },
-                    |ctx| app.dialogs(ctx),
-                )
-            };
-            frame(&mut app, vec![]);
-            let out = frame(&mut app, vec![]);
-            let label = if confirm { "转换为文本并写入" } else { "取消" };
-            let at = out
-                .shapes
-                .iter()
-                .find_map(|s| match &s.shape {
-                    egui::Shape::Text(t) if t.galley.job.text == label => Some(t.pos + egui::vec2(4.0, 4.0)),
-                    _ => None,
-                })
-                .unwrap();
-            for pressed in [true, false] {
-                frame(
-                    &mut app,
-                    vec![
-                        egui::Event::PointerMoved(at),
-                        egui::Event::PointerButton {
-                            pos: at,
-                            button: egui::PointerButton::Primary,
-                            pressed,
-                            modifiers: egui::Modifiers::NONE,
-                        },
-                    ],
-                );
-            }
-            assert!(app.dialog.is_none());
-            if confirm {
-                assert_eq!(app.project.books[0].columns[0].data.kind(), DataKind::Text);
-                assert_eq!(app.project.books[0].columns[0].data.text_at(0), "text input");
-                assert_eq!(
-                    app.project.books[0].columns[0].data.text_at(1),
-                    before.books[0].columns[0].data.text_at(1)
-                );
-                roundtrip(&mut app, &before);
-            } else {
-                assert_eq!(app.project, before);
-                assert!(app.history.undo_label().is_none());
-            }
-        }
-    }
-
-    #[test]
-    fn incompatible_grid_paste_leaves_typed_columns_and_headers_unchanged() {
-        let ctx = egui::Context::default();
-        let mut app = app();
-        app.active = Some(1);
-        let before = app.project.clone();
-        let mut state = SheetState {
-            range: Some(Range::single(0, 1)),
-            ..Default::default()
-        };
-        let _ = ctx.run(
-            egui::RawInput {
-                events: vec![egui::Event::Paste("text\t4\n5\t6".into())],
-                ..Default::default()
-            },
-            |ctx| app.sheet_keys(ctx, 1, &mut state),
-        );
-        app.finish_edit();
-        assert_eq!(app.project, before);
-        assert!(app.status.contains("转换为文本列"));
-        assert!(app.history.undo_label().is_none());
-    }
-
-    #[test]
-    fn idle_large_book_opens_no_history_transaction() {
-        let ctx = egui::Context::default();
-        let mut app = app();
-        let mut p = Project::sample();
-        p.books[0].columns[0].data = vec!["1".into(); 100_000].into();
-        app.load_project(p, None);
-        app.active = Some(1);
-        for _ in 0..10 {
-            editor_frame(&mut app, &ctx, vec![], false);
-            assert!(!app.history.is_pending());
-        }
-        assert!(app.history.undo_label().is_none());
-    }
-
-    #[test]
-    fn layer_placement_control_is_undoable() {
-        let ctx = egui::Context::default();
-        crate::fonts::setup(&ctx);
-        let mut app = app();
-        app.props_for = Some(2);
-        let before = app.project.clone();
-        editor_frame(&mut app, &ctx, vec![], true);
-        let output = editor_frame(&mut app, &ctx, vec![], true);
-        let at = output
-            .shapes
-            .iter()
-            .find_map(|s| match &s.shape {
-                egui::Shape::Text(t) if t.galley.job.text == "自定义图层位置" => {
-                    Some(t.pos + egui::vec2(4.0, 4.0))
-                }
-                _ => None,
-            })
-            .unwrap();
-        for pressed in [true, false] {
-            editor_frame(
-                &mut app,
-                &ctx,
-                vec![
-                    egui::Event::PointerMoved(at),
-                    egui::Event::PointerButton {
-                        pos: at,
-                        button: egui::PointerButton::Primary,
-                        pressed,
-                        modifiers: egui::Modifiers::NONE,
-                    },
-                ],
-                true,
-            );
-        }
-        assert!(app.project.graphs[0].first_layer().placement.is_some());
-        roundtrip(&mut app, &before);
-    }
-}
+#[path = "app/tests/mod.rs"]
+mod history_tests;
 
 #[cfg(test)]
-mod snap_assist_tests {
-    use super::*;
-    use crate::mdi::{snap_rect, Snap};
+#[path = "app/tests/windows.rs"]
+mod snap_assist_tests;
 
-    const SCREEN: egui::Vec2 = egui::vec2(1200.0, 800.0);
-
-    fn ws() -> egui::Rect {
-        egui::Rect::from_min_size(egui::Pos2::ZERO, SCREEN)
-    }
-
-    fn frame(ctx: &egui::Context, app: &mut SciApp, events: Vec<egui::Event>) {
-        let _ = ctx.run(
-            egui::RawInput {
-                screen_rect: Some(ws()),
-                events,
-                ..Default::default()
-            },
-            |ctx| app.child_windows(ctx),
-        );
-    }
-
-    fn button(pos: egui::Pos2, pressed: bool) -> egui::Event {
-        egui::Event::PointerButton {
-            pos,
-            button: egui::PointerButton::Primary,
-            pressed,
-            modifiers: egui::Modifiers::NONE,
-        }
-    }
-
-    fn click(ctx: &egui::Context, app: &mut SciApp, pos: egui::Pos2) {
-        frame(ctx, app, vec![egui::Event::PointerMoved(pos), button(pos, true)]);
-        frame(ctx, app, vec![button(pos, false)]);
-        frame(ctx, app, vec![]);
-    }
-
-    fn card(app: &SciApp, id: u64) -> egui::Rect {
-        let assist = app.snap_assist.as_ref().expect("snap assist is showing");
-        assist
-            .cards
-            .iter()
-            .find(|(c, _)| *c == id)
-            .expect("window has a card")
-            .1
-    }
-
-    fn setup() -> (egui::Context, SciApp) {
-        let ctx = egui::Context::default();
-        crate::fonts::setup(&ctx);
-        let mut app = SciApp::initial(theme::palette(egui::Theme::Light));
-        // 新的 egui Area 第一帧只量尺寸，第二帧起才可见、可交互。
-        frame(&ctx, &mut app, vec![]);
-        frame(&ctx, &mut app, vec![]);
-        (ctx, app)
-    }
-
-    #[test]
-    fn dragging_a_window_to_an_edge_offers_the_other_windows_for_the_other_half() {
-        let (ctx, mut app) = setup();
-        let book = app.geoms[&1].rect;
-        let start = egui::pos2(book.center().x, book.top() + mdi::TITLE_H / 2.0);
-        frame(
-            &ctx,
-            &mut app,
-            vec![egui::Event::PointerMoved(start), button(start, true)],
-        );
-        frame(
-            &ctx,
-            &mut app,
-            vec![egui::Event::PointerMoved(egui::pos2(150.0, 300.0))],
-        );
-        frame(&ctx, &mut app, vec![egui::Event::PointerMoved(egui::pos2(2.0, 300.0))]);
-        frame(&ctx, &mut app, vec![button(egui::pos2(2.0, 300.0), false)]);
-        frame(&ctx, &mut app, vec![]);
-        assert_eq!(app.geoms[&1].rect, snap_rect(ws(), Snap::Left));
-        let assist = app.snap_assist.as_ref().expect("snap assist after snapping");
-        assert_eq!(assist.zones, [Snap::Right]);
-        let graph = card(&app, 2);
-        assert!(snap_rect(ws(), Snap::Right).contains_rect(graph));
-
-        let normal = app.geoms[&2].rect.size();
-        click(&ctx, &mut app, graph.center());
-        assert!(app.snap_assist.is_none());
-        let geom = app.geoms[&2];
-        assert_eq!(
-            (geom.rect, geom.state),
-            (snap_rect(ws(), Snap::Right), WinState::Normal)
-        );
-        assert_eq!(geom.restore, Some(normal), "the filled window remembers its size");
-        assert_eq!(app.active, Some(2));
-    }
-
-    #[test]
-    fn quarter_snap_fills_the_remaining_quarters_one_by_one() {
-        let (ctx, mut app) = setup();
-        let book = app.project.new_book();
-        app.open.insert(book, true);
-        app.geoms.get_mut(&2).unwrap().state = WinState::Min;
-        frame(&ctx, &mut app, vec![]);
-        app.start_snap_assist(1, Snap::TopLeft);
-        frame(&ctx, &mut app, vec![]);
-        frame(&ctx, &mut app, vec![]);
-        assert_eq!(
-            app.snap_assist.as_ref().unwrap().cards.len(),
-            2,
-            "minimized windows are offered too"
-        );
-
-        let at = card(&app, book).center();
-        click(&ctx, &mut app, at);
-        assert_eq!(app.geoms[&book].rect, snap_rect(ws(), Snap::TopRight));
-        assert_eq!(
-            app.snap_assist.as_ref().unwrap().zones,
-            [Snap::BottomLeft, Snap::BottomRight]
-        );
-
-        let graph = card(&app, 2);
-        assert!(snap_rect(ws(), Snap::BottomLeft).contains_rect(graph));
-        click(&ctx, &mut app, graph.center());
-        let geom = app.geoms[&2];
-        assert_eq!(
-            (geom.rect, geom.state),
-            (snap_rect(ws(), Snap::BottomLeft), WinState::Normal)
-        );
-        assert!(app.snap_assist.is_none(), "no windows left to offer");
-    }
-
-    #[test]
-    fn escape_or_pressing_outside_the_cards_dismisses_without_moving_windows() {
-        let (ctx, mut app) = setup();
-        let before = app.geoms[&2].rect;
-        app.start_snap_assist(1, Snap::Left);
-        frame(&ctx, &mut app, vec![]);
-        assert!(app.snap_assist.is_some());
-        frame(
-            &ctx,
-            &mut app,
-            vec![egui::Event::Key {
-                key: egui::Key::Escape,
-                physical_key: None,
-                pressed: true,
-                repeat: false,
-                modifiers: egui::Modifiers::NONE,
-            }],
-        );
-        assert!(app.snap_assist.is_none());
-
-        app.start_snap_assist(1, Snap::Left);
-        frame(&ctx, &mut app, vec![]);
-        frame(&ctx, &mut app, vec![]);
-        let outside = snap_rect(ws(), Snap::Right).right_bottom() - egui::vec2(20.0, 20.0);
-        assert!(!card(&app, 2).contains(outside));
-        click(&ctx, &mut app, outside);
-        assert!(app.snap_assist.is_none());
-        assert_eq!(app.geoms[&2].rect, before);
-
-        // 只有一个窗口时不显示助手。
-        app.open.insert(2, false);
-        app.start_snap_assist(1, Snap::Left);
-        assert!(app.snap_assist.is_none());
-    }
-
-    #[test]
-    fn cards_fit_the_zone_and_center_a_short_last_row() {
-        let zone = egui::Rect::from_min_size(egui::pos2(600.0, 0.0), egui::vec2(600.0, 800.0));
-        for n in 1..=7 {
-            let cards = crate::assist::card_rects(zone, n);
-            assert_eq!(cards.len(), n);
-            for (i, a) in cards.iter().enumerate() {
-                assert!(zone.contains_rect(*a), "{n}: {a:?}");
-                for b in &cards[i + 1..] {
-                    assert!(!a.intersects(*b), "{n}: cards overlap");
-                }
-            }
-        }
-        let three = crate::assist::card_rects(zone, 3);
-        assert!((three[2].center().x - zone.center().x).abs() < 0.5 || three[0].top() != three[2].top());
-    }
-}
+#[cfg(test)]
+#[path = "ui_review.rs"]
+mod ui_review;

@@ -135,6 +135,115 @@ impl Default for ColumnData {
 }
 
 impl ColumnData {
+    /// 日期列第 `row` 行按“墙上时间”重新解释：原文不带时区时，按 UTC 偏移 `offset_minutes` 换算成 UTC；
+    /// 带时区（ISO 8601 的 Z 或 ±hh:mm）的原文保持原时刻。原文不变。
+    pub fn reinterpret_local(&mut self, row: usize, offset_minutes: i32) {
+        let Self::DateTime { .. } = self else { return };
+        if self.f64_at(row).is_none() {
+            return;
+        }
+        let text = self.text_at(row).into_owned();
+        if chrono::DateTime::parse_from_rfc3339(text.trim()).is_ok() {
+            return;
+        }
+        if let (Some(naive), Self::DateTime { values, .. }) = (timestamp(&text), self) {
+            values[row] = naive - i64::from(offset_minutes) * 60_000;
+        }
+    }
+
+    /// 分类列按显示顺序排列的类别：有序字典按字典顺序，否则按文字排序。其他类型返回 None。
+    pub fn category_levels(&self) -> Option<Vec<String>> {
+        let Self::Category { levels, ordered, .. } = self else {
+            return None;
+        };
+        let mut out = levels.clone();
+        if !ordered {
+            out.sort();
+        }
+        Some(out)
+    }
+
+    /// 分类列各行在显示顺序中的位置（从 1 开始），缺失为 NaN；用作分类轴的坐标。
+    pub fn category_positions(&self) -> Option<Vec<f64>> {
+        let Self::Category { codes, levels, .. } = self else {
+            return None;
+        };
+        let order = self.category_levels()?;
+        let rank: Vec<f64> = levels
+            .iter()
+            .map(|l| order.iter().position(|o| o == l).map_or(f64::NAN, |p| p as f64 + 1.0))
+            .collect();
+        Some(
+            codes
+                .iter()
+                .map(|&c| rank.get(c as usize).copied().unwrap_or(f64::NAN))
+                .collect(),
+        )
+    }
+
+    /// 纯文字 X 按首次出现顺序作为分类标签；含数值的旧文字列沿用数值轴，存储类型保持不变。
+    pub fn plot_category_levels(&self) -> Option<Vec<String>> {
+        let Self::Text(values) = self else {
+            return self.category_levels();
+        };
+        if values.iter().all(|v| v.trim().is_empty()) || values.iter().any(|v| number(v).is_some()) {
+            return None;
+        }
+        let mut seen = std::collections::HashSet::new();
+        Some(
+            values
+                .iter()
+                .filter(|v| !v.trim().is_empty() && seen.insert(v.as_str()))
+                .cloned()
+                .collect(),
+        )
+    }
+
+    /// 分类与文字 X 共用分类轴坐标；空标签不参与绘图。
+    pub fn plot_category_positions(&self) -> Option<Vec<f64>> {
+        let Self::Text(values) = self else {
+            return self.category_positions();
+        };
+        let levels = self.plot_category_levels()?;
+        let positions: std::collections::HashMap<_, _> = levels
+            .iter()
+            .enumerate()
+            .map(|(i, value)| (value.as_str(), i as f64 + 1.0))
+            .collect();
+        Some(
+            values
+                .iter()
+                .map(|v| positions.get(v.as_str()).copied().unwrap_or(f64::NAN))
+                .collect(),
+        )
+    }
+
+    /// 设置类别顺序：`order` 必须正好是现有类别的一种排列。之后按此顺序显示、排序和作图。
+    pub fn set_category_order(&mut self, order: &[String]) -> Result<(), String> {
+        let Self::Category { codes, levels, ordered } = self else {
+            return Err("只有分类列可以设置类别顺序".into());
+        };
+        let mut a = levels.clone();
+        let mut b = order.to_vec();
+        a.sort();
+        b.sort();
+        if a != b {
+            return Err("类别顺序必须包含全部类别且不重复".into());
+        }
+        let remap: Vec<u32> = levels
+            .iter()
+            .map(|l| order.iter().position(|o| o == l).unwrap() as u32)
+            .collect();
+        for c in codes.iter_mut() {
+            if let Some(&n) = remap.get(*c as usize) {
+                *c = n;
+            }
+        }
+        *levels = order.to_vec();
+        *ordered = true;
+        Ok(())
+    }
+
     pub fn kind(&self) -> DataKind {
         match self {
             Self::Num { .. } => DataKind::Num,
@@ -220,6 +329,11 @@ impl ColumnData {
                 _ => true,
             }
     }
+    /// 数值列粘贴文字时由原有自适应写入转为文本，已有内容保留；日期列沿用原校验。
+    pub fn accepts_paste(&self, text: &str) -> bool {
+        self.accepts(text) || self.kind() == DataKind::Num
+    }
+
     pub fn converted(&self, kind: DataKind) -> Result<Self, String> {
         if self.kind() == kind {
             return Ok(self.clone());
@@ -583,10 +697,28 @@ impl ColumnData {
                 {
                     return Err("日期时间超出支持范围".into());
                 }
+                // 不带时区的原文按列时区存储：与 UTC 解析结果相差同一个整分钟偏移（±14 小时内）
+                let mut shift: Option<i64> = None;
                 for (&row, text) in lexemes {
-                    let matches = timestamp(text) == Some(values[row]) || legacy_millis(text) == Some(values[row]);
-                    if (!missing_at(missing, row) && !matches) || (missing_at(missing, row) && !text.trim().is_empty())
-                    {
+                    let missing_here = missing_at(missing, row);
+                    if missing_here {
+                        if !text.trim().is_empty() {
+                            return Err("日期时间与原始文本不一致".into());
+                        }
+                        continue;
+                    }
+                    let v = values[row];
+                    let zoned = chrono::DateTime::parse_from_rfc3339(text.trim()).is_ok();
+                    let ok = match timestamp(text) {
+                        Some(t) if !zoned => {
+                            let d = t - v;
+                            let same = *shift.get_or_insert(d) == d;
+                            same && d % 60_000 == 0 && d.abs() <= 14 * 3_600_000
+                        }
+                        Some(t) => t == v,
+                        None => false,
+                    } || legacy_millis(text) == Some(v);
+                    if !ok {
                         return Err("日期时间与原始文本不一致".into());
                     }
                 }

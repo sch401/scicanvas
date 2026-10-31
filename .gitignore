@@ -1,3 +1,4 @@
 /target
 *.scproj.bak
 __pycache__/
+_gpt_session/

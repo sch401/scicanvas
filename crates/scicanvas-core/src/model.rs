@@ -3,7 +3,8 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-pub const PROJECT_VERSION: u32 = 9;
+pub const PROJECT_VERSION: u32 = 20;
+pub const GRAPH_TEMPLATE_VERSION: u32 = 1;
 
 /// 列的绘图角色，对应 Origin 里的 X / Y / 忽略。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -14,6 +15,10 @@ pub enum Role {
     XError,
     YError,
     Ignore,
+    /// Z 值（三维数据、等高线和热图的第三维）；二维作图和分析不把它当 Y。
+    Z,
+    /// 标签列：数据标签选“指定列文本”而未指定列时使用。
+    Label,
 }
 
 impl Role {
@@ -24,8 +29,19 @@ impl Role {
             Role::XError => "X Error",
             Role::YError => "Y Error",
             Role::Ignore => "—",
+            Role::Z => "Z",
+            Role::Label => "L",
         }
     }
+}
+
+/// 列移动的目标位置。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum ColumnMove {
+    Left,
+    Right,
+    First,
+    Last,
 }
 
 /// 工作表中的一列。类型化存储，稀疏文本保留用户输入的原样。
@@ -45,6 +61,15 @@ pub struct Column {
     /// 误差列关联的 X/Y 列；空字符串表示来源已删除，None 按列顺序自动关联。
     #[cfg_attr(feature = "serde", serde(default))]
     pub error_for: Option<String>,
+    /// 保存的列公式：引用的列变化时自动重算（见 `Project::recalc_computed`）。
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Option::is_none"))]
+    pub formula: Option<String>,
+    /// 生成这一列的分析操作（平滑、微分等），按其重算方式随来源更新。
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Option::is_none"))]
+    pub op: Option<crate::ops::Operation>,
+    /// 结果列拥有的数值报告，来源删除后仍保留上次结果。
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Option::is_none"))]
+    pub fit_report: Option<Box<crate::ops::NlFitReport>>,
     /// 显示格式：只影响工作表里的显示。全部为“原样”时不写入文件。
     #[cfg_attr(
         feature = "serde",
@@ -64,6 +89,9 @@ impl Column {
             data: crate::ColumnData::default(),
             derived_from: None,
             error_for: None,
+            formula: None,
+            op: None,
+            fit_report: None,
             format: Default::default(),
         }
     }
@@ -73,7 +101,10 @@ impl Column {
         use crate::ColumnData;
         let formatted = match &self.data {
             ColumnData::Num { .. } => self.data.f64_at(row).and_then(|v| self.format.number.apply(v)),
-            ColumnData::DateTime { .. } => self.data.f64_at(row).and_then(|v| self.format.date.apply(v as i64)),
+            ColumnData::DateTime { .. } => self
+                .data
+                .f64_at(row)
+                .and_then(|v| self.format.date.apply_in(v as i64, self.format.utc_offset)),
             _ => None,
         };
         formatted.map_or_else(|| self.data.text_at(row), std::borrow::Cow::Owned)
@@ -126,8 +157,19 @@ impl Column {
             return;
         }
         self.data.set_text(row, value);
+        if self.format.utc_offset != 0 {
+            self.data.reinterpret_local(row, self.format.utc_offset);
+        }
         while self.data.last().is_some_and(|s| s.trim().is_empty()) {
             self.data.pop();
+        }
+    }
+
+    /// 设置日期列的时区：不带时区写的日期保持“墙上时间”（按新时区重新换算成 UTC），带时区的保持原时刻。
+    pub fn set_utc_offset(&mut self, minutes: i32) {
+        self.format.utc_offset = minutes;
+        for row in 0..self.data.len() {
+            self.data.reinterpret_local(row, minutes);
         }
     }
 }
@@ -294,6 +336,46 @@ impl Book {
         key
     }
 
+    /// 移动选中的列（左移、右移一格，或移到最前、最后），选中列之间的相对顺序不变。
+    /// 误差列先固定所属数据列，移动后仍关联原来的列。返回列顺序是否改变。
+    pub fn move_columns(&mut self, keys: &[String], to: ColumnMove) -> bool {
+        let picked = |c: &Column| keys.contains(&c.key);
+        if !self.columns.iter().any(picked) {
+            return false;
+        }
+        let before: Vec<String> = self.columns.iter().map(|c| c.key.clone()).collect();
+        self.freeze_error_sources();
+        let n = self.columns.len();
+        match to {
+            ColumnMove::Left => {
+                for i in 1..n {
+                    if picked(&self.columns[i]) && !picked(&self.columns[i - 1]) {
+                        self.columns.swap(i, i - 1);
+                    }
+                }
+            }
+            ColumnMove::Right => {
+                for i in (0..n.saturating_sub(1)).rev() {
+                    if picked(&self.columns[i]) && !picked(&self.columns[i + 1]) {
+                        self.columns.swap(i, i + 1);
+                    }
+                }
+            }
+            ColumnMove::First | ColumnMove::Last => {
+                let (mut sel, mut rest): (Vec<Column>, Vec<Column>) =
+                    std::mem::take(&mut self.columns).into_iter().partition(|c| picked(c));
+                if to == ColumnMove::First {
+                    sel.append(&mut rest);
+                    self.columns = sel;
+                } else {
+                    rest.append(&mut sel);
+                    self.columns = rest;
+                }
+            }
+        }
+        self.columns.iter().map(|c| &c.key).ne(before.iter())
+    }
+
     pub fn push_column(&mut self, role: Role) -> String {
         self.insert_column(self.columns.len(), role)
     }
@@ -439,37 +521,19 @@ impl PlotType {
     }
 
     pub fn has_line(self) -> bool {
-        matches!(
-            self,
-            PlotType::Line
-                | PlotType::LineSymbol
-                | PlotType::StepHorizontal
-                | PlotType::StepVertical
-                | PlotType::Area
-                | PlotType::Spline
-                | PlotType::SplineSymbol
-        )
+        crate::presets::recipe(self).has_line()
     }
-
     pub fn is_bar(self) -> bool {
-        matches!(
-            self,
-            Self::Bar | Self::StackedBar | Self::PercentStackedBar | Self::FloatingBar | Self::HorizontalBar
-        )
+        crate::presets::recipe(self).is_bar()
     }
-
     pub fn is_stacked(self) -> bool {
-        matches!(self, Self::StackedBar | Self::PercentStackedBar)
+        crate::presets::recipe(self).position.is_stacked()
     }
-
     pub fn has_symbol(self) -> bool {
-        matches!(
-            self,
-            PlotType::Scatter | PlotType::LineSymbol | PlotType::SplineSymbol | PlotType::VerticalDrop
-        )
+        crate::presets::recipe(self).has_symbol()
     }
     pub fn is_spline(self) -> bool {
-        matches!(self, Self::Spline | Self::SplineSymbol)
+        crate::presets::recipe(self).path == crate::mark::Path::Natural
     }
 }
 
@@ -494,6 +558,7 @@ pub fn palette_hex(i: usize) -> String {
 
 /// 符号递增顺序：圆、方块、上三角、下三角、菱形……
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Symbol {
     Square,
     Circle,
@@ -516,12 +581,20 @@ pub const SYMBOLS: [Symbol; 8] = [
     Symbol::Hexagon,
 ];
 
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct PointStyle {
+    pub color: Option<[u8; 3]>,
+    pub size: Option<f32>,
+    pub symbol: Option<Symbol>,
+}
+
 /// 一条曲线的数据。
 #[derive(Clone, Debug, PartialEq)]
 pub struct Series {
     pub key: String,
     pub name: String,
     pub points: Vec<[f64; 2]>,
+    pub point_styles: Vec<PointStyle>,
     /// 与 points 逐点对齐；无效或缺失的误差为 None。
     pub errors: Vec<[Option<f64>; 2]>,
     /// 原始行用于堆叠对齐；均值变换后按 X 对齐。
@@ -566,13 +639,17 @@ impl SeriesColor {
 /// 每条曲线的画法。SVG 导出和界面共用，保证两边一致。
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct SeriesStyle {
-    /// 结果曲线固定为 Line，其余跟随图类型。
+    /// 结果曲线固定为 Line，其余跟随图类型（可被逐曲线设置覆盖）。
     pub kind: PlotType,
     pub color: SeriesColor,
     pub symbol: Symbol,
     /// 柱状图里这条曲线是第几组、一共几组。
     pub bar_index: usize,
     pub bar_count: usize,
+    pub line_width: f32,
+    pub symbol_size: f32,
+    /// 画在右侧 Y 轴上。
+    pub y_axis: crate::coord::YAxis,
 }
 
 /// 颜色和符号只在数据曲线之间递增，结果曲线不占顺序。
@@ -594,6 +671,9 @@ pub fn series_styles(series: &[Series], plot_type: PlotType) -> Vec<SeriesStyle>
                     symbol: Symbol::Square,
                     bar_index: 0,
                     bar_count,
+                    line_width: 1.0,
+                    symbol_size: 4.5,
+                    y_axis: crate::coord::YAxis::Left,
                 }
             } else {
                 let i = data_index;
@@ -605,6 +685,9 @@ pub fn series_styles(series: &[Series], plot_type: PlotType) -> Vec<SeriesStyle>
                     symbol: SYMBOLS[i % SYMBOLS.len()],
                     bar_index: i,
                     bar_count,
+                    line_width: 1.0,
+                    symbol_size: 4.5,
+                    y_axis: crate::coord::YAxis::Left,
                 }
             }
         })
@@ -649,6 +732,24 @@ impl Graph {
     }
 }
 
+/// 不含工作簿数据或编号、按列标识重绑定的图形页面模板。
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize), serde(deny_unknown_fields))]
+pub struct GraphTemplate {
+    pub version: u32,
+    pub name: String,
+    pub page: crate::page::Page,
+}
+
+/// 随项目保存的文本笔记或计算报告。
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct Note {
+    pub id: u64,
+    pub name: String,
+    pub text: String,
+}
+
 /// 整个项目。
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
@@ -658,6 +759,10 @@ pub struct Project {
     pub version: u32,
     pub books: Vec<Book>,
     pub graphs: Vec<Graph>,
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Vec::is_empty"))]
+    pub notes: Vec<Note>,
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Vec::is_empty"))]
+    pub fit_functions: Vec<crate::nlfit::SavedFitFunction>,
     #[cfg_attr(feature = "serde", serde(default))]
     pub folders: Vec<crate::project_tree::Folder>,
     pub next_id: u64,
@@ -669,6 +774,8 @@ impl Default for Project {
             version: PROJECT_VERSION,
             books: Vec::new(),
             graphs: Vec::new(),
+            notes: Vec::new(),
+            fit_functions: Vec::new(),
             folders: Vec::new(),
             next_id: 1,
         }
@@ -676,18 +783,70 @@ impl Default for Project {
 }
 
 impl Project {
+    pub fn note(&self, id: u64) -> Option<&Note> {
+        self.notes.iter().find(|n| n.id == id)
+    }
+
+    pub fn add_note(&mut self, name: &str, text: String) -> u64 {
+        let id = self.alloc_id();
+        let name = self.unique_name(name);
+        self.notes.push(Note { id, name, text });
+        id
+    }
+
     /// 界面、预设和未来脚本共用的声明式作图入口；校验成功后才修改项目。
     pub fn plot_spec(&mut self, spec: crate::plotspec::PlotSpec) -> Result<u64, String> {
         let book = self.book(spec.book_id.ok_or("请选择工作簿")?).ok_or("找不到工作簿")?;
-        spec.validate(book)?;
+        spec.validate_in(book, &|id| self.book(id))?;
         let parent = self.folder_of(book.id);
         let id = self.alloc_id();
         let mut graph = Graph::new(id, self.unique_name("Graph"));
-        graph.first_layer_mut().spec = spec;
+        graph.first_layer_mut().spec = spec.into();
         self.graphs.push(graph);
         self.move_project_item(id, parent)?;
         Ok(id)
     }
+
+    pub fn apply_graph_template(&mut self, template: &GraphTemplate, book_id: u64) -> Result<u64, String> {
+        if template.version != GRAPH_TEMPLATE_VERSION {
+            return Err(format!("不支持的图形模板版本 {}", template.version));
+        }
+        if template.name.trim().is_empty() {
+            return Err("图形模板名称不能为空".into());
+        }
+        let mut page = template.page.clone();
+        let mut curve_count = 0;
+        {
+            let book = self.book(book_id).ok_or("找不到目标工作簿")?;
+            for layer in page.layers_mut() {
+                if layer.book_id.is_some() || !layer.foreign_books().is_empty() {
+                    return Err("图形模板仍绑定源工作簿，请重新保存模板".into());
+                }
+                layer.book_id = Some(book_id);
+                let count = layer.draft().y_keys.len();
+                if count > 0 {
+                    layer.validate(book)?;
+                    curve_count += count;
+                }
+            }
+        }
+        if curve_count == 0 {
+            return Err("图形模板没有可应用的曲线".into());
+        }
+        page.validate()?;
+        let name = self.unique_name(template.name.trim());
+        let parent = self.folder_of(book_id);
+        let next_id = self.next_id;
+        let id = self.alloc_id();
+        self.graphs.push(Graph { id, name, page });
+        if let Err(error) = self.move_project_item(id, parent) {
+            self.graphs.pop();
+            self.next_id = next_id;
+            return Err(error);
+        }
+        Ok(id)
+    }
+
     pub fn alloc_id(&mut self) -> u64 {
         let id = self.next_id;
         self.next_id += 1;
@@ -714,6 +873,7 @@ impl Project {
         self.book(id)
             .map(|b| b.name.as_str())
             .or_else(|| self.graph(id).map(|g| g.name.as_str()))
+            .or_else(|| self.note(id).map(|n| n.name.as_str()))
             .or_else(|| self.folder(id).map(|f| f.name.as_str()))
     }
 
@@ -724,6 +884,9 @@ impl Project {
         if let Some(g) = self.graphs.iter_mut().find(|g| g.id == id) {
             return Some(&mut g.name);
         }
+        if let Some(n) = self.notes.iter_mut().find(|n| n.id == id) {
+            return Some(&mut n.name);
+        }
         self.folders.iter_mut().find(|f| f.id == id).map(|f| &mut f.name)
     }
 
@@ -731,7 +894,11 @@ impl Project {
     pub fn unique_name(&self, base: &str) -> String {
         (1..)
             .map(|i| format!("{}{}", base, i))
-            .find(|n| !self.books.iter().any(|b| &b.name == n) && !self.graphs.iter().any(|g| &g.name == n))
+            .find(|n| {
+                !self.books.iter().any(|b| &b.name == n)
+                    && !self.graphs.iter().any(|g| &g.name == n)
+                    && !self.notes.iter().any(|note| &note.name == n)
+            })
             .unwrap()
     }
 
@@ -742,13 +909,23 @@ impl Project {
         }
         self.books.retain(|b| b.id != id);
         self.graphs.retain(|g| g.id != id);
+        self.notes.retain(|n| n.id != id);
+        let books = &self.books;
         for g in &mut self.graphs {
             for layer in g.page.layers_mut() {
-                if layer.book_id == Some(id) {
-                    layer.book_id = None;
-                }
+                layer.remove_source_book(id, &|id| books.iter().find(|b| b.id == id));
             }
         }
+    }
+
+    /// 把工作簿的若干数据列加为图层曲线，工作簿可以与图层原来的不同；
+    /// 图层还没有数据时改绑到这个工作簿。已在图层里的列不重复添加，返回新加的条数。
+    pub fn add_curves(&mut self, graph_id: u64, layer: usize, book_id: u64, keys: &[String]) -> Result<usize, String> {
+        let book = self.books.iter().find(|b| b.id == book_id).ok_or("找不到工作簿")?;
+        let graph = self.graphs.iter_mut().find(|g| g.id == graph_id).ok_or("找不到图形")?;
+        let layer = graph.page.layers_mut().get_mut(layer).ok_or("找不到图层")?;
+        let main_alive = layer.book_id.is_some_and(|id| self.books.iter().any(|b| b.id == id));
+        layer.add_book_curves(book, keys, main_alive)
     }
 
     /// 删除工作簿中的若干列，并从图形里去掉对它们的引用。
@@ -760,28 +937,29 @@ impl Project {
                     col.error_for = Some(String::new());
                 }
             }
+            for col in &mut b.columns {
+                if let Some(op) = &mut col.op {
+                    if let crate::ops::OpKind::Nonlinear(recipe) = &mut op.kind {
+                        if keys.contains(&op.y)
+                            || op.x.as_ref().is_some_and(|x| keys.contains(x))
+                            || keys.contains(&recipe.output_x)
+                        {
+                            col.op = None; // 来源或必要输出删除后成为快照，列标识复用不会重绑。
+                            if let Some(report) = &mut col.fit_report {
+                                report.current = false;
+                                report.error = Some("来源或必要输出已删除，保留上次结果快照".into());
+                            }
+                        } else {
+                            recipe.bands.retain(|b| !b.columns.iter().any(|key| keys.contains(key)));
+                        }
+                    }
+                }
+            }
             b.columns.retain(|c| !keys.contains(&c.key));
         }
         for g in &mut self.graphs {
             for layer in g.page.layers_mut() {
-                if layer.book_id == Some(book_id) {
-                    layer.y_keys.retain(|k| !keys.contains(k));
-                    layer.line_only.retain(|k| !keys.contains(k));
-                    layer.x_by_y.retain(|y, x| !keys.contains(y) && !keys.contains(x));
-                    // 保留缺失下端的映射，避免删除后把浮动柱静默改成从零开始。
-                    layer.base_by_y.retain(|y, _| !keys.contains(y));
-                    if layer.labels.column.as_ref().is_some_and(|k| keys.contains(k)) {
-                        layer.labels.column = None;
-                    }
-                    for base in layer.base_by_y.values_mut() {
-                        if keys.contains(base) {
-                            base.clear();
-                        }
-                    }
-                    if layer.x_key.as_ref().is_some_and(|k| keys.contains(k)) {
-                        layer.x_key = None;
-                    }
-                }
+                layer.remove_columns(book_id, keys);
             }
         }
     }
@@ -829,19 +1007,26 @@ impl Project {
 
     /// 按 `map` 平移引用 `book_id` 的图层行范围；端点被删除时向内收缩，整段删除则清除范围。
     fn shift_row_ranges(&mut self, book_id: u64, map: impl Fn(usize) -> Option<usize>) {
-        for g in &mut self.graphs {
-            for layer in g.page.layers_mut() {
-                if layer.book_id != Some(book_id) {
-                    continue;
-                }
-                let Some((a, b)) = layer.rows else { continue };
-                // 起点被删时取删除段之后的第一行，终点被删时取删除段之前的最后一行
+        let shift = |range: &mut Option<(usize, usize)>| {
+            if let Some((a, b)) = *range {
                 let start = (a..=b).find_map(&map);
                 let end = (a..=b).rev().find_map(&map);
-                layer.rows = match (start, end) {
+                *range = match (start, end) {
                     (Some(s), Some(e)) if s <= e => Some((s, e)),
                     _ => None,
                 };
+            }
+        };
+        if let Some(book) = self.book_mut(book_id) {
+            for col in &mut book.columns {
+                if let Some(operation) = &mut col.op {
+                    shift(&mut operation.rows);
+                }
+            }
+        }
+        for g in &mut self.graphs {
+            for layer in g.page.layers_mut() {
+                layer.map_row_ranges(book_id, shift);
             }
         }
     }
@@ -867,9 +1052,13 @@ impl Project {
             return Err("浮动柱需要成对的 Y 列，请用单面板绘制".into());
         }
         let book = self.book(book_id).ok_or("找不到工作簿")?;
-        let spec = crate::plotspec::PlotSpec::from_selection(book, selected, plot_type)?;
+        let layer = crate::page::Layer {
+            spec: crate::plotspec::PlotSpec::from_selection(book, selected, plot_type)?.into(),
+            ..Default::default()
+        };
         let n = panels.count();
-        let ys = spec.y_keys.clone();
+        let plots = layer.plots(&|id| self.book(id));
+        let ys: Vec<_> = plots.iter().map(|plot| plot.mapping.y.clone()).collect();
         if ys.len() < n {
             return Err(format!(
                 "{}需要至少 {} 个 Y 列，当前只有 {} 个",
@@ -887,23 +1076,24 @@ impl Project {
             chunks.push(ys[start..start + len].to_vec());
             start += len;
         }
-        let specs: Vec<_> = chunks
+        let layers: Vec<_> = chunks
             .into_iter()
-            .map(|y_keys| crate::plotspec::PlotSpec { y_keys, ..spec.clone() })
+            .map(|sources| {
+                let mut panel = layer.clone();
+                panel.retain_plots(&|id| self.book(id), |plot| sources.contains(&plot.mapping.y));
+                panel
+            })
             .collect();
-        for s in &specs {
-            s.validate(book)?;
+        for layer in &layers {
+            layer.spec.validate(book)?;
         }
         let parent = self.folder_of(book_id);
         let id = self.alloc_id();
         let mut graph = Graph::new(id, self.unique_name("Graph"));
-        let mut specs = specs.into_iter();
-        graph.first_layer_mut().spec = specs.next().unwrap();
-        for s in specs {
-            graph.page.add_layer(crate::page::Layer {
-                spec: s,
-                ..Default::default()
-            });
+        let mut layers = layers.into_iter();
+        *graph.first_layer_mut() = layers.next().unwrap();
+        for layer in layers {
+            graph.page.add_layer(layer);
         }
         graph.page.columns = panels.columns();
         (graph.page.width_mm, graph.page.height_mm) = panels.page_mm();
@@ -928,7 +1118,14 @@ impl Project {
         let auto = selected.is_empty();
         let spec = crate::plotspec::PlotSpec::from_selection(book, selected, plot_type)?;
         let x_key = spec.x_key.clone();
-        let ys = spec.y_keys.clone();
+        let ys: Vec<_> = crate::page::Layer {
+            spec: spec.clone().into(),
+            ..Default::default()
+        }
+        .plots(&|id| self.book(id))
+        .into_iter()
+        .map(|plot| plot.key)
+        .collect();
         let book_name = book.name.clone();
 
         let id = self.plot_spec(spec)?;
@@ -990,7 +1187,21 @@ impl Project {
         let mut g = Graph::new(gid, "Graph1");
         g.first_layer_mut().book_id = Some(bid);
         g.first_layer_mut().x_key = Some("A".into());
-        g.first_layer_mut().y_keys = vec!["B".into(), "C".into()];
+        for y in ["B", "C"] {
+            let plot = crate::plotspec::Plot {
+                key: y.into(),
+                mapping: crate::plotspec::CurveMapping {
+                    y: crate::plotspec::DataRef::new(bid, y),
+                    x: Some(crate::plotspec::DataRef::new(bid, "A")),
+                    base: None,
+                    rows: None,
+                    line_only: false,
+                },
+                style: None,
+                x_override: false,
+            };
+            g.first_layer_mut().add_plot(plot, &|id| p.book(id)).unwrap();
+        }
         p.graphs.push(g);
         p
     }
@@ -999,6 +1210,32 @@ impl Project {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn moving_columns_keeps_selection_order_and_error_links() {
+        let mut b = Book::new(1, "Book1");
+        for role in [Role::X, Role::Y, Role::YError, Role::Y, Role::Y] {
+            b.push_column(role);
+        }
+        let order = |b: &Book| b.columns.iter().map(|c| c.key.clone()).collect::<Vec<_>>().join("");
+        assert_eq!(order(&b), "ABCDE");
+        // C 是 B 的误差列；把 B 右移到 D 后面，C 仍关联 B
+        assert!(b.move_columns(&["B".into()], ColumnMove::Right));
+        assert_eq!(order(&b), "ACBDE");
+        assert!(b.move_columns(&["B".into()], ColumnMove::Right));
+        assert_eq!(order(&b), "ACDBE");
+        let c = b.column_index("C").unwrap();
+        assert_eq!(b.error_source(c), Some("B"));
+        // 不相邻的多列一起左移，相对顺序不变；已在最左的不动
+        assert!(b.move_columns(&["A".into(), "B".into(), "E".into()], ColumnMove::Left));
+        assert_eq!(order(&b), "ACBED");
+        assert!(b.move_columns(&["B".into(), "E".into()], ColumnMove::First));
+        assert_eq!(order(&b), "BEACD");
+        assert!(b.move_columns(&["B".into(), "E".into()], ColumnMove::Last));
+        assert_eq!(order(&b), "ACDBE");
+        assert!(!b.move_columns(&["B".into(), "E".into()], ColumnMove::Last));
+        assert!(!b.move_columns(&["Z".into()], ColumnMove::Left));
+    }
 
     #[test]
     fn range_copy_clear_fill() {
@@ -1051,7 +1288,7 @@ mod tests {
         // 什么都不选：全部 Y 列，X = A
         let (gid, _) = p.plot_from_selection(1, &[], PlotType::Line).unwrap();
         let g = p.graph(gid).unwrap().first_layer();
-        assert_eq!(g.y_keys, vec!["B", "C"]);
+        assert_eq!(g.draft().y_keys, vec!["B", "C"]);
         assert_eq!(g.x_key.as_deref(), Some("A"));
         // 只选 C：X 自动找左边的 A
         let (gid, _) = p.plot_from_selection(1, &["C".to_string()], PlotType::Scatter).unwrap();
@@ -1080,7 +1317,7 @@ mod tests {
         ] {
             let (id, _) = p.plot_panels(1, &[], PlotType::Line, panels).unwrap();
             let page = &p.graph(id).unwrap().page;
-            let keys: Vec<_> = page.layers().iter().map(|l| l.y_keys.clone()).collect();
+            let keys: Vec<_> = page.layers().iter().map(|l| l.draft().y_keys.clone()).collect();
             assert_eq!(keys, [vec!["B".to_string()], vec!["C".to_string()]]);
             assert_eq!((page.columns, (page.width_mm, page.height_mm)), (columns, size));
             assert!(page.layers().iter().all(|l| l.x_key.as_deref() == Some("A")));
@@ -1100,7 +1337,7 @@ mod tests {
         let (id, msg) = p.plot_panels(1, &[], PlotType::Scatter, Panels::Grid4).unwrap();
         assert!(msg.contains("5 个 Y 列"));
         let g = p.graph(id).unwrap();
-        let sizes: Vec<_> = g.page.layers().iter().map(|l| l.y_keys.len()).collect();
+        let sizes: Vec<_> = g.page.layers().iter().map(|l| l.draft().y_keys.len()).collect();
         assert_eq!(sizes, [2, 1, 1, 1], "earlier panels take the extra columns");
         assert!(g.page.layers().iter().all(|l| l.plot_type == PlotType::Scatter));
         let sc = crate::scene::layout_page(g, &p, &[]);
@@ -1183,7 +1420,7 @@ mod tests {
         p.delete_columns(1, &["A".to_string(), "B".to_string()]);
         let g = p.graph(2).unwrap().first_layer();
         assert_eq!(g.x_key, None);
-        assert_eq!(g.y_keys, vec!["C"]);
+        assert_eq!(g.draft().y_keys, vec!["C"]);
         assert_eq!(p.book(1).unwrap().columns.len(), 1);
         // 新列标识不会和剩下的 C 冲突
         assert_eq!(p.book(1).unwrap().next_key(), "A");

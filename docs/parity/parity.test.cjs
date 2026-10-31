@@ -65,7 +65,7 @@ test('sub-item labels and scope notes escape markup and quotes', () => {
 
 test('legacy prototype overrides use current audited status', () => {
   const { api } = page();
-  assert.equal(api.normalizeStatus('F201', '原型'), '部分实现');
+  assert.equal(api.normalizeStatus('F014', '原型'), '部分实现');
   assert.equal(api.normalizeStatus('F105', '原型'), '已实现待验收');
   assert.equal(api.normalizeStatus('F001', '__proto__'), null);
 });

@@ -6,6 +6,8 @@ use scicanvas_core::{
 use std::{fs, path::PathBuf};
 
 fn cases() -> Vec<(String, String)> {
+    static INIT: std::sync::Once = std::sync::Once::new();
+    INIT.call_once(|| assert!(scicanvas_core::text::initialize(scicanvas_core::text::Fonts::bundled()).is_ok()));
     let mut project = Project::default();
     let mut book = presets::example();
     // Include negative values and a missing row, not just the positive gallery example.
@@ -14,7 +16,9 @@ fn cases() -> Vec<(String, String)> {
     let mut cases = Vec::new();
     for preset in presets::all() {
         let mut graph = Graph::new(20, preset.name);
-        graph.first_layer_mut().spec = PlotSpec::from_selection(&project.books[0], &[], preset.kind).unwrap();
+        graph.first_layer_mut().spec = PlotSpec::from_selection(&project.books[0], &[], preset.kind)
+            .unwrap()
+            .into();
         cases.push((preset.id.to_owned(), svg::render_page(&graph, &project)));
     }
 
@@ -28,8 +32,9 @@ fn cases() -> Vec<(String, String)> {
         project.books[0].columns.push(column);
     }
     let mut graph = Graph::new(20, "Errors & labels <baseline>");
-    graph.first_layer_mut().spec =
-        PlotSpec::from_selection(&project.books[0], &["B".into()], PlotType::LineSymbol).unwrap();
+    graph.first_layer_mut().spec = PlotSpec::from_selection(&project.books[0], &["B".into()], PlotType::LineSymbol)
+        .unwrap()
+        .into();
     cases.push(("xy-errors".into(), svg::render_page(&graph, &project)));
     graph.first_layer_mut().labels.visible = true;
     graph.first_layer_mut().labels.source = LabelSource::XY;
@@ -50,6 +55,10 @@ fn cases() -> Vec<(String, String)> {
     graph.page.layers_mut()[1].placement = None;
     graph.page.columns = 2;
     cases.push(("two-panels".into(), svg::render_page(&graph, &project)));
+    graph.first_layer_mut().legend_position = Some([0.7, 0.7]);
+    let id = graph.page.add_text([0.15, 0.06]).unwrap();
+    graph.page.text_mut(id).unwrap().text = "Note_{1} α\n\\b{Result} R^{2}".into();
+    cases.push(("annotation-legend".into(), svg::render_page(&graph, &project)));
     cases
 }
 

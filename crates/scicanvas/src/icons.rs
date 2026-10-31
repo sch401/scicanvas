@@ -1,6 +1,6 @@
 //! 功能区图标和图类型缩略图。
 //!
-//! 与网页原型共用同一套 SVG，由 egui_extras 的 SVG 加载器渲染。
+//! 与网页原型共用同一套 SVG，由共用 resvg 渲染栈加载。
 //! SVG 里用占位色（--ic-b 等），按浅色 / 深色主题替换成实际颜色后缓存。
 //! 注意：egui 的 SVG 渲染器不带字体，图标里不能用 <text>。
 
@@ -8,6 +8,9 @@ use std::collections::HashMap;
 use std::sync::OnceLock;
 
 use eframe::egui;
+
+mod loader;
+pub use loader::install_loaders;
 
 const AX: &str = r#"<path d="M4 3.5V20h16.5"/>"#;
 
@@ -20,7 +23,12 @@ fn wrap(body: &str) -> String {
 
 /// (名称, SVG 主体)
 fn sources() -> Vec<(&'static str, String)> {
+    [source_group_1(), source_group_2(), source_group_3()].concat()
+}
+
+fn source_group_1() -> Vec<(&'static str, String)> {
     vec![
+        ("note", wrap(r#"<path d="M6 3h9l4 4v14H6zM15 3v5h4M9 12h7M9 16h7"/>"#)),
         (
             "steph",
             wrap(&format!(
@@ -131,6 +139,11 @@ fn sources() -> Vec<(&'static str, String)> {
                 r##"<rect x="3" y="4" width="18" height="11" rx="1.5" opacity=".5"/><rect x="3" y="17" width="7" height="3" rx="1" fill="IC_B" stroke="IC_B"/><rect x="12" y="17" width="7" height="3" rx="1" fill="IC_B" stroke="IC_B"/>"##,
             ),
         ),
+    ]
+}
+
+fn source_group_2() -> Vec<(&'static str, String)> {
+    vec![
         (
             "hideall",
             wrap(
@@ -220,6 +233,18 @@ fn sources() -> Vec<(&'static str, String)> {
             ),
         ),
         (
+            "colleft",
+            wrap(
+                r##"<rect x="12.5" y="3.5" width="8" height="17" rx="1" fill="IC_PAPER"/><path d="M12.5 8h8"/><path d="M10 12H3.5M6.5 9L3.5 12l3 3" stroke="IC_B" stroke-width="1.8"/>"##,
+            ),
+        ),
+        (
+            "colright",
+            wrap(
+                r##"<rect x="3.5" y="3.5" width="8" height="17" rx="1" fill="IC_PAPER"/><path d="M3.5 8h8"/><path d="M14 12h6.5M17.5 9l3 3-3 3" stroke="IC_B" stroke-width="1.8"/>"##,
+            ),
+        ),
+        (
             "colclear",
             wrap(
                 r##"<rect x="3.5" y="3.5" width="8" height="17" rx="1" fill="IC_PAPER"/><path d="M3.5 8h8"/><path d="M14 18h7M14.5 15l3.5-3.5 2 2-3.5 3.5z" stroke="IC_O"/>"##,
@@ -231,6 +256,11 @@ fn sources() -> Vec<(&'static str, String)> {
                 r##"<path d="M7 4v16M3.5 7.5L7 4l3.5 3.5" stroke="IC_B" stroke-width="1.8"/><path d="M13 6h3M13 11h5M13 16h7"/>"##,
             ),
         ),
+    ]
+}
+
+fn source_group_3() -> Vec<(&'static str, String)> {
+    vec![
         (
             "sortdesc",
             wrap(
@@ -328,6 +358,7 @@ fn sources() -> Vec<(&'static str, String)> {
 }
 
 /// 图类型画廊缩略图：白底，Origin 默认配色，两种主题通用。
+/// 图型缩略图：功能区画廊与悬停说明共用。配色与实际出图一致（深蓝、砖红）。
 fn thumbs() -> Vec<(&'static str, String)> {
     let th = |b: &str| {
         format!(
@@ -339,25 +370,85 @@ fn thumbs() -> Vec<(&'static str, String)> {
         (
             "line",
             th(
-                r##"<path d="M10 26l8-9 7 5 8-10 8 6 10-9" fill="none" stroke="#000000" stroke-width="1.3"/><path d="M10 31l9-4 8 1 8-6 8 2 9-5" fill="none" stroke="#ff0000" stroke-width="1.3"/>"##,
+                r##"<path d="M11 27L19 18L27 22L35 12L43 16L51 9" fill="none" stroke="#0f4d92" stroke-width="1.3" stroke-linejoin="round"/><path d="M11 32L19 29L27 30L35 25L43 26L51 22" fill="none" stroke="#b64342" stroke-width="1.3" stroke-linejoin="round"/>"##,
             ),
         ),
         (
             "scatter",
             th(
-                r##"<g fill="#000000"><rect x="11" y="25" width="2.6" height="2.6"/><rect x="18" y="18" width="2.6" height="2.6"/><rect x="25" y="21" width="2.6" height="2.6"/><rect x="33" y="12" width="2.6" height="2.6"/><rect x="41" y="16" width="2.6" height="2.6"/><rect x="48" y="9" width="2.6" height="2.6"/></g><g fill="#ff0000"><circle cx="13" cy="31" r="1.4"/><circle cx="21" cy="28" r="1.4"/><circle cx="29" cy="29" r="1.4"/><circle cx="37" cy="24" r="1.4"/><circle cx="45" cy="25" r="1.4"/><circle cx="51" cy="21" r="1.4"/></g>"##,
+                r##"<circle cx="11" cy="27" r="1.7" fill="#0f4d92"/><circle cx="19" cy="18" r="1.7" fill="#0f4d92"/><circle cx="27" cy="22" r="1.7" fill="#0f4d92"/><circle cx="35" cy="12" r="1.7" fill="#0f4d92"/><circle cx="43" cy="16" r="1.7" fill="#0f4d92"/><circle cx="51" cy="9" r="1.7" fill="#0f4d92"/><rect x="9.5" y="30.5" width="3" height="3" fill="#b64342"/><rect x="17.5" y="27.5" width="3" height="3" fill="#b64342"/><rect x="25.5" y="28.5" width="3" height="3" fill="#b64342"/><rect x="33.5" y="23.5" width="3" height="3" fill="#b64342"/><rect x="41.5" y="24.5" width="3" height="3" fill="#b64342"/><rect x="49.5" y="20.5" width="3" height="3" fill="#b64342"/>"##,
             ),
         ),
         (
             "linesym",
             th(
-                r##"<path d="M12 26l8-8 8 3 8-9 8 5 7-7" fill="none" stroke="#000000" stroke-width="1.1"/><g fill="#000000"><rect x="10.7" y="24.7" width="2.6" height="2.6"/><rect x="18.7" y="16.7" width="2.6" height="2.6"/><rect x="26.7" y="19.7" width="2.6" height="2.6"/><rect x="34.7" y="10.7" width="2.6" height="2.6"/><rect x="42.7" y="15.7" width="2.6" height="2.6"/><rect x="49.7" y="8.7" width="2.6" height="2.6"/></g><path d="M12 31l8-3 8 1 8-5 8 1 7-4" fill="none" stroke="#ff0000" stroke-width="1.1"/><g fill="#ff0000"><circle cx="12" cy="31" r="1.4"/><circle cx="20" cy="28" r="1.4"/><circle cx="28" cy="29" r="1.4"/><circle cx="36" cy="24" r="1.4"/><circle cx="44" cy="25" r="1.4"/><circle cx="51" cy="21" r="1.4"/></g>"##,
+                r##"<path d="M11 27L19 18L27 22L35 12L43 16L51 9" fill="none" stroke="#0f4d92" stroke-width="1.1" stroke-linejoin="round"/><circle cx="11" cy="27" r="1.7" fill="#0f4d92"/><circle cx="19" cy="18" r="1.7" fill="#0f4d92"/><circle cx="27" cy="22" r="1.7" fill="#0f4d92"/><circle cx="35" cy="12" r="1.7" fill="#0f4d92"/><circle cx="43" cy="16" r="1.7" fill="#0f4d92"/><circle cx="51" cy="9" r="1.7" fill="#0f4d92"/><path d="M11 32L19 29L27 30L35 25L43 26L51 22" fill="none" stroke="#b64342" stroke-width="1.1" stroke-linejoin="round"/><rect x="9.5" y="30.5" width="3" height="3" fill="#b64342"/><rect x="17.5" y="27.5" width="3" height="3" fill="#b64342"/><rect x="25.5" y="28.5" width="3" height="3" fill="#b64342"/><rect x="33.5" y="23.5" width="3" height="3" fill="#b64342"/><rect x="41.5" y="24.5" width="3" height="3" fill="#b64342"/><rect x="49.5" y="20.5" width="3" height="3" fill="#b64342"/>"##,
             ),
         ),
         (
             "bar",
             th(
-                r##"<g stroke="#000000" stroke-width=".6"><rect x="12" y="20" width="5" height="14" fill="#000000" fill-opacity=".85"/><rect x="17" y="25" width="5" height="9" fill="#ff0000" fill-opacity=".85"/><rect x="27" y="11" width="5" height="23" fill="#000000" fill-opacity=".85"/><rect x="32" y="18" width="5" height="16" fill="#ff0000" fill-opacity=".85"/><rect x="42" y="15" width="5" height="19" fill="#000000" fill-opacity=".85"/><rect x="47" y="22" width="5" height="12" fill="#ff0000" fill-opacity=".85"/></g>"##,
+                r##"<rect x="12" y="20" width="5" height="14" fill="#0f4d92" stroke="#222222" stroke-width=".5"/><rect x="27" y="11" width="5" height="23" fill="#0f4d92" stroke="#222222" stroke-width=".5"/><rect x="42" y="16" width="5" height="18" fill="#0f4d92" stroke="#222222" stroke-width=".5"/><rect x="17" y="25" width="5" height="9" fill="#b64342" stroke="#222222" stroke-width=".5"/><rect x="32" y="18" width="5" height="16" fill="#b64342" stroke="#222222" stroke-width=".5"/><rect x="47" y="22" width="5" height="12" fill="#b64342" stroke="#222222" stroke-width=".5"/>"##,
+            ),
+        ),
+        (
+            "stacked_bar",
+            th(
+                r##"<rect x="13" y="24" width="9" height="10" fill="#0f4d92" stroke="#222222" stroke-width=".5"/><rect x="27" y="20" width="9" height="14" fill="#0f4d92" stroke="#222222" stroke-width=".5"/><rect x="41" y="26" width="9" height="8" fill="#0f4d92" stroke="#222222" stroke-width=".5"/><rect x="13" y="16" width="9" height="8" fill="#b64342" stroke="#222222" stroke-width=".5"/><rect x="27" y="9" width="9" height="11" fill="#b64342" stroke="#222222" stroke-width=".5"/><rect x="41" y="13" width="9" height="13" fill="#b64342" stroke="#222222" stroke-width=".5"/>"##,
+            ),
+        ),
+        (
+            "percent_stacked_bar",
+            th(
+                r##"<rect x="13" y="20" width="9" height="14" fill="#0f4d92" stroke="#222222" stroke-width=".5"/><rect x="27" y="14" width="9" height="20" fill="#0f4d92" stroke="#222222" stroke-width=".5"/><rect x="41" y="24" width="9" height="10" fill="#0f4d92" stroke="#222222" stroke-width=".5"/><rect x="13" y="6" width="9" height="14" fill="#b64342" stroke="#222222" stroke-width=".5"/><rect x="27" y="6" width="9" height="8" fill="#b64342" stroke="#222222" stroke-width=".5"/><rect x="41" y="6" width="9" height="18" fill="#b64342" stroke="#222222" stroke-width=".5"/>"##,
+            ),
+        ),
+        (
+            "floating_bar",
+            th(
+                r##"<rect x="13" y="16" width="9" height="12" fill="#0f4d92" stroke="#222222" stroke-width=".5"/><rect x="27" y="9" width="9" height="13" fill="#0f4d92" stroke="#222222" stroke-width=".5"/><rect x="41" y="18" width="9" height="11" fill="#0f4d92" stroke="#222222" stroke-width=".5"/>"##,
+            ),
+        ),
+        (
+            "horizontal_bar",
+            th(
+                r##"<rect x="8" y="7" width="30" height="4" fill="#0f4d92" stroke="#222222" stroke-width=".5"/><rect x="8" y="17" width="40" height="4" fill="#0f4d92" stroke="#222222" stroke-width=".5"/><rect x="8" y="27" width="22" height="3" fill="#0f4d92" stroke="#222222" stroke-width=".5"/><rect x="8" y="11" width="22" height="4" fill="#b64342" stroke="#222222" stroke-width=".5"/><rect x="8" y="21" width="28" height="4" fill="#b64342" stroke="#222222" stroke-width=".5"/><rect x="8" y="30" width="34" height="4" fill="#b64342" stroke="#222222" stroke-width=".5"/>"##,
+            ),
+        ),
+        (
+            "area",
+            th(
+                r##"<path d="M8 34L8 20L18 14L28 18L38 9L48 13L54 11L54 34Z" fill="#b64342" fill-opacity=".3"/><path d="M8 20L18 14L28 18L38 9L48 13L54 11" fill="none" stroke="#b64342" stroke-width="1.1" stroke-linejoin="round"/><path d="M8 34L8 28L18 24L28 27L38 20L48 23L54 21L54 34Z" fill="#0f4d92" fill-opacity=".35"/><path d="M8 28L18 24L28 27L38 20L48 23L54 21" fill="none" stroke="#0f4d92" stroke-width="1.1" stroke-linejoin="round"/>"##,
+            ),
+        ),
+        (
+            "spline",
+            th(
+                r##"<path d="M11 27C15 20 17 17 21 18S29 25 33 18 41 9 51 11" fill="none" stroke="#0f4d92" stroke-width="1.3"/><path d="M11 32C16 29 20 28 24 30S32 28 36 26 46 22 51 23" fill="none" stroke="#b64342" stroke-width="1.3"/>"##,
+            ),
+        ),
+        (
+            "spline_symbol",
+            th(
+                r##"<path d="M11 27C15 20 17 17 21 18S29 25 33 18 41 9 51 11" fill="none" stroke="#0f4d92" stroke-width="1.1"/><path d="M11 32C16 29 20 28 24 30S32 28 36 26 46 22 51 23" fill="none" stroke="#b64342" stroke-width="1.1"/><circle cx="11" cy="27" r="1.7" fill="#0f4d92"/><circle cx="21" cy="18" r="1.7" fill="#0f4d92"/><circle cx="33" cy="18" r="1.7" fill="#0f4d92"/><circle cx="51" cy="11" r="1.7" fill="#0f4d92"/><rect x="9.5" y="30.5" width="3" height="3" fill="#b64342"/><rect x="22.5" y="28.5" width="3" height="3" fill="#b64342"/><rect x="34.5" y="24.5" width="3" height="3" fill="#b64342"/><rect x="49.5" y="21.5" width="3" height="3" fill="#b64342"/>"##,
+            ),
+        ),
+        (
+            "vertical_drop",
+            th(
+                r##"<path d="M12 34V22" stroke="#0f4d92" stroke-width="1.1"/><path d="M24 34V12" stroke="#0f4d92" stroke-width="1.1"/><path d="M36 34V18" stroke="#0f4d92" stroke-width="1.1"/><path d="M48 34V9" stroke="#0f4d92" stroke-width="1.1"/><circle cx="12" cy="22" r="1.7" fill="#0f4d92"/><circle cx="24" cy="12" r="1.7" fill="#0f4d92"/><circle cx="36" cy="18" r="1.7" fill="#0f4d92"/><circle cx="48" cy="9" r="1.7" fill="#0f4d92"/><path d="M17 34V28" stroke="#b64342" stroke-width="1.1"/><path d="M29 34V24" stroke="#b64342" stroke-width="1.1"/><path d="M41 34V27" stroke="#b64342" stroke-width="1.1"/><path d="M52 34V20" stroke="#b64342" stroke-width="1.1"/><rect x="15.5" y="26.5" width="3" height="3" fill="#b64342"/><rect x="27.5" y="22.5" width="3" height="3" fill="#b64342"/><rect x="39.5" y="25.5" width="3" height="3" fill="#b64342"/><rect x="50.5" y="18.5" width="3" height="3" fill="#b64342"/>"##,
+            ),
+        ),
+        (
+            "step_horizontal",
+            th(
+                r##"<path d="M9 27H17V20H26V24H35V13H44V17H53" fill="none" stroke="#0f4d92" stroke-width="1.3"/><path d="M9 32H17V29H26V30H35V25H44V27H53" fill="none" stroke="#b64342" stroke-width="1.3"/>"##,
+            ),
+        ),
+        (
+            "step_vertical",
+            th(
+                r##"<path d="M9 27V20H17V24H26V13H35V17H44V10H53" fill="none" stroke="#0f4d92" stroke-width="1.3"/><path d="M9 32V29H17V30H26V25H35V27H44V22H53" fill="none" stroke="#b64342" stroke-width="1.3"/>"##,
             ),
         ),
     ]
@@ -435,10 +526,42 @@ pub fn icon(name: &str, dark: bool) -> egui::Image<'static> {
     )
 }
 
-/// 图类型缩略图（line / scatter / linesym / bar）。
+/// 图类型缩略图，名称为命令 id 中 plot. 之后的部分（line、stacked_bar……）。
 pub fn thumb(kind: &str) -> egui::Image<'static> {
     let bytes = *cache()
         .get(&(format!("thumb-{}", kind), false))
         .unwrap_or_else(|| cache().get(&("thumb-line".to_string(), false)).unwrap());
     egui::Image::from_bytes(format!("bytes://scicanvas/thumb/{}.svg", kind), bytes)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn all_icons_and_thumbnails_render_at_multiple_sizes() {
+        for ((name, dark), bytes) in cache() {
+            for width in [16, 24, 48] {
+                let image = loader::load_svg(bytes, egui::load::SizeHint::Width(width)).unwrap();
+                assert_eq!(image.size[0], width as usize, "{name}");
+                assert!(image.pixels.iter().any(|p| p.a() > 0), "{name}");
+                if !name.starts_with("thumb-") {
+                    assert!(
+                        image.pixels.iter().any(|p| p.a() == 0),
+                        "{name}: transparent background"
+                    );
+                }
+                if let Ok(directory) = std::env::var("SCICANVAS_ICON_PROBE_DIR") {
+                    let dir = std::path::Path::new(&directory);
+                    std::fs::create_dir_all(dir).unwrap();
+                    let mut pixmap = resvg::tiny_skia::Pixmap::new(image.size[0] as u32, image.size[1] as u32).unwrap();
+                    for (pixel, color) in pixmap.pixels_mut().iter_mut().zip(&image.pixels) {
+                        let [r, g, b, a] = color.to_array();
+                        *pixel = resvg::tiny_skia::PremultipliedColorU8::from_rgba(r, g, b, a).unwrap();
+                    }
+                    pixmap.save_png(dir.join(format!("{name}-{dark}-{width}.png"))).unwrap();
+                }
+            }
+        }
+    }
 }

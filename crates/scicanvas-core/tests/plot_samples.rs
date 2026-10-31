@@ -61,20 +61,43 @@ fn range(layer: &mut Layer, x: Option<(f64, f64)>, y: Option<(f64, f64)>) {
     }
 }
 
+fn numbers(n: i32) -> Vec<String> {
+    values((1..=n).map(f64::from), 0)
+}
+fn list(xs: &[f64]) -> Vec<String> {
+    values(xs.iter().copied(), 3)
+}
+
 fn samples() -> Vec<(String, Project)> {
-    use PlotType::*;
-    use Role::{YError, X, Y};
     let t: Vec<f64> = (0..=12).map(|i| f64::from(i) * 5.0).collect();
     let years = values((2020..=2025).map(f64::from), 0);
     let months = values((1..=12).map(f64::from), 0);
-    let numbers = |n: i32| values((1..=n).map(f64::from), 0);
-    let list = |xs: &[f64]| values(xs.iter().copied(), 3);
-    let cases = vec![
+    let mut cases = sample_group_1(&t);
+    cases.extend(sample_group_2(&years, &months));
+    cases.extend(sample_group_3());
+    cases.extend(sample_group_4());
+    // 提交的示例是 v8 兼容样本，当时默认页面为 89 × 66.75 mm；已保存的项目保留自己的页面尺寸
+    cases
+        .into_iter()
+        .enumerate()
+        .map(|(i, mut p)| {
+            for g in &mut p.graphs {
+                (g.page.width_mm, g.page.height_mm) = scicanvas_core::page::LEGACY_PAGE_MM;
+            }
+            (format!("{:02}-{}.scv", i + 1, p.graphs[0].name), p)
+        })
+        .collect()
+}
+
+fn sample_group_1(t: &[f64]) -> Vec<Project> {
+    use PlotType::*;
+    use Role::{YError, X, Y};
+    vec![
         sample(
             Line,
             "反应釜升温",
             vec![
-                (X, "时间", "min", "X 列：自变量，按从小到大排列", values(t.clone(), 0)),
+                (X, "时间", "min", "X 列：自变量，按从小到大排列", values(t.to_vec(), 0)),
                 (
                     Y,
                     "釜内温度",
@@ -164,12 +187,19 @@ fn samples() -> Vec<(String, Project)> {
             ),
             |l| l.y_title = "产率 (%)".into(),
         ),
+    ]
+}
+
+fn sample_group_2(years: &[String], months: &[String]) -> Vec<Project> {
+    use PlotType::*;
+    use Role::{X, Y};
+    vec![
         layer(
             sample(
                 StackedBar,
                 "发电结构",
                 vec![
-                    (X, "年份", "", "X 列", years.clone()),
+                    (X, "年份", "", "X 列", years.to_vec()),
                     (
                         Y,
                         "火电",
@@ -219,7 +249,7 @@ fn samples() -> Vec<(String, Project)> {
                 FloatingBar,
                 "月气温范围",
                 vec![
-                    (X, "月份", "", "X 列", months),
+                    (X, "月份", "", "X 列", months.to_vec()),
                     (
                         Y,
                         "最低气温",
@@ -258,6 +288,13 @@ fn samples() -> Vec<(String, Project)> {
                 ),
             ],
         ),
+    ]
+}
+
+fn sample_group_3() -> Vec<Project> {
+    use PlotType::*;
+    use Role::{X, Y};
+    vec![
         sample(
             Area,
             "净热流",
@@ -343,6 +380,13 @@ fn samples() -> Vec<(String, Project)> {
                 ),
             ],
         ),
+    ]
+}
+
+fn sample_group_4() -> Vec<Project> {
+    use PlotType::*;
+    use Role::{X, Y};
+    vec![
         sample(
             SplineSymbol,
             "吸附等温线",
@@ -386,18 +430,7 @@ fn samples() -> Vec<(String, Project)> {
                 ),
             ],
         ),
-    ];
-    // 提交的示例是 v8 兼容样本，当时默认页面为 89 × 66.75 mm；已保存的项目保留自己的页面尺寸
-    cases
-        .into_iter()
-        .enumerate()
-        .map(|(i, mut p)| {
-            for g in &mut p.graphs {
-                (g.page.width_mm, g.page.height_mm) = scicanvas_core::page::LEGACY_PAGE_MM;
-            }
-            (format!("{:02}-{}.scv", i + 1, p.graphs[0].name), p)
-        })
-        .collect()
+    ]
 }
 
 fn directory() -> PathBuf {
@@ -425,7 +458,7 @@ fn every_plot_type_has_a_sample_with_one_table_and_one_graph() {
             book.columns
                 .iter()
                 .filter(|c| c.role == Role::Y)
-                .all(|c| spec.y_keys.contains(&c.key) || spec.base_by_y.values().any(|b| *b == c.key)),
+                .all(|c| spec.draft().y_keys.contains(&c.key) || spec.draft().base_by_y.values().any(|b| *b == c.key)),
             "{name} plots every Y column"
         );
         assert!(readme.contains(name.as_str()), "samples/README.md lists {name}");

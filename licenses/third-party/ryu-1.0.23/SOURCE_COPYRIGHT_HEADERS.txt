@@ -1,0 +1,224 @@
+[src/common.rs]
+//
+// Copyright 2018 Ulf Adams
+//
+// The contents of this file may be used under the terms of the Apache License,
+// Version 2.0.
+//
+//    (See accompanying file LICENSE-Apache or copy at
+//     http://www.apache.org/licenses/LICENSE-2.0)
+//
+// Alternatively, the contents of this file may be used under the terms of
+// the Boost Software License, Version 1.0.
+//    (See accompanying file LICENSE-Boost or copy at
+//     https://www.boost.org/LICENSE_1_0.txt)
+
+[src/d2s.rs]
+//
+// Copyright 2018 Ulf Adams
+//
+// The contents of this file may be used under the terms of the Apache License,
+// Version 2.0.
+//
+//    (See accompanying file LICENSE-Apache or copy at
+//     http://www.apache.org/licenses/LICENSE-2.0)
+//
+// Alternatively, the contents of this file may be used under the terms of
+// the Boost Software License, Version 1.0.
+//    (See accompanying file LICENSE-Boost or copy at
+//     https://www.boost.org/LICENSE_1_0.txt)
+
+[src/d2s_full_table.rs]
+//
+// Copyright 2018 Ulf Adams
+//
+// The contents of this file may be used under the terms of the Apache License,
+// Version 2.0.
+//
+//    (See accompanying file LICENSE-Apache or copy at
+//     http://www.apache.org/licenses/LICENSE-2.0)
+//
+// Alternatively, the contents of this file may be used under the terms of
+// the Boost Software License, Version 1.0.
+//    (See accompanying file LICENSE-Boost or copy at
+//     https://www.boost.org/LICENSE_1_0.txt)
+
+[src/d2s_intrinsics.rs]
+//
+// Copyright 2018 Ulf Adams
+//
+// The contents of this file may be used under the terms of the Apache License,
+// Version 2.0.
+//
+//    (See accompanying file LICENSE-Apache or copy at
+//     http://www.apache.org/licenses/LICENSE-2.0)
+//
+// Alternatively, the contents of this file may be used under the terms of
+// the Boost Software License, Version 1.0.
+//    (See accompanying file LICENSE-Boost or copy at
+//     https://www.boost.org/LICENSE_1_0.txt)
+
+[src/d2s_small_table.rs]
+//
+// Copyright 2018 Ulf Adams
+//
+// The contents of this file may be used under the terms of the Apache License,
+// Version 2.0.
+//
+//    (See accompanying file LICENSE-Apache or copy at
+//     http://www.apache.org/licenses/LICENSE-2.0)
+//
+// Alternatively, the contents of this file may be used under the terms of
+// the Boost Software License, Version 1.0.
+//    (See accompanying file LICENSE-Boost or copy at
+//     https://www.boost.org/LICENSE_1_0.txt)
+
+[src/digit_table.rs]
+//
+// Copyright 2018 Ulf Adams
+//
+// The contents of this file may be used under the terms of the Apache License,
+// Version 2.0.
+//
+//    (See accompanying file LICENSE-Apache or copy at
+//     http://www.apache.org/licenses/LICENSE-2.0)
+//
+// Alternatively, the contents of this file may be used under the terms of
+// the Boost Software License, Version 1.0.
+//    (See accompanying file LICENSE-Boost or copy at
+//     https://www.boost.org/LICENSE_1_0.txt)
+
+[src/f2s.rs]
+//
+// Copyright 2018 Ulf Adams
+//
+// The contents of this file may be used under the terms of the Apache License,
+// Version 2.0.
+//
+//    (See accompanying file LICENSE-Apache or copy at
+//     http://www.apache.org/licenses/LICENSE-2.0)
+//
+// Alternatively, the contents of this file may be used under the terms of
+// the Boost Software License, Version 1.0.
+//    (See accompanying file LICENSE-Boost or copy at
+//     https://www.boost.org/LICENSE_1_0.txt)
+
+[src/f2s_intrinsics.rs]
+//
+// Copyright 2018 Ulf Adams
+//
+// The contents of this file may be used under the terms of the Apache License,
+// Version 2.0.
+//
+//    (See accompanying file LICENSE-Apache or copy at
+//     http://www.apache.org/licenses/LICENSE-2.0)
+//
+// Alternatively, the contents of this file may be used under the terms of
+// the Boost Software License, Version 1.0.
+//    (See accompanying file LICENSE-Boost or copy at
+//     https://www.boost.org/LICENSE_1_0.txt)
+
+[tests/common_test.rs]
+//
+// Copyright 2018 Ulf Adams
+//
+// The contents of this file may be used under the terms of the Apache License,
+// Version 2.0.
+//
+//    (See accompanying file LICENSE-Apache or copy at
+//     http://www.apache.org/licenses/LICENSE-2.0)
+//
+// Alternatively, the contents of this file may be used under the terms of
+// the Boost Software License, Version 1.0.
+//    (See accompanying file LICENSE-Boost or copy at
+//     https://www.boost.org/LICENSE_1_0.txt)
+
+[tests/d2s_intrinsics_test.rs]
+//
+// Copyright 2018 Ulf Adams
+//
+// The contents of this file may be used under the terms of the Apache License,
+// Version 2.0.
+//
+//    (See accompanying file LICENSE-Apache or copy at
+//     http://www.apache.org/licenses/LICENSE-2.0)
+//
+// Alternatively, the contents of this file may be used under the terms of
+// the Boost Software License, Version 1.0.
+//    (See accompanying file LICENSE-Boost or copy at
+//     https://www.boost.org/LICENSE_1_0.txt)
+
+[tests/d2s_table_test.rs]
+//
+// Copyright 2018 Ulf Adams
+//
+// The contents of this file may be used under the terms of the Apache License,
+// Version 2.0.
+//
+//    (See accompanying file LICENSE-Apache or copy at
+//     http://www.apache.org/licenses/LICENSE-2.0)
+//
+// Alternatively, the contents of this file may be used under the terms of
+// the Boost Software License, Version 1.0.
+//    (See accompanying file LICENSE-Boost or copy at
+//     https://www.boost.org/LICENSE_1_0.txt)
+
+[tests/d2s_test.rs]
+//
+// Copyright 2018 Ulf Adams
+//
+// The contents of this file may be used under the terms of the Apache License,
+// Version 2.0.
+//
+//    (See accompanying file LICENSE-Apache or copy at
+//     http://www.apache.org/licenses/LICENSE-2.0)
+//
+// Alternatively, the contents of this file may be used under the terms of
+// the Boost Software License, Version 1.0.
+//    (See accompanying file LICENSE-Boost or copy at
+//     https://www.boost.org/LICENSE_1_0.txt)
+
+[tests/f2s_test.rs]
+//
+// Copyright 2018 Ulf Adams
+//
+// The contents of this file may be used under the terms of the Apache License,
+// Version 2.0.
+//
+//    (See accompanying file LICENSE-Apache or copy at
+//     http://www.apache.org/licenses/LICENSE-2.0)
+//
+// Alternatively, the contents of this file may be used under the terms of
+// the Boost Software License, Version 1.0.
+//    (See accompanying file LICENSE-Boost or copy at
+//     https://www.boost.org/LICENSE_1_0.txt)
+
+[tests/s2d_test.rs]
+//
+// Copyright 2018 Ulf Adams
+//
+// The contents of this file may be used under the terms of the Apache License,
+// Version 2.0.
+//
+//    (See accompanying file LICENSE-Apache or copy at
+//     http://www.apache.org/licenses/LICENSE-2.0)
+//
+// Alternatively, the contents of this file may be used under the terms of
+// the Boost Software License, Version 1.0.
+//    (See accompanying file LICENSE-Boost or copy at
+//     https://www.boost.org/LICENSE_1_0.txt)
+
+[tests/s2f_test.rs]
+//
+// Copyright 2018 Ulf Adams
+//
+// The contents of this file may be used under the terms of the Apache License,
+// Version 2.0.
+//
+//    (See accompanying file LICENSE-Apache or copy at
+//     http://www.apache.org/licenses/LICENSE-2.0)
+//
+// Alternatively, the contents of this file may be used under the terms of
+// the Boost Software License, Version 1.0.
+//    (See accompanying file LICENSE-Boost or copy at
+//     https://www.boost.org/LICENSE_1_0.txt)

@@ -57,9 +57,26 @@ impl History {
         self.pending.is_some()
     }
 
+    /// 当前事务里已有写入（用于提交前做公式重算等收尾）。
+    pub fn has_changes(&self) -> bool {
+        self.pending.as_ref().is_some_and(|p| p.changed)
+    }
+
     /// 实际写入后设置修改标记。空闲帧不比较或复制项目。
     pub fn changed(&mut self) {
         self.pending.as_mut().expect("写入前应开启撤销事务").changed = true;
+    }
+
+    /// 一次性编辑收尾时与起点比较；空闲帧和旧连续编辑仍使用 changed 标记。
+    pub fn changed_if_different(&mut self, current: &Project) -> bool {
+        let pending = self.pending.as_mut().expect("写入前应开启撤销事务");
+        pending.changed = pending.before.project != *current;
+        pending.changed
+    }
+
+    /// 放弃当前事务并移回原快照，不改动已提交的撤销/重做记录及预算。
+    pub fn rollback(&mut self) -> Option<Project> {
+        self.pending.take().map(|pending| pending.before.project)
     }
 
     pub fn commit(&mut self, current: &Project) -> bool {
@@ -132,13 +149,31 @@ impl Snapshot {
     }
 }
 
-/// 估算快照拥有的堆内存；BTreeMap 按每项 128 字节保守计入节点开销。
+/// 估算快照拥有的堆内存，曲线按 Vec 容量及对象拥有的字符串计入。
 fn estimated_bytes(p: &Project) -> usize {
     let mut bytes = p.books.capacity() * size_of::<Book>() + p.graphs.capacity() * size_of::<Graph>();
+    bytes += p.notes.capacity() * size_of::<crate::Note>()
+        + p.notes
+            .iter()
+            .map(|n| n.name.capacity() + n.text.capacity())
+            .sum::<usize>();
     bytes += p.folders.capacity() * size_of::<crate::project_tree::Folder>()
         + p.folders
             .iter()
             .map(|f| f.name.capacity() + f.items.capacity() * size_of::<u64>())
+            .sum::<usize>();
+    bytes += p.fit_functions.capacity() * size_of::<crate::nlfit::SavedFitFunction>()
+        + p.fit_functions
+            .iter()
+            .map(|saved| {
+                let f = &saved.definition;
+                f.name.capacity()
+                    + f.formula.capacity()
+                    + f.constraints.capacity()
+                    + f.parameters.capacity() * size_of::<String>()
+                    + f.parameters.iter().map(String::capacity).sum::<usize>()
+                    + f.initial.capacity() * size_of::<f64>()
+            })
             .sum::<usize>();
     for b in &p.books {
         bytes += b.name.capacity() + b.columns.capacity() * size_of::<Column>();
@@ -148,32 +183,30 @@ fn estimated_bytes(p: &Project) -> usize {
                 .map(|s| s.capacity())
                 .sum::<usize>();
             bytes += c.data.estimated_bytes();
+            bytes += c.fit_report.as_ref().map_or(0, |r| r.estimated_bytes());
             bytes += c.derived_from.as_ref().map_or(0, String::capacity);
             bytes += c.error_for.as_ref().map_or(0, String::capacity);
+            if let Some(crate::ops::Operation {
+                kind: crate::ops::OpKind::Nonlinear(recipe),
+                y,
+                x,
+                ..
+            }) = &c.op
+            {
+                bytes += recipe.estimated_bytes() + y.capacity() + x.as_ref().map_or(0, String::capacity);
+            }
         }
     }
     for g in &p.graphs {
         bytes += g.name.capacity() + std::mem::size_of_val(g.page.layers());
         for layer in g.page.layers() {
+            bytes += layer.estimated_plot_bytes();
             bytes += [&layer.title, &layer.x_title, &layer.y_title]
                 .iter()
                 .map(|s| s.capacity())
                 .sum::<usize>();
             bytes += layer.x_key.as_ref().map_or(0, String::capacity);
             bytes += layer.labels.column.as_ref().map_or(0, String::capacity);
-            for keys in [&layer.y_keys, &layer.line_only] {
-                bytes += keys.capacity() * size_of::<String>() + keys.iter().map(String::capacity).sum::<usize>();
-            }
-            bytes += layer
-                .x_by_y
-                .iter()
-                .map(|(k, v)| 128 + k.capacity() + v.capacity())
-                .sum::<usize>();
-            bytes += layer
-                .base_by_y
-                .iter()
-                .map(|(k, v)| 128 + k.capacity() + v.capacity())
-                .sum::<usize>();
         }
     }
     bytes
@@ -272,5 +305,292 @@ mod tests {
         p = h.undo(&p).unwrap();
         assert!(h.bytes <= 4096);
         assert!(h.redo(&p).is_none());
+    }
+    #[test]
+    fn fit_report_memory_is_included_in_snapshot_budget() {
+        let mut p = Project::sample();
+        p.nlfit(
+            &crate::ops::Source::Book {
+                id: 1,
+                selected: vec!["C".into()],
+                rows: None,
+            },
+            crate::nlfit::Model::ExpDec1,
+            &[],
+            &[],
+        )
+        .unwrap();
+        let before = estimated_bytes(&p);
+        p.books[0]
+            .columns
+            .iter_mut()
+            .find_map(|c| c.fit_report.as_mut())
+            .unwrap()
+            .error = Some("x".repeat(8192));
+        assert!(estimated_bytes(&p) >= before + 8192);
+    }
+
+    #[test]
+    fn custom_fit_library_memory_is_included_in_snapshot_budget() {
+        let mut project = Project::default();
+        let empty = estimated_bytes(&project);
+        let definition = crate::nlfit::CustomFitDefinition::from_text("Line", "a*x+b", "a,b", "2,1", "a >= 0").unwrap();
+        project.save_fit_function(None, definition).unwrap();
+        project.fit_functions[0].definition.formula.reserve(4096);
+        assert!(estimated_bytes(&project) > empty + 4096);
+        assert_eq!(estimated_bytes(&project), reference_estimated_bytes(&project));
+        let snapshot = Snapshot::new(project.clone(), "function".into());
+        assert_eq!(
+            snapshot.bytes,
+            estimated_bytes(&snapshot.project) + size_of::<Snapshot>() + "function".len()
+        );
+    }
+
+    fn reference_estimated_bytes(p: &Project) -> usize {
+        let mut bytes = p.books.capacity() * size_of::<Book>() + p.graphs.capacity() * size_of::<Graph>();
+        bytes += p.notes.capacity() * size_of::<crate::Note>()
+            + p.notes
+                .iter()
+                .map(|n| n.name.capacity() + n.text.capacity())
+                .sum::<usize>();
+        bytes += p.folders.capacity() * size_of::<crate::project_tree::Folder>()
+            + p.folders
+                .iter()
+                .map(|f| f.name.capacity() + f.items.capacity() * size_of::<u64>())
+                .sum::<usize>();
+        bytes += p.fit_functions.capacity() * size_of::<crate::nlfit::SavedFitFunction>()
+            + p.fit_functions
+                .iter()
+                .map(|saved| {
+                    let f = &saved.definition;
+                    f.name.capacity()
+                        + f.formula.capacity()
+                        + f.constraints.capacity()
+                        + f.parameters.capacity() * size_of::<String>()
+                        + f.parameters.iter().map(String::capacity).sum::<usize>()
+                        + f.initial.capacity() * size_of::<f64>()
+                })
+                .sum::<usize>();
+        for b in &p.books {
+            bytes += b.name.capacity() + b.columns.capacity() * size_of::<Column>();
+            for c in &b.columns {
+                bytes += [&c.key, &c.long_name, &c.units, &c.comment]
+                    .iter()
+                    .map(|s| s.capacity())
+                    .sum::<usize>();
+                bytes += c.data.estimated_bytes();
+                bytes += c.fit_report.as_ref().map_or(0, |r| r.estimated_bytes());
+                bytes += c.derived_from.as_ref().map_or(0, String::capacity);
+                bytes += c.error_for.as_ref().map_or(0, String::capacity);
+                if let Some(crate::ops::Operation {
+                    kind: crate::ops::OpKind::Nonlinear(recipe),
+                    y,
+                    x,
+                    ..
+                }) = &c.op
+                {
+                    bytes += recipe.estimated_bytes() + y.capacity() + x.as_ref().map_or(0, String::capacity);
+                }
+            }
+        }
+        for g in &p.graphs {
+            bytes += g.name.capacity() + std::mem::size_of_val(g.page.layers());
+            for layer in g.page.layers() {
+                bytes += layer.spec.plots.capacity() * size_of::<crate::page::plots::Plot>();
+                for plot in &layer.spec.plots {
+                    bytes += plot.source.col.capacity();
+                    bytes += plot.x.as_ref().map_or(0, |r| r.col.capacity());
+                    bytes += plot.base.as_ref().map_or(0, |r| r.col.capacity());
+                    bytes += plot.style.as_ref().map_or(0, |style| style.legend_label.capacity());
+                }
+                bytes += [&layer.title, &layer.x_title, &layer.y_title]
+                    .iter()
+                    .map(|s| s.capacity())
+                    .sum::<usize>();
+                bytes += layer.x_key.as_ref().map_or(0, String::capacity);
+                bytes += layer.labels.column.as_ref().map_or(0, String::capacity);
+            }
+        }
+        bytes
+    }
+
+    fn curve_budget_fixture(unbound: bool, empty: bool) -> Project {
+        fn reserved(text: &str, capacity: usize) -> String {
+            let mut value = String::with_capacity(capacity);
+            value.push_str(text);
+            value
+        }
+        let mut p = Project::sample();
+        p.books.reserve(3);
+        p.graphs.reserve(2);
+        let layer = p.graphs[0].first_layer_mut();
+        if unbound {
+            layer.book_id = None;
+        }
+        layer.edit_draft(|draft| {
+            draft.y_keys.push(reserved("中文列@2", 96));
+            draft.line_only.push(reserved("派生线@2", 128));
+            draft.x_by_y.insert(reserved("hidden@2", 80), reserved("A@2", 192));
+            draft.base_by_y.insert(reserved("B", 64), reserved("", 96));
+            draft
+                .base_by_y
+                .insert(reserved("hidden@2", 160), reserved("lower@2", 320));
+            draft.row_by_y.insert(reserved("hidden", 144), None);
+            draft.row_by_y.insert(reserved("中文列@2", 240), Some((1, 3)));
+            if empty {
+                draft.y_keys.clear();
+                draft.line_only.clear();
+            }
+        });
+        layer.spec.plots.reserve(37);
+        layer.spec.plots[0].source.col.reserve(96);
+        layer.spec.x_key = Some(reserved("A", 64));
+        layer.labels.column = Some(reserved("标签列", 128));
+        layer.title = reserved("预算回归", 256);
+        let second = layer.clone();
+        p.graphs[0].page.add_layer(second);
+        p
+    }
+
+    #[test]
+    fn curve_budget_counts_vec_capacity_hidden_and_unbound_entries() {
+        for unbound in [false, true] {
+            for empty in [false, true] {
+                let p = curve_budget_fixture(unbound, empty);
+                // 原项目的预留容量和快照克隆后的容量分别核对。
+                assert_eq!(estimated_bytes(&p), reference_estimated_bytes(&p));
+                let mut snapshot = p.clone();
+                assert_eq!(estimated_bytes(&snapshot), reference_estimated_bytes(&snapshot));
+                let before = estimated_bytes(&snapshot);
+                snapshot.graphs[0].first_layer_mut().set_plot_style(
+                    "style-only",
+                    Some(crate::page::CurveStyle {
+                        legend_label: "曲线对象拥有的标签".repeat(100),
+                        right_axis: true,
+                        ..Default::default()
+                    }),
+                );
+                assert!(estimated_bytes(&snapshot) > before, "逐项计入 Vec 对象及标签的实际分配");
+                assert_eq!(estimated_bytes(&snapshot), reference_estimated_bytes(&snapshot));
+            }
+        }
+    }
+
+    #[test]
+    fn curve_budget_preserves_exact_limits_eviction_redo_and_branching() {
+        let initial = curve_budget_fixture(true, true);
+        let label = "曲线改动😀";
+        let cost = reference_estimated_bytes(&initial.clone()) + size_of::<Snapshot>() + label.len();
+        for (max_steps, max_bytes, retained) in [
+            (2, usize::MAX, 2),
+            (100, 2 * cost, 2),
+            (100, 2 * cost - 1, 1),
+            (100, cost - 1, 0),
+        ] {
+            let mut p = initial.clone();
+            let mut states = vec![p.clone()];
+            let mut h = History::with_limits(max_steps, max_bytes);
+            for rows in [Some((0, 3)), Some((1, 4))] {
+                h.begin(&p, label);
+                assert_eq!(h.pending.as_ref().unwrap().before.bytes, cost);
+                p.graphs[0].first_layer_mut().spec.rows = rows;
+                h.changed();
+                assert!(h.commit(&p));
+                states.push(p.clone());
+            }
+            assert_eq!(h.undo.len(), retained);
+            assert_eq!(h.bytes, retained * cost);
+            for i in (2 - retained..2).rev() {
+                assert_eq!(h.undo_label(), Some(label));
+                p = h.undo(&p).unwrap();
+                assert_eq!(p, states[i]);
+                assert_eq!(h.bytes, retained * cost);
+            }
+            assert!(h.undo(&p).is_none());
+            for state in states.iter().skip(3 - retained) {
+                assert_eq!(h.redo_label(), Some(label));
+                p = h.redo(&p).unwrap();
+                assert_eq!(&p, state);
+                assert_eq!(h.bytes, retained * cost);
+            }
+            assert!(h.redo(&p).is_none());
+            if retained > 0 {
+                p = h.undo(&p).unwrap();
+                h.begin(&p, label);
+                assert!(!h.commit(&p));
+                assert_eq!(h.redo_label(), Some(label));
+                h.begin(&p, label);
+                p.graphs[0].first_layer_mut().spec.rows = Some((2, 5));
+                h.changed();
+                assert!(h.commit(&p));
+                assert_eq!(h.bytes, retained * cost);
+                assert!(h.redo(&p).is_none());
+            }
+        }
+    }
+
+    #[test]
+    fn rollback_moves_pending_snapshot_and_preserves_history_budget_and_redo() {
+        let mut p = Project::sample();
+        let initial = p.clone();
+        let mut h = History::default();
+        h.begin(&p, "已提交");
+        p.new_book();
+        h.changed();
+        assert!(h.commit(&p));
+        let committed = p.clone();
+        p = h.undo(&p).unwrap();
+        assert_eq!(p, initial);
+        let bytes = h.bytes;
+        h.begin(&p, "放弃");
+        let crate::ColumnData::Num { values, .. } =
+            &h.pending.as_ref().unwrap().before.project.books[0].columns[0].data
+        else {
+            panic!("numeric");
+        };
+        let allocation = values.as_ptr();
+        p.books[0].columns[0].set(0, "临时文字".into());
+        p.new_book();
+        assert!(h.changed_if_different(&p));
+        assert!(h.has_changes());
+        p = h.rollback().unwrap();
+        assert_eq!(p, initial);
+        let crate::ColumnData::Num { values, .. } = &p.books[0].columns[0].data else {
+            panic!("numeric");
+        };
+        assert_eq!(values.as_ptr(), allocation, "回滚移动原快照而非再次克隆");
+        assert!(!h.is_pending());
+        assert_eq!(h.bytes, bytes);
+        assert!(h.undo_label().is_none());
+        assert_eq!(h.redo_label(), Some("已提交"));
+        assert!(h.rollback().is_none());
+        assert_eq!(h.bytes, bytes);
+        assert_eq!(h.redo(&p).unwrap(), committed);
+    }
+
+    #[test]
+    fn actual_change_detection_can_return_to_start_without_consuming_redo() {
+        let mut p = Project::sample();
+        let mut h = History::default();
+        h.begin(&p, "已提交");
+        p.new_book();
+        h.changed();
+        assert!(h.commit(&p));
+        p = h.undo(&p).unwrap();
+        let before = p.clone();
+        let bytes = h.bytes;
+        h.begin(&p, "无改动");
+        assert!(!h.changed_if_different(&p));
+        assert!(!h.has_changes());
+        p.books[0].name.push('!');
+        assert!(h.changed_if_different(&p));
+        p.books[0].name.pop();
+        assert!(!h.changed_if_different(&p));
+        assert!(!h.has_changes());
+        assert!(!h.commit(&p));
+        assert_eq!(p, before);
+        assert_eq!(h.bytes, bytes);
+        assert_eq!(h.redo_label(), Some("已提交"));
+        assert!(h.undo_label().is_none());
     }
 }

@@ -19,10 +19,56 @@ pub struct PolyFit {
     pub dof: usize,
     pub x_min: f64,
     pub x_max: f64,
+    /// 总平方和（对均值）。
+    pub tss: f64,
     // 标准化后的系数，用来稳定地求值
     mx: f64,
     sx: f64,
     bt: Vec<f64>,
+    /// 标准化系数的协方差 σ²·(TᵀT)⁻¹。
+    cov_t: Vec<Vec<f64>>,
+}
+
+/// 回归的方差分析表：回归、残差、总计（对均值校正）。
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct FitAnova {
+    pub df_reg: f64,
+    pub ss_reg: f64,
+    pub df_err: f64,
+    pub ss_err: f64,
+    pub df_tot: f64,
+    pub ss_tot: f64,
+    pub f: f64,
+    pub p: f64,
+}
+
+impl FitAnova {
+    pub fn ms_reg(&self) -> f64 {
+        self.ss_reg / self.df_reg
+    }
+    pub fn ms_err(&self) -> f64 {
+        self.ss_err / self.df_err
+    }
+}
+
+/// 置信带与预测带的半宽：t 分位数 × √var(ŷ) 与 × √(σ² + var(ŷ))。
+pub fn band_half_widths(var_fit: f64, sigma2: f64, dof: usize, level: f64) -> (f64, f64) {
+    let t = crate::stats::t_ppf(1.0 - (1.0 - level) / 2.0, dof as f64);
+    (t * var_fit.max(0.0).sqrt(), t * (sigma2 + var_fit.max(0.0)).sqrt())
+}
+
+/// 系数的 t 值与双侧 p 值。
+pub fn coef_t_tests(values: &[f64], se: &[f64], dof: usize) -> Vec<(f64, f64)> {
+    values
+        .iter()
+        .zip(se)
+        .map(|(v, s)| {
+            let t = v / s;
+            // 双侧尾概率直接取 I_{ν/(ν+t²)}(ν/2, 1/2)，避免 1 − CDF 在极小 p 时相减抵消
+            let df = dof as f64;
+            (t, crate::stats::beta_inc(df / 2.0, 0.5, df / (df + t * t)))
+        })
+        .collect()
 }
 
 impl PolyFit {
@@ -40,6 +86,51 @@ impl PolyFit {
 
     pub fn order(&self) -> usize {
         self.coef.len() - 1
+    }
+
+    /// 在 x 处的置信带、预测带半宽（`level` 如 0.95）。
+    pub fn band(&self, x: f64, level: f64) -> (f64, f64) {
+        let t = (x - self.mx) / self.sx;
+        let g: Vec<f64> = (0..self.bt.len()).map(|j| t.powi(j as i32)).collect();
+        let var: f64 = (0..g.len())
+            .map(|i| (0..g.len()).map(|j| g[i] * self.cov_t[i][j] * g[j]).sum::<f64>())
+            .sum();
+        band_half_widths(var, self.rss / self.dof as f64, self.dof, level)
+    }
+
+    /// 方差分析：回归自由度为阶数，残差自由度 n − 阶数 − 1。
+    pub fn anova(&self) -> FitAnova {
+        let df_reg = self.order() as f64;
+        let df_err = self.dof as f64;
+        let ss_reg = self.tss - self.rss;
+        let f = (ss_reg / df_reg) / (self.rss / df_err);
+        FitAnova {
+            df_reg,
+            ss_reg,
+            df_err,
+            ss_err: self.rss,
+            df_tot: (self.n - 1) as f64,
+            ss_tot: self.tss,
+            f,
+            p: crate::stats::f_sf(f, df_reg, df_err),
+        }
+    }
+
+    /// 各系数（原始 x 的幂次）的 t 值和双侧 p 值。
+    pub fn t_tests(&self) -> Vec<(f64, f64)> {
+        coef_t_tests(&self.coef, &self.se, self.dof)
+    }
+
+    /// 拟合多项式在 x 处的 k 阶导数（k = 0 即拟合值）。
+    pub fn derivative_at(&self, x: f64, k: usize) -> f64 {
+        let t = (x - self.mx) / self.sx;
+        let mut f = 0.0;
+        for (j, b) in self.bt.iter().enumerate().skip(k) {
+            // d^k/dt^k t^j = j!/(j−k)! · t^(j−k)
+            let falling: f64 = ((j - k + 1)..=j).map(|v| v as f64).product();
+            f += b * falling * t.powi((j - k) as i32);
+        }
+        f / self.sx.powi(k as i32)
     }
 
     /// 线性拟合的 Pearson 相关系数；高阶拟合返回 None。
@@ -157,9 +248,11 @@ pub fn polyfit(xs: &[f64], ys: &[f64], order: usize) -> Option<PolyFit> {
         dof: n - p,
         x_min: xs[..n].iter().copied().fold(f64::INFINITY, f64::min),
         x_max: xs[..n].iter().copied().fold(f64::NEG_INFINITY, f64::max),
+        tss: 0.0,
         mx,
         sx,
         bt,
+        cov_t: vec![],
     };
     let ym = ys[..n].iter().sum::<f64>() / n as f64;
     let (mut rss, mut tss) = (0.0, 0.0);
@@ -199,31 +292,125 @@ pub fn polyfit(xs: &[f64], ys: &[f64], order: usize) -> Option<PolyFit> {
         })
         .collect();
     fit.rss = rss;
+    fit.tss = tss;
+    fit.cov_t = inv.iter().map(|r| r.iter().map(|v| v * s2).collect()).collect();
     fit.r2 = if tss > 0.0 { 1.0 - rss / tss } else { f64::NAN };
     fit.adj_r2 = 1.0 - (1.0 - fit.r2) * (n - 1) as f64 / fit.dof as f64;
     Some(fit)
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum SmoothMethod {
     /// 移动平均。
     MovingAverage,
     /// Savitzky-Golay 二阶（窗口内局部二次拟合）。
     SavitzkyGolay,
+    /// LOWESS：每点取最近的“窗口点数”个点，按 tricube 权重做局部加权线性回归。
+    Lowess,
+    /// FFT 低通：去掉首尾连线趋势后，滤掉高于 1/(窗口点数·Δx) 的频率再加回趋势；需要等间距 X。
+    FftFilter,
 }
 
 impl SmoothMethod {
+    pub const ALL: [SmoothMethod; 4] = [
+        SmoothMethod::SavitzkyGolay,
+        SmoothMethod::MovingAverage,
+        SmoothMethod::Lowess,
+        SmoothMethod::FftFilter,
+    ];
+
     pub fn label(self) -> &'static str {
         match self {
             SmoothMethod::MovingAverage => "移动平均",
             SmoothMethod::SavitzkyGolay => "Savitzky-Golay（二阶）",
+            SmoothMethod::Lowess => "LOWESS",
+            SmoothMethod::FftFilter => "FFT 滤波",
         }
+    }
+}
+
+/// LOWESS 局部加权线性回归（不做稳健迭代）：x 不必有序；每点取最近的 k 个点（k = 窗口点数，不超过总点数），
+/// 带宽为其中最远的距离，权重 (1 − (d/h)³)³。
+pub fn lowess(xs: &[f64], ys: &[f64], window: usize) -> Vec<f64> {
+    let n = ys.len().min(xs.len());
+    if n == 0 {
+        return vec![];
+    }
+    let k = window.max(2).min(n);
+    let mut order: Vec<usize> = (0..n).collect();
+    order.sort_by(|&a, &b| xs[a].total_cmp(&xs[b]));
+    let sx: Vec<f64> = order.iter().map(|&i| xs[i]).collect();
+    let mut out = vec![0.0; n];
+    for (pos, &i) in order.iter().enumerate() {
+        let x0 = sx[pos];
+        // 有序数组里向两侧扩展，每次取更近的一侧，得到最近的 k 个点
+        let (mut a, mut b) = (pos, pos);
+        while b - a + 1 < k {
+            if a == 0 {
+                b += 1;
+            } else if b == n - 1 || x0 - sx[a - 1] <= sx[b + 1] - x0 {
+                a -= 1;
+            } else {
+                b += 1;
+            }
+        }
+        let h = (x0 - sx[a]).max(sx[b] - x0);
+        let (mut sw, mut swx, mut swy, mut swxx, mut swxy) = (0.0, 0.0, 0.0, 0.0, 0.0);
+        for j in a..=b {
+            let w = if h > 0.0 {
+                let u = ((sx[j] - x0).abs() / h).min(1.0);
+                (1.0 - u * u * u).powi(3)
+            } else {
+                1.0
+            };
+            let (x, y) = (sx[j] - x0, ys[order[j]]);
+            sw += w;
+            swx += w * x;
+            swy += w * y;
+            swxx += w * x * x;
+            swxy += w * x * y;
+        }
+        // 以 x0 为原点的加权直线，截距即平滑值；退化时取加权平均
+        let det = sw * swxx - swx * swx;
+        out[i] = if det.abs() > 1e-12 * sw * swxx.max(f64::MIN_POSITIVE) {
+            (swxx * swy - swx * swxy) / det
+        } else if sw > 0.0 {
+            swy / sw
+        } else {
+            ys[i]
+        };
+    }
+    out
+}
+
+/// FFT 低通平滑：截止频率 1/(window·Δx)，Δx 取平均采样间隔。先减去首尾连线、滤波后加回，减少端点振铃。
+pub fn fft_smooth(xs: &[f64], ys: &[f64], window: usize) -> Vec<f64> {
+    let n = ys.len().min(xs.len());
+    if n < 3 {
+        return ys[..n].to_vec();
+    }
+    let dt = (xs[n - 1] - xs[0]) / (n - 1) as f64;
+    if !(dt.is_finite() && dt > 0.0) {
+        return ys[..n].to_vec();
+    }
+    let trend = |i: usize| ys[0] + (ys[n - 1] - ys[0]) * i as f64 / (n - 1) as f64;
+    let detrended: Vec<f64> = (0..n).map(|i| ys[i] - trend(i)).collect();
+    let cutoff = 1.0 / (window.max(2) as f64 * dt);
+    match crate::fft::filter(&detrended, dt, crate::fft::FilterKind::LowPass(cutoff)) {
+        Ok(v) => v.iter().enumerate().map(|(i, y)| y + trend(i)).collect(),
+        Err(_) => ys[..n].to_vec(),
     }
 }
 
 /// 平滑。窗口点数会被调整为不小于 3 的奇数。
 /// 移动平均在两端缩小窗口；Savitzky-Golay 在两端平移窗口保持点数，并按实际 x 间距拟合。
 pub fn smooth(xs: &[f64], ys: &[f64], method: SmoothMethod, window: usize) -> Vec<f64> {
+    match method {
+        SmoothMethod::Lowess => return lowess(xs, ys, window),
+        SmoothMethod::FftFilter => return fft_smooth(xs, ys, window),
+        _ => {}
+    }
     let n = ys.len();
     let w = (window.max(3)) | 1;
     let h = w / 2;
@@ -235,21 +422,48 @@ pub fn smooth(xs: &[f64], ys: &[f64], method: SmoothMethod, window: usize) -> Ve
                 ys[a..=b].iter().sum::<f64>() / (b - a + 1) as f64
             }
             SmoothMethod::SavitzkyGolay => {
-                let (mut a, mut b) = (i as isize - h as isize, (i + h) as isize);
-                if a < 0 {
-                    b -= a;
-                    a = 0;
-                }
-                if b > n as isize - 1 {
-                    a -= b - (n as isize - 1);
-                    b = n as isize - 1;
-                }
-                let a = a.max(0) as usize;
-                let b = b as usize;
+                let (a, b) = sg_window(i, n, h);
                 polyfit(&xs[a..=b], &ys[a..=b], 2)
                     .map(|f| f.eval(xs[i]))
                     .unwrap_or(ys[i])
             }
+            SmoothMethod::Lowess | SmoothMethod::FftFilter => unreachable!(),
+        })
+        .collect()
+}
+
+/// Savitzky–Golay 窗口：以 i 为中心、半宽 h；靠近两端时平移窗口保持点数。
+fn sg_window(i: usize, n: usize, h: usize) -> (usize, usize) {
+    let (mut a, mut b) = (i as isize - h as isize, (i + h) as isize);
+    if a < 0 {
+        b -= a;
+        a = 0;
+    }
+    if b > n as isize - 1 {
+        a -= b - (n as isize - 1);
+        b = n as isize - 1;
+    }
+    (a.max(0) as usize, b as usize)
+}
+
+/// Savitzky–Golay 平滑求导：每点在窗口内按实际 x 做 `order` 阶最小二乘多项式，
+/// 取该多项式在此点的 `deriv` 阶导数。窗口取奇数并不超过数据点数，阶数限制在窗口点数 − 2 以内。
+/// 等间距数据与 SciPy `savgol_filter(..., deriv, delta, mode="interp")` 一致。
+pub fn sg_derivative(xs: &[f64], ys: &[f64], window: usize, order: usize, deriv: usize) -> Vec<f64> {
+    let n = ys.len().min(xs.len());
+    if n < 3 {
+        return vec![f64::NAN; n];
+    }
+    let mut w = window.max(3) | 1;
+    if w > n {
+        w = if n % 2 == 1 { n } else { n - 1 };
+    }
+    let order = order.clamp(deriv.max(1), w - 2);
+    let h = w / 2;
+    (0..n)
+        .map(|i| {
+            let (a, b) = sg_window(i, n, h);
+            polyfit(&xs[a..=b], &ys[a..=b], order).map_or(f64::NAN, |f| f.derivative_at(xs[i], deriv))
         })
         .collect()
 }
@@ -291,6 +505,7 @@ pub fn cumulative_trapezoid(xs: &[f64], ys: &[f64]) -> (Vec<f64>, f64) {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum NormalizeMethod {
     /// 缩放到 [0, 1]。
     MinMax,
@@ -447,6 +662,294 @@ mod tests {
             smooth(&x, &y, SmoothMethod::MovingAverage, 4),
             smooth(&x, &y, SmoothMethod::MovingAverage, 5)
         );
+    }
+
+    #[test]
+    fn savitzky_golay_derivatives_match_scipy() {
+        // 参考值：SciPy 1.17.1 savgol_filter(y, w, order, deriv, delta=0.5, mode="interp")
+        let xs: Vec<f64> = (0..21).map(|i| i as f64 * 0.5).collect();
+        let ys: Vec<f64> = xs
+            .iter()
+            .map(|x| x.sin() + 0.1 * (3.0 * x).cos() + 0.05 * x * x)
+            .collect();
+        let cases: [((usize, usize, usize), [f64; 21]); 3] = [
+            (
+                (7, 2, 1),
+                [
+                    1.2288647913282356,
+                    0.878913110890015,
+                    0.5289614304517944,
+                    0.1790097500135727,
+                    -0.11305126965050136,
+                    -0.3178199022619514,
+                    -0.4193068628723384,
+                    -0.360385292862031,
+                    -0.0940177391507212,
+                    0.3137475274346442,
+                    0.724245698629218,
+                    1.055062901983875,
+                    1.2893441204270788,
+                    1.3834645877258036,
+                    1.2749345673293544,
+                    0.993761574815048,
+                    0.671469969649942,
+                    0.4151520871158408,
+                    0.110712648234077,
+                    -0.19372679064769227,
+                    -0.4981662295294613,
+                ],
+            ),
+            (
+                (9, 3, 2),
+                [
+                    -1.1030624516612693,
+                    -0.9521215782816457,
+                    -0.8011807049020221,
+                    -0.6502398315223986,
+                    -0.4992989581427748,
+                    -0.3053723773511236,
+                    -0.033628165392129816,
+                    0.3271659709805541,
+                    0.6617433097968165,
+                    0.8066127449432817,
+                    0.7416961594678995,
+                    0.5666397310787632,
+                    0.320761216897252,
+                    -0.01999320626558554,
+                    -0.3805725173477872,
+                    -0.5896260748950561,
+                    -0.5758406998981406,
+                    -0.5487916922003695,
+                    -0.5217426845025978,
+                    -0.494693676804826,
+                    -0.4676446691070542,
+                ],
+            ),
+            (
+                (5, 3, 1),
+                [
+                    0.7745739500717682,
+                    0.7257137891496365,
+                    0.6023357879382183,
+                    0.47601755760440767,
+                    -0.1422955154852812,
+                    -0.7946179103007259,
+                    -0.7956748693480048,
+                    -0.3547031538711767,
+                    -0.11211816648978162,
+                    0.029605896452785496,
+                    0.6131718146745665,
+                    1.4432223953654515,
+                    1.754457565412268,
+                    1.4663884094134998,
+                    1.2337640411396378,
+                    1.2232304430875134,
+                    0.8914169928073257,
+                    0.15538546948160104,
+                    -0.2591836769420599,
+                    -0.06169312502709734,
+                    0.7042938573576871,
+                ],
+            ),
+        ];
+        for ((w, order, deriv), want) in cases {
+            let got = sg_derivative(&xs, &ys, w, order, deriv);
+            for (g, e) in got.iter().zip(want) {
+                assert!(
+                    (g - e).abs() < 1e-9 * (1.0 + e.abs()),
+                    "w={w} order={order} deriv={deriv}: {g} vs {e}"
+                );
+            }
+        }
+        // 二次函数的二阶导数处处为常数；窗口大于数据点数时自动缩小
+        let q: Vec<f64> = xs.iter().map(|x| 3.0 * x * x - x + 2.0).collect();
+        assert!(sg_derivative(&xs, &q, 51, 2, 2).iter().all(|d| (d - 6.0).abs() < 1e-9));
+        assert!(sg_derivative(&xs[..2], &q[..2], 5, 2, 1).iter().all(|d| d.is_nan()));
+    }
+
+    #[test]
+    fn lowess_and_fft_smoothing_match_numpy_references() {
+        // LOWESS 参考：NumPy 逐点取最近 k 点、tricube 权重加权线性最小二乘（输入 x 无序、不等间距）
+        let xp = [
+            2.359807621135331,
+            0.0,
+            12.419160170741758,
+            5.826012958872607,
+            0.75,
+            10.47846096908265,
+            4.0590169943749475,
+            7.65,
+            1.5414213562373094,
+            11.443608329051592,
+            4.934846922834953,
+            8.581138830084189,
+            3.1999999999999997,
+            9.52414363469547,
+            6.731370849898476,
+        ];
+        let yp = [
+            1.2393594152648446,
+            0.3,
+            0.9397088056528399,
+            -0.1587369139173762,
+            0.6250147004584157,
+            -0.12135780705562005,
+            -0.3990030405357141,
+            1.6745176613308415,
+            0.9967635735845345,
+            0.5036763647294626,
+            -0.2639511451346272,
+            1.4903286340883781,
+            0.04936229817811538,
+            1.1037479321589518,
+            1.3407074170470343,
+        ];
+        for (k, want) in [
+            (
+                5,
+                [
+                    0.826048407995424,
+                    0.3074982986326627,
+                    0.8181299180348789,
+                    0.24031276460305978,
+                    0.6263820870553979,
+                    0.41252336187186567,
+                    -0.22880148376920403,
+                    1.524568480510214,
+                    0.9560102423787585,
+                    0.5542156948059328,
+                    -0.27294086351347413,
+                    1.4329321951511074,
+                    0.26854767808896873,
+                    0.8648323762458509,
+                    1.0007572160338059,
+                ],
+            ),
+            (
+                9,
+                [
+                    0.43884185987169244,
+                    0.7824099153254878,
+                    0.4624738639160305,
+                    0.44560105972254715,
+                    0.6901662289415013,
+                    0.782390633499318,
+                    0.14366653566629586,
+                    1.0424922975400932,
+                    0.5702685475123925,
+                    0.6214830336031489,
+                    0.1812709093135082,
+                    1.0624786705017357,
+                    0.3025465641716403,
+                    0.9192846532158123,
+                    0.7992514043812813,
+                ],
+            ),
+        ] {
+            let got = smooth(&xp, &yp, SmoothMethod::Lowess, k);
+            for (g, w) in got.iter().zip(want) {
+                assert!((g - w).abs() < 1e-9, "k={k}: {g} vs {w}");
+            }
+        }
+        // 直线不变
+        let line: Vec<f64> = xp.iter().map(|x| 2.0 * x - 1.0).collect();
+        assert!(lowess(&xp, &line, 5)
+            .iter()
+            .zip(&line)
+            .all(|(a, b)| (a - b).abs() < 1e-9));
+        // FFT 平滑参考：numpy.fft.rfft 去首尾趋势、频率 > 1/(5·0.1) 置零、irfft 后加回趋势
+        let t: Vec<f64> = (0..32).map(|i| i as f64 * 0.1).collect();
+        let s: Vec<f64> = t
+            .iter()
+            .map(|t| {
+                let tau = 2.0 * std::f64::consts::PI;
+                (tau * 0.8 * t).sin() + 0.25 * (tau * 4.0 * t).sin() + 0.5 * t
+            })
+            .collect();
+        let want = [
+            0.09023167491837975,
+            0.4803506441091951,
+            0.923918654360487,
+            1.1756623432721311,
+            1.1244989072477463,
+            0.8238938517285221,
+            0.40491277963974576,
+            -0.015327456136765671,
+            -0.35212032417634176,
+            -0.5261824557321666,
+            -0.4644858113706162,
+            -0.1467352511104726,
+            0.35766069828793345,
+            0.9135268792082749,
+            1.3861355697679818,
+            1.687261598598019,
+            1.7733249019269877,
+            1.6297979476553839,
+            1.2825163237032107,
+            0.822669805404732,
+            0.39549121175389823,
+            0.13814642664674448,
+            0.11710981980833912,
+            0.32228619407436376,
+            0.7091457467732173,
+            1.2241424069950442,
+            1.7797380040387454,
+            2.229453934181274,
+            2.41861869394293,
+            2.3034414995185717,
+            2.027537549636495,
+            1.8523774107559259,
+        ];
+        for (g, w) in smooth(&t, &s, SmoothMethod::FftFilter, 5).iter().zip(want) {
+            assert!((g - w).abs() < 1e-9, "{g} vs {w}");
+        }
+    }
+
+    #[test]
+    fn polynomial_bands_anova_and_t_tests_match_numpy_scipy() {
+        // 参考：NumPy 原始范德蒙德矩阵最小二乘 + scipy.stats（t、F 分布），二阶多项式，95%
+        let noise = |i: usize| (1.7 * i as f64).sin() * 0.6 + (0.37 * (i * i) as f64).cos() * 0.4;
+        let xs: Vec<f64> = (0..41).map(|i| i as f64 * 0.25).collect();
+        let ys: Vec<f64> = xs
+            .iter()
+            .enumerate()
+            .map(|(i, x)| 1.0 + 0.5 * x - 0.03 * x * x + 0.2 * noise(i))
+            .collect();
+        let fit = polyfit(&xs, &ys, 2).unwrap();
+        let close = |g: f64, w: f64, rel: f64| assert!((g - w).abs() <= rel * w.abs(), "{g} vs {w}");
+        let at = [0.0, 3.3, 7.7, 10.0, 12.0];
+        let conf = [
+            0.10150171944461821,
+            0.0488263171620758,
+            0.04851656672767118,
+            0.10150171944461794,
+            0.20421951132107755,
+        ];
+        let pred = [
+            0.24893031711680438,
+            0.2324816400864172,
+            0.2324167829066984,
+            0.24893031711680427,
+            0.30556392544585254,
+        ];
+        for i in 0..5 {
+            let (c, p) = fit.band(at[i], 0.95);
+            close(c, conf[i], 1e-9);
+            close(p, pred[i], 1e-9);
+        }
+        let a = fit.anova();
+        close(a.f, 639.0783635586567, 1e-9);
+        close(a.p, 5.611045444989869e-30, 1e-6);
+        close(a.ss_reg, 16.113114531602644, 1e-9);
+        close(a.ss_err, 0.4790479439730725, 1e-9);
+        close(a.ss_tot, 16.592162475575716, 1e-9);
+        assert_eq!((a.df_reg, a.df_err, a.df_tot), (2.0, 38.0, 40.0));
+        let t = [20.512546418687485, 21.589277997879766, -13.58972948708151];
+        let pv = [3.7382843618811248e-22, 6.215137765756575e-23, 3.610205994049847e-16];
+        for (k, (tv, p)) in fit.t_tests().into_iter().enumerate() {
+            close(tv, t[k], 1e-9);
+            close(p, pv[k], 1e-6);
+        }
     }
 
     #[test]

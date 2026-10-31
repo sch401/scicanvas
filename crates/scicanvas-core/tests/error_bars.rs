@@ -42,7 +42,7 @@ fn errors(sc: &Scene) -> Vec<&Vec<[f64; 4]>> {
 fn association_supports_both_column_orders_and_shared_x_errors() {
     let (mut p, gid) = project();
     let g = p.graph(gid).unwrap().first_layer();
-    assert_eq!(g.y_keys, ["B"]);
+    assert_eq!(g.draft().y_keys, ["B"]);
     let (_, s) = g.series(p.book(1).unwrap());
     assert_eq!(s[0].errors[0], [Some(0.2), Some(2.0)]);
     let b = p.book_mut(1).unwrap();
@@ -117,8 +117,8 @@ fn autoscale_svg_and_all_basic_chart_types_share_error_segments() {
         p.graph_mut(gid).unwrap().first_layer_mut().plot_type = kind;
         let g = p.graph(gid).unwrap();
         let sc = scene::layout_page(g, &p, &[]);
-        assert!(sc.xa.lo <= 0.8 && sc.xa.hi >= 3.4);
-        assert!(sc.ya.lo <= 8.0 && sc.ya.hi >= 34.0);
+        assert!(sc.axes.x.lo <= 0.8 && sc.axes.x.hi >= 3.4);
+        assert!(sc.axes.left_y.lo <= 8.0 && sc.axes.left_y.hi >= 34.0);
         let groups = errors(&sc);
         assert_eq!(groups.len(), if kind == PlotType::VerticalDrop { 2 } else { 1 });
         let group = groups.last().unwrap();
@@ -163,7 +163,7 @@ fn grouped_bars_place_errors_at_each_bar_center() {
     b.columns.push(col("E", Role::Y, &["15", "25", "35"]));
     b.columns.push(col("F", Role::YError, &["1", "2", "3"]));
     let l = p.graph_mut(gid).unwrap().first_layer_mut();
-    l.y_keys.push("E".into());
+    l.edit_draft(|draft| draft.y_keys.push("E".into()));
     l.plot_type = PlotType::Bar;
     let sc = scene::layout_page(p.graph(gid).unwrap(), &p, &[]);
     let groups = errors(&sc);

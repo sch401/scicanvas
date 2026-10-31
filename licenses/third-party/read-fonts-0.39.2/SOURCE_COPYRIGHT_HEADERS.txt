@@ -1,0 +1,13 @@
+[src/ps/cff/dict.rs]
+    VariationStoreOffset,
+    Copyright,
+    IsFixedPitch,
+    ItalicAngle,
+    UnderlinePosition,
+    UnderlineThickness,
+    PaintType,
+    CharstringType,
+    FontMatrix,
+    StrokeWidth,
+    FdArrayOffset,
+    FdSelectOffset,

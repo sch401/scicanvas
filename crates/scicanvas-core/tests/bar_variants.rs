@@ -50,7 +50,7 @@ fn signed_stacks_keep_missing_rows_aligned_and_expand_the_axis() {
     assert_eq!(s[1].points, [[1.0, 7.0], [2.0, 7.0], [3.0, -7.0], [4.0, 0.0]]);
     assert_eq!(s[2].bases, [0.0; 4]);
     let sc = scene::layout_page(p.graph(id).unwrap(), &p, &[]);
-    assert!(sc.ya.lo <= -7.0 && sc.ya.hi >= 7.0);
+    assert!(sc.axes.left_y.lo <= -7.0 && sc.axes.left_y.hi >= 7.0);
     let rects = rectangles(&sc);
     assert_eq!(rects.len(), 11);
     assert_eq!(rects[0][0], rects[3][0]);
@@ -81,7 +81,7 @@ fn percentages_normalize_each_sign_and_handle_zero_and_extreme_scales() {
     assert!((s[0].points[3][1] - 25.0).abs() < 1e-10);
     assert_eq!(s[1].points[4][1], 100.0);
     let sc = scene::layout_page(p.graph(id).unwrap(), &p, &[]);
-    assert_eq!((sc.ya.lo, sc.ya.hi), (-100.0, 100.0));
+    assert_eq!((sc.axes.left_y.lo, sc.axes.left_y.hi), (-100.0, 100.0));
     assert!(svg::render_page(p.graph(id).unwrap(), &p).contains("百分比 (%)"));
 }
 
@@ -97,13 +97,13 @@ fn floating_columns_pair_by_key_and_skip_incomplete_ranges() {
         ],
     );
     let g = p.graph(id).unwrap().first_layer();
-    assert_eq!(g.y_keys, ["C", "E"]);
-    assert_eq!(g.base_by_y.get("C").map(String::as_str), Some("B"));
+    assert_eq!(g.draft().y_keys, ["C", "E"]);
+    assert_eq!(g.draft().base_by_y.get("C").map(String::as_str), Some("B"));
     let s = series(&p, id);
     assert_eq!(s[0].points, [[1.0, 20.0], [3.0, 35.0]]);
     assert_eq!(s[0].bases, [10.0, 40.0]);
     let sc = scene::layout_page(p.graph(id).unwrap(), &p, &[]);
-    assert!(sc.ya.lo > 0.0 && sc.ya.lo <= 10.0 && sc.ya.hi >= 70.0);
+    assert!(sc.axes.left_y.lo > 0.0 && sc.axes.left_y.lo <= 10.0 && sc.axes.left_y.hi >= 70.0);
     assert_eq!(rectangles(&sc).len(), 6);
     let before = series(&p, id);
     p.book_mut(1).unwrap().insert_column(2, Role::Y);
@@ -124,15 +124,14 @@ fn invalid_floating_selection_is_atomic_and_mapping_can_be_adjusted() {
     let before = l.spec.clone();
     assert!(l.set_plot_type(PlotType::FloatingBar).is_err());
     assert_eq!(l.spec, before);
-    l.y_keys.pop();
+    l.edit_draft(|draft| draft.y_keys.pop());
     l.set_plot_type(PlotType::FloatingBar).unwrap();
-    l.base_by_y.insert("C".into(), "D".into());
+    l.edit_draft(|draft| draft.base_by_y.insert("C".into(), "D".into()));
     assert_eq!(series(&p, id)[0].bases, [3.0]);
     p.graph_mut(id)
         .unwrap()
         .first_layer_mut()
-        .base_by_y
-        .insert("C".into(), "C".into());
+        .edit_draft(|draft| draft.base_by_y.insert("C".into(), "C".into()));
     assert!(p.graph(id).unwrap().first_layer().validate(p.book(1).unwrap()).is_err());
     assert!(series(&p, id).is_empty());
 }
@@ -277,7 +276,7 @@ fn v5_persists_all_bar_types_and_v4_defaults_to_no_baseline_mapping() {
         .remove("base_by_y");
     let loaded = project_file::from_json(&v.to_string()).unwrap();
     assert_eq!(loaded.version, project_file::CURRENT_VERSION);
-    assert!(loaded.graph(id).unwrap().first_layer().base_by_y.is_empty());
+    assert!(loaded.graph(id).unwrap().first_layer().draft().base_by_y.is_empty());
     assert_eq!(series(&loaded, id), series(&p, id));
     let spec = PlotSpec::from_selection(p.book(1).unwrap(), &[], PlotType::FloatingBar).unwrap();
     spec.validate(p.book(1).unwrap()).unwrap();

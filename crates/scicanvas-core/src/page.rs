@@ -1,5 +1,8 @@
 //! 页面 → 图层 → 作图描述。图层样式和数据引用均可独立设置。
-use crate::{plotspec::PlotSpec, Book};
+pub(crate) mod plots;
+pub use plots::LayerSpec;
+
+use crate::Book;
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
@@ -10,6 +13,45 @@ pub struct Page {
     pub height_mm: f64,
     pub columns: usize,
     layers: Vec<Layer>,
+    /// 页面背景色，None 为白色。图层和图例的底色跟随页面背景。
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub background: Option<[u8; 3]>,
+    /// 页边距 mm（左、上、右、下）：网格排版的图层放在边距以内；自定义位置的图层仍按整页定位。
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "no_margin"))]
+    pub margin_mm: [f64; 4],
+    /// 网格图层之间的间距 mm（横向、纵向）。
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "no_gap"))]
+    pub gap_mm: [f64; 2],
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Vec::is_empty"))]
+    pub annotations: Vec<TextAnnotation>,
+    /// Page-local stable IDs are never reused after deletion.
+    next_text_id: u64,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub struct TextAnnotation {
+    pub id: u64,
+    pub text: String,
+    /// Top-left anchor as fractions of the entire page, independent of data axes and window pixels.
+    pub position: [f64; 2],
+    pub size_pt: f64,
+    pub color: [u8; 3],
+    pub rich: bool,
+}
+
+fn valid_position(position: [f64; 2]) -> bool {
+    position.iter().all(|v| v.is_finite() && (0.0..=1.0).contains(v))
+}
+
+#[cfg(feature = "serde")]
+fn no_gap(g: &[f64; 2]) -> bool {
+    *g == [0.0; 2]
+}
+
+#[cfg(feature = "serde")]
+fn no_margin(m: &[f64; 4]) -> bool {
+    *m == [0.0; 4]
 }
 /// 字号、刻度、点和线宽按这一栏宽设计（Nature 单栏 89 mm）；更宽的栏按比例整体放大。
 pub const REFERENCE_COLUMN_MM: f64 = 89.0;
@@ -28,20 +70,56 @@ impl Default for Page {
             height_mm: A4_WIDTH_MM * 0.75,
             columns: 1,
             layers: vec![Layer::default()],
+            background: None,
+            margin_mm: [0.0; 4],
+            gap_mm: [0.0; 2],
+            annotations: Vec::new(),
+            next_text_id: 1,
         }
     }
 }
 impl Page {
+    pub fn add_text(&mut self, position: [f64; 2]) -> Result<u64, String> {
+        if !valid_position(position) {
+            return Err("文字位置应在页面内".into());
+        }
+        let id = self.next_text_id;
+        self.next_text_id = id.checked_add(1).ok_or("文字编号已用尽")?;
+        self.annotations.push(TextAnnotation {
+            id,
+            text: "文字".into(),
+            position,
+            size_pt: 10.0,
+            color: [0, 0, 0],
+            rich: true,
+        });
+        Ok(id)
+    }
+    pub fn text(&self, id: u64) -> Option<&TextAnnotation> {
+        self.annotations.iter().find(|t| t.id == id)
+    }
+    pub fn text_mut(&mut self, id: u64) -> Option<&mut TextAnnotation> {
+        self.annotations.iter_mut().find(|t| t.id == id)
+    }
     /// 页面固定逻辑画布，96 个逻辑单位对应一英寸。
     pub fn logical_size(&self) -> [f64; 2] {
         [self.width_mm * 96.0 / 25.4, self.height_mm * 96.0 / 25.4]
     }
     /// 版面放大倍数：每栏宽度 / 89 mm，至少为 1（单栏及更窄的页面保持原尺寸）。
+    /// 网格排版区域（逻辑单位）：[左, 上, 宽, 高]，即整页扣除页边距。
+    pub fn content_rect(&self) -> [f64; 4] {
+        let [w, h] = self.logical_size();
+        let px = 96.0 / 25.4;
+        let [l, t, r, b] = self.margin_mm.map(|m| m * px);
+        [l, t, w - l - r, h - t - b]
+    }
+
     pub fn scale(&self) -> f64 {
         let cols = self
             .columns
             .clamp(1, self.layers.iter().filter(|l| l.placement.is_none()).count().max(1));
-        let k = self.width_mm / cols as f64 / REFERENCE_COLUMN_MM;
+        let inner = self.width_mm - self.margin_mm[0] - self.margin_mm[2];
+        let k = inner / cols as f64 / REFERENCE_COLUMN_MM;
         if k.is_finite() {
             k.max(1.0)
         } else {
@@ -66,9 +144,38 @@ impl Page {
         }
         let layer = self.layers.remove(index);
         self.columns = self.columns.min(self.layers.len());
+        // 联动到被删图层的取消，后面的图层序号前移
+        for l in &mut self.layers {
+            for link in [&mut l.link_x, &mut l.link_y] {
+                *link = match *link {
+                    Some(j) if j == index => None,
+                    Some(j) if j > index => Some(j - 1),
+                    other => other,
+                };
+            }
+        }
         Ok(layer)
     }
     pub fn validate(&self) -> Result<(), String> {
+        let mut ids = std::collections::BTreeSet::new();
+        for text in &self.annotations {
+            if text.id == 0 || text.id >= self.next_text_id || !ids.insert(text.id) {
+                return Err("文字标注编号无效或重复".into());
+            }
+            if !valid_position(text.position) || !text.size_pt.is_finite() || !(1.0..=256.0).contains(&text.size_pt) {
+                return Err("文字标注位置或字号无效".into());
+            }
+        }
+        if self.next_text_id == 0 {
+            return Err("文字标注编号无效".into());
+        }
+        if self
+            .layers
+            .iter()
+            .any(|l| l.legend_position.is_some_and(|p| !valid_position(p)))
+        {
+            return Err("图例位置应为有效的页面比例".into());
+        }
         if self.layers.is_empty() || self.columns == 0 || self.columns > self.layers.len() {
             return Err("页面需要至少一个图层，排版列数应在 1 与图层数之间".into());
         }
@@ -80,7 +187,27 @@ impl Page {
         {
             return Err("页面毫米尺寸必须为有限正数".into());
         }
+        let [l, t, r, b] = self.margin_mm;
+        if self.margin_mm.iter().any(|m| !m.is_finite() || *m < 0.0)
+            || self.width_mm - l - r < 1.0
+            || self.height_mm - t - b < 1.0
+        {
+            return Err("页边距必须非负，且留给图层的区域至少 1 mm".into());
+        }
+        if self.gap_mm.iter().any(|g| !g.is_finite() || *g < 0.0) {
+            return Err("网格间距必须是非负数".into());
+        }
+        for (i, layer) in self.layers.iter().enumerate() {
+            for link in [layer.link_x, layer.link_y].into_iter().flatten() {
+                if link == i || link >= self.layers.len() {
+                    return Err("坐标轴联动的目标图层无效".into());
+                }
+            }
+        }
         for layer in &self.layers {
+            for line in &layer.reference_lines {
+                line.validate()?;
+            }
             if let Some(rect) = layer.placement {
                 rect.validate()?;
             }
@@ -97,8 +224,11 @@ pub struct Layer {
     #[cfg_attr(feature = "serde", serde(default))]
     pub transparent: bool,
     #[cfg_attr(feature = "serde", serde(flatten))]
-    pub spec: PlotSpec,
+    pub spec: LayerSpec,
     pub title: String,
+    /// Opt-in scientific text; legacy project strings remain literal.
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "is_false"))]
+    pub rich_text: bool,
     pub x_title: String,
     pub y_title: String,
     pub x_auto: bool,
@@ -117,9 +247,234 @@ pub struct Layer {
     pub error_bars: ErrorBars,
     #[cfg_attr(feature = "serde", serde(default))]
     pub labels: DataLabels,
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Vec::is_empty"))]
+    pub reference_lines: Vec<ReferenceLine>,
     pub grid: bool,
     pub legend: bool,
+    /// None keeps automatic avoidance; manual anchors are fractions of the entire page.
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Option::is_none"))]
+    pub legend_position: Option<[f64; 2]>,
+    /// 四边框：补上顶边和右边，并在这两边画不带标签的镜像刻度。
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "is_false"))]
+    pub frame: bool,
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "TickDir::is_out"))]
+    pub tick_dir: TickDir,
+    /// 右侧 Y 轴标题（空则用右轴第一条曲线的列名和单位）。
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "String::is_empty"))]
+    pub y2_title: String,
+    /// 坐标轴联动：X、Y 轴的范围跟随另一个图层（图层序号）。
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Option::is_none"))]
+    pub link_x: Option<usize>,
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Option::is_none"))]
+    pub link_y: Option<usize>,
+    /// 刻度标签的数字格式（日期列做 X 时自动用日期刻度）。
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "is_auto_number"))]
+    pub x_format: crate::format::NumberFormat,
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "is_auto_number"))]
+    pub y_format: crate::format::NumberFormat,
+    /// 折线、点线图的连接方式。
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Connect::is_straight"))]
+    pub connect: Connect,
+    /// 右侧 Y 轴范围；默认自动，手动范围仅影响右轴曲线。
+    #[cfg_attr(
+        feature = "serde",
+        serde(default = "default_y2_auto", skip_serializing_if = "is_true")
+    )]
+    pub y2_auto: bool,
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "is_zero_f64"))]
+    pub y2_min: f64,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default = "default_y2_max", skip_serializing_if = "is_default_y2_max")
+    )]
+    pub y2_max: f64,
+    /// None 时沿用左 Y 轴数字格式，保持 v14 行为。
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Option::is_none"))]
+    pub y2_format: Option<crate::format::NumberFormat>,
 }
+
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum ReferenceAxis {
+    X,
+    #[default]
+    YLeft,
+    YRight,
+}
+
+impl ReferenceAxis {
+    pub const ALL: [Self; 3] = [Self::X, Self::YLeft, Self::YRight];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::X => "X",
+            Self::YLeft => "左 Y",
+            Self::YRight => "右 Y",
+        }
+    }
+}
+
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize), serde(default))]
+pub struct ReferenceLine {
+    pub axis: ReferenceAxis,
+    pub value: f64,
+    pub color: [u8; 3],
+    pub width: f32,
+    pub dashed: bool,
+}
+
+impl Default for ReferenceLine {
+    fn default() -> Self {
+        Self {
+            axis: ReferenceAxis::YLeft,
+            value: 0.0,
+            color: [136, 136, 136],
+            width: 1.0,
+            dashed: true,
+        }
+    }
+}
+
+impl ReferenceLine {
+    pub fn validate(&self) -> Result<(), String> {
+        if !self.value.is_finite() || !self.width.is_finite() || !(0.2..=8.0).contains(&self.width) {
+            return Err("参考线位置或线宽无效".into());
+        }
+        Ok(())
+    }
+}
+
+/// 符号填充方式。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum SymbolFill {
+    #[default]
+    MatchCurve,
+    Hollow,
+    Color([u8; 3]),
+}
+
+/// 一条曲线的单独样式；None 表示跟随图层设置。
+#[derive(Clone, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize), serde(default))]
+pub struct CurveStyle {
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "String::is_empty"))]
+    pub legend_label: String,
+    pub kind: Option<crate::PlotType>,
+    pub color: Option<[u8; 3]>,
+    pub symbol: Option<crate::Symbol>,
+    pub line_width: Option<f32>,
+    pub symbol_size: Option<f32>,
+    /// 画在右侧 Y 轴上（双 Y 轴）。
+    pub right_axis: bool,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub symbol_fill: Option<SymbolFill>,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub symbol_border_color: Option<[u8; 3]>,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub symbol_border_width: Option<f32>,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub color_column: Option<String>,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub size_column: Option<String>,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub symbol_column: Option<String>,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
+    pub size_range: Option<[f32; 2]>,
+}
+
+impl CurveStyle {
+    /// 逐曲线可选的图型（同一图层里可以混合）；堆叠类、浮动柱和条形图按整层设置。
+    pub const KINDS: [crate::PlotType; 10] = [
+        crate::PlotType::Line,
+        crate::PlotType::Scatter,
+        crate::PlotType::LineSymbol,
+        crate::PlotType::Bar,
+        crate::PlotType::Area,
+        crate::PlotType::Spline,
+        crate::PlotType::SplineSymbol,
+        crate::PlotType::VerticalDrop,
+        crate::PlotType::StepHorizontal,
+        crate::PlotType::StepVertical,
+    ];
+
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+}
+
+/// 连线方式（只用于折线和点线图；样条、阶梯另有图型）。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum Connect {
+    #[default]
+    Straight,
+    BSpline,
+    Bezier,
+}
+
+impl Connect {
+    pub const ALL: [Connect; 3] = [Connect::Straight, Connect::BSpline, Connect::Bezier];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            Connect::Straight => "直线",
+            Connect::BSpline => "B 样条",
+            Connect::Bezier => "Bezier",
+        }
+    }
+
+    pub fn is_straight(&self) -> bool {
+        *self == Connect::Straight
+    }
+}
+
+#[cfg(feature = "serde")]
+fn is_false(v: &bool) -> bool {
+    !*v
+}
+
+#[cfg(feature = "serde")]
+fn is_auto_number(f: &crate::format::NumberFormat) -> bool {
+    *f == crate::format::NumberFormat::Auto
+}
+
+/// 刻度方向（相对坐标框）。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum TickDir {
+    #[default]
+    Out,
+    In,
+    Both,
+}
+
+impl TickDir {
+    pub const ALL: [TickDir; 3] = [TickDir::Out, TickDir::In, TickDir::Both];
+
+    pub fn label(self) -> &'static str {
+        match self {
+            TickDir::Out => "朝外",
+            TickDir::In => "朝内",
+            TickDir::Both => "内外",
+        }
+    }
+
+    pub fn is_out(&self) -> bool {
+        *self == TickDir::Out
+    }
+
+    /// (框外长度系数, 框内长度系数)。
+    pub fn factors(self) -> (f64, f64) {
+        match self {
+            TickDir::Out => (1.0, 0.0),
+            TickDir::In => (0.0, 1.0),
+            TickDir::Both => (1.0, 1.0),
+        }
+    }
+}
+
 impl Default for Layer {
     fn default() -> Self {
         Self {
@@ -127,6 +482,7 @@ impl Default for Layer {
             transparent: false,
             spec: Default::default(),
             title: String::new(),
+            rich_text: false,
             x_title: String::new(),
             y_title: String::new(),
             x_auto: true,
@@ -142,10 +498,47 @@ impl Default for Layer {
             area_opacity: default_area_opacity(),
             error_bars: Default::default(),
             labels: Default::default(),
+            reference_lines: Vec::new(),
             grid: false,
             legend: true,
+            legend_position: None,
+            frame: false,
+            tick_dir: TickDir::Out,
+            connect: Connect::Straight,
+            y2_title: String::new(),
+            link_x: None,
+            link_y: None,
+            x_format: crate::format::NumberFormat::Auto,
+            y_format: crate::format::NumberFormat::Auto,
+            y2_auto: default_y2_auto(),
+            y2_min: 0.0,
+            y2_max: default_y2_max(),
+            y2_format: None,
         }
     }
+}
+
+fn default_y2_auto() -> bool {
+    true
+}
+
+fn default_y2_max() -> f64 {
+    10.0
+}
+
+#[cfg(feature = "serde")]
+fn is_true(value: &bool) -> bool {
+    *value
+}
+
+#[cfg(feature = "serde")]
+fn is_zero_f64(value: &f64) -> bool {
+    *value == 0.0
+}
+
+#[cfg(feature = "serde")]
+fn is_default_y2_max(value: &f64) -> bool {
+    *value == default_y2_max()
 }
 
 fn default_area_opacity() -> f32 {
@@ -235,7 +628,7 @@ impl LayerRect {
     }
 }
 impl std::ops::Deref for Layer {
-    type Target = PlotSpec;
+    type Target = LayerSpec;
     fn deref(&self) -> &Self::Target {
         &self.spec
     }
@@ -245,23 +638,255 @@ impl std::ops::DerefMut for Layer {
         &mut self.spec
     }
 }
+/// Prepared data, effective style and path stay together throughout rendering.
+#[derive(Clone, Debug, PartialEq)]
+pub struct PreparedPlot {
+    pub plot: crate::plotspec::Plot,
+    pub series: crate::Series,
+    pub style: crate::SeriesStyle,
+    pub paths: Vec<Vec<[f64; 2]>>,
+}
+
 impl Layer {
+    pub fn plot_in(&self, key: &str, books: crate::plotspec::BookLookup<'_, '_>) -> Option<crate::plotspec::Plot> {
+        self.spec.plot_in(key, books)
+    }
+    pub fn plots_in(&self, books: crate::plotspec::BookLookup<'_, '_>) -> Vec<crate::plotspec::Plot> {
+        self.spec.plots_in(books)
+    }
+
+    pub fn prepared_plots_in<'a>(
+        &self,
+        book: &'a Book,
+        others: crate::plotspec::BookLookup<'a, '_>,
+    ) -> (Option<&'a crate::Column>, Vec<PreparedPlot>) {
+        let g = self;
+        let plots = self.plots(&|id| if id == book.id { Some(book) } else { others(id) });
+        let (xcol, mut series) = self.spec.series_from_plots(book, others, &plots);
+        let recipe = crate::presets::recipe(self.plot_type);
+        let horizontal = recipe.orientation == crate::coord::Orientation::Horizontal;
+        recipe.orientation.apply(&mut series);
+        crate::stat::prepare(self, &mut series);
+        // 样式：默认按图层递增，再用逐曲线设置覆盖（图型、颜色、符号、线宽、符号大小、右侧 Y 轴）
+        let mut styles = crate::model::series_styles(&series, g.plot_type);
+        if g.color_map != crate::colormap::ColorMap::Origin {
+            let n = series.iter().filter(|s| !s.line_only).count();
+            for style in &mut styles {
+                if let crate::SeriesColor::Palette(i) = style.color {
+                    style.color =
+                        crate::SeriesColor::Rgb(g.color_map.sample(i as f64 / n.saturating_sub(1).max(1) as f64));
+                }
+            }
+        }
+        let mut descriptions = plots.into_iter();
+        let mut prepared: Vec<PreparedPlot> = series
+            .into_iter()
+            .zip(styles)
+            .map(|(series, mut style)| {
+                let plot = descriptions
+                    .find(|p| p.key == series.key)
+                    .expect("sampled curve has a description");
+                style.line_width = self.line_width;
+                style.symbol_size = self.symbol_size;
+                if let Some(c) = &plot.style {
+                    // Derived lines retain their line/color rules, but must follow their assigned Y axis.
+                    style.y_axis = if c.right_axis && !horizontal {
+                        crate::coord::YAxis::Right
+                    } else {
+                        crate::coord::YAxis::Left
+                    };
+                    if !series.line_only {
+                        if let Some(kind) = c.kind.filter(|_| !self.plot_type.is_stacked() && !horizontal) {
+                            style.kind = kind;
+                        }
+                        if let Some([r, g, b]) = c.color {
+                            style.color = crate::SeriesColor::Rgb((r, g, b));
+                        }
+                        if let Some(symbol) = c.symbol {
+                            style.symbol = symbol;
+                        }
+                        if let Some(width) = c.line_width {
+                            style.line_width = width;
+                        }
+                        if let Some(size) = c.symbol_size {
+                            style.symbol_size = size;
+                        }
+                    }
+                }
+                PreparedPlot {
+                    plot,
+                    series,
+                    style,
+                    paths: Vec::new(),
+                }
+            })
+            .collect();
+        for p in &mut prepared {
+            if let Some(label) = p.plot.style.as_ref().map(|s| &s.legend_label).filter(|s| !s.is_empty()) {
+                p.series.name = label.clone();
+            }
+        }
+        if self.spec.has_curve_kind() {
+            let count = prepared
+                .iter()
+                .filter(|p| p.style.kind.is_bar() && !p.series.line_only)
+                .count();
+            for (index, p) in prepared
+                .iter_mut()
+                .filter(|p| p.style.kind.is_bar() && !p.series.line_only)
+                .enumerate()
+            {
+                p.style.bar_index = index;
+                p.style.bar_count = count;
+            }
+        }
+        (xcol, prepared)
+    }
+
+    /// 工作表快捷入口和图层内容草稿共用的添加逻辑。
+    pub fn add_book_curves(&mut self, book: &Book, keys: &[String], main_alive: bool) -> Result<usize, String> {
+        let mut seen = std::collections::BTreeSet::new();
+        let keys: Vec<_> = keys
+            .iter()
+            .filter(|k| {
+                seen.insert(k.as_str())
+                    && book
+                        .column(k)
+                        .is_some_and(|c| matches!(c.role, crate::Role::Y | crate::Role::Z))
+            })
+            .collect();
+        if keys.is_empty() {
+            return Err("选中的列里没有 Y 列".into());
+        }
+        let floating = self.plot_type == crate::PlotType::FloatingBar;
+        if floating {
+            let lookup = |id| (id == book.id).then_some(book);
+            let present = |key: &str| {
+                self.plot(&crate::plotspec::DataRef::new(book.id, key), &lookup)
+                    .is_some()
+            };
+            if keys.iter().all(|key| present(key)) {
+                return Ok(0);
+            }
+            if keys.len() % 2 != 0 {
+                return Err("浮动柱请按下端、上端的顺序选择成对的 Y 列".into());
+            }
+            for pair in keys.as_chunks::<2>().0 {
+                if let Some(upper) = self.plot(&crate::plotspec::DataRef::new(book.id, pair[1]), &lookup) {
+                    if upper.mapping.base != Some(crate::plotspec::DataRef::new(book.id, pair[0])) {
+                        return Err("该上端列已关联其他下端列".into());
+                    }
+                }
+            }
+        }
+        let empty = self.plot_keys(true).is_empty();
+        let changed_book = self.book_id != Some(book.id);
+        let rebind = !main_alive || (empty && changed_book);
+        if rebind {
+            if empty {
+                self.spec.clear_plots();
+                self.spec.rows = None;
+            }
+            if changed_book {
+                self.labels.column = None;
+            }
+            self.spec.book_id = Some(book.id);
+            self.edit_plot_keys(|keys| keys.retain(|k| crate::plotspec::split_key(k).1.is_some()));
+            self.spec.x_key = crate::plotspec::default_x(book, keys[0]);
+        }
+        // 同表空图层沿用当前 X（包括行号），不自动套用列角色的默认 X。
+        let keep_layer_x = empty && !rebind;
+        if floating {
+            let before = self.plot_keys(true).len();
+            for pair in keys.as_chunks::<2>().0 {
+                let upper = self.spec.add_curve(book, pair[1])?;
+                if keep_layer_x {
+                    self.spec.clear_plot_x(&upper);
+                }
+                let lower = self.result_key(book.id, pair[0]);
+                self.set_plot_base_key(&upper, lower);
+            }
+            return Ok(self.plot_keys(true).len() - before);
+        }
+        let before = self.plot_keys(true).len();
+        for key in keys {
+            let key = self.spec.add_curve(book, key)?;
+            if keep_layer_x {
+                self.spec.clear_plot_x(&key);
+            }
+        }
+        Ok(self.plot_keys(true).len() - before)
+    }
+
+    pub fn add_analysis_result(&mut self, book: u64, source: &str, result: &str, x: Option<&str>) {
+        let source = self.result_key(book, source);
+        let key = self.result_key(book, result);
+        let right = self.plot_style(&source).is_some_and(|s| s.right_axis);
+        self.spec
+            .add_derived(&source, &key, x.map(|x| self.result_key(book, x)));
+        if right {
+            self.set_plot_style(
+                &key,
+                Some(CurveStyle {
+                    right_axis: true,
+                    ..Default::default()
+                }),
+            );
+        }
+    }
+
+    /// 从图层移除一条曲线，连同它的单独样式。
+    pub fn remove_curve(&mut self, key: &str) {
+        self.spec.remove_curve(key);
+    }
+
+    /// 去掉引用另一工作簿 `book_id` 中列的曲线（`keys` 为 None 时去掉该表的全部曲线）。
+    pub fn drop_foreign(&mut self, book_id: u64, keys: Option<&[String]>) {
+        self.spec.drop_foreign(book_id, keys);
+    }
+
     pub fn x_axis_title(&self, book: Option<&Book>) -> String {
+        self.x_axis_title_in(book, &|_| None)
+    }
+
+    pub fn y_axis_title(&self, book: Option<&Book>) -> String {
+        self.y_axis_title_in(book, &|_| None)
+    }
+
+    /// 曲线列（可能来自其他工作簿）的坐标轴标签。
+    fn curve_axis_label<'a>(
+        &self,
+        book: Option<&'a Book>,
+        others: crate::plotspec::BookLookup<'a, '_>,
+        key: &str,
+    ) -> Option<String> {
+        book.and_then(|b| self.resolve(b, others, key))
+            .map(|(_, c)| c.axis_label())
+    }
+
+    pub fn x_axis_title_in<'a>(&self, book: Option<&'a Book>, others: crate::plotspec::BookLookup<'a, '_>) -> String {
         if !self.x_title.trim().is_empty() {
             return self.x_title.clone();
         }
         if self.plot_type == crate::PlotType::HorizontalBar {
-            return book
-                .and_then(|b| self.y_keys.first().and_then(|k| b.column(k)))
-                .map(|c| c.axis_label())
+            return self
+                .plot_keys(true)
+                .first()
+                .and_then(|k| self.curve_axis_label(book, others, k))
                 .unwrap_or_default();
         }
         book.and_then(|b| self.x_key.as_deref().and_then(|k| b.column(k)))
             .map(|c| c.axis_label())
+            // 本表没有 X 列时用第一条曲线自己的 X 列
+            .or_else(|| {
+                let first = self.plot_keys(true).into_iter().next()?;
+                let x = self.spec.explicit_plot_x(&first)?;
+                self.curve_axis_label(book, others, &x)
+            })
             .unwrap_or_else(|| "行号".to_string())
     }
 
-    pub fn y_axis_title(&self, book: Option<&Book>) -> String {
+    pub fn y_axis_title_in<'a>(&self, book: Option<&'a Book>, others: crate::plotspec::BookLookup<'a, '_>) -> String {
         if !self.y_title.trim().is_empty() {
             return self.y_title.clone();
         }
@@ -276,15 +901,34 @@ impl Layer {
         }
         if self.plot_type == crate::PlotType::FloatingBar {
             let range = book.and_then(|b| {
-                let top = self.y_keys.first()?;
-                Some(b.column(self.base_by_y.get(top)?)?.range_label(b.column(top)?))
+                let top = self.plot_keys(true).into_iter().next()?;
+                Some(b.column(&self.plot_base_key(&top)?)?.range_label(b.column(&top)?))
             });
             if let Some(range) = range {
                 return range;
             }
         }
-        book.and_then(|b| self.y_keys.first().and_then(|k| b.column(k)))
-            .map(|c| c.axis_label())
+        // 右侧 Y 轴的曲线不参与左轴标题
+        self.plot_keys(true)
+            .iter()
+            .find(|k| !self.plot_style(k).is_some_and(|c| c.right_axis))
+            .and_then(|k| self.curve_axis_label(book, others, k))
+            .unwrap_or_default()
+    }
+
+    /// 右侧 Y 轴标题：自定义标题，或右轴第一条曲线的列名和单位。
+    pub fn y2_axis_title(&self, book: Option<&Book>) -> String {
+        self.y2_axis_title_in(book, &|_| None)
+    }
+
+    pub fn y2_axis_title_in<'a>(&self, book: Option<&'a Book>, others: crate::plotspec::BookLookup<'a, '_>) -> String {
+        if !self.y2_title.trim().is_empty() {
+            return self.y2_title.clone();
+        }
+        self.plot_keys(true)
+            .iter()
+            .find(|k| self.plot_style(k).is_some_and(|c| c.right_axis))
+            .and_then(|k| self.curve_axis_label(book, others, k))
             .unwrap_or_default()
     }
 }

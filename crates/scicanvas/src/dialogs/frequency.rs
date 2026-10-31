@@ -1,0 +1,56 @@
+use super::*;
+
+impl Dialog {
+    pub(super) fn show_frequency(&mut self, ctx: &egui::Context, pal: &Palette, open: &mut bool, _esc: bool) -> Action {
+        let Self::Frequency {
+            auto,
+            bins,
+            custom,
+            from,
+            to,
+        } = self
+        else {
+            unreachable!()
+        };
+        let mut action = Action::None;
+        window(ctx, "频数统计").open(open).show(ctx, |ui| {
+            egui::Grid::new("freq-grid")
+                .num_columns(2)
+                .spacing([12.0, 8.0])
+                .show(ui, |ui| {
+                    ui.label("区间数");
+                    ui.horizontal_wrapped(|ui| {
+                        ui.checkbox(auto, "自动（Sturges）");
+                        ui.add_enabled(!*auto, egui::DragValue::new(bins).range(1..=10_000));
+                    });
+                    ui.end_row();
+                    ui.label("统计范围");
+                    ui.horizontal_wrapped(|ui| {
+                        ui.checkbox(custom, "自定义");
+                        ui.add_enabled(*custom, egui::DragValue::new(from).speed(0.1));
+                        ui.label("到");
+                        ui.add_enabled(*custom, egui::DragValue::new(to).speed(0.1));
+                    });
+                    ui.end_row();
+                });
+            ui.label(
+                RichText::new(
+                    "每个选中的列生成一个新表：区间下限、中点、上限、频数、累积频数、相对频率和累积相对频率。\n区间等宽，最后一个区间包含右端点（与 numpy.histogram 相同）；范围外的值不计。",
+                )
+                .small()
+                .color(pal.weak),
+            );
+            let valid = !*custom || (from.is_finite() && to.is_finite() && from < to);
+            if !valid {
+                ui.colored_label(egui::Color32::from_rgb(182, 67, 66), "起点必须小于终点");
+            }
+            let (ok, cancel) = buttons(ui, "统计");
+            if ok && valid {
+                action = Action::Frequency((!*auto).then_some(*bins), custom.then_some((*from, *to)));
+            } else if cancel {
+                action = Action::Close;
+            }
+        });
+        action
+    }
+}

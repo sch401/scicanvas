@@ -1,3 +1,4 @@
+#![cfg_attr(not(test), warn(clippy::too_many_lines))]
 //! SciCanvas 核心库。
 //!
 //! 这里只放与界面无关的逻辑：数据模型、CSV/剪贴板解析、坐标轴刻度、SVG 导出。
@@ -14,21 +15,27 @@ pub mod format;
 pub mod formula;
 pub mod history;
 pub mod interpolate;
+mod mark;
 pub mod model;
 pub mod nlfit;
 pub mod ops;
 pub mod page;
 pub mod peaks;
 pub mod plotspec;
+mod position;
 pub mod presets;
 #[cfg(feature = "serde")]
 pub mod project_file;
 pub mod project_tree;
 pub mod scene;
 pub mod spline;
+mod stat;
 pub mod stats;
 pub mod svg;
+pub mod text;
 pub mod ticks;
+#[cfg(feature = "xlsx")]
+pub mod xls;
 #[cfg(feature = "xlsx")]
 pub mod xlsx;
 

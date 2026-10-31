@@ -1,0 +1,419 @@
+[src/lib.rs]
+// Copyright 2018 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+/*!
+`usvg` (micro SVG) is an [SVG] parser that tries to solve most of SVG complexity.
+
+SVG is notoriously hard to parse. `usvg` presents a layer between an XML library and
+a potential SVG rendering library. It will parse an input SVG into a strongly-typed tree structure
+were all the elements, attributes, references and other SVG features are already resolved
+and presented in the simplest way possible.
+So a caller doesn't have to worry about most of the issues related to SVG parsing
+and can focus just on the rendering part.
+
+[src/main.rs]
+// Copyright 2018 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use std::fs::File;
+use std::io::{self, Read, Write};
+use std::path::PathBuf;
+use std::process;
+use std::sync::Arc;
+
+use pico_args::Arguments;
+
+const HELP: &str = "\
+
+[src/parser/clippath.rs]
+// Copyright 2018 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use std::str::FromStr;
+use std::sync::Arc;
+
+use super::converter;
+use super::svgtree::{AId, EId, SvgNode};
+use crate::{ClipPath, Group, NonEmptyString, NonZeroRect, Transform, Units};
+
+pub(crate) fn convert(
+    node: SvgNode,
+
+[src/parser/converter.rs]
+// Copyright 2018 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use std::collections::{HashMap, HashSet};
+use std::hash::{Hash, Hasher};
+use std::str::FromStr;
+use std::sync::Arc;
+
+#[cfg(feature = "text")]
+use fontdb::Database;
+use svgtypes::{Length, LengthUnit as Unit, PaintOrderKind, TransformOrigin};
+use tiny_skia_path::PathBuilder;
+
+[src/parser/filter.rs]
+// Copyright 2022 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! A collection of SVG filters.
+
+use std::collections::HashSet;
+use std::str::FromStr;
+use std::sync::Arc;
+
+use strict_num::PositiveF32;
+use svgtypes::{AspectRatio, Length, LengthUnit as Unit};
+
+
+[src/parser/image.rs]
+// Copyright 2018 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use std::sync::Arc;
+
+use svgtypes::{AspectRatio, Length};
+
+use super::svgtree::{AId, SvgNode};
+use super::{converter, OptionLog, Options};
+use crate::{
+    ClipPath, Group, Image, ImageKind, ImageRendering, Node, NonZeroRect, Path, Size, Transform,
+    Tree, Visibility,
+
+[src/parser/marker.rs]
+// Copyright 2018 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use std::sync::Arc;
+
+use strict_num::NonZeroPositiveF32;
+use svgtypes::Length;
+use tiny_skia_path::Point;
+
+use super::converter;
+use super::svgtree::{AId, EId, SvgNode};
+use crate::{
+
+[src/parser/mask.rs]
+// Copyright 2018 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use std::sync::Arc;
+
+use svgtypes::{Length, LengthUnit as Unit};
+
+use super::svgtree::{AId, EId, SvgNode};
+use super::{converter, OptionLog};
+use crate::{Group, Mask, MaskType, Node, NonEmptyString, NonZeroRect, Transform, Units};
+
+pub(crate) fn convert(
+
+[src/parser/mod.rs]
+// Copyright 2018 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+mod clippath;
+mod converter;
+mod filter;
+mod image;
+mod marker;
+mod mask;
+mod options;
+mod paint_server;
+mod shapes;
+
+[src/parser/options.rs]
+// Copyright 2018 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+#[cfg(feature = "text")]
+use std::sync::Arc;
+
+#[cfg(feature = "text")]
+use crate::FontResolver;
+use crate::{ImageHrefResolver, ImageRendering, ShapeRendering, Size, TextRendering};
+
+/// Processing options.
+#[derive(Debug)]
+
+[src/parser/paint_server.rs]
+// Copyright 2018 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use std::str::FromStr;
+use std::sync::Arc;
+
+use strict_num::PositiveF32;
+use svgtypes::{Length, LengthUnit as Unit};
+
+use super::converter::{self, Cache, SvgColorExt};
+use super::svgtree::{AId, EId, SvgNode};
+use super::OptionLog;
+
+[src/parser/shapes.rs]
+// Copyright 2018 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use std::sync::Arc;
+
+use svgtypes::Length;
+use tiny_skia_path::Path;
+
+use super::svgtree::{AId, EId, SvgNode};
+use super::{converter, units};
+use crate::{ApproxEqUlps, IsValidLength, Rect};
+
+
+[src/parser/style.rs]
+// Copyright 2018 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use super::converter::{self, SvgColorExt};
+use super::paint_server;
+use super::svgtree::{AId, FromValue, SvgNode};
+use crate::tree::ContextElement;
+use crate::{
+    ApproxEqUlps, Color, Fill, FillRule, LineCap, LineJoin, Opacity, Paint, Stroke,
+    StrokeMiterlimit, Units,
+};
+
+
+[src/parser/svgtree/mod.rs]
+// Copyright 2021 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use std::collections::HashMap;
+use std::num::NonZeroU32;
+use std::str::FromStr;
+
+#[rustfmt::skip] mod names;
+mod parse;
+mod text;
+
+use tiny_skia_path::Transform;
+
+[src/parser/svgtree/names.rs]
+// Copyright 2019 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+// This file is autogenerated. Do not edit it!
+// See ./codegen for details.
+
+/// An element ID.
+#[allow(missing_docs)]
+#[derive(Clone, Copy, PartialEq)]
+pub enum EId {
+    A,
+    Circle,
+
+[src/parser/svgtree/parse.rs]
+// Copyright 2021 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use std::collections::HashMap;
+
+use roxmltree::Error;
+use simplecss::Declaration;
+use svgtypes::FontShorthand;
+
+use super::{AId, Attribute, Document, EId, NodeData, NodeId, NodeKind, ShortRange};
+
+const SVG_NS: &str = "http://www.w3.org/2000/svg";
+
+[src/parser/svgtree/text.rs]
+// Copyright 2021 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+#![allow(clippy::comparison_chain)]
+
+use roxmltree::Error;
+
+use super::{AId, Document, EId, NodeId, NodeKind, SvgNode};
+
+const XLINK_NS: &str = "http://www.w3.org/1999/xlink";
+
+pub(crate) fn parse_svg_text_element<'input>(
+
+[src/parser/switch.rs]
+// Copyright 2018 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use super::svgtree::{AId, SvgNode};
+use super::{converter, Options};
+use crate::{Group, Node};
+
+// Full list can be found here: https://www.w3.org/TR/SVG11/feature.html
+static FEATURES: &[&str] = &[
+    "http://www.w3.org/TR/SVG11/feature#SVGDOM-static",
+    "http://www.w3.org/TR/SVG11/feature#SVG-static",
+    "http://www.w3.org/TR/SVG11/feature#CoreAttribute", // no xml:base and xml:lang
+
+[src/parser/text.rs]
+// Copyright 2019 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use std::sync::Arc;
+
+use kurbo::{ParamCurve, ParamCurveArclen};
+use svgtypes::{parse_font_families, FontFamily, Length, LengthUnit};
+
+use super::svgtree::{AId, EId, FromValue, SvgNode};
+use super::{converter, style, OptionLog};
+use crate::*;
+
+
+[src/parser/units.rs]
+// Copyright 2019 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use svgtypes::{Length, LengthUnit as Unit};
+
+use super::converter;
+use super::svgtree::{AId, SvgNode};
+use crate::Units;
+
+#[inline(never)]
+pub(crate) fn convert_length(
+    length: Length,
+
+[src/parser/use_node.rs]
+// Copyright 2019 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use std::sync::Arc;
+
+use svgtypes::{Length, LengthUnit};
+
+use super::svgtree::{AId, EId, SvgNode};
+use super::{converter, style};
+use crate::tree::ContextElement;
+use crate::{Group, IsValidLength, Node, NonZeroRect, Path, Size, Transform, ViewBox};
+
+
+[src/text/colr.rs]
+// Copyright 2024 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use crate::parser::OptionLog;
+use rustybuzz::ttf_parser;
+
+struct Builder<'a>(&'a mut String);
+
+impl Builder<'_> {
+    fn finish(&mut self) {
+        if !self.0.is_empty() {
+            self.0.pop(); // remove trailing space
+
+[src/text/flatten.rs]
+// Copyright 2022 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use std::mem;
+use std::sync::Arc;
+
+use fontdb::{Database, ID};
+use rustybuzz::ttf_parser;
+use rustybuzz::ttf_parser::{GlyphId, RasterImageFormat, RgbaColor};
+use tiny_skia_path::{NonZeroRect, Size, Transform};
+use xmlwriter::XmlWriter;
+
+
+[src/text/layout.rs]
+// Copyright 2022 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use std::collections::HashMap;
+use std::num::NonZeroU16;
+use std::sync::Arc;
+
+use fontdb::{Database, ID};
+use kurbo::{ParamCurve, ParamCurveArclen, ParamCurveDeriv};
+use rustybuzz::ttf_parser;
+use rustybuzz::ttf_parser::{GlyphId, Tag};
+use strict_num::NonZeroPositiveF32;
+
+[src/text/mod.rs]
+// Copyright 2024 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use std::sync::Arc;
+
+use fontdb::{Database, ID};
+use svgtypes::FontFamily;
+
+use self::layout::DatabaseExt;
+use crate::{Font, FontStretch, FontStyle, Text};
+
+mod flatten;
+
+[src/tree/filter.rs]
+// Copyright 2018 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+//! SVG filter types.
+
+use strict_num::PositiveF32;
+
+use crate::{BlendMode, Color, Group, NonEmptyString, NonZeroF32, NonZeroRect, Opacity};
+
+/// A filter element.
+///
+/// `filter` element in the SVG.
+
+[src/tree/geom.rs]
+// Copyright 2018 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use strict_num::ApproxEqUlps;
+use svgtypes::{Align, AspectRatio};
+pub use tiny_skia_path::{NonZeroRect, Rect, Size, Transform};
+
+/// Approximate zero equality comparisons.
+pub trait ApproxZeroUlps: ApproxEqUlps {
+    /// Checks if the number is approximately zero.
+    fn approx_zero_ulps(&self, ulps: <Self::Flt as strict_num::Ulps>::U) -> bool;
+}
+
+[src/tree/mod.rs]
+// Copyright 2019 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+pub mod filter;
+mod geom;
+mod text;
+
+use std::sync::Arc;
+
+pub use strict_num::{self, ApproxEqUlps, NonZeroPositiveF32, NormalizedF32, PositiveF32};
+
+pub use tiny_skia_path;
+
+[src/tree/text.rs]
+// Copyright 2018 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use std::sync::Arc;
+
+use strict_num::NonZeroPositiveF32;
+pub use svgtypes::FontFamily;
+
+#[cfg(feature = "text")]
+use crate::layout::Span;
+use crate::{Fill, Group, NonEmptyString, PaintOrder, Rect, Stroke, TextRendering, Transform};
+
+
+[src/writer.rs]
+// Copyright 2023 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use std::fmt::Display;
+use std::io::Write;
+
+use svgtypes::{parse_font_families, FontFamily};
+use xmlwriter::XmlWriter;
+
+use crate::parser::{AId, EId};
+use crate::*;
+

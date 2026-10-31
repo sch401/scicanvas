@@ -1,6 +1,7 @@
 //! 基线：两端连线，以及非对称最小二乘（ALS，Eilers & Boelens 2005）自动基线。
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum BaselineMethod {
     /// 首末两点的连线。
     Line,

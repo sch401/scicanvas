@@ -178,7 +178,12 @@ impl DateFormat {
 
     /// 格式化 UTC 毫秒；`Original` 返回 None，表示沿用原始写法。
     pub fn apply(self, millis: i64) -> Option<String> {
-        let t = chrono::DateTime::from_timestamp_millis(millis)?;
+        self.apply_in(millis, 0)
+    }
+
+    /// 按 UTC 偏移 `offset_minutes`（分钟）显示当地时间。
+    pub fn apply_in(self, millis: i64, offset_minutes: i32) -> Option<String> {
+        let t = chrono::DateTime::from_timestamp_millis(millis.checked_add(i64::from(offset_minutes) * 60_000)?)?;
         let pattern = match self {
             Self::Original => return None,
             Self::Date => "%Y-%m-%d",
@@ -196,6 +201,36 @@ impl DateFormat {
 pub struct DisplayFormat {
     pub number: NumberFormat,
     pub date: DateFormat,
+    /// 日期列的时区（相对 UTC 的分钟数）：不带时区的输入按此理解，显示与日期刻度按此换算。
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "is_zero"))]
+    pub utc_offset: i32,
+}
+
+#[cfg(feature = "serde")]
+fn is_zero(v: &i32) -> bool {
+    *v == 0
+}
+
+/// 时区选项（分钟）：整点 UTC−12 … UTC+14，另有 +3:30、+4:30、+5:30、+5:45、+6:30、+9:30。
+pub fn utc_offsets() -> Vec<i32> {
+    let mut v: Vec<i32> = (-12..=14).map(|h| h * 60).collect();
+    v.extend([210, 270, 330, 345, 390, 570]);
+    v.sort_unstable();
+    v
+}
+
+/// 时区写法，如 UTC、UTC+8、UTC+5:30、UTC−3。
+pub fn utc_offset_label(minutes: i32) -> String {
+    if minutes == 0 {
+        return "UTC".into();
+    }
+    let sign = if minutes > 0 { "+" } else { "−" };
+    let (h, m) = (minutes.abs() / 60, minutes.abs() % 60);
+    if m == 0 {
+        format!("UTC{sign}{h}")
+    } else {
+        format!("UTC{sign}{h}:{m:02}")
+    }
 }
 
 impl DisplayFormat {

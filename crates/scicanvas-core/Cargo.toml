@@ -16,8 +16,11 @@ encoding = ["dep:encoding_rs"]
 xlsx = ["dep:zip", "dep:flate2", "dep:roxmltree"]
 
 [dependencies]
+ab_glyph = "0.2.32"
+ttf-parser = "0.25.1"
+epaint_default_fonts = "0.29.1"
 serde = { version = "1", features = ["derive"], optional = true }
-serde_json = { version = "1", optional = true }
+serde_json = { version = "1", features = ["float_roundtrip"], optional = true }
 # .scv 是 ZIP 容器（zip 9 需要 Rust 1.88）；只启用 deflate（flate2 纯 Rust 后端），不带加密和其他压缩算法
 zip = { version = "9", default-features = false, features = ["deflate-flate2"], optional = true }
 # zip 关闭了 flate2 的默认后端，这里显式选用界面依赖已在使用的纯 Rust miniz_oxide

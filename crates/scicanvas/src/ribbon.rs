@@ -47,8 +47,12 @@ pub static TABS: &[Tab] = &[
         ctx: None,
         groups: &[
             Group {
-                label: "新建",
-                items: &[Big("book.new"), Smalls(&["file.import", "file.open", "file.save"])],
+                label: "项目",
+                items: &[
+                    Big("book.new"),
+                    Smalls(&["note.new", "file.import"]),
+                    Smalls(&["file.open", "file.save"]),
+                ],
             },
             Group {
                 label: "选区",
@@ -110,8 +114,13 @@ pub static TABS: &[Tab] = &[
                 label: "图形",
                 items: &[
                     Big("graph.props"),
-                    Smalls(&["graph.export", "graph.export_png", "graph.copy"]),
+                    Smalls(&["graph.export", "graph.export_pdf", "graph.export_png"]),
+                    Smalls(&["graph.copy"]),
                 ],
+            },
+            Group {
+                label: "模板",
+                items: &[Smalls(&["graph.template.save", "graph.template.apply"])],
             },
         ],
     },
@@ -121,11 +130,16 @@ pub static TABS: &[Tab] = &[
         ctx: None,
         groups: &[
             Group {
+                label: "数据选择",
+                items: &[Smalls(&["analysis.curves"])],
+            },
+            Group {
                 label: "拟合",
                 items: &[
                     Big("fit.linear"),
                     Big("fit.poly"),
                     Big("fit.nonlinear"),
+                    Smalls(&["fit.reports"]),
                     Big("fit.calibration"),
                     Big("fit.mlr"),
                 ],
@@ -135,7 +149,7 @@ pub static TABS: &[Tab] = &[
                 items: &[
                     Smalls(&["math.smooth", "math.diff", "math.integ"]),
                     Smalls(&["math.norm", "math.interp", "math.colmath"]),
-                    Smalls(&["math.average"]),
+                    Smalls(&["math.average", "math.diff_sg", "data.recalc"]),
                 ],
             },
             Group {
@@ -144,6 +158,7 @@ pub static TABS: &[Tab] = &[
                     Big("signal.baseline"),
                     Big("signal.peaks"),
                     Big("signal.fft"),
+                    Big("signal.ifft"),
                     Big("signal.filter"),
                     Big("signal.correlate"),
                 ],
@@ -196,11 +211,12 @@ pub static TABS: &[Tab] = &[
                     Big("col.setvalues"),
                     Big("col.fill"),
                     Smalls(&["col.insert", "col.delete", "col.clear"]),
+                    Smalls(&["col.left", "col.right"]),
                 ],
             },
             Group {
                 label: "排序",
-                items: &[Smalls(&["sort.asc", "sort.desc"])],
+                items: &[Smalls(&["sort.asc", "sort.desc", "sort.custom"])],
             },
             Group {
                 label: "导出",
@@ -229,19 +245,33 @@ pub static TABS: &[Tab] = &[
             },
             Group {
                 label: "坐标轴",
-                items: &[Smalls(&["graph.logx", "graph.logy", "graph.grid"])],
+                items: &[
+                    Smalls(&["graph.logx", "graph.logy", "graph.grid"]),
+                    Smalls(&["graph.reference.vertical", "graph.reference.horizontal"]),
+                ],
             },
             Group {
                 label: "图例",
                 items: &[Big("graph.legend"), Big("graph.labels")],
             },
             Group {
+                label: "标注",
+                items: &[Smalls(&["graph.text.add", "graph.text.manage", "graph.legend.auto"])],
+            },
+            Group {
                 label: "设置",
-                items: &[Big("graph.props"), Smalls(&["layer.add", "layer.remove"])],
+                items: &[
+                    Big("graph.props"),
+                    Big("layer.contents"),
+                    Smalls(&["layer.add", "layer.remove"]),
+                ],
             },
             Group {
                 label: "导出",
-                items: &[Big("graph.export"), Smalls(&["graph.export_png", "graph.copy"])],
+                items: &[
+                    Big("graph.export"),
+                    Smalls(&["graph.export_pdf", "graph.export_png", "graph.copy"]),
+                ],
             },
         ],
     },
@@ -262,7 +292,7 @@ pub static TABS: &[Tab] = &[
                 label: "窗口",
                 items: &[
                     Smalls(&["win.cascade", "win.tile", "win.minall"]),
-                    Smalls(&["win.showall", "win.hideall"]),
+                    Smalls(&["win.showall", "win.hideall", "win.reset"]),
                 ],
             },
             Group {
@@ -289,6 +319,7 @@ const BACKSTAGE_NAV: &[&str] = &[
     "file.saveas",
     "graph.export",
     "graph.export_png",
+    "graph.export_pdf",
     "book.export_csv",
     "project.reset",
     "help.show",
@@ -359,9 +390,10 @@ pub fn show(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palette, 
         .show_separator_line(false)
         .show(ctx, |ui| {
             ui.spacing_mut().item_spacing = vec2(4.0, 0.0);
-            // 标题栏：快速访问 + 名称 + 搜索
-            ui.add_space(3.0);
-            ui.horizontal(|ui| {
+            // 标题栏：快速访问 + 名称 + 搜索 + 窗口按钮；空白处拖动移窗、双击最大化
+            let title_rect = Rect::from_min_size(ui.cursor().min, vec2(ui.available_width(), 30.0));
+            crate::chrome::drag_area(ui, title_rect);
+            ui.allocate_ui_with_layout(title_rect.size(), Layout::left_to_right(Align::Center), |ui| {
                 ui.add_space(6.0);
                 for id in QAT {
                     if let Some(c) = commands::find(id) {
@@ -375,7 +407,8 @@ pub fn show(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palette, 
                 ui.add_space(6.0);
                 ui.label(RichText::new(app.doc_title()).color(pal.weak));
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    ui.add_space(8.0);
+                    crate::chrome::buttons(ui, pal);
+                    ui.add_space(12.0);
                     let text = RichText::new("搜索命令            Ctrl K").color(pal.weak);
                     let b = egui::Button::image_and_text(
                         icons::icon("search", dark).fit_to_exact_size(vec2(14.0, 14.0)),
@@ -506,7 +539,7 @@ fn group(ui: &mut egui::Ui, app: &SciApp, g: &Group, pal: &Palette, clicked: &mu
                         ui.vertical(|ui| {
                             for id in *ids {
                                 if let Some(c) = commands::find(id) {
-                                    if small_button(ui, app, c, pal).clicked() {
+                                    if small_button(ui, app, c, pal, clicked).clicked() {
                                         *clicked = Some(c.id);
                                     }
                                 }
@@ -527,7 +560,7 @@ fn group(ui: &mut egui::Ui, app: &SciApp, g: &Group, pal: &Palette, clicked: &mu
                                 ui.horizontal(|ui| {
                                     for id in *ids {
                                         if let Some(c) = commands::find(id) {
-                                            if gallery_tile(ui, app, c, pal).clicked() {
+                                            if gallery_tile(ui, app, c, pal, clicked).clicked() {
                                                 *clicked = Some(c.id);
                                             }
                                         }
@@ -539,6 +572,7 @@ fn group(ui: &mut egui::Ui, app: &SciApp, g: &Group, pal: &Palette, clicked: &mu
             }
         });
         let w = items.response.rect.width().max(40.0);
+        ui.add_space((72.0 - items.response.rect.height()).max(0.0));
         let (rect, _) = ui.allocate_exact_size(vec2(w, 16.0), Sense::hover());
         ui.painter().text(
             rect.center(),
@@ -597,7 +631,13 @@ fn big_button(ui: &mut egui::Ui, app: &SciApp, c: &Command, pal: &Palette) -> eg
     resp.on_hover_text(commands::tooltip(app, c))
 }
 
-fn small_button(ui: &mut egui::Ui, app: &SciApp, c: &Command, pal: &Palette) -> egui::Response {
+fn small_button(
+    ui: &mut egui::Ui,
+    app: &SciApp,
+    c: &Command,
+    pal: &Palette,
+    clicked: &mut Option<&'static str>,
+) -> egui::Response {
     let enabled = (c.when)(app).is_ok();
     let checked = c.checked.is_some_and(|f| f(app));
     let galley = ui.painter().layout_no_wrap(
@@ -612,12 +652,45 @@ fn small_button(ui: &mut egui::Ui, app: &SciApp, c: &Command, pal: &Palette) -> 
     icons::icon(c.icon, pal.dark).tint(dim(enabled)).paint_at(ui, icon_rect);
     let text_pos = egui::pos2(rect.left() + 28.0, rect.center().y - galley.size().y / 2.0);
     ui.painter().galley(text_pos, galley, pal.ink);
-    resp.on_hover_text(commands::tooltip(app, c))
+    // 图型命令（如“图形”选项卡里的图类型）与画廊相同：悬停显示缩略图、用法和示例
+    if crate::examples::ALL.iter().any(|e| e.plot_command == c.id) {
+        resp.on_hover_ui(|ui| plot_hover(ui, app, c, clicked))
+    } else {
+        resp.on_hover_text(commands::tooltip(app, c))
+    }
 }
 
-fn gallery_tile(ui: &mut egui::Ui, app: &SciApp, c: &Command, pal: &Palette) -> egui::Response {
+/// 图型命令的悬停说明：较大的缩略图、用途与数据排列说明，以及“打开示例”。
+fn plot_hover(ui: &mut egui::Ui, app: &SciApp, c: &Command, clicked: &mut Option<&'static str>) {
+    ui.set_max_width(300.0);
+    ui.strong(c.label);
+    if let Some(example) = crate::examples::ALL.iter().find(|e| e.plot_command == c.id) {
+        let kind = c.id.split('.').nth(1).unwrap_or("line");
+        ui.add(icons::thumb(kind).fit_to_exact_size(vec2(145.0, 100.0)));
+        ui.label(example.description);
+        ui.separator();
+        if ui.button("打开示例").clicked() {
+            *clicked = Some(example.command);
+        }
+    }
+    if let Err(reason) = (c.when)(app) {
+        ui.label(reason);
+    }
+}
+
+fn gallery_tile(
+    ui: &mut egui::Ui,
+    app: &SciApp,
+    c: &Command,
+    pal: &Palette,
+    clicked: &mut Option<&'static str>,
+) -> egui::Response {
     let enabled = (c.when)(app).is_ok();
-    let (rect, resp) = ui.allocate_exact_size(vec2(72.0, 62.0), if enabled { Sense::click() } else { Sense::hover() });
+    let label = ui
+        .painter()
+        .layout_no_wrap(c.label.to_owned(), FontId::proportional(11.5), text_color(enabled, pal));
+    let width = (label.size().x + 12.0).max(72.0);
+    let (rect, resp) = ui.allocate_exact_size(vec2(width, 62.0), if enabled { Sense::click() } else { Sense::hover() });
     button_bg(ui, rect, &resp, enabled, false, pal);
     let kind = c.id.split('.').nth(1).unwrap_or("line");
     let thumb_rect = Rect::from_center_size(egui::pos2(rect.center().x, rect.top() + 24.0), vec2(58.0, 40.0));
@@ -629,7 +702,7 @@ fn gallery_tile(ui: &mut egui::Ui, app: &SciApp, c: &Command, pal: &Palette) -> 
         FontId::proportional(11.5),
         text_color(enabled, pal),
     );
-    resp.on_hover_text(commands::tooltip(app, c))
+    resp.on_hover_ui(|ui| plot_hover(ui, app, c, clicked))
 }
 
 fn icon_button(ui: &mut egui::Ui, app: &SciApp, c: &Command, dark: bool, pal: &Palette, size: f32) -> egui::Response {
@@ -760,9 +833,14 @@ pub fn backstage(
                 let nb = app.project.books.len();
                 let ng = app.project.graphs.len();
                 ui.label(
-                    RichText::new(format!("项目内容 · {} 个工作簿，{} 个图形", nb, ng))
-                        .strong()
-                        .color(pal.weak),
+                    RichText::new(format!(
+                        "项目内容 · {} 个工作簿，{} 个图形，{} 个 Note",
+                        nb,
+                        ng,
+                        app.project.notes.len()
+                    ))
+                    .strong()
+                    .color(pal.weak),
                 );
                 ui.add_space(6.0);
                 ui.horizontal_wrapped(|ui| {
@@ -781,6 +859,11 @@ pub fn backstage(
                         };
                         if project_card(ui, "graph", &g.name, &sub, dark, pal).clicked() {
                             open = Some(g.id);
+                        }
+                    }
+                    for note in &app.project.notes {
+                        if project_card(ui, "note", &note.name, "Note · 文本与计算结果", dark, pal).clicked() {
+                            open = Some(note.id);
                         }
                     }
                 });
@@ -920,10 +1003,11 @@ pub fn palette(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palett
     let mut close = false;
     egui::Window::new("命令面板")
         .id(egui::Id::new("scicanvas-palette"))
-        .title_bar(false)
+        .constrain_to(crate::dialogs::floating_bounds(ctx))
         .resizable(false)
         .collapsible(false)
-        .anchor(Align2::CENTER_TOP, vec2(0.0, 80.0))
+        .pivot(Align2::CENTER_TOP)
+        .default_pos(egui::pos2(ctx.screen_rect().center().x, 80.0))
         .fixed_size(vec2(520.0, 440.0))
         .show(ctx, |ui| {
             let te = ui.add(
@@ -1025,5 +1109,30 @@ pub fn palette(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palett
     }
     if close {
         st.palette = None;
+    }
+}
+
+#[cfg(test)]
+mod export_tests {
+    use super::*;
+    #[test]
+    fn pdf_export_is_registered_without_growing_the_ribbon_rows() {
+        let command = commands::find("graph.export_pdf").unwrap();
+        assert!(!command.modifies);
+        assert!(BACKSTAGE_NAV.contains(&command.id));
+        let mut entries = 0;
+        for tab in TABS {
+            for group in tab.groups {
+                for item in group.items {
+                    if let Smalls(ids) = item {
+                        if ids.contains(&command.id) {
+                            assert!(ids.len() <= 3, "{} / {}", tab.id, group.label);
+                            entries += 1;
+                        }
+                    }
+                }
+            }
+        }
+        assert_eq!(entries, 2, "home and graph export entry points");
     }
 }

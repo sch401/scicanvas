@@ -1,0 +1,307 @@
+[examples/custom_href_resolver.rs]
+// Copyright 2022 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+fn main() {
+    let mut opt = usvg::Options::default();
+
+    let ferris_image = std::sync::Arc::new(std::fs::read("./examples/ferris.png").unwrap());
+
+    // We know that our SVG won't have DataUrl hrefs, just return None for such case.
+    let resolve_data = Box::new(|_: &str, _: std::sync::Arc<Vec<u8>>, _: &usvg::Options| None);
+
+    // Here we handle xlink:href attribute as string,
+
+[examples/draw_bboxes.rs]
+// Copyright 2017 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    if !(args.len() == 3 || args.len() == 5) {
+        println!(
+            "Usage:\n\
+             \tdraw_bboxes <in-svg> <out-png>\n\
+             \tdraw_bboxes <in-svg> <out-png> -z ZOOM"
+        );
+        return;
+
+[examples/minimal.rs]
+// Copyright 2017 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    if args.len() != 3 {
+        println!("Usage:\n\tminimal <in-svg> <out-png>");
+        return;
+    }
+
+    let tree = {
+        let mut opt = usvg::Options {
+
+[src/clip.rs]
+// Copyright 2019 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use crate::render::Context;
+
+pub fn apply(
+    clip: &usvg::ClipPath,
+    transform: tiny_skia::Transform,
+    pixmap: &mut tiny_skia::Pixmap,
+) {
+    let mut clip_pixmap = tiny_skia::Pixmap::new(pixmap.width(), pixmap.height()).unwrap();
+    clip_pixmap.fill(tiny_skia::Color::BLACK);
+
+[src/filter/box_blur.rs]
+// Copyright 2020 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+// Based on https://github.com/fschutt/fastblur
+
+#![allow(clippy::needless_range_loop)]
+
+use super::ImageRefMut;
+use rgb::RGBA8;
+use std::cmp;
+
+const STEPS: usize = 5;
+
+[src/filter/color_matrix.rs]
+// Copyright 2020 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use super::{f32_bound, ImageRefMut};
+use rgb::RGBA8;
+use usvg::filter::ColorMatrixKind as ColorMatrix;
+
+/// Applies a color matrix filter.
+///
+/// Input image pixels should have an **unpremultiplied alpha**.
+pub fn apply(matrix: &ColorMatrix, src: ImageRefMut) {
+    match matrix {
+
+[src/filter/component_transfer.rs]
+// Copyright 2020 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use super::{f32_bound, ImageRefMut};
+use usvg::filter::{ComponentTransfer, TransferFunction};
+
+/// Applies component transfer functions for each `src` image channel.
+///
+/// Input image pixels should have an **unpremultiplied alpha**.
+pub fn apply(fe: &ComponentTransfer, src: ImageRefMut) {
+    for pixel in src.data {
+        if !is_dummy(fe.func_r()) {
+
+[src/filter/composite.rs]
+// Copyright 2020 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use super::{f32_bound, ImageRef, ImageRefMut};
+use rgb::RGBA8;
+use usvg::ApproxZeroUlps;
+
+/// Performs an arithmetic composition.
+///
+/// - `src1` and `src2` image pixels should have a **premultiplied alpha**.
+/// - `dest` image pixels will have a **premultiplied alpha**.
+///
+
+[src/filter/convolve_matrix.rs]
+// Copyright 2020 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use super::{f32_bound, ImageRefMut};
+use rgb::RGBA8;
+use usvg::filter::{ConvolveMatrix, EdgeMode};
+
+/// Applies a convolve matrix.
+///
+/// Input image pixels should have a **premultiplied alpha** when `preserve_alpha=false`.
+///
+/// # Allocations
+
+[src/filter/displacement_map.rs]
+// Copyright 2020 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use super::{ImageRef, ImageRefMut};
+use usvg::filter::{ColorChannel, DisplacementMap};
+
+/// Applies a displacement map.
+///
+/// - `map` pixels should have a **unpremultiplied alpha**.
+/// - `src` pixels can have any alpha method.
+///
+/// `sx` and `sy` indicate canvas scale.
+
+[src/filter/iir_blur.rs]
+// Copyright 2020 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+// An IIR blur.
+//
+// Based on http://www.getreuer.info/home/gaussianiir
+//
+// Licensed under 'Simplified BSD License'.
+//
+//
+// Implements the fast Gaussian convolution algorithm of Alvarez and Mazorra,
+// where the Gaussian is approximated by a cascade of first-order infinite
+
+[src/filter/lighting.rs]
+// Copyright 2020 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use super::{f32_bound, ImageRef, ImageRefMut};
+use rgb::RGBA8;
+use usvg::filter::{DiffuseLighting, LightSource, SpecularLighting};
+use usvg::{ApproxEqUlps, ApproxZeroUlps, Color};
+
+const FACTOR_1_2: f32 = 1.0 / 2.0;
+const FACTOR_1_3: f32 = 1.0 / 3.0;
+const FACTOR_1_4: f32 = 1.0 / 4.0;
+const FACTOR_2_3: f32 = 2.0 / 3.0;
+
+[src/filter/mod.rs]
+// Copyright 2018 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use std::rc::Rc;
+
+use rgb::{FromSlice, RGBA8};
+use tiny_skia::IntRect;
+use usvg::{ApproxEqUlps, ApproxZeroUlps};
+
+mod box_blur;
+mod color_matrix;
+mod component_transfer;
+
+[src/filter/morphology.rs]
+// Copyright 2020 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use super::ImageRefMut;
+use rgb::RGBA8;
+use usvg::filter::MorphologyOperator;
+
+/// Applies a morphology filter.
+///
+/// `src` pixels should have a **premultiplied alpha**.
+///
+/// # Allocations
+
+[src/filter/turbulence.rs]
+// Copyright 2020 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+#![allow(clippy::needless_range_loop)]
+
+use super::{f32_bound, ImageRefMut};
+use usvg::ApproxZeroUlps;
+
+const RAND_M: i32 = 2147483647; // 2**31 - 1
+const RAND_A: i32 = 16807; // 7**5; primitive root of m
+const RAND_Q: i32 = 127773; // m / a
+const RAND_R: i32 = 2836; // m % a
+
+[src/geom.rs]
+// Copyright 2023 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+/// Fits the current rect into the specified bounds.
+pub fn fit_to_rect(
+    r: tiny_skia::IntRect,
+    bounds: tiny_skia::IntRect,
+) -> Option<tiny_skia::IntRect> {
+    let mut left = r.left();
+    if left < bounds.left() {
+        left = bounds.left();
+    }
+
+[src/image.rs]
+// Copyright 2018 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+pub fn render(
+    image: &usvg::Image,
+    transform: tiny_skia::Transform,
+    pixmap: &mut tiny_skia::PixmapMut,
+) {
+    if !image.is_visible() {
+        return;
+    }
+
+
+[src/lib.rs]
+// Copyright 2017 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+/*!
+[resvg](https://github.com/linebender/resvg) is an SVG rendering library.
+*/
+
+#![forbid(unsafe_code)]
+#![warn(missing_docs)]
+#![allow(clippy::field_reassign_with_default)]
+#![allow(clippy::identity_op)]
+#![allow(clippy::too_many_arguments)]
+
+[src/main.rs]
+// Copyright 2020 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+#![allow(clippy::uninlined_format_args)]
+
+use std::path;
+use std::sync::Arc;
+
+use usvg::fontdb;
+
+fn main() {
+    if let Err(e) = process() {
+
+[src/mask.rs]
+// Copyright 2019 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use crate::render::Context;
+
+pub fn apply(
+    mask: &usvg::Mask,
+    ctx: &Context,
+    transform: tiny_skia::Transform,
+    pixmap: &mut tiny_skia::Pixmap,
+) {
+    if mask.root().children().is_empty() {
+
+[src/path.rs]
+// Copyright 2019 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use crate::render::Context;
+
+pub fn render(
+    path: &usvg::Path,
+    blend_mode: tiny_skia::BlendMode,
+    ctx: &Context,
+    transform: tiny_skia::Transform,
+    pixmap: &mut tiny_skia::PixmapMut,
+) {
+
+[src/render.rs]
+// Copyright 2018 the Resvg Authors
+// SPDX-License-Identifier: Apache-2.0 OR MIT
+
+use crate::OptionLog;
+
+pub struct Context {
+    pub max_bbox: tiny_skia::IntRect,
+}
+
+pub fn render_nodes(
+    parent: &usvg::Group,
+    ctx: &Context,

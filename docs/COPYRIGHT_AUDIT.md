@@ -18,6 +18,16 @@
 
 THIRD_PARTY_NOTICES.md 是用户入口；发行候选包同时附许可证和五个 MPL 原始源码归档，接收者离线即可取得源码，私密 GitHub 仓库的权限不影响获取。
 
+## A6 字体复用补充（2026-10-22）
+
+共享度量模块直接复用既有 ab_glyph、ttf-parser 和 epaint_default_fonts 包及原始字体字节。未导入外部字体素材，Ubuntu/Hack/Noto Emoji 的原始声明继续由 third_party.py 提取并随发布包保留。系统 Arial/微软雅黑等只在内存中用于测量、显示及栅格化，SVG 引用字体名称与字宽，未把系统字体嵌入文件或拷入包中。
+
+## A6 PDF 字体嵌入补充（2026-10-23）
+
+PDF 使用 svg2pdf 0.13.0 及其锁定依赖。新增 0.45 系列 resvg/usvg 使用包内声明的 MIT OR Apache-2.0，不扩大 MPL 例外；既有 0.37 MPL 包继续保留完整源码归档。全部许可、原始声明和校验值随实际 Windows 依赖树生成。clipboard-win 5.4.1 被上游撤回后更新为 5.4.3，补充许可来源指向新 crate 的 VCS 提交，BSL-1.0 原文及 SHA-256 已核对。
+
+与此前 SVG/PNG 路径不同，PDF 文档会嵌入实际使用字体的子集。程序先读取字体 OpenType OS/2 fsType，通过 ttf-parser 检查权限、轮廓嵌入与子集化限制，拒绝受限、仅位图、禁止子集或无效权限的字体。程序不修改系统字体文件；exe 和发布包仍不复制 Windows 或用户外部字体。检查依据见 [Microsoft OpenType fsType 规范](https://learn.microsoft.com/typography/opentype/spec/os2#fstype)。实际导出已检查 Arial 四种样式、微软雅黑常规/粗体的字体流及 Unicode 映射，系统字体对应的使用条款继续适用。
+
 ## 来源记录与发布边界
 
 2026-10-18 用户确认：图标/网页原型及 Shapiro–Wilk 检验由 AI 生成，用户未向 AI 提供外部代码或素材。以下结合这条开发记录与仓库证据说明范围。
@@ -54,3 +64,12 @@ THIRD_PARTY_NOTICES.md 是用户入口；发行候选包同时附许可证和五
 4. `python tools/package_release.py` 重新构建并生成 `target/releases/SciCanvas-0.1.0-windows-x64.zip`。向他人分发完整包，保留 MPL_SOURCE.md、THIRD_PARTY_NOTICES.md、licenses 和构建信息。
 
 原文依据：[MPL 2.0 第 3 节](https://www.mozilla.org/en-US/MPL/2.0/)、[Mozilla FAQ 第 8–10 问](https://www.mozilla.org/en-US/MPL/2.0/FAQ/)、[OFL 原文](https://openfontlicense.org/open-font-license-official-text/)、[Ubuntu 字体许可](https://canonical.com/legal/font-licence)、[Microsoft 字体分发说明](https://learn.microsoft.com/en-us/typography/fonts/font-faq)、[SciPy v1.17.1 许可](https://github.com/scipy/scipy/blob/v1.17.1/LICENSE.txt)。
+
+
+## 依赖与图标栈升级补充（2026-10-25）
+
+PNG、PDF 与 SVG 图标现共用 resvg/usvg 0.45.1，rustybuzz 与 fontdb 各只有当前单一版本。Cargo.lock 不再包含 0.37 解析器，也不含 rustybuzz 0.12.1。该版渲染库声明为 MIT OR Apache-2.0，按原始包分别保留许可证与源码版权头，索引由 Cargo.lock 生成。
+
+更新后的 Windows 完整特性依赖索引中没有 MPL-2.0 包，MPL 源码归档不会打入本版发布包。仓库保留的 0.37 源码和声明是历史版本档案，说明见 MPL_SOURCE.md。发布脚本仅在当前锁定依赖含 MPL 包时才附源码说明和对应完整归档。
+
+图标 loader 保留 egui_extras 0.29.1 的 URI、尺寸提示、缓存和颜色换算行为，原 MIT 声明已随依赖记录；全套图标/缩略图逐像素比对一致。16份图型/科学文字/多面板PNG逐像素与升级前一致；屏幕字形位置和PDF矢量/字体子集回归均通过。

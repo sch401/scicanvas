@@ -4,7 +4,7 @@
 //! `tables/*.csv` 和 `graphs/*.svg` 是保存时生成的预览，解压即可查看，打开时忽略。
 //! 旧版 `.scproj` 为纯 JSON，继续支持读写。
 
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 use std::io::{Cursor, Read, Write};
 use std::path::Path;
 
@@ -12,7 +12,7 @@ use serde_json::Value;
 use zip::write::SimpleFileOptions;
 use zip::CompressionMethod;
 
-use crate::{Book, Project};
+use crate::{Book, Graph, GraphTemplate, Project};
 
 pub const CURRENT_VERSION: u32 = crate::model::PROJECT_VERSION;
 
@@ -23,6 +23,48 @@ const PROJECT_ENTRY: &str = "project.json";
 const MANIFEST_ENTRY: &str = "manifest.json";
 /// 解压单个条目的上限，防止损坏或恶意压缩包耗尽内存。
 const MAX_ENTRY_BYTES: u64 = 1 << 31;
+
+use crate::page::plots::StoredCurve;
+
+/// 原有文件的显式/继承 X 规则在读取边界归一化，不再展开为平行表。
+fn decode_plots(
+    layer: &mut Value,
+    defaults: &std::collections::BTreeMap<(u64, String), Option<String>>,
+) -> Result<(), String> {
+    let Some(plots) = layer.get("plots").cloned() else {
+        return Ok(());
+    };
+    let mut plots: Vec<StoredCurve> = serde_json::from_value(plots).map_err(|e| format!("曲线映射无效：{e}"))?;
+    let main = layer.get("book_id").and_then(Value::as_u64);
+    let mut seen = BTreeSet::new();
+    for plot in &mut plots {
+        let m = &plot.mapping;
+        m.validate()?;
+        if plot.base_missing && m.base.is_some() {
+            return Err("曲线下端不能同时为缺失和已指定".into());
+        }
+        if !seen.insert(m.y.clone()) {
+            return Err("曲线行范围无效或来源重复".into());
+        }
+        if let Some(x) = &m.x {
+            let default = if Some(m.y.book) == main {
+                layer.get("x_key").and_then(Value::as_str).map(str::to_string)
+            } else {
+                defaults.get(&(m.y.book, m.y.col.clone())).cloned().flatten()
+            };
+            let inherited = x.book == m.y.book && default.as_deref() == Some(&x.col);
+            if !inherited {
+                plot.x_override = true;
+            }
+            // 继承的其他表 X 仍在使用时解析，不固化旧的默认列。
+            if inherited && !plot.x_override && Some(m.y.book) != main {
+                plot.mapping.x = None;
+            }
+        }
+    }
+    layer["plots"] = serde_json::to_value(plots).map_err(|e| e.to_string())?;
+    Ok(())
+}
 
 /// 无版本号为 v0；显式未知版本拒绝打开，保留源文件。
 pub fn migrate(mut value: Value) -> Result<Value, String> {
@@ -62,10 +104,45 @@ pub fn migrate(mut value: Value) -> Result<Value, String> {
             }
         }
     }
+    let mut defaults = std::collections::BTreeMap::new();
+    if let Some(books) = object.get("books").and_then(Value::as_array) {
+        for book in books {
+            let (Some(id), Some(columns)) = (
+                book.get("id").and_then(Value::as_u64),
+                book.get("columns").and_then(Value::as_array),
+            ) else {
+                continue;
+            };
+            let first_x = columns
+                .iter()
+                .find(|c| c.get("role").and_then(Value::as_str) == Some("X"))
+                .and_then(|c| c.get("key"))
+                .and_then(Value::as_str)
+                .map(str::to_string);
+            let mut last_x = None;
+            for col in columns {
+                if let Some(key) = col.get("key").and_then(Value::as_str) {
+                    defaults.insert((id, key.to_string()), last_x.clone().or_else(|| first_x.clone()));
+                    if col.get("role").and_then(Value::as_str) == Some("X") {
+                        last_x = Some(key.to_string());
+                    }
+                }
+            }
+        }
+    }
     // 默认页宽从 89 mm 改为 A4 宽之前，早期文件可能没有记录页面尺寸：补上当时的默认值，打开后版面不变。
     if let Some(graphs) = object.get_mut("graphs").and_then(Value::as_array_mut) {
         for graph in graphs {
             if let Some(page) = graph.get_mut("page").and_then(Value::as_object_mut) {
+                if let Some(layers) = page.get_mut("layers").and_then(Value::as_array_mut) {
+                    for layer in layers {
+                        decode_plots(layer, &defaults)?;
+                        // v0-v11 titles and column names always keep their literal meaning.
+                        if version < 12 {
+                            layer["rich_text"] = false.into();
+                        }
+                    }
+                }
                 let (w, h) = crate::page::LEGACY_PAGE_MM;
                 page.entry("width_mm").or_insert(w.into());
                 page.entry("height_mm").or_insert(h.into());
@@ -101,7 +178,16 @@ pub fn from_json(text: &str) -> Result<Project, String> {
         .iter()
         .map(|b| b.id)
         .chain(project.graphs.iter().map(|g| g.id))
+        .chain(project.notes.iter().map(|n| n.id))
         .chain(project.folders.iter().map(|f| f.id))
+        .chain(project.fit_functions.iter().map(|f| f.id))
+        .chain(
+            project
+                .books
+                .iter()
+                .flat_map(|b| &b.columns)
+                .filter_map(|c| c.fit_report.as_ref().map(|r| r.id)),
+        )
         .max()
         .unwrap_or(0);
     project.next_id = project.next_id.max(max_id.checked_add(1).ok_or("项目对象编号已用尽")?);
@@ -112,6 +198,30 @@ pub fn from_json(text: &str) -> Result<Project, String> {
 pub fn to_json(project: &Project) -> Result<String, String> {
     validate(project)?;
     let mut value = serde_json::to_value(project).map_err(|e| e.to_string())?;
+    for (graph, wire) in project.graphs.iter().zip(value["graphs"].as_array_mut().unwrap()) {
+        for (layer, wire) in graph
+            .page
+            .layers()
+            .iter()
+            .zip(wire["page"]["layers"].as_array_mut().unwrap())
+        {
+            // 保留失去主工作簿的旧空图编辑设置；其余图层用明确的曲线对象写盘。
+            if layer.book_id.is_none() {
+                continue;
+            }
+            let plots: Vec<StoredCurve> = layer
+                .plots(&|id| project.book(id))
+                .into_iter()
+                .map(|plot| StoredCurve {
+                    base_missing: layer.plot_base_key(&plot.key).as_deref() == Some(""),
+                    mapping: plot.mapping,
+                    style: plot.style,
+                    x_override: plot.x_override,
+                })
+                .collect();
+            wire["plots"] = serde_json::to_value(plots).map_err(|e| e.to_string())?;
+        }
+    }
     value["version"] = CURRENT_VERSION.into();
     serde_json::to_string_pretty(&value).map_err(|e| e.to_string())
 }
@@ -129,17 +239,78 @@ fn validate(project: &Project) -> Result<(), String> {
         .iter()
         .map(|b| b.id)
         .chain(project.graphs.iter().map(|g| g.id))
+        .chain(project.notes.iter().map(|n| n.id))
         .chain(project.folders.iter().map(|f| f.id))
+        .chain(project.fit_functions.iter().map(|f| f.id))
+        .chain(
+            project
+                .books
+                .iter()
+                .flat_map(|b| &b.columns)
+                .filter_map(|c| c.fit_report.as_ref().map(|r| r.id)),
+        )
     {
         if id == 0 || id == u64::MAX || !ids.insert(id) {
             return Err(format!("对象编号 {id} 无效或重复"));
         }
     }
+    let mut function_names = BTreeSet::new();
+    for saved in &project.fit_functions {
+        saved.definition.resolve()?;
+        if !function_names.insert(&saved.definition.name) {
+            return Err("项目函数库中有重复名称".into());
+        }
+    }
     project.validate_folders()?;
+    if project.notes.iter().any(|n| n.name.trim().is_empty()) {
+        return Err("Note 名称不能为空".into());
+    }
     for book in &project.books {
         let mut keys = BTreeSet::new();
+        let mut fit_outputs = BTreeSet::new();
         for col in &book.columns {
             col.data.validate()?;
+            if let Some(report) = &col.fit_report {
+                report.validate()?;
+                if report.book_id != book.id || report.curve.1 != col.key {
+                    return Err("拟合报告与结果列关联不一致".into());
+                }
+                if let Some(crate::ops::Operation {
+                    kind: crate::ops::OpKind::Nonlinear(recipe),
+                    ..
+                }) = &col.op
+                {
+                    if recipe.output_x != report.curve.0
+                        || recipe.function != crate::ops::FitMethod::from_function(&report.fit.model)
+                    {
+                        return Err("拟合报告与操作定义不一致".into());
+                    }
+                }
+            }
+            if let Some(op) = &col.op {
+                if let crate::ops::OpKind::Nonlinear(recipe) = &op.kind {
+                    recipe.validate()?;
+                    let mut outputs = BTreeSet::from([col.key.as_str()]);
+                    for key in std::iter::once(&recipe.output_x).chain(recipe.bands.iter().flat_map(|b| &b.columns)) {
+                        if !outputs.insert(key.as_str())
+                            || book.column(key).is_none()
+                            || book.column(key).is_some_and(|c| c.formula.is_some() || c.op.is_some())
+                        {
+                            return Err("非线性重算输出列缺失、重复或有其他计算定义".into());
+                        }
+                    }
+                    if outputs.iter().any(|key| !fit_outputs.insert(*key)) {
+                        return Err("多次非线性拟合重复占用同一输出列".into());
+                    }
+                    if outputs.contains(op.y.as_str())
+                        || op.x.as_ref().is_some_and(|x| outputs.contains(x.as_str()))
+                        || book.column(&op.y).is_none()
+                        || op.x.as_ref().is_some_and(|x| book.column(x).is_none())
+                    {
+                        return Err("非线性重算来源缺失或引用自身输出".into());
+                    }
+                }
+            }
             if col.key.is_empty() || !keys.insert(&col.key) {
                 return Err(format!("工作簿 {} 的列标识为空或重复", book.name));
             }
@@ -148,11 +319,16 @@ fn validate(project: &Project) -> Result<(), String> {
     for graph in &project.graphs {
         graph.page.validate()?;
         for layer in graph.page.layers() {
+            for plot in layer.plots(&|id| project.book(id)) {
+                plot.mapping.validate()?;
+            }
             if [
                 layer.x_min,
                 layer.x_max,
                 layer.y_min,
                 layer.y_max,
+                layer.y2_min,
+                layer.y2_max,
                 f64::from(layer.line_width),
                 f64::from(layer.symbol_size),
                 f64::from(layer.error_bars.cap),
@@ -176,7 +352,7 @@ fn validate(project: &Project) -> Result<(), String> {
             {
                 return Err("数据标签字号应为有限正数，偏移应为有限非负数".into());
             }
-            if layer.rows.is_some_and(|(a, b)| a > b || b == usize::MAX) {
+            if !layer.valid_plot_rows() {
                 return Err("图层行范围无效".into());
             }
         }
@@ -273,6 +449,10 @@ pub fn to_scv(project: &Project) -> Result<Vec<u8>, String> {
         "graphs": graphs.iter().map(|(path, g)| serde_json::json!({
             "id": g.id, "name": g.name, "folder": folder(g.id), "path": path,
         })).collect::<Vec<_>>(),
+        "notes": project.notes.iter().map(|n| serde_json::json!({
+            "id": n.id, "name": n.name, "folder": folder(n.id),
+            "path": entry_name("notes", n.id, &n.name, "txt"),
+        })).collect::<Vec<_>>(),
     });
     let manifest = serde_json::to_string_pretty(&manifest).map_err(|e| e.to_string())?;
 
@@ -293,6 +473,13 @@ pub fn to_scv(project: &Project) -> Result<Vec<u8>, String> {
         for (path, book) in &tables {
             add(path, CompressionMethod::Deflated, book_csv(book).as_bytes())?;
         }
+        for note in &project.notes {
+            add(
+                &entry_name("notes", note.id, &note.name, "txt"),
+                CompressionMethod::Deflated,
+                note.text.as_bytes(),
+            )?;
+        }
         for (path, graph) in &graphs {
             add(
                 path,
@@ -306,6 +493,219 @@ pub fn to_scv(project: &Project) -> Result<Vec<u8>, String> {
         .and_then(|()| zip.finish())
         .map(Cursor::into_inner)
         .map_err(|e| format!("生成 .scv 失败：{e}"))
+}
+
+const MAX_GRAPH_TEMPLATE_BYTES: usize = 16 * 1024 * 1024;
+
+fn template_column(key: &str) -> String {
+    crate::plotspec::split_key(key).0.to_owned()
+}
+
+fn template_key_map<T: PartialEq>(
+    entries: impl IntoIterator<Item = (String, T)>,
+) -> Result<BTreeMap<String, T>, String> {
+    let mut out = BTreeMap::new();
+    for (key, value) in entries {
+        let key = template_column(&key);
+        if out.get(&key).is_some_and(|existing| existing != &value) {
+            return Err(format!("模板中同名列有冲突的映射：{key}"));
+        }
+        out.entry(key).or_insert(value);
+    }
+    Ok(out)
+}
+
+/// 提取页面样式与列标识；不把源工作簿编号或数据复制进模板。
+pub fn graph_template_from_graph(graph: &Graph, project: &Project) -> Result<GraphTemplate, String> {
+    let mut curve_count = 0;
+    for layer in graph.page.layers() {
+        for book_id in layer.book_id.into_iter().chain(layer.foreign_books()).chain(
+            layer
+                .styles()
+                .keys()
+                .filter_map(|key| crate::plotspec::split_key(key).1),
+        ) {
+            if project.book(book_id).is_none() {
+                return Err("图形引用的工作簿已不存在，无法保存模板".into());
+            }
+        }
+        let spec = layer.draft();
+        if !spec.y_keys.is_empty() {
+            let book_id = layer.book_id.ok_or("图形曲线没有绑定源工作簿")?;
+            let book = project.book(book_id).ok_or("找不到图形源工作簿")?;
+            layer.validate_in(book, &|id| project.book(id))?;
+            curve_count += spec.y_keys.len();
+        }
+    }
+    if curve_count == 0 {
+        return Err("图形没有可保存的曲线".into());
+    }
+
+    let mut page = graph.page.clone();
+    for layer in page.layers_mut() {
+        let mut draft = layer.draft();
+        draft.book_id = None;
+        draft.x_key = draft.x_key.as_deref().map(template_column);
+        let mut seen = BTreeSet::new();
+        draft.y_keys = draft
+            .y_keys
+            .iter()
+            .map(|key| template_column(key))
+            .map(|key| {
+                if seen.insert(key.clone()) {
+                    Ok(key)
+                } else {
+                    Err(format!("同一图层有重复列标识 {key}，无法保存为模板"))
+                }
+            })
+            .collect::<Result<_, _>>()?;
+        draft.x_by_y = template_key_map(
+            draft
+                .x_by_y
+                .into_iter()
+                .map(|(key, value)| (key, template_column(&value))),
+        )?;
+        draft.base_by_y = template_key_map(
+            draft
+                .base_by_y
+                .into_iter()
+                .map(|(key, value)| (key, template_column(&value))),
+        )?;
+        draft.row_by_y = template_key_map(draft.row_by_y)?;
+        let mut seen_lines = BTreeSet::new();
+        draft.line_only = draft
+            .line_only
+            .iter()
+            .map(|key| template_column(key))
+            .filter(|key| seen_lines.insert(key.clone()))
+            .collect();
+
+        let styles = template_key_map(layer.styles())?;
+        layer.spec = crate::page::LayerSpec::from(draft);
+        layer.spec.edit_styles(|stored| *stored = styles);
+        layer.book_id = None;
+    }
+    page.validate()?;
+    Ok(GraphTemplate {
+        version: crate::model::GRAPH_TEMPLATE_VERSION,
+        name: graph.name.clone(),
+        page,
+    })
+}
+
+fn validate_graph_template(template: &GraphTemplate) -> Result<(), String> {
+    if template.version != crate::model::GRAPH_TEMPLATE_VERSION {
+        return Err(format!("不支持的图形模板版本 {}", template.version));
+    }
+    if template.name.trim().is_empty() {
+        return Err("图形模板名称不能为空".into());
+    }
+    template.page.validate()?;
+    let mut curves = 0;
+    for layer in template.page.layers() {
+        if layer.book_id.is_some()
+            || !layer.foreign_books().is_empty()
+            || layer
+                .styles()
+                .keys()
+                .any(|key| crate::plotspec::split_key(key).1.is_some())
+        {
+            return Err("图形模板不能包含源工作簿编号".into());
+        }
+        curves += layer.draft().y_keys.len();
+    }
+    if curves == 0 {
+        return Err("图形模板没有可应用的曲线".into());
+    }
+    Ok(())
+}
+
+pub fn graph_template_to_json(template: &GraphTemplate) -> Result<String, String> {
+    validate_graph_template(template)?;
+    serde_json::to_string_pretty(template).map_err(|e| format!("序列化图形模板失败：{e}"))
+}
+
+pub fn graph_template_from_json(text: &str) -> Result<GraphTemplate, String> {
+    if text.len() > MAX_GRAPH_TEMPLATE_BYTES {
+        return Err("图形模板文件过大".into());
+    }
+    let template: GraphTemplate =
+        serde_json::from_str(text.trim_start_matches('\u{feff}')).map_err(|e| format!("图形模板格式错误：{e}"))?;
+    validate_graph_template(&template)?;
+    Ok(template)
+}
+
+pub fn save_graph_template(path: &Path, template: &GraphTemplate) -> Result<(), String> {
+    let content = graph_template_to_json(template)?.into_bytes();
+    write_atomic(path, &content, "模板文件名为空", "保存图形模板失败：")
+}
+
+pub fn load_graph_template(path: &Path) -> Result<GraphTemplate, String> {
+    let file = std::fs::File::open(path).map_err(|e| e.to_string())?;
+    if file.metadata().map_err(|e| e.to_string())?.len() > MAX_GRAPH_TEMPLATE_BYTES as u64 {
+        return Err("图形模板文件过大".into());
+    }
+    let mut content = Vec::new();
+    file.take(MAX_GRAPH_TEMPLATE_BYTES as u64 + 1)
+        .read_to_end(&mut content)
+        .map_err(|e| e.to_string())?;
+    if content.len() > MAX_GRAPH_TEMPLATE_BYTES {
+        return Err("图形模板文件过大".into());
+    }
+    let text = String::from_utf8(content).map_err(|_| "图形模板不是 UTF-8 JSON")?;
+    graph_template_from_json(&text)
+}
+
+const MAX_FIT_FUNCTION_BYTES: usize = 64 * 1024;
+
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(deny_unknown_fields)]
+struct FitFunctionFile {
+    version: u32,
+    function: crate::nlfit::CustomFitDefinition,
+}
+
+pub fn fit_function_to_json(function: &crate::nlfit::CustomFitDefinition) -> Result<String, String> {
+    function.resolve()?;
+    let content = serde_json::to_string_pretty(&FitFunctionFile {
+        version: 1,
+        function: function.clone(),
+    })
+    .map_err(|error| format!("序列化拟合函数失败：{error}"))?;
+    if content.len() > MAX_FIT_FUNCTION_BYTES {
+        return Err("拟合函数文件过大".into());
+    }
+    Ok(content)
+}
+
+pub fn fit_function_from_json(text: &str) -> Result<crate::nlfit::CustomFitDefinition, String> {
+    if text.len() > MAX_FIT_FUNCTION_BYTES {
+        return Err("拟合函数文件过大".into());
+    }
+    let file: FitFunctionFile = serde_json::from_str(text.trim_start_matches('\u{feff}'))
+        .map_err(|error| format!("拟合函数文件格式错误：{error}"))?;
+    if file.version != 1 {
+        return Err(format!("不支持的拟合函数文件版本 {}", file.version));
+    }
+    file.function.resolve()?;
+    Ok(file.function)
+}
+
+pub fn save_fit_function(path: &Path, function: &crate::nlfit::CustomFitDefinition) -> Result<(), String> {
+    let content = fit_function_to_json(function)?;
+    write_atomic(path, content.as_bytes(), "函数文件名为空", "保存拟合函数失败：")
+}
+
+pub fn load_fit_function(path: &Path) -> Result<crate::nlfit::CustomFitDefinition, String> {
+    let file = std::fs::File::open(path).map_err(|error| error.to_string())?;
+    if file.metadata().map_err(|error| error.to_string())?.len() > MAX_FIT_FUNCTION_BYTES as u64 {
+        return Err("拟合函数文件过大".into());
+    }
+    let mut content = String::new();
+    file.take(MAX_FIT_FUNCTION_BYTES as u64 + 1)
+        .read_to_string(&mut content)
+        .map_err(|error| format!("读取拟合函数失败：{error}"))?;
+    fit_function_from_json(&content)
 }
 
 fn scv_text(zip: &mut zip::ZipArchive<Cursor<&[u8]>>, name: &str) -> Result<Option<String>, String> {
@@ -379,7 +779,11 @@ pub fn save(path: &Path, project: &Project) -> Result<(), String> {
     } else {
         to_scv(project)?
     };
-    let name = path.file_name().ok_or("项目文件名为空")?.to_string_lossy();
+    write_atomic(path, &content, "项目文件名为空", "保存项目失败：")
+}
+
+fn write_atomic(path: &Path, content: &[u8], missing_name: &str, failure_prefix: &str) -> Result<(), String> {
+    let name = path.file_name().ok_or(missing_name)?.to_string_lossy();
     let stamp = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|e| e.to_string())?
@@ -387,7 +791,7 @@ pub fn save(path: &Path, project: &Project) -> Result<(), String> {
     let temporary = path.with_file_name(format!(".{name}.{}.{stamp}.tmp", std::process::id()));
     let mut file = std::fs::File::create_new(&temporary).map_err(|e| e.to_string())?;
     let result = (|| {
-        file.write_all(&content)?;
+        file.write_all(content)?;
         file.sync_all()?;
         drop(file);
         std::fs::rename(&temporary, path)
@@ -395,5 +799,5 @@ pub fn save(path: &Path, project: &Project) -> Result<(), String> {
     if result.is_err() {
         let _ = std::fs::remove_file(&temporary);
     }
-    result.map_err(|e| format!("保存项目失败：{e}"))
+    result.map_err(|e| format!("{failure_prefix}{e}"))
 }

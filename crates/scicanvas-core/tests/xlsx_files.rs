@@ -115,3 +115,36 @@ fn legacy_and_broken_files_are_reported() {
         .unwrap_err()
         .contains("缺失"));
 }
+
+#[test]
+fn legacy_xls_and_xlsx_from_excel_read_identically_with_dates_and_merged_cells() {
+    // 两个文件由 Excel 16 用同一份内容分别另存为 .xls（BIFF8）和 .xlsx
+    let xls = read(include_bytes!("fixtures/legacy.xls")).unwrap();
+    let xlsx = read(include_bytes!("fixtures/legacy.xlsx")).unwrap();
+    assert_eq!(xls, xlsx);
+    let names: Vec<_> = xls.iter().map(|s| s.name.as_str()).collect();
+    assert_eq!(names, ["测量", "空表", "长文本"]);
+    assert_eq!(
+        xls[0].rows,
+        rows(&[
+            &["时间 (s)", "电压 (mV)", "日期", "备注", "", "组别", "组别"],
+            &["0", "10", "2026-10-18", "第1次", "", "A组", "1"],
+            &["0.5", "8", "2026-10-19", "", "", "A组", "2"],
+            &["1", "6.4", "2026-10-20 14:30", "第3次", "", "", ""],
+            &["1.5", "5.12", "", "合计值", "", "", ""],
+            &["2", "4.096", "", "TRUE", "", "", ""],
+            &["0.3", "33.616", "", "", "", "", ""],
+            &["-123456789", "1.5e-7", "", "", "", "", ""],
+        ])
+    );
+    assert!(xls[1].rows.is_empty());
+    // 共享字符串跨多个 CONTINUE 记录
+    let long = &xls[2].rows;
+    assert_eq!(long.len(), 1200);
+    assert!((0..1200).all(|i| long[i][0] == format!("样品编号-{}-测试字符串", i + 1)));
+    assert_eq!(long[0][1], format!("{}尾", "长".repeat(300)));
+    // 导入成工作簿：日期列为日期时间类型
+    let book = scicanvas_core::csv::book_from_table(1, "测量", xls[0].rows.clone());
+    assert_eq!(book.columns[2].data.kind(), scicanvas_core::DataKind::DateTime);
+    assert_eq!(book.columns[2].long_name, "日期");
+}

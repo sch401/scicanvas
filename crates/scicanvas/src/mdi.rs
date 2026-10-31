@@ -56,8 +56,11 @@ pub enum Snap {
     BottomRight,
 }
 
-/// 拖动标题栏时鼠标位置对应的贴靠方式。工作区外（如功能区、侧栏）也算靠近对应边缘。
+/// 仅在工作区边缘附近贴靠，拖远到工作区外时保持自由位置。
 pub fn snap_at(ws: Rect, p: Pos2) -> Option<Snap> {
+    if !ws.expand(SNAP_EDGE).contains(p) {
+        return None;
+    }
     let (left, right) = (p.x <= ws.left() + SNAP_EDGE, p.x >= ws.right() - SNAP_EDGE);
     let (top, bottom) = (p.y <= ws.top() + SNAP_EDGE, p.y >= ws.bottom() - SNAP_EDGE);
     let (near_top, near_bottom) = (p.y <= ws.top() + SNAP_CORNER, p.y >= ws.bottom() - SNAP_CORNER);
@@ -232,12 +235,8 @@ pub fn window(
     add_body: impl FnOnce(&mut egui::Ui),
 ) -> WinResponse {
     let mut out = WinResponse::default();
-    // 窗口至少有一部分标题栏留在工作区里
     if geom.state == WinState::Normal {
-        let r = geom.rect;
-        let x = r.left().clamp(-r.width() + 80.0, (ws.width() - 80.0).max(0.0));
-        let y = r.top().clamp(0.0, (ws.height() - TITLE_H).max(0.0));
-        geom.rect = Rect::from_min_size(pos2(x, y), r.size());
+        geom.rect = geom.rect.translate(vec2(0.0, (-geom.rect.top()).max(0.0)));
     }
     let rect = match geom.state {
         WinState::Max => ws,
@@ -284,11 +283,11 @@ pub fn window(
             } else {
                 painter.rect_filled(bar, 0.0, pal.title_in);
             }
-            let fg = Color32::WHITE;
+            let fg = if active { Color32::WHITE } else { pal.ink };
             let bar_resp = ui.interact(bar, id.with("title"), Sense::click_and_drag());
             out.pressed = bar_resp.is_pointer_button_down_on();
             let ic = Rect::from_center_size(pos2(bar.left() + 14.0, bar.center().y), vec2(14.0, 14.0));
-            icons::icon(icon, true).paint_at(ui, ic);
+            icons::icon(icon, active || pal.dark).paint_at(ui, ic);
 
             let bw = 22.0;
             let by = bar.center().y;
@@ -384,108 +383,115 @@ pub fn window(
             let line = if active { pal.title } else { pal.line };
             painter.rect_stroke(rect, 0.0, Stroke::new(1.0_f32, line));
 
-            // 改变大小：右下角、右边、下边
-            if geom.state == WinState::Normal {
-                let grips = [
-                    (
-                        Rect::from_min_max(pos2(rect.right() - 14.0, rect.bottom() - 14.0), rect.max),
-                        CursorIcon::ResizeNwSe,
-                        (true, true),
-                    ),
-                    (
-                        Rect::from_min_max(
-                            pos2(rect.right() - 4.0, bar.bottom()),
-                            pos2(rect.right() + 3.0, rect.bottom() - 14.0),
-                        ),
-                        CursorIcon::ResizeHorizontal,
-                        (true, false),
-                    ),
-                    (
-                        Rect::from_min_max(
-                            pos2(rect.left(), rect.bottom() - 4.0),
-                            pos2(rect.right() - 14.0, rect.bottom() + 3.0),
-                        ),
-                        CursorIcon::ResizeVertical,
-                        (false, true),
-                    ),
-                ];
-                for (i, (r, cursor, (dx, dy))) in grips.into_iter().enumerate() {
-                    let g = ui.interact(r, id.with(("grip", i)), Sense::drag());
-                    if g.hovered() || g.dragged() {
-                        ctx.set_cursor_icon(cursor);
-                    }
-                    if g.dragged() {
-                        geom.restore = None;
-                        let d = g.drag_delta();
-                        let mut max = geom.rect.max;
-                        if dx {
-                            max.x += d.x;
-                        }
-                        if dy {
-                            max.y += d.y;
-                        }
-                        let size = (max - geom.rect.min).max(MIN_SIZE);
-                        geom.rect = Rect::from_min_size(geom.rect.min, size);
-                    }
-                    if i == 0 {
-                        // 右下角的斜纹
-                        let s = Stroke::new(1.0_f32, pal.weak);
-                        for k in [4.0, 8.0] {
-                            painter.line_segment(
-                                [
-                                    pos2(rect.right() - 2.0 - k, rect.bottom() - 2.0),
-                                    pos2(rect.right() - 2.0, rect.bottom() - 2.0 - k),
-                                ],
-                                s,
-                            );
-                        }
-                    }
+            resize_grips(ui, ctx, id, geom, rect, bar, pal);
+        });
+    if geom.state == WinState::Normal || out.state == Some(WinState::Normal) {
+        geom.rect = geom.rect.translate(vec2(0.0, (-geom.rect.top()).max(0.0)));
+    }
+    out
+}
+
+fn resize_grips(
+    ui: &mut egui::Ui,
+    ctx: &egui::Context,
+    id: egui::Id,
+    geom: &mut Geom,
+    rect: Rect,
+    bar: Rect,
+    pal: &Palette,
+) {
+    let painter = ui.painter().clone();
+    if geom.state == WinState::Normal {
+        let grips = [
+            (
+                Rect::from_min_max(pos2(rect.right() - 14.0, rect.bottom() - 14.0), rect.max),
+                CursorIcon::ResizeNwSe,
+                (true, true),
+            ),
+            (
+                Rect::from_min_max(
+                    pos2(rect.right() - 4.0, bar.bottom()),
+                    pos2(rect.right() + 3.0, rect.bottom() - 14.0),
+                ),
+                CursorIcon::ResizeHorizontal,
+                (true, false),
+            ),
+            (
+                Rect::from_min_max(
+                    pos2(rect.left(), rect.bottom() - 4.0),
+                    pos2(rect.right() - 14.0, rect.bottom() + 3.0),
+                ),
+                CursorIcon::ResizeVertical,
+                (false, true),
+            ),
+        ];
+        for (i, (r, cursor, (dx, dy))) in grips.into_iter().enumerate() {
+            let g = ui.interact(r, id.with(("grip", i)), Sense::drag());
+            if g.hovered() || g.dragged() {
+                ctx.set_cursor_icon(cursor);
+            }
+            if g.dragged() {
+                geom.restore = None;
+                let d = g.drag_delta();
+                let mut max = geom.rect.max;
+                if dx {
+                    max.x += d.x;
+                }
+                if dy {
+                    max.y += d.y;
+                }
+                let size = (max - geom.rect.min).max(MIN_SIZE);
+                geom.rect = Rect::from_min_size(geom.rect.min, size);
+            }
+            if i == 0 {
+                // 右下角的斜纹
+                let s = Stroke::new(1.0_f32, pal.weak);
+                for k in [4.0, 8.0] {
+                    painter.line_segment(
+                        [
+                            pos2(rect.right() - 2.0 - k, rect.bottom() - 2.0),
+                            pos2(rect.right() - 2.0, rect.bottom() - 2.0 - k),
+                        ],
+                        s,
+                    );
                 }
             }
-        });
-    out
+        }
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     fn frame(ctx: &egui::Context, g: &mut Geom, events: Vec<egui::Event>) -> WinResponse {
+        frame_in_workspace(ctx, g, events, Rect::from_min_size(Pos2::ZERO, vec2(800.0, 600.0)))
+    }
+    fn frame_in_workspace(ctx: &egui::Context, g: &mut Geom, events: Vec<egui::Event>, ws: Rect) -> WinResponse {
         let mut response = WinResponse::default();
-        let _ = ctx.run(
-            egui::RawInput {
-                screen_rect: Some(Rect::from_min_size(Pos2::ZERO, vec2(1000.0, 700.0))),
-                events,
-                ..Default::default()
-            },
-            |ctx| {
-                response = window(
-                    ctx,
-                    egui::Id::new("mdi-test"),
-                    Rect::from_min_size(Pos2::ZERO, vec2(800.0, 600.0)),
-                    g,
-                    0,
-                    "Window",
-                    "book",
-                    true,
-                    &crate::theme::palette(egui::Theme::Light),
-                    |ui| {
-                        ui.label("body");
-                    },
-                );
-            },
-        );
+        let mut harness = crate::test_ui::Harness::new(ctx.clone(), Some(vec2(1000.0, 700.0)), ());
+        harness.run(events, |ctx| {
+            response = window(
+                ctx,
+                egui::Id::new("mdi-test"),
+                ws,
+                g,
+                0,
+                "Window",
+                "book",
+                true,
+                &crate::theme::palette(egui::Theme::Light),
+                |ui| {
+                    ui.label("body");
+                },
+            );
+        });
         if let Some(state) = response.state {
             g.state = state;
         }
         response
     }
     fn button(pos: Pos2, pressed: bool) -> egui::Event {
-        egui::Event::PointerButton {
-            pos,
-            button: egui::PointerButton::Primary,
-            pressed,
-            modifiers: egui::Modifiers::NONE,
-        }
+        crate::test_ui::button(pos, pressed)
     }
     fn click(ctx: &egui::Context, g: &mut Geom, pos: Pos2) -> WinResponse {
         frame(ctx, g, vec![egui::Event::PointerMoved(pos), button(pos, true)]);
@@ -568,13 +574,79 @@ mod tests {
     }
 
     #[test]
+    fn windows_can_move_past_workspace_edges_without_being_pulled_back() {
+        let ctx = egui::Context::default();
+        let mut geom = Geom::new(pos2(80.0, 70.0), vec2(320.0, 220.0));
+        let released = drag_title(&ctx, &mut geom, pos2(650.0, 220.0), pos2(950.0, 220.0));
+        assert!(released.snapped.is_none());
+        assert_eq!(geom.state, WinState::Normal);
+        assert!(geom.rect.left() > 720.0);
+        assert!(geom.rect.right() > 800.0);
+        let moved = geom.rect;
+        frame(&ctx, &mut geom, vec![]);
+        assert_eq!(geom.rect, moved);
+        geom.rect = Rect::from_min_size(pos2(-420.0, -90.0), vec2(320.0, 220.0));
+        frame(&ctx, &mut geom, vec![]);
+        assert_eq!(geom.rect.min, pos2(-420.0, 0.0));
+        assert_eq!(geom.rect.size(), vec2(320.0, 220.0));
+        for (via, end) in [
+            (pos2(80.0, 220.0), pos2(-200.0, 220.0)),
+            (pos2(400.0, 550.0), pos2(400.0, 900.0)),
+        ] {
+            geom = Geom::new(pos2(80.0, 70.0), vec2(320.0, 220.0));
+            let released = drag_title(&ctx, &mut geom, via, end);
+            assert!(released.snapped.is_none());
+            assert_eq!(geom.state, WinState::Normal);
+            if end.x < 0.0 {
+                assert!(geom.rect.right() < 0.0);
+            } else {
+                assert!(geom.rect.top() > 600.0);
+            }
+            let outside = geom.rect;
+            frame(&ctx, &mut geom, vec![]);
+            assert_eq!(geom.rect, outside);
+        }
+    }
+
+    #[test]
+    fn dragging_above_the_workspace_keeps_the_title_below_the_ribbon() {
+        let ctx = egui::Context::default();
+        let ws = Rect::from_min_size(pos2(40.0, 120.0), vec2(800.0, 500.0));
+        let mut geom = Geom::new(pos2(80.0, 70.0), vec2(320.0, 220.0));
+        for _ in 0..2 {
+            frame_in_workspace(&ctx, &mut geom, vec![], ws);
+        }
+        let start = ws.min + geom.rect.min.to_vec2() + vec2(160.0, TITLE_H / 2.0);
+        frame_in_workspace(&ctx, &mut geom, vec![egui::Event::PointerMoved(start)], ws);
+        frame_in_workspace(&ctx, &mut geom, vec![button(start, true)], ws);
+        frame_in_workspace(
+            &ctx,
+            &mut geom,
+            vec![egui::Event::PointerMoved(start + vec2(30.0, -20.0))],
+            ws,
+        );
+        let end = pos2(start.x + 30.0, ws.top() - 100.0);
+        frame_in_workspace(&ctx, &mut geom, vec![egui::Event::PointerMoved(end)], ws);
+        let released = frame_in_workspace(&ctx, &mut geom, vec![button(end, false)], ws);
+        frame_in_workspace(&ctx, &mut geom, vec![], ws);
+        assert!(released.snapped.is_none());
+        assert_eq!(geom.state, WinState::Normal);
+        assert_eq!(geom.rect.top(), 0.0);
+        assert_eq!(geom.rect.size(), vec2(320.0, 220.0));
+        assert_eq!(
+            ctx.memory(|m| m.area_rect(egui::Id::new("mdi-test"))).unwrap().top(),
+            ws.top()
+        );
+    }
+
+    #[test]
     fn snap_zones_follow_windows_11_edges_and_corners() {
         let ws = Rect::from_min_size(pos2(100.0, 50.0), vec2(800.0, 600.0));
         for (p, snap) in [
             (pos2(500.0, 52.0), Some(Snap::Max)),
-            (pos2(500.0, 20.0), Some(Snap::Max)),
+            (pos2(500.0, 20.0), None),
             (pos2(101.0, 300.0), Some(Snap::Left)),
-            (pos2(60.0, 300.0), Some(Snap::Left)),
+            (pos2(60.0, 300.0), None),
             (pos2(899.0, 300.0), Some(Snap::Right)),
             (pos2(101.0, 90.0), Some(Snap::TopLeft)),
             (pos2(150.0, 52.0), Some(Snap::TopLeft)),

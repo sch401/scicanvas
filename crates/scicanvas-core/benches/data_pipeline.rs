@@ -24,7 +24,7 @@ fn main() {
             .unwrap();
         }
         let start = Instant::now();
-        let book = csv::book_from_table(1, "Benchmark", csv::parse_table(black_box(&input)));
+        let book = csv::book_from_text(1, "Benchmark", black_box(&input));
         let import = start.elapsed();
         assert_eq!(book.nrows(), rows);
         assert_eq!(book.columns.len(), 10);

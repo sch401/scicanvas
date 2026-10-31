@@ -179,6 +179,7 @@ pub fn spectrum(ys: &[f64], dt: f64, window: Window) -> Result<Spectrum, String>
 /// 由 X 列求采样间隔；不等间距（相对偏差超过 1e-6）时报错。
 /// FFT 滤波类型；频率单位与 1/X 相同（X 以 s 为单位时为 Hz）。
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum FilterKind {
     LowPass(f64),
     HighPass(f64),
@@ -227,6 +228,57 @@ pub fn filter(ys: &[f64], dt: f64, kind: FilterKind) -> Result<Vec<f64>, String>
     Ok(out.iter().map(|v| v / n as f64).collect())
 }
 
+/// IFFT 的输入：单边谱（实数信号，`odd` 表示原信号点数为奇数）或双边谱（复数，按 numpy.fft 顺序）。
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum InverseInput {
+    OneSided { odd: bool },
+    TwoSided,
+}
+
+impl InverseInput {
+    /// 由频谱行数 m 得到输出点数。
+    pub fn points(self, m: usize) -> usize {
+        match self {
+            InverseInput::OneSided { odd: false } => 2 * m.saturating_sub(1),
+            InverseInput::OneSided { odd: true } => (2 * m).saturating_sub(1),
+            InverseInput::TwoSided => m,
+        }
+    }
+}
+
+/// 逆离散傅里叶变换 x_n = (1/N) Σ X_k e^{2πikn/N}（与 `numpy.fft.ifft` 相同），返回 (实部, 虚部)。
+pub fn inverse(re: &[f64], im: &[f64]) -> (Vec<f64>, Vec<f64>) {
+    let n = re.len();
+    // 共轭后正变换再共轭，除以 N
+    let neg: Vec<f64> = im.iter().map(|v| -v).collect();
+    let (r, i) = dft(re, &neg);
+    (
+        r.iter().map(|v| v / n as f64).collect(),
+        i.iter().map(|v| -v / n as f64).collect(),
+    )
+}
+
+/// 单边谱逆变换为 `n` 点实数信号（与 `numpy.fft.irfft(X, n)` 相同）：
+/// 用前 ⌊n/2⌋+1 个频点（不足补零），按共轭对称补全负频率；直流和偶数长度奈奎斯特频点只取实部。
+pub fn inverse_real(re: &[f64], im: &[f64], n: usize) -> Vec<f64> {
+    if n == 0 {
+        return vec![];
+    }
+    let half = n / 2 + 1;
+    let at = |v: &[f64], k: usize| v.get(k).copied().unwrap_or(0.0);
+    let (mut fr, mut fi) = (vec![0.0; n], vec![0.0; n]);
+    for k in 0..half.min(n) {
+        let nyquist = n.is_multiple_of(2) && k == n / 2;
+        fr[k] = at(re, k);
+        fi[k] = if k == 0 || nyquist { 0.0 } else { at(im, k) };
+        if k > 0 && !nyquist {
+            fr[n - k] = fr[k];
+            fi[n - k] = -fi[k];
+        }
+    }
+    inverse(&fr, &fi).0
+}
+
 pub fn sample_interval(xs: &[f64]) -> Result<f64, String> {
     if xs.len() < 2 {
         return Err("FFT 至少需要 2 个数据点".into());
@@ -244,6 +296,89 @@ pub fn sample_interval(xs: &[f64]) -> Result<f64, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn inverse_transforms_match_numpy_and_round_trip() {
+        // numpy.fft.irfft / ifft 参考值（numpy 2.4.4）
+        let re = [1.0, -0.5, 2.0, 0.25, -1.0];
+        let im = [0.3, 1.5, -0.75, 0.5, 0.2];
+        let cases: [(usize, &[f64]); 3] = [
+            (
+                8,
+                &[
+                    0.4375,
+                    -0.04863591206575146,
+                    -0.75,
+                    -0.1584708691207961,
+                    0.5625,
+                    0.9236359120657515,
+                    -0.25,
+                    0.2834708691207961,
+                ],
+            ),
+            (
+                9,
+                &[
+                    0.2777777777777778,
+                    0.12266098316272755,
+                    -0.6703066826041761,
+                    -0.36039160872708326,
+                    0.21602554342684321,
+                    0.7632131316682589,
+                    0.5826138309493054,
+                    -0.3773616611843837,
+                    0.4457686855307301,
+                ],
+            ),
+            (
+                7,
+                &[
+                    0.6428571428571428,
+                    -0.3258634699834446,
+                    -0.694769642782539,
+                    0.1191916078746647,
+                    1.1047134230851052,
+                    0.10345260371854043,
+                    0.05041833523053019,
+                ],
+            ),
+        ];
+        for (n, want) in cases {
+            let got = inverse_real(&re, &im, n);
+            assert_eq!(got.len(), n);
+            for (g, w) in got.iter().zip(want) {
+                assert!((g - w).abs() < 1e-12, "n={n}: {got:?}");
+            }
+        }
+        let (cr, ci) = inverse(&re, &im);
+        let want_re = [
+            0.35000000000000003,
+            -0.35709112694483225,
+            0.1911744511113793,
+            0.9723510404510421,
+            -0.15643436461758897,
+        ];
+        let want_im = [
+            0.35000000000000003,
+            0.5063471177381105,
+            -0.5046078832802859,
+            0.043574627667826965,
+            -0.09531386212565147,
+        ];
+        for i in 0..5 {
+            assert!((cr[i] - want_re[i]).abs() < 1e-12 && (ci[i] - want_im[i]).abs() < 1e-12);
+        }
+        // 往返：任意长度的实数信号，正变换后取单边谱再逆变换回原信号
+        for n in [7usize, 8, 12, 13] {
+            let ys: Vec<f64> = (0..n).map(|i| (i as f64 * 0.7).sin() + 0.1 * i as f64).collect();
+            let (fr, fi) = dft(&ys, &vec![0.0; n]);
+            let back = inverse_real(&fr[..n / 2 + 1], &fi[..n / 2 + 1], n);
+            let (cr, ci) = inverse(&fr, &fi);
+            for i in 0..n {
+                assert!((back[i] - ys[i]).abs() < 1e-12 && (cr[i] - ys[i]).abs() < 1e-12 && ci[i].abs() < 1e-12);
+            }
+        }
+    }
 
     #[test]
     fn filters_match_numpy_masked_rfft() {
