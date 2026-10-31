@@ -27,7 +27,7 @@ impl Dialog {
                     .small()
                     .color(pal.weak),
             );
-            if ui.button("关闭").clicked() {
+            if actions(ui, &[(ActionKind::Plain, "关闭")]).is_some() {
                 action = Action::Close;
             }
         });

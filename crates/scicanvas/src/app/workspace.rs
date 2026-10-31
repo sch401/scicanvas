@@ -450,7 +450,7 @@ impl SciApp {
                     .id_salt(("project-rename", id))
                     .desired_width(ui.available_width())
                     .show(ui);
-                if focus {
+                if focus && !self.modal_active() {
                     output.response.request_focus();
                     output.state.cursor.set_char_range(Some(egui::text::CCursorRange::two(
                         egui::text::CCursor::new(0),
@@ -460,7 +460,9 @@ impl SciApp {
                     self.explorer_rename = Some((id, false));
                 } else if ui.input(|i| i.key_pressed(egui::Key::Escape)) {
                     self.finish_explorer_rename(true);
-                } else if output.response.lost_focus() || ui.input(|i| i.key_pressed(egui::Key::Enter)) {
+                } else if !self.modal_active()
+                    && (output.response.lost_focus() || ui.input(|i| i.key_pressed(egui::Key::Enter)))
+                {
                     self.finish_explorer_rename(false);
                 }
                 return output.response;

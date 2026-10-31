@@ -4,6 +4,7 @@ use super::*;
 
 /// 工作表一次绘制所需的输入和待处理结果，不跨帧保存。
 pub(super) struct SheetFrame {
+    pub(super) frozen: bool,
     pub(super) id: u64,
     pub(super) pal: Palette,
     pub(super) active: bool,
@@ -263,7 +264,7 @@ impl SheetFrame {
             rect.center(),
             egui::Align2::CENTER_CENTER,
             (r + 1).to_string(),
-            egui::FontId::monospace(12.0),
+            egui::FontId::monospace(crate::theme::size::MONO_SMALL),
             self.pal.weak,
         );
         if self.pressed && ui.rect_contains_pointer(rect) {
@@ -307,7 +308,7 @@ impl SheetFrame {
                     .desired_width(f32::INFINITY)
                     .font(egui::TextStyle::Monospace),
             );
-            if !e.focused {
+            if !e.focused && !self.frozen {
                 resp.request_focus();
                 e.focused = true;
             }
@@ -342,7 +343,7 @@ impl SheetFrame {
                 self.edit_end = Some((true, 0, -1));
             } else if dn {
                 self.edit_end = Some((true, 0, 1));
-            } else if resp.lost_focus() {
+            } else if resp.lost_focus() && !self.frozen {
                 self.edit_end = Some((
                     true,
                     0,
@@ -374,7 +375,7 @@ impl SheetFrame {
                 rect.right_center() - egui::vec2(5.0, 0.0),
                 egui::Align2::RIGHT_CENTER,
                 s,
-                egui::FontId::monospace(12.5),
+                egui::FontId::monospace(crate::theme::size::MONO),
                 self.text_color,
             );
         }

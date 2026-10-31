@@ -118,7 +118,43 @@ impl RecalcInputs {
     }
 }
 
+#[derive(Clone, Debug)]
+struct RecoveryCandidate {
+    path: PathBuf,
+    source: Option<PathBuf>,
+    notice: Option<&'static str>,
+    modified: Option<std::time::SystemTime>,
+}
+impl RecoveryCandidate {
+    fn read(path: PathBuf) -> Self {
+        use scicanvas_core::project_file::session;
+        Self {
+            source: session::recovery_source(&path),
+            notice: session::recovery_notice(&path),
+            modified: path.metadata().and_then(|m| m.modified()).ok(),
+            path,
+        }
+    }
+    fn time_text(&self) -> String {
+        self.modified
+            .and_then(|t| t.elapsed().ok())
+            .map_or("未知".into(), |age| {
+                let minutes = age.as_secs() / 60;
+                if minutes < 1 {
+                    "刚刚".into()
+                } else if minutes < 60 {
+                    format!("{minutes} 分钟前")
+                } else if minutes < 24 * 60 {
+                    format!("{} 小时前", minutes / 60)
+                } else {
+                    format!("{} 天前", minutes / (24 * 60))
+                }
+            })
+    }
+}
+
 struct CleanupTask {
+    started: std::time::Instant,
     worker: std::thread::JoinHandle<Result<(), String>>,
     after: Option<PendingDiscard>,
 }
@@ -134,7 +170,12 @@ pub struct SciApp {
     close_confirmed: bool,
     pub(crate) settings: scicanvas_core::project_file::session::Settings,
     save_error: Option<String>,
-    recovery_candidates: Vec<PathBuf>,
+    recovery_candidates: Vec<RecoveryCandidate>,
+    modal_focus_restore: Option<egui::Id>,
+    modal_was_active: bool,
+    background_focus: Option<egui::Id>,
+    drawing_frozen: bool,
+    modal_input_backup: Option<egui::InputState>,
     recovery_file: Option<PathBuf>,
     recovery_lock: Option<std::fs::File>,
     last_recovery: std::time::Instant,
@@ -243,7 +284,10 @@ impl SciApp {
         };
         app.pending_theme = Some(app.theme_pref);
         if let Some(directory) = scicanvas_core::project_file::session::recovery_dir() {
-            app.recovery_candidates = scicanvas_core::project_file::session::recoveries(&directory);
+            app.recovery_candidates = scicanvas_core::project_file::session::recoveries(&directory)
+                .into_iter()
+                .map(RecoveryCandidate::read)
+                .collect();
         }
         if !has_cjk {
             app.status = "系统缺少中文字体，可通过 SCICANVAS_FONT 指定字体文件".into();
@@ -264,6 +308,11 @@ impl SciApp {
             settings: Default::default(),
             save_error: None,
             recovery_candidates: Vec::new(),
+            modal_focus_restore: None,
+            modal_was_active: false,
+            background_focus: None,
+            drawing_frozen: false,
+            modal_input_backup: None,
             recovery_file: None,
             recovery_lock: None,
             last_recovery: std::time::Instant::now(),
@@ -731,7 +780,7 @@ impl SciApp {
                 screen.center(),
                 egui::Align2::CENTER_CENTER,
                 text,
-                egui::FontId::proportional(24.0),
+                egui::FontId::proportional(crate::theme::size::OVERLAY),
                 egui::Color32::WHITE,
             );
         }
@@ -922,6 +971,9 @@ impl SciApp {
 
     /// 执行一条命令（功能区、快捷键、命令面板都走这里）。不能执行时在状态栏说明原因。
     pub(crate) fn run_command(&mut self, id: &str) {
+        if self.drawing_frozen {
+            return;
+        }
         let Some(c) = commands::find(id) else { return };
         self.pending_repaint = true;
         self.finish_edit();
@@ -976,6 +1028,9 @@ impl SciApp {
         f: impl FnOnce(&mut Self) -> Result<Option<T>, String>,
         show: impl FnOnce(&mut Self, T) -> R,
     ) -> Option<R> {
+        if self.drawing_frozen {
+            return None;
+        }
         let outer = self.edit_depth == 0;
         if outer {
             self.finish_edit();
@@ -1045,6 +1100,9 @@ impl SciApp {
         f: impl FnOnce(&mut Project) -> Result<T, String>,
         show: impl FnOnce(&mut Self, T),
     ) -> Result<(), String> {
+        if self.drawing_frozen {
+            return Ok(());
+        }
         if self.history.is_pending() && (group.is_none() || self.last_history_group != group) {
             self.finish_edit();
         }
@@ -1549,11 +1607,31 @@ impl SciApp {
         if self.closing_frame(ctx) {
             return;
         }
+        self.freeze_modal_background(ctx);
+        self.background_frame(ctx);
+        self.thaw_modal_input(ctx);
+        if self.cleanup_blocks_ui() {
+            self.cleanup_progress(ctx);
+        } else {
+            self.confirm_window(ctx);
+            self.session_dialogs(ctx);
+        }
+        self.restore_modal_focus(ctx);
+        if !self.modal_active() {
+            self.background_focus = ctx.memory(|m| m.focused());
+        }
+        self.session_tick(ctx);
+        if self.quit && self.close_confirmed {
+            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+            ctx.request_repaint();
+        }
+    }
+    fn background_frame(&mut self, ctx: &egui::Context) {
         let reset = egui::Modifiers {
             shift: true,
             ..egui::Modifiers::COMMAND
         };
-        if ctx.input_mut(|input| input.consume_key(reset, egui::Key::R)) {
+        if !self.drawing_frozen && ctx.input_mut(|input| input.consume_key(reset, egui::Key::R)) {
             self.run_command("win.reset");
         }
         if std::mem::take(&mut self.pending_window_reset) {
@@ -1562,8 +1640,11 @@ impl SciApp {
         }
         dialogs::begin_docks(ctx);
         crate::chrome::edges(ctx, &self.pal);
-        self.dropped_files(ctx);
-        if self.last_history_group.is_some()
+        if !self.drawing_frozen {
+            self.dropped_files(ctx);
+        }
+        if !self.drawing_frozen
+            && self.last_history_group.is_some()
             && ctx.input(|i| {
                 i.pointer.any_pressed()
                     || i.key_pressed(egui::Key::Tab)
@@ -1579,20 +1660,20 @@ impl SciApp {
         }
         self.pal = theme::palette(ctx.theme());
         // 命令面板打开时不处理全局快捷键，避免和输入框冲突
-        if self.ui.palette.is_none() {
+        if !self.drawing_frozen && self.ui.palette.is_none() {
             self.shortcuts(ctx);
         }
 
+        self.freeze_modal_background(ctx);
         // 功能区和命令面板只读地访问程序状态，被点击的命令在绘制完成后执行
         let mut clicked: Option<&'static str> = None;
         let mut ui_state = std::mem::take(&mut self.ui);
         let pal = self.pal;
         ribbon::show(ctx, self, &mut ui_state, &pal, &mut clicked);
-        if clicked == Some("app.quit") {
-            self.ui = ui_state;
+        if clicked == Some("app.quit") && !self.drawing_frozen {
             self.run_command("app.quit");
-            self.closing_frame(ctx);
-            return;
+            clicked = None;
+            self.freeze_modal_background(ctx);
         }
 
         let style = ctx.style();
@@ -1654,6 +1735,7 @@ impl SciApp {
                         dialogs::place_docks(ui, dialogs::DockSide::Right, ui.available_rect_before_wrap())
                     });
             }
+            self.freeze_modal_background(ctx);
             // 子窗口放在面板之间剩下的区域里（Origin 的 MDI 工作区）
             self.refresh_book_preview();
             self.child_windows(ctx);
@@ -1664,9 +1746,12 @@ impl SciApp {
         ribbon::palette(ctx, self, &mut ui_state, &pal, &mut clicked);
         self.ui = ui_state;
 
-        if let Some(id) = clicked {
-            self.run_command(id);
+        if !self.drawing_frozen {
+            if let Some(id) = clicked {
+                self.run_command(id);
+            }
         }
+        self.freeze_modal_background(ctx);
         if let Some(t) = self.pending_copy.take() {
             ctx.copy_text(t);
         }
@@ -1674,21 +1759,21 @@ impl SciApp {
         self.props_window(ctx);
         self.object_window(ctx);
         self.help_window(ctx);
-        self.confirm_window(ctx);
-        self.dialogs(ctx);
-        if crate::builder::show(ctx, &self.project, &mut self.plot_draft) {
+        if self.drawing_frozen {
+            if let Some(dialog) = self.dialog.as_mut() {
+                let _ = dialogs::show(ctx, dialog, &self.pal, &self.project);
+            }
+        } else {
+            self.dialogs(ctx);
+        }
+        if crate::builder::show(ctx, &self.project, &mut self.plot_draft) && !self.drawing_frozen {
             self.run_command("plot.apply_spec");
         }
         dialogs::end_docks(ctx);
-        self.finish_frame_edit(self.history_group);
-        if std::mem::take(&mut self.pending_repaint) {
-            ctx.request_repaint();
+        if !self.drawing_frozen {
+            self.finish_frame_edit(self.history_group);
         }
-
-        self.session_dialogs(ctx);
-        self.session_tick(ctx);
-        if self.quit && self.close_confirmed {
-            ctx.send_viewport_cmd(egui::ViewportCommand::Close);
+        if std::mem::take(&mut self.pending_repaint) {
             ctx.request_repaint();
         }
     }
@@ -1783,80 +1868,75 @@ impl SciApp {
         self.start_cleanup(None);
     }
     fn session_dialogs(&mut self, ctx: &egui::Context) {
-        if self.pending_discard.is_some() {
-            let mut choice = 0;
-            dialogs::window(ctx, "未保存的修改").show(ctx, |ui| {
-                ui.label("项目有未保存的修改，是否保存？");
-                ui.horizontal(|ui| {
-                    if ui.button("保存").clicked() {
-                        choice = 1;
-                    }
-                    if ui.button("不保存").clicked() {
-                        choice = 2;
-                    }
-                    if ui.button("取消").clicked() {
-                        choice = 3;
-                    }
-                });
-            });
-            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-                choice = 3;
+        use dialogs::{
+            actions, modal,
+            ActionKind::{Danger, Plain, Primary},
+        };
+        if let Some(error) = self.save_error.clone() {
+            let choice = modal(ctx, "保存失败", |ui| {
+                ui.colored_label(self.pal.error, error);
+                actions(ui, &[(Primary, "知道了")])
+            })
+            .flatten();
+            if choice.is_some() || ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
+                self.save_error = None;
             }
-            if choice == 3 {
+            return;
+        }
+        if self.pending_discard.is_some() {
+            let name = self
+                .project_path
+                .as_deref()
+                .and_then(|p| p.file_name())
+                .map_or("未命名项目".into(), |n| n.to_string_lossy().into_owned());
+            let choice = modal(ctx, "未保存的修改", |ui| {
+                ui.label(format!("“{name}”有未保存的修改，是否保存？"));
+                actions(ui, &[(Primary, "保存"), (Danger, "不保存"), (Plain, "取消")])
+            })
+            .flatten();
+            if choice == Some(2) {
                 self.pending_discard = None;
-            } else if choice == 2 || (choice == 1 && self.try_save_project(false)) {
+            } else if choice == Some(1) || (choice == Some(0) && self.try_save_project(false)) {
                 if let Some(action) = self.pending_discard.take() {
                     self.execute_discard(action);
                 }
             }
+            return;
         }
-        if let Some(error) = self.save_error.clone() {
-            let mut open = true;
-            dialogs::window(ctx, "保存失败").open(&mut open).show(ctx, |ui| {
-                ui.label(error);
-                if ui.button("知道了").clicked() {
-                    self.save_error = None;
-                }
-            });
-            if !open {
-                self.save_error = None;
-            }
-        }
-        if let Some(path) = self.recovery_candidates.first().cloned() {
-            let mut choice = 0;
-            dialogs::window(ctx, "恢复未保存的工作").show(ctx, |ui| {
+        if let Some(candidate) = self.recovery_candidates.first().cloned() {
+            let title = if self.recovery_candidates.len() > 1 {
+                format!("恢复未保存的工作（1/{}）", self.recovery_candidates.len())
+            } else {
+                "恢复未保存的工作".into()
+            };
+            let choice = modal(ctx, &title, |ui| {
                 ui.label("发现上次会话的自动备份，是否恢复？");
-                if let Some(notice) = scicanvas_core::project_file::session::recovery_notice(&path) {
-                    ui.label(notice);
+                ui.label(
+                    candidate
+                        .source
+                        .as_ref()
+                        .map_or("未命名项目".into(), |p| p.display().to_string()),
+                );
+                ui.label(format!("备份时间：{}", candidate.time_text()));
+                if let Some(notice) = candidate.notice {
+                    ui.colored_label(self.pal.warn, notice);
                 }
-                let source = scicanvas_core::project_file::session::recovery_source(&path);
-                ui.label(source.map_or("未命名项目".into(), |p| p.display().to_string()));
-                ui.horizontal(|ui| {
-                    if ui.button("恢复").clicked() {
-                        choice = 1;
-                    }
-                    if ui.button("放弃这份备份").clicked() {
-                        choice = 2;
-                    }
-                    if ui.button("稍后").clicked() {
-                        choice = 3;
-                    }
-                });
-            });
-            if choice == 1 {
-                self.request_discard(PendingDiscard::Recover(path.clone()));
-                self.recovery_candidates.clear();
-            }
-            if choice == 2 {
-                match scicanvas_core::project_file::session::discard_recovery(&path) {
+                actions(ui, &[(Primary, "恢复"), (Danger, "放弃这份备份"), (Plain, "稍后")])
+            })
+            .flatten();
+            match choice {
+                Some(0) => {
+                    self.request_discard(PendingDiscard::Recover(candidate.path));
+                    self.recovery_candidates.clear();
+                }
+                Some(1) => match scicanvas_core::project_file::session::discard_recovery(&candidate.path) {
                     Ok(()) => {
                         self.recovery_candidates.remove(0);
                     }
                     Err(error) => self.status = error,
-                }
-            }
-            if choice == 3 || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-                self.recovery_candidates.clear();
+                },
+                Some(2) => self.recovery_candidates.clear(),
+                _ => {}
             }
         }
     }
@@ -2094,7 +2174,11 @@ impl SciApp {
             });
         match worker {
             Ok(worker) => {
-                self.cleanup_task = Some(CleanupTask { worker, after });
+                self.cleanup_task = Some(CleanupTask {
+                    worker,
+                    after,
+                    started: std::time::Instant::now(),
+                });
                 self.pending_repaint = true;
             }
             Err(error) => self.status = format!("启动退出清理失败：{error}"),
@@ -2135,30 +2219,28 @@ impl SciApp {
         }
     }
     fn cleanup_progress(&mut self, ctx: &egui::Context) {
-        egui::CentralPanel::default().show(ctx, |ui| {
-            ui.vertical_centered(|ui| {
-                ui.add_space(ui.available_height() * 0.35);
-                ui.spinner();
-                ui.label("正在完成自动备份和恢复文件清理…");
-                if ui.button("返回项目").clicked() {
-                    self.cancel_cleanup_discard();
-                }
-            });
-        });
-        ctx.request_repaint_after(std::time::Duration::from_millis(50));
+        if !self
+            .cleanup_task
+            .as_ref()
+            .is_some_and(|t| t.started.elapsed() >= std::time::Duration::from_millis(300))
+        {
+            return;
+        }
+        let choice = dialogs::modal(ctx, "正在完成", |ui| {
+            ui.spinner();
+            ui.label("正在完成自动备份和恢复文件清理…");
+            dialogs::actions(ui, &[(dialogs::ActionKind::Plain, "返回项目")])
+        })
+        .flatten();
+        if choice.is_some() {
+            self.cancel_cleanup_discard();
+        }
     }
 }
 
 impl SciApp {
     fn closing_frame(&mut self, ctx: &egui::Context) -> bool {
         self.poll_cleanup(ctx);
-        if self.cleanup_blocks_ui() {
-            if ctx.input(|i| i.viewport().close_requested()) {
-                ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
-            }
-            self.cleanup_progress(ctx);
-            return true;
-        }
         if ctx.input(|i| i.viewport().close_requested()) && !self.close_confirmed {
             self.request_discard(PendingDiscard::Quit);
             if !self.close_confirmed {
@@ -2170,18 +2252,58 @@ impl SciApp {
             ctx.request_repaint();
             return true;
         }
-        if self.pending_discard.is_some() {
-            // 确认期间暂停底层编辑器，避免失焦自动提交草稿并启动拟合。
-            egui::CentralPanel::default().show(ctx, |_| {});
-            self.session_dialogs(ctx);
-            if self.cleanup_task.is_some() {
-                ctx.request_repaint_after(std::time::Duration::from_millis(50));
-            }
-            if self.pending_discard.is_none() {
-                ctx.request_repaint();
-            }
-            return true;
-        }
         false
+    }
+}
+
+impl SciApp {
+    pub(crate) fn modal_active(&self) -> bool {
+        self.pending_discard.is_some()
+            || self.save_error.is_some()
+            || !self.recovery_candidates.is_empty()
+            || self.confirm_delete.is_some()
+            || self.cleanup_blocks_ui()
+    }
+    fn freeze_modal_background(&mut self, ctx: &egui::Context) {
+        if !self.modal_active() {
+            return;
+        }
+        if !self.modal_was_active {
+            self.modal_focus_restore = ctx.memory(|m| m.focused()).or(self.background_focus);
+            if let Some(id) = self.modal_focus_restore {
+                ctx.memory_mut(|m| m.surrender_focus(id));
+            }
+            self.modal_was_active = true;
+        }
+        if self.modal_input_backup.is_none() {
+            self.modal_input_backup = Some(ctx.input(Clone::clone));
+            ctx.input_mut(|i| {
+                i.events.clear();
+                i.raw.events.clear();
+                i.keys_down.clear();
+                i.modifiers = egui::Modifiers::NONE;
+                i.pointer = Default::default();
+                i.raw_scroll_delta = egui::Vec2::ZERO;
+                i.smooth_scroll_delta = egui::Vec2::ZERO;
+                i.raw.dropped_files.clear();
+                i.raw.hovered_files.clear();
+            });
+        }
+        self.drawing_frozen = true;
+    }
+    fn thaw_modal_input(&mut self, ctx: &egui::Context) {
+        if let Some(input) = self.modal_input_backup.take() {
+            ctx.input_mut(|i| *i = input);
+        }
+        self.drawing_frozen = false;
+    }
+    fn restore_modal_focus(&mut self, ctx: &egui::Context) {
+        if self.modal_was_active && !self.modal_active() {
+            if let Some(id) = self.modal_focus_restore.take() {
+                ctx.memory_mut(|m| m.request_focus(id));
+            }
+            self.modal_was_active = false;
+            ctx.request_repaint();
+        }
     }
 }
