@@ -919,3 +919,146 @@ fn invalid_draft_save_dismisses_close_confirmation_for_the_conversion_dialog() {
     assert!(!app.quit);
     assert!(app.sheets[&1].edit.is_some());
 }
+
+#[test]
+fn modal_keeps_background_and_drafts_while_blocking_commands() {
+    let mut app = app();
+    app.sheets.entry(1).or_default().edit = Some(Edit {
+        cell: Cell { c: 0, r: 0 },
+        buf: "123".into(),
+        focused: false,
+    });
+    let before = app.project.clone();
+    app.request_discard(PendingDiscard::Quit);
+    let undo = app.history.undo_label().map(str::to_owned);
+    let ctx = egui::Context::default();
+    crate::theme::install(&ctx);
+    crate::fonts::setup(&ctx);
+    let mut h = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1280., 900.)),
+        |a: &mut SciApp, c: &egui::Context| a.ui_frame(c),
+    )
+    .with_step(0.02);
+    let mut output = h.frame(&mut app, vec![]);
+    for _ in 0..3 {
+        output = h.frame(&mut app, vec![]);
+    }
+    assert!(
+        crate::test_ui::text_rect(&output, "SciCanvas").is_some(),
+        "背景功能区继续绘制"
+    );
+    let event = egui::Event::Key {
+        key: egui::Key::Z,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers: egui::Modifiers::COMMAND,
+    };
+    h.modifiers = egui::Modifiers::COMMAND;
+    h.frame(&mut app, vec![event]);
+    h.modifiers = egui::Modifiers::NONE;
+    output = h.frame(&mut app, vec![]);
+    h.click_text(&mut app, &output, "新建工作簿");
+    assert_eq!(app.project, before);
+    assert_eq!(app.history.undo_label(), undo.as_deref());
+    assert_eq!(app.sheets[&1].edit.as_ref().unwrap().buf, "123");
+    output = h.frame(&mut app, vec![]);
+    h.click_text(&mut app, &output, "取消");
+    assert!(!app.quit);
+    assert_eq!(app.project, before);
+    assert_eq!(app.sheets[&1].edit.as_ref().unwrap().buf, "123");
+}
+#[test]
+fn full_frame_modal_save_flushes_the_cell_draft() {
+    let mut app = app();
+    let path = std::env::temp_dir().join(format!("scicanvas-modal-save-{}.scv", std::process::id()));
+    app.project_path = Some(path.clone());
+    app.sheets.entry(1).or_default().edit = Some(Edit {
+        cell: Cell { c: 0, r: 0 },
+        buf: "123".into(),
+        focused: false,
+    });
+    app.request_discard(PendingDiscard::New);
+    let ctx = egui::Context::default();
+    crate::theme::install(&ctx);
+    crate::fonts::setup(&ctx);
+    let mut h = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1280., 900.)),
+        |a: &mut SciApp, c: &egui::Context| a.ui_frame(c),
+    )
+    .with_step(0.02);
+    let mut output = h.frame(&mut app, vec![]);
+    for _ in 0..3 {
+        output = h.frame(&mut app, vec![]);
+    }
+    h.click_text(&mut app, &output, "保存");
+    assert_eq!(
+        scicanvas_core::project_file::load(&path).unwrap().books[0].columns[0]
+            .data
+            .text_at(0),
+        "123"
+    );
+    assert!(!app.is_dirty());
+    std::fs::remove_file(path).unwrap();
+}
+#[test]
+fn cached_recovery_information_is_not_reloaded_each_frame() {
+    let mut app = app();
+    let path = std::env::temp_dir().join(format!("scicanvas-candidate-{}.scproj", std::process::id()));
+    scicanvas_core::project_file::session::save_recovery(
+        &path,
+        &app.project,
+        Some(std::path::Path::new("C:/cached-project.scv")),
+    )
+    .unwrap();
+    app.recovery_candidates = vec![RecoveryCandidate::read(path.clone())];
+    std::fs::remove_file(path.with_extension("source")).unwrap();
+    let ctx = egui::Context::default();
+    crate::theme::install(&ctx);
+    crate::fonts::setup(&ctx);
+    let mut h = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1280., 900.)),
+        |a: &mut SciApp, c: &egui::Context| a.ui_frame(c),
+    );
+    for _ in 0..3 {
+        h.frame(&mut app, vec![]);
+    }
+    for _ in 0..4 {
+        let out = h.frame(&mut app, vec![]);
+        assert!(out
+            .shapes
+            .iter()
+            .any(|s| matches!(&s.shape,egui::Shape::Text(t) if t.galley.job.text.contains("cached-project.scv"))));
+    }
+    std::fs::remove_file(&path).unwrap();
+}
+
+#[test]
+fn quick_cleanup_keeps_the_ribbon_and_does_not_show_progress() {
+    let mut app = app();
+    let (release, wait) = std::sync::mpsc::channel();
+    app.backup_job = Some(std::thread::spawn(move || {
+        let _ = wait.recv_timeout(std::time::Duration::from_secs(5));
+        Ok(())
+    }));
+    app.request_discard(PendingDiscard::Quit);
+    let ctx = egui::Context::default();
+    crate::theme::install(&ctx);
+    crate::fonts::setup(&ctx);
+    let mut h = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1280., 900.)),
+        |a: &mut SciApp, c: &egui::Context| a.ui_frame(c),
+    );
+    // 此处单帧前显式设定起点，避免字体加载耗时进入进度阈值。
+    app.cleanup_task.as_mut().unwrap().started = std::time::Instant::now();
+    let out = h.frame(&mut app, vec![]);
+    assert!(crate::test_ui::text_rect(&out, "SciCanvas").is_some());
+    assert!(crate::test_ui::text_rect(&out, "正在完成自动备份和恢复文件清理…").is_none());
+    release.send(()).unwrap();
+    app.finish_cleanup();
+    assert!(app.quit);
+}

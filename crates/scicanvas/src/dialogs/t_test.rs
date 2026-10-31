@@ -52,10 +52,7 @@ impl Dialog {
             };
             ui.label(RichText::new(hint).small().color(pal.weak));
             if !ready {
-                ui.colored_label(
-                    egui::Color32::from_rgb(182, 67, 66),
-                    "请先在工作表里按顺序单击选中两列（Ctrl+单击多选）",
-                );
+                ui.colored_label(pal.error, "请先在工作表里按顺序单击选中两列（Ctrl+单击多选）");
             }
             let (ok, cancel) = buttons(ui, "计算");
             if ok && ready {

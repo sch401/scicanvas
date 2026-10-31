@@ -17,7 +17,7 @@ impl Dialog {
                 ui.add_space(4.0);
                 ui.label(
                     RichText::new(format!("列 {key} 第 {} 行的输入与当前列类型不符", *row + 1))
-                        .size(14.0)
+                        .size(crate::theme::size::EMPHASIS)
                         .strong(),
                 );
                 ui.add_space(4.0);

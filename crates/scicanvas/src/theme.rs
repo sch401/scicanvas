@@ -15,6 +15,10 @@ pub struct Palette {
     pub dark: bool,
     /// 强调色：当前窗口标题、选中状态、链接。
     pub accent: Color32,
+    pub accent_fill: Color32,
+    pub danger: Color32,
+    pub error: Color32,
+    pub warn: Color32,
     /// 多文档工作区的底色。
     pub workspace: Color32,
     /// 工作表“长名称 / 单位 / 注释”三行的底色。
@@ -52,6 +56,10 @@ struct Tokens {
     ink: Color32,
     weak: Color32,
     accent: Color32,
+    accent_fill: Color32,
+    danger: Color32,
+    error: Color32,
+    warn: Color32,
     panel: Color32,
     window: Color32,
     workspace: Color32,
@@ -78,6 +86,10 @@ const LIGHT: Tokens = Tokens {
     ink: hex(0x1E2633),
     weak: hex(0x6B7685),
     accent: hex(0x2563C9),
+    accent_fill: hex(0x2563C9),
+    danger: hex(0xC42B1C),
+    error: hex(0xB64342),
+    warn: hex(0x9A6700),
     panel: hex(0xF4F6F9),
     window: hex(0xFFFFFF),
     workspace: hex(0xDCE2E9),
@@ -104,6 +116,10 @@ const DARK: Tokens = Tokens {
     ink: hex(0xE3E8EF),
     weak: hex(0x9AA4B2),
     accent: hex(0x6EA8FF),
+    accent_fill: hex(0x2F6FD6),
+    danger: hex(0xC42B1C),
+    error: hex(0xFF8A80),
+    warn: hex(0xE3B341),
     panel: hex(0x1F232A),
     window: hex(0x262B33),
     workspace: hex(0x15181D),
@@ -136,6 +152,10 @@ pub fn palette(theme: Theme) -> Palette {
     Palette {
         dark: t.dark,
         accent: t.accent,
+        accent_fill: t.accent_fill,
+        danger: t.danger,
+        error: t.error,
+        warn: t.warn,
         workspace: t.workspace,
         meta_bg: t.meta_bg,
         sel_bg: t.sel_bg,
@@ -219,11 +239,11 @@ fn style(theme: Theme) -> egui::Style {
     let mut s = egui::Style {
         visuals: visuals(t),
         text_styles: [
-            (TextStyle::Heading, FontId::new(14.5, FontFamily::Proportional)),
-            (TextStyle::Body, FontId::new(13.0, FontFamily::Proportional)),
-            (TextStyle::Button, FontId::new(13.0, FontFamily::Proportional)),
-            (TextStyle::Small, FontId::new(11.0, FontFamily::Proportional)),
-            (TextStyle::Monospace, FontId::new(12.5, FontFamily::Monospace)),
+            (TextStyle::Heading, FontId::new(size::HEADING, FontFamily::Proportional)),
+            (TextStyle::Body, FontId::new(size::BODY, FontFamily::Proportional)),
+            (TextStyle::Button, FontId::new(size::BODY, FontFamily::Proportional)),
+            (TextStyle::Small, FontId::new(size::SMALL, FontFamily::Proportional)),
+            (TextStyle::Monospace, FontId::new(size::MONO, FontFamily::Monospace)),
         ]
         .into(),
         ..Default::default()
@@ -243,4 +263,102 @@ pub fn install(ctx: &egui::Context) {
     ctx.set_style_of(Theme::Dark, style(Theme::Dark));
     ctx.options_mut(|o| o.fallback_theme = Theme::Light);
     ctx.set_theme(egui::ThemePreference::System);
+}
+
+pub fn palette_for(ctx: &egui::Context) -> Palette {
+    palette(ctx.theme())
+}
+/// 界面字号档位，保留已有数值；出版画布继续使用自身字号。
+pub mod size {
+    pub const MICRO: f32 = 10.5;
+    pub const SMALL: f32 = 11.0;
+    pub const LABEL: f32 = 11.5;
+    pub const COMPACT: f32 = 12.0;
+    pub const MONO_SMALL: f32 = 12.0;
+    pub const MONO: f32 = 12.5;
+    pub const BODY: f32 = 13.0;
+    pub const MENU: f32 = 13.5;
+    pub const EMPHASIS: f32 = 14.0;
+    pub const HEADING: f32 = 14.5;
+    pub const INPUT: f32 = 15.0;
+    pub const TITLE: f32 = 22.0;
+    pub const OVERLAY: f32 = 24.0;
+}
+
+#[cfg(test)]
+mod consistency_tests {
+    use super::*;
+    fn contrast(a: Color32, b: Color32) -> f32 {
+        let lum = |c: Color32| {
+            let linear = |v: u8| {
+                let v = f32::from(v) / 255.;
+                if v <= 0.04045 {
+                    v / 12.92
+                } else {
+                    ((v + 0.055) / 1.055).powf(2.4)
+                }
+            };
+            0.2126 * linear(c.r()) + 0.7152 * linear(c.g()) + 0.0722 * linear(c.b())
+        };
+        let (a, b) = (lum(a), lum(b));
+        (a.max(b) + 0.05) / (a.min(b) + 0.05)
+    }
+    #[test]
+    fn semantic_colors_have_readable_contrast_in_both_themes() {
+        for theme in [Theme::Light, Theme::Dark] {
+            let p = palette(theme);
+            for color in [p.accent_fill, p.danger] {
+                assert!(contrast(color, Color32::WHITE) >= 4.5, "{theme:?} {color:?}");
+            }
+            for color in [p.error, p.warn, p.weak] {
+                assert!(
+                    contrast(color, p.window) >= 4.5,
+                    "{theme:?} {color:?}: {}",
+                    contrast(color, p.window)
+                );
+            }
+            assert!(contrast(p.ink, p.window) >= 7.);
+        }
+    }
+    #[test]
+    fn interface_colors_and_type_sizes_use_named_tokens() {
+        fn scan(dir: &std::path::Path) {
+            for entry in std::fs::read_dir(dir).unwrap() {
+                let path = entry.unwrap().path();
+                if path.file_name().is_some_and(|n| n == "_gpt_session") {
+                    continue;
+                }
+                if path.is_dir() {
+                    scan(&path);
+                    continue;
+                }
+                if path.extension().is_none_or(|e| e != "rs") {
+                    continue;
+                }
+                if path.file_name().is_some_and(|n| n == "theme.rs") {
+                    continue;
+                }
+                let text = std::fs::read_to_string(&path).unwrap();
+                let exempt = path.components().any(|c| c.as_os_str() == "icons")
+                    || path
+                        .file_name()
+                        .is_some_and(|n| ["plot.rs", "export.rs", "assist.rs"].iter().any(|v| n == *v));
+                assert!(
+                    exempt || !text.contains("Color32::from_rgb("),
+                    "界面颜色应使用 theme：{}",
+                    path.display()
+                );
+                for pattern in ["FontId::proportional(", "FontId::monospace(", ".size("] {
+                    for rest in text.split(pattern).skip(1) {
+                        assert!(
+                            !rest.trim_start().starts_with(|c: char| c.is_ascii_digit()),
+                            "字号应使用 theme：{} {pattern}",
+                            path.display()
+                        );
+                    }
+                }
+            }
+        }
+        scan(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"));
+    }
 }

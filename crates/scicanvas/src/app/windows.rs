@@ -384,7 +384,7 @@ impl SciApp {
                 rect.right_bottom() + egui::vec2(-8.0, -6.0),
                 egui::Align2::RIGHT_BOTTOM,
                 text,
-                egui::FontId::proportional(11.5),
+                egui::FontId::proportional(crate::theme::size::LABEL),
                 egui::Color32::from_gray(110),
             );
         } else if out.zoomed {
@@ -392,7 +392,7 @@ impl SciApp {
                 rect.right_bottom() + egui::vec2(-8.0, -6.0),
                 egui::Align2::RIGHT_BOTTOM,
                 "双击恢复原始范围",
-                egui::FontId::proportional(11.5),
+                egui::FontId::proportional(crate::theme::size::LABEL),
                 egui::Color32::from_gray(140),
             );
         }
@@ -588,36 +588,28 @@ impl SciApp {
     }
 
     pub(super) fn confirm_window(&mut self, ctx: &egui::Context) {
+        if self.pending_discard.is_some()
+            || self.save_error.is_some()
+            || !self.recovery_candidates.is_empty()
+            || self.cleanup_blocks_ui()
+        {
+            return;
+        }
         let Some(id) = self.confirm_delete else { return };
         let name = self.project.name_of(id).unwrap_or("").to_string();
-        let mut decision: Option<bool> = None;
-        if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
-            decision = Some(false);
-        }
-        let weak = self.pal.weak;
-        dialogs::window(ctx, "删除").show(ctx, |ui| {
-            ui.vertical_centered(|ui| {
-                ui.add_space(4.0);
-                ui.label(RichText::new(format!("确定删除“{name}”吗？")).size(14.0).strong());
-                ui.add_space(4.0);
-                ui.label(RichText::new("删除后可以用“撤销”（Ctrl+Z）恢复。").color(weak));
-            });
-            ui.add_space(10.0);
-            ui.separator();
-            ui.add_space(4.0);
-            ui.horizontal(|ui| {
-                dialogs::center_buttons(ui, 2);
-                let danger = egui::Button::new(RichText::new("删除").color(egui::Color32::WHITE).strong())
-                    .fill(egui::Color32::from_rgb(0xC4, 0x2B, 0x1C))
-                    .min_size(dialogs::BUTTON);
-                if ui.add(danger).clicked() {
-                    decision = Some(true);
-                }
-                if ui.add(dialogs::plain("取消")).clicked() {
-                    decision = Some(false);
-                }
-            });
-        });
+        let choice = dialogs::modal(ctx, "删除", |ui| {
+            ui.label(RichText::new(format!("确定删除“{name}”吗？")).strong());
+            ui.label(RichText::new("删除后可以用“撤销”（Ctrl+Z）恢复。").color(self.pal.weak));
+            dialogs::actions(
+                ui,
+                &[
+                    (dialogs::ActionKind::Danger, "删除"),
+                    (dialogs::ActionKind::Plain, "取消"),
+                ],
+            )
+        })
+        .flatten();
+        let decision = choice.map(|index| index == 0);
         match decision {
             Some(true) => {
                 self.finish_edit();

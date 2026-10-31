@@ -42,7 +42,7 @@ impl Dialog {
             );
             let valid = !*custom || (from.is_finite() && to.is_finite() && from < to);
             if !valid {
-                ui.colored_label(egui::Color32::from_rgb(182, 67, 66), "起点必须小于终点");
+                ui.colored_label(pal.error, "起点必须小于终点");
             }
             let (ok, cancel) = buttons(ui, "统计");
             if ok && valid {

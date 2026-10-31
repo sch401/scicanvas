@@ -119,7 +119,7 @@ pub fn show(ctx: &egui::Context, project: &Project, draft: &mut Option<PlotSpec>
                     }
                 });
                 if let Err(e) = &valid {
-                    ui.colored_label(egui::Color32::from_rgb(180, 65, 45), e);
+                    ui.colored_label(crate::theme::palette_for(ui.ctx()).error, e);
                 }
                 if ui.add_enabled(valid.is_ok(), egui::Button::new("创建图形")).clicked() {
                     apply = true;

@@ -156,7 +156,7 @@ impl SciApp {
             pos2(icon.right() + 6.0, bar.center().y),
             egui::Align2::LEFT_CENTER,
             self.project.name_of(id).unwrap_or(""),
-            egui::FontId::proportional(12.5),
+            egui::FontId::proportional(crate::theme::size::MONO),
             Color32::WHITE,
         );
         let thumb = Rect::from_min_max(pos2(rect.left(), bar.bottom()), rect.max).shrink(4.0);
@@ -170,14 +170,14 @@ impl SciApp {
                     thumb.left_top() + vec2(3.0, row as f32 * 14.0),
                     egui::Align2::LEFT_TOP,
                     text,
-                    egui::FontId::monospace(10.5),
+                    egui::FontId::monospace(crate::theme::size::MICRO),
                     Color32::BLACK,
                 );
             }
         } else if let Some(book) = self.project.book(id) {
             // 工作簿：表头加前几行数据。
             let p = painter.with_clip_rect(thumb);
-            let font = egui::FontId::proportional(10.5);
+            let font = egui::FontId::proportional(crate::theme::size::MICRO);
             let row_h = 14.0;
             let col_w = (thumb.width() / book.columns.len().clamp(1, 4) as f32).max(36.0);
             p.rect_filled(
