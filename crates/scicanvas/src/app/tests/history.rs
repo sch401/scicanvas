@@ -1062,3 +1062,24 @@ fn quick_cleanup_keeps_the_ribbon_and_does_not_show_progress() {
     app.finish_cleanup();
     assert!(app.quit);
 }
+
+#[test]
+fn smoke_test_draws_the_workspace_and_requests_close() {
+    let mut app = app();
+    app.smoke_test = true;
+    let ctx = egui::Context::default();
+    crate::theme::install(&ctx);
+    crate::fonts::setup(&ctx);
+    let mut h = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1280., 820.)),
+        |a: &mut SciApp, ctx: &egui::Context| a.ui_frame(ctx),
+    );
+    let output = h.frame(&mut app, vec![]);
+    assert!(app.close_confirmed && app.quit);
+    assert!(output
+        .viewport_output
+        .values()
+        .any(|v| v.commands.contains(&egui::ViewportCommand::Close)));
+    assert!(crate::test_ui::find_text(&output, "新建工作簿").is_some());
+}

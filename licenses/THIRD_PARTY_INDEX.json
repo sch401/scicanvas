@@ -1,7 +1,7 @@
 {
   "target": "x86_64-pc-windows-msvc",
   "scope": "normal,build; all workspace features",
-  "cargo_lock_sha256": "93db0b4df875071aeffef50e17463a76e0365ae95a88008238af028bf39e7edd",
+  "cargo_lock_sha256": "eacd5bf7ba68d7eab402caa6a4ffa1b5706824004a0760aaa4fb36898be50852",
   "packages": [
     {
       "name": "ab_glyph",
@@ -662,6 +662,24 @@
         {
           "path": "licenses/third-party/cursor-icon-1.2.0/SOURCE_COPYRIGHT_HEADERS.txt",
           "sha256": "078c802041e43e415ffac517b948de542bc24af03c541d7ed489f3dc32b3bdb8"
+        }
+      ]
+    },
+    {
+      "name": "d3d12",
+      "version": "22.0.0",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/gfx-rs/wgpu/tree/trunk/d3d12",
+      "crate_sha256": "bdbd1f579714e3c809ebd822c81ef148b1ceaeb3d535352afc73fd0c4c6a0017",
+      "revision": "278d278b28ff7b424dc7dde0c0d7519e8d839ec1",
+      "files": [
+        {
+          "path": "licenses/third-party/d3d12-22.0.0/upstream/LICENSE.APACHE",
+          "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+        },
+        {
+          "path": "licenses/third-party/d3d12-22.0.0/upstream/LICENSE.MIT",
+          "sha256": "c7fea58d1cfe49634cd92e54fc10a9d871f4b275321a4cd8c09e449122caaeb4"
         }
       ]
     },
@@ -2490,6 +2508,24 @@
       ]
     },
     {
+      "name": "range-alloc",
+      "version": "0.1.5",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/gfx-rs/range-alloc",
+      "crate_sha256": "ca45419789ae5a7899559e9512e58ca889e41f04f1f2445e9f4b290ceccd1d08",
+      "revision": "34a5b93f04850e25315f87841d2555f2c0e0ed80",
+      "files": [
+        {
+          "path": "licenses/third-party/range-alloc-0.1.5/LICENSE.APACHE",
+          "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+        },
+        {
+          "path": "licenses/third-party/range-alloc-0.1.5/LICENSE.MIT",
+          "sha256": "ba00052102ed87948bb8822d6e1c496260c83042887b22bb5caad922ec025a60"
+        }
+      ]
+    },
+    {
       "name": "raw-window-handle",
       "version": "0.6.2",
       "license": "MIT OR Apache-2.0 OR Zlib",
@@ -3808,6 +3844,14 @@
         {
           "path": "licenses/third-party/wgpu-hal-22.0.0/LICENSE.MIT",
           "sha256": "c7fea58d1cfe49634cd92e54fc10a9d871f4b275321a4cd8c09e449122caaeb4"
+        },
+        {
+          "path": "licenses/third-party/wgpu-hal-22.0.0/upstream/LICENSE.APACHE",
+          "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+        },
+        {
+          "path": "licenses/third-party/wgpu-hal-22.0.0/upstream/LICENSE.MIT",
+          "sha256": "c7fea58d1cfe49634cd92e54fc10a9d871f4b275321a4cd8c09e449122caaeb4"
         }
       ]
     },
@@ -3825,6 +3869,14 @@
         },
         {
           "path": "licenses/third-party/wgpu-types-22.0.0/LICENSE.MIT",
+          "sha256": "c7fea58d1cfe49634cd92e54fc10a9d871f4b275321a4cd8c09e449122caaeb4"
+        },
+        {
+          "path": "licenses/third-party/wgpu-types-22.0.0/upstream/LICENSE.APACHE",
+          "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+        },
+        {
+          "path": "licenses/third-party/wgpu-types-22.0.0/upstream/LICENSE.MIT",
           "sha256": "c7fea58d1cfe49634cd92e54fc10a9d871f4b275321a4cd8c09e449122caaeb4"
         }
       ]

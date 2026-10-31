@@ -211,5 +211,17 @@
     "url": "https://raw.githubusercontent.com/zakarumych/gpu-descriptor/9f2fb9546591322e7b77ee1e79385e01effd85e4/license/MIT",
     "sha256": "5226e27d5fbc683db56c52853cdb9d15b69abadb525a60f95c862c2dbd77cdc8",
     "group": "gpu-descriptor-types"
+  },
+  {
+    "path": "licenses/supplemental/d3d12-22.0.0/LICENSE.MIT",
+    "url": "https://raw.githubusercontent.com/gfx-rs/wgpu/278d278b28ff7b424dc7dde0c0d7519e8d839ec1/LICENSE.MIT",
+    "sha256": "c7fea58d1cfe49634cd92e54fc10a9d871f4b275321a4cd8c09e449122caaeb4",
+    "group": "d3d12-22.0.0"
+  },
+  {
+    "path": "licenses/supplemental/d3d12-22.0.0/LICENSE.APACHE",
+    "url": "https://raw.githubusercontent.com/gfx-rs/wgpu/278d278b28ff7b424dc7dde0c0d7519e8d839ec1/LICENSE.APACHE",
+    "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9",
+    "group": "d3d12-22.0.0"
   }
 ]
