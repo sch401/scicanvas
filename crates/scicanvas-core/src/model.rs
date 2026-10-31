@@ -3,7 +3,7 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-pub const PROJECT_VERSION: u32 = 20;
+pub const PROJECT_VERSION: u32 = 21;
 pub const GRAPH_TEMPLATE_VERSION: u32 = 1;
 
 /// 列的绘图角色，对应 Origin 里的 X / Y / 忽略。
@@ -54,7 +54,10 @@ pub struct Column {
     pub long_name: String,
     pub units: String,
     pub comment: String,
-    pub data: crate::ColumnData,
+    pub data: crate::SharedData,
+    /// 独立采样网格不参与来源表的整行操作。
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "std::ops::Not::not"))]
+    pub independent_rows: bool,
     /// 由哪一列计算得来（拟合、平滑等结果列），新的结果列会排在同一来源的结果列后面。
     #[cfg_attr(feature = "serde", serde(default))]
     pub derived_from: Option<String>,
@@ -86,7 +89,8 @@ impl Column {
             long_name: String::new(),
             units: String::new(),
             comment: String::new(),
-            data: crate::ColumnData::default(),
+            data: Default::default(),
+            independent_rows: false,
             derived_from: None,
             error_for: None,
             formula: None,
@@ -99,7 +103,7 @@ impl Column {
     /// 工作表里显示的文字：按显示格式写数值和日期；缺失、文本、分类和“原样”格式显示原始写法。
     pub fn display_at(&self, row: usize) -> std::borrow::Cow<'_, str> {
         use crate::ColumnData;
-        let formatted = match &self.data {
+        let formatted = match &*self.data {
             ColumnData::Num { .. } => self.data.f64_at(row).and_then(|v| self.format.number.apply(v)),
             ColumnData::DateTime { .. } => self
                 .data
@@ -265,7 +269,7 @@ impl Book {
             })
             .collect::<Result<Vec<_>, String>>()?;
         for (i, data) in converted {
-            self.columns[i].data = data;
+            self.columns[i].data = data.into();
         }
         Ok(())
     }
@@ -970,7 +974,7 @@ impl Project {
         if n == 0 {
             return;
         }
-        for col in &mut b.columns {
+        for col in b.columns.iter_mut().filter(|c| !c.independent_rows) {
             // 插入点在数据末尾之后时，那里本来就是空行，不必补齐
             if at < col.data.len() {
                 col.data.insert_empty(at, n);
@@ -985,7 +989,7 @@ impl Project {
         if r0 > r1 {
             return;
         }
-        for col in &mut b.columns {
+        for col in b.columns.iter_mut().filter(|c| !c.independent_rows) {
             if r0 < col.data.len() {
                 col.data.delete_rows(r0, r1);
             }
@@ -1024,9 +1028,16 @@ impl Project {
                 }
             }
         }
+        let affected: std::collections::HashSet<String> = self
+            .book(book_id)
+            .into_iter()
+            .flat_map(|b| &b.columns)
+            .filter(|c| c.independent_rows)
+            .map(|c| c.key.clone())
+            .collect();
         for g in &mut self.graphs {
             for layer in g.page.layers_mut() {
-                layer.map_row_ranges(book_id, shift);
+                layer.map_row_ranges(book_id, &affected, shift);
             }
         }
     }
@@ -1204,6 +1215,23 @@ impl Project {
         }
         p.graphs.push(g);
         p
+    }
+}
+
+impl Book {
+    /// 非线性结果组的所有权与重算模式无关。
+    pub fn nonlinear_output_owner(&self, key: &str) -> Option<&str> {
+        self.columns.iter().find_map(|c| {
+            let crate::ops::Operation {
+                kind: crate::ops::OpKind::Nonlinear(r),
+                ..
+            } = c.op.as_ref()?
+            else {
+                return None;
+            };
+            (c.key == key || r.output_x == key || r.bands.iter().any(|b| b.columns.iter().any(|k| k == key)))
+                .then_some(c.key.as_str())
+        })
     }
 }
 

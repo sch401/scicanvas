@@ -732,13 +732,23 @@ impl Layer {
         self.spec.rows = None;
         self.labels.column = None;
     }
-    pub(crate) fn map_row_ranges(&mut self, book: u64, map: impl Fn(&mut Option<(usize, usize)>)) {
+    pub(crate) fn map_row_ranges(
+        &mut self,
+        book: u64,
+        affected: &std::collections::HashSet<String>,
+        map: impl Fn(&mut Option<(usize, usize)>),
+    ) {
         let main = self.book_id;
         if main == Some(book) {
+            for plot in &mut self.spec.plots {
+                if affected.contains(&plot.source.col) && plot.rows.is_none() {
+                    plot.rows = Some(self.spec.rows);
+                }
+            }
             map(&mut self.spec.rows);
         }
         for p in &mut self.spec.plots {
-            if resolved(&p.source, main).is_some_and(|r| r.book == book) {
+            if resolved(&p.source, main).is_some_and(|r| r.book == book && !affected.contains(&r.col)) {
                 if let Some(rows) = &mut p.rows {
                     map(rows);
                 }

@@ -533,7 +533,8 @@ fn text_interval_x_draws_categories_and_y_errors_without_changing_storage() {
         let (mut p, id) = project(kind);
         let b = p.book_mut(1).unwrap();
         b.columns[0].data =
-            scicanvas_core::ColumnData::Text(["4-10", "10-40", "40-100", "", "4-10"].map(str::to_string).to_vec());
+            (scicanvas_core::ColumnData::Text(["4-10", "10-40", "40-100", "", "4-10"].map(str::to_string).to_vec()))
+                .into();
         b.columns[1].data = ["73000", "76000", "81000", "99999", "71000"]
             .map(str::to_string)
             .to_vec()
@@ -585,7 +586,8 @@ fn numeric_and_mixed_text_x_keep_numeric_coordinates_instead_of_category_positio
         (["1", "bad", "100"], vec![1.0, 100.0]),
     ] {
         let (mut p, id) = project(PlotType::Line);
-        p.book_mut(1).unwrap().columns[0].data = scicanvas_core::ColumnData::Text(values.map(str::to_string).to_vec());
+        p.book_mut(1).unwrap().columns[0].data =
+            (scicanvas_core::ColumnData::Text(values.map(str::to_string).to_vec())).into();
         let b = p.book(1).unwrap();
         assert!(b.columns[0].data.plot_category_levels().is_none());
         assert_eq!(

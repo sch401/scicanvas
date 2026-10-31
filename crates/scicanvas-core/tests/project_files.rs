@@ -36,7 +36,7 @@ fn display_formats_round_trip_and_leave_stored_values_alone() {
     let mut dates: scicanvas_core::ColumnData = vec!["2026/10/18 14:30".to_string()].into();
     dates = dates.converted(scicanvas_core::DataKind::DateTime).unwrap();
     let col = &mut p.books[0].columns[2];
-    col.data = dates;
+    col.data = dates.into();
     assert_eq!(col.display_at(0), "2026/10/18 14:30");
     col.format.date = DateFormat::Chinese;
     assert_eq!(col.display_at(0), "2026年10月18日");

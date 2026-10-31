@@ -54,15 +54,14 @@ fn rich_text(node: Node) -> String {
 fn cell_ref(r: &str) -> Option<(usize, usize)> {
     let split = r.find(|c: char| c.is_ascii_digit())?;
     let (letters, digits) = r.split_at(split);
-    if letters.is_empty() || !letters.chars().all(|c| c.is_ascii_uppercase()) {
+    if letters.is_empty() || letters.len() > 3 || !letters.chars().all(|c| c.is_ascii_uppercase()) {
         return None;
     }
-    let col = letters
-        .bytes()
-        .fold(0usize, |acc, b| acc * 26 + (b - b'A' + 1) as usize)
-        - 1;
+    let col = letters.bytes().try_fold(0usize, |acc, b| {
+        acc.checked_mul(26)?.checked_add((b - b'A' + 1) as usize)
+    })? - 1;
     let row = digits.parse::<usize>().ok()?.checked_sub(1)?;
-    Some((col, row))
+    (col < 16_384 && row < 1_048_576).then_some((col, row))
 }
 
 /// 导入的数值写成文字：取 15 位有效数字（去掉 0.1 + 0.2 这类二进制尾差，不丢精度），
@@ -244,15 +243,29 @@ fn parse_sheet(xml: &str, shared: &[String], date_xf: &[bool], date1904: bool) -
     let mut cells: Vec<(usize, usize, String)> = vec![];
     let mut next_row = 0;
     for row in doc.descendants().filter(|n| is(n, "row")) {
-        let r = row
-            .attribute("r")
-            .and_then(|v| v.parse::<usize>().ok())
-            .and_then(|v| v.checked_sub(1))
-            .unwrap_or(next_row);
+        let r = match row.attribute("r") {
+            None => next_row,
+            Some(text) => text
+                .parse::<usize>()
+                .ok()
+                .and_then(|v| v.checked_sub(1))
+                .ok_or("工作表行号无效")?,
+        };
+        if r >= 1_048_576 {
+            return Err("工作表行号超出 Excel 支持范围".into());
+        }
         next_row = r + 1;
         let mut next_col = 0;
         for c in row.children().filter(|n| is(n, "c")) {
-            let (col, row_index) = c.attribute("r").and_then(cell_ref).unwrap_or((next_col, r));
+            let (col, row_index) = match c.attribute("r") {
+                Some(reference) => {
+                    cell_ref(reference).ok_or_else(|| format!("单元格坐标 {reference} 无效或超出 Excel 范围"))?
+                }
+                None => (next_col, r),
+            };
+            if col >= 16_384 {
+                return Err("工作表列号超出 Excel 支持范围".into());
+            }
             next_col = col + 1;
             let v = || c.children().find(|n| is(n, "v")).and_then(|n| n.text()).unwrap_or("");
             let text = match c.attribute("t").unwrap_or("n") {
@@ -290,6 +303,7 @@ fn parse_sheet(xml: &str, shared: &[String], date_xf: &[bool], date1904: bool) -
     }
     let nrows = cells.iter().map(|c| c.0 + 1).max().unwrap_or(0);
     let ncols = cells.iter().map(|c| c.1 + 1).max().unwrap_or(0);
+    check_sheet_size(nrows, ncols)?;
     let mut rows = vec![vec![String::new(); ncols]; nrows];
     for (r, c, text) in cells {
         rows[r][c] = text;
@@ -305,4 +319,30 @@ fn parse_sheet(xml: &str, shared: &[String], date_xf: &[bool], date1904: bool) -
         .collect();
     fill_merged(&mut rows, &merged);
     Ok(rows)
+}
+
+pub(crate) fn check_sheet_size(rows: usize, columns: usize) -> Result<(), String> {
+    // 每格 String 至少 24 字节，将稠密导入限制在约 240 MB 的空格开销内。
+    if rows.saturating_mul(columns) > 10_000_000 {
+        return Err(format!(
+            "工作表范围过大（{rows} 行 × {columns} 列），请删除远处单元格或拆分数据后导入"
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod review_limits_tests {
+    use super::*;
+    #[test]
+    fn sparse_far_cells_and_overflowed_coordinates_are_rejected() {
+        assert!(cell_ref("AAAAAAAAAAAAAAAAAAAA1").is_none());
+        assert!(cell_ref("XFE1").is_none());
+        assert!(cell_ref("A1048577").is_none());
+        assert_eq!(cell_ref("XFD1048576"), Some((16383, 1048575)));
+        let xml = r#"<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="1"><c r="A1"><v>1</v></c></row><row r="1048576"><c r="XFD1048576"><v>2</v></c></row></sheetData></worksheet>"#;
+        assert!(parse_sheet(xml, &[], &[], false).unwrap_err().contains("范围过大"));
+        let invalid = r#"<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><sheetData><row r="18446744073709551615"><c><v>1</v></c></row></sheetData></worksheet>"#;
+        assert!(parse_sheet(invalid, &[], &[], false).is_err());
+    }
 }

@@ -960,3 +960,74 @@ mod serialization {
         }
     }
 }
+
+/// 项目快照共享未改动的列；首次写入仅复制被修改的列。
+#[derive(Clone, Debug, Default)]
+pub struct SharedData(std::sync::Arc<ColumnData>);
+impl std::ops::Deref for SharedData {
+    type Target = ColumnData;
+    fn deref(&self) -> &ColumnData {
+        &self.0
+    }
+}
+impl std::ops::DerefMut for SharedData {
+    fn deref_mut(&mut self) -> &mut ColumnData {
+        std::sync::Arc::make_mut(&mut self.0)
+    }
+}
+impl SharedData {
+    pub fn estimated_bytes(&self) -> usize {
+        std::mem::size_of::<ColumnData>() + 2 * std::mem::size_of::<usize>() + self.0.estimated_bytes()
+    }
+    pub fn identity(&self) -> usize {
+        std::sync::Arc::as_ptr(&self.0) as usize
+    }
+}
+impl PartialEq for SharedData {
+    fn eq(&self, other: &Self) -> bool {
+        std::sync::Arc::ptr_eq(&self.0, &other.0) || self.0 == other.0
+    }
+}
+impl From<ColumnData> for SharedData {
+    fn from(value: ColumnData) -> Self {
+        Self(std::sync::Arc::new(value))
+    }
+}
+impl From<Vec<String>> for SharedData {
+    fn from(value: Vec<String>) -> Self {
+        ColumnData::from(value).into()
+    }
+}
+impl FromIterator<String> for SharedData {
+    fn from_iter<I: IntoIterator<Item = String>>(values: I) -> Self {
+        values.into_iter().collect::<ColumnData>().into()
+    }
+}
+impl<S: AsRef<str>> PartialEq<Vec<S>> for SharedData {
+    fn eq(&self, other: &Vec<S>) -> bool {
+        self.0.as_ref() == other
+    }
+}
+impl<S: AsRef<str>, const N: usize> PartialEq<[S; N]> for SharedData {
+    fn eq(&self, other: &[S; N]) -> bool {
+        self.0.as_ref() == other
+    }
+}
+#[cfg(feature = "serde")]
+impl serde::Serialize for SharedData {
+    fn serialize<S: serde::Serializer>(&self, s: S) -> Result<S::Ok, S::Error> {
+        self.0.as_ref().serialize(s)
+    }
+}
+#[cfg(feature = "serde")]
+impl<'de> serde::Deserialize<'de> for SharedData {
+    fn deserialize<D: serde::Deserializer<'de>>(d: D) -> Result<Self, D::Error> {
+        Ok(<ColumnData as serde::Deserialize>::deserialize(d)?.into())
+    }
+}
+
+impl PartialEq<ColumnData> for SharedData {
+    fn eq(&self, other: &ColumnData) -> bool {
+        self.0.as_ref() == other
+    }
+}

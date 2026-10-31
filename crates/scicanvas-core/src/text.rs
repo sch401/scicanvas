@@ -298,7 +298,7 @@ impl Fonts {
     }
     fn load(&mut self, paths: &[&str]) -> Option<usize> {
         paths.iter().find_map(|path| {
-            let face = Face::parse(std::fs::read(path).ok()?, 0)?;
+            let face = Face::parse(std::fs::read(system_font_path(path)).ok()?, 0)?;
             let index = self.faces.len();
             self.faces.push(face);
             Some(index)
@@ -532,6 +532,17 @@ pub fn fit_size_formatted(text: &str, size: f64, bold: bool, width: f64, rich: b
     } else {
         size
     }
+}
+
+pub fn system_font_path(path: &str) -> std::path::PathBuf {
+    if let Some(name) = path.strip_prefix(r"C:\Windows\Fonts\") {
+        return std::env::var_os("WINDIR")
+            .map(std::path::PathBuf::from)
+            .unwrap_or_else(|| std::path::PathBuf::from(r"C:\Windows"))
+            .join("Fonts")
+            .join(name);
+    }
+    std::path::PathBuf::from(path)
 }
 
 #[cfg(test)]

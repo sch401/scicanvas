@@ -130,7 +130,13 @@ fn dropped_data_files_import_as_one_step_and_project_files_open() {
     other.books[0].name = "拖入的项目".into();
     scicanvas_core::project_file::save(&scv, &other).unwrap();
     drop(&mut app, &[&a, &scv]);
-    assert_eq!(app.project, other, "a project file wins over data files");
+    assert!(
+        matches!(app.pending_discard, Some(PendingDiscard::Open(_))),
+        "dirty project requires confirmation"
+    );
+    let action = app.pending_discard.take().unwrap();
+    app.execute_discard(action);
+    assert_eq!(app.project, other, "confirmed project file wins over data files");
     assert_eq!(app.project_path.as_deref(), Some(scv.as_path()));
     assert!(app.history.undo_label().is_none());
     std::fs::remove_dir_all(dir).unwrap();

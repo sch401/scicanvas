@@ -338,7 +338,7 @@ impl SciApp {
                 else {
                     return Ok(None);
                 };
-                column.data = column.data.converted(scicanvas_core::DataKind::Text).unwrap();
+                column.data = column.data.converted(scicanvas_core::DataKind::Text).unwrap().into();
                 column.set(row, value);
                 Ok(Some(()))
             },
@@ -378,7 +378,13 @@ impl SciApp {
                     .collect();
                 app.status = match &within {
                     Some(cols) => format!("已按 {} 排序 {} 列，其余列不动", names.join("、"), cols.join("、")),
-                    None => format!("已按 {} 排序整张工作表", names.join("、")),
+                    None => format!(
+                        "已按 {} 排序整张工作表，保留 {} 个独立采样结果列的原顺序",
+                        names.join("、"),
+                        app.project
+                            .book(book)
+                            .map_or(0, |b| b.columns.iter().filter(|c| c.independent_rows).count())
+                    ),
                 };
                 app.dialog = None;
             },

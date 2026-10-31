@@ -39,5 +39,5 @@ pub mod xls;
 #[cfg(feature = "xlsx")]
 pub mod xlsx;
 
-pub use data::{ColumnData, ColumnView, DataKind};
+pub use data::{ColumnData, ColumnView, DataKind, SharedData};
 pub use model::*;

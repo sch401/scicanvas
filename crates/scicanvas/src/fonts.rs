@@ -35,13 +35,15 @@ pub fn plot_font(size: f32, face: usize) -> FontId {
 }
 
 fn load(paths: &[&str]) -> Option<Vec<u8>> {
-    paths.iter().find_map(|p| std::fs::read(p).ok())
+    paths
+        .iter()
+        .find_map(|p| std::fs::read(scicanvas_core::text::system_font_path(p)).ok())
 }
 
 /// 界面字体：微软雅黑字体集里的第 2 个字体是行距更紧凑的 “Microsoft YaHei UI”。
 fn ui_font() -> Option<egui::FontData> {
     for p in [r"C:\Windows\Fonts\msyh.ttc", r"C:\Windows\Fonts\msyh.ttf"] {
-        if let Ok(bytes) = std::fs::read(p) {
+        if let Ok(bytes) = std::fs::read(scicanvas_core::text::system_font_path(p)) {
             let mut data = egui::FontData::from_owned(bytes);
             if p.ends_with(".ttc") {
                 data.index = 1;
@@ -52,11 +54,15 @@ fn ui_font() -> Option<egui::FontData> {
     None
 }
 
-pub fn setup(ctx: &egui::Context) {
+pub fn setup(ctx: &egui::Context) -> bool {
     let mut fonts = egui::FontDefinitions::default();
 
     let env = std::env::var("SCICANVAS_FONT").ok();
-    let cjk = env.as_deref().and_then(|p| std::fs::read(p).ok()).or_else(|| load(CJK));
+    let cjk = env
+        .as_deref()
+        .and_then(|p| std::fs::read(scicanvas_core::text::system_font_path(p)).ok())
+        .or_else(|| load(CJK));
+    let available = cjk.is_some();
     if let Some(bytes) = cjk {
         fonts
             .font_data
@@ -84,4 +90,5 @@ pub fn setup(ctx: &egui::Context) {
         fonts.families.insert(FontFamily::Name(name.clone().into()), vec![name]);
     }
     ctx.set_fonts(fonts);
+    available
 }

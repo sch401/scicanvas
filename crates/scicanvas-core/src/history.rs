@@ -9,9 +9,12 @@ struct Snapshot {
     project: Project,
     label: String,
     bytes: usize,
+    generation: u64,
 }
 
 pub struct History {
+    current: u64,
+    next: u64,
     pending: Option<Pending>,
     undo: VecDeque<Snapshot>,
     redo: VecDeque<Snapshot>,
@@ -34,6 +37,8 @@ impl Default for History {
 impl History {
     pub fn with_limits(max_steps: usize, max_bytes: usize) -> Self {
         Self {
+            current: 0,
+            next: 1,
             pending: None,
             undo: VecDeque::new(),
             redo: VecDeque::new(),
@@ -46,8 +51,10 @@ impl History {
     /// 修改前开启事务；同一事务的后续输入复用第一份快照。
     pub fn begin(&mut self, current: &Project, label: &str) {
         if self.pending.is_none() {
+            let mut snapshot = Snapshot::new(current.clone(), label.to_string());
+            snapshot.generation = self.current;
             self.pending = Some(Pending {
-                before: Snapshot::new(current.clone(), label.to_string()),
+                before: snapshot,
                 changed: false,
             });
         }
@@ -87,7 +94,8 @@ impl History {
             return false;
         }
         self.redo.clear();
-        self.bytes = self.undo.iter().map(|s| s.bytes).sum::<usize>() + pending.before.bytes;
+        self.current = self.next;
+        self.next += 1;
         self.undo.push_back(pending.before);
         self.trim();
         true
@@ -113,9 +121,9 @@ impl History {
     pub fn undo(&mut self, current: &Project) -> Option<Project> {
         self.commit(current);
         let snapshot = self.undo.pop_back()?;
-        self.bytes -= snapshot.bytes;
-        let reverse = Snapshot::new(current.clone(), snapshot.label);
-        self.bytes += reverse.bytes;
+        let mut reverse = Snapshot::new(current.clone(), snapshot.label);
+        reverse.generation = self.current;
+        self.current = snapshot.generation;
         self.redo.push_back(reverse);
         self.trim();
         Some(snapshot.project)
@@ -124,20 +132,44 @@ impl History {
     pub fn redo(&mut self, current: &Project) -> Option<Project> {
         self.commit(current);
         let snapshot = self.redo.pop_back()?;
-        self.bytes -= snapshot.bytes;
-        let reverse = Snapshot::new(current.clone(), snapshot.label);
-        self.bytes += reverse.bytes;
+        let mut reverse = Snapshot::new(current.clone(), snapshot.label);
+        reverse.generation = self.current;
+        self.current = snapshot.generation;
         self.undo.push_back(reverse);
         self.trim();
         Some(snapshot.project)
     }
 
+    pub fn generation(&self) -> u64 {
+        self.current
+    }
+
+    fn recount(&mut self) {
+        let mut allocations = std::collections::HashSet::new();
+        self.bytes = self
+            .undo
+            .iter()
+            .chain(&self.redo)
+            .map(|s| {
+                let mut bytes = s.bytes;
+                for col in s.project.books.iter().flat_map(|b| &b.columns) {
+                    bytes -= col.data.estimated_bytes();
+                    if allocations.insert(col.data.identity()) {
+                        bytes += col.data.estimated_bytes();
+                    }
+                }
+                bytes
+            })
+            .sum();
+    }
     fn trim(&mut self) {
+        self.recount();
         while self.undo.len() + self.redo.len() > self.max_steps || self.bytes > self.max_bytes {
             let Some(old) = self.undo.pop_front().or_else(|| self.redo.pop_front()) else {
                 break;
             };
-            self.bytes -= old.bytes;
+            drop(old);
+            self.recount();
         }
     }
 }
@@ -145,7 +177,12 @@ impl History {
 impl Snapshot {
     fn new(project: Project, label: String) -> Self {
         let bytes = estimated_bytes(&project) + size_of::<Self>() + label.len();
-        Self { project, label, bytes }
+        Self {
+            project,
+            label,
+            bytes,
+            generation: 0,
+        }
     }
 }
 
@@ -257,7 +294,7 @@ mod tests {
         let mut h = History::default();
         h.begin(&p, "列名称");
         let allocation = |p: &Project| {
-            let crate::ColumnData::Num { values, .. } = &p.books[0].columns[0].data else {
+            let crate::ColumnData::Num { values, .. } = &*p.books[0].columns[0].data else {
                 panic!("numeric column expected")
             };
             values.as_ptr()
@@ -481,11 +518,18 @@ mod tests {
         let initial = curve_budget_fixture(true, true);
         let label = "曲线改动😀";
         let cost = reference_estimated_bytes(&initial.clone()) + size_of::<Snapshot>() + label.len();
+        let data: usize = initial
+            .books
+            .iter()
+            .flat_map(|b| &b.columns)
+            .map(|c| c.data.estimated_bytes())
+            .sum();
+        let charge = |n: usize| if n == 0 { 0 } else { data + n * (cost - data) };
         for (max_steps, max_bytes, retained) in [
             (2, usize::MAX, 2),
-            (100, 2 * cost, 2),
-            (100, 2 * cost - 1, 1),
-            (100, cost - 1, 0),
+            (100, charge(2), 2),
+            (100, charge(2) - 1, 1),
+            (100, charge(1) - 1, 0),
         ] {
             let mut p = initial.clone();
             let mut states = vec![p.clone()];
@@ -499,19 +543,19 @@ mod tests {
                 states.push(p.clone());
             }
             assert_eq!(h.undo.len(), retained);
-            assert_eq!(h.bytes, retained * cost);
+            assert_eq!(h.bytes, charge(retained));
             for i in (2 - retained..2).rev() {
                 assert_eq!(h.undo_label(), Some(label));
                 p = h.undo(&p).unwrap();
                 assert_eq!(p, states[i]);
-                assert_eq!(h.bytes, retained * cost);
+                assert_eq!(h.bytes, charge(retained));
             }
             assert!(h.undo(&p).is_none());
             for state in states.iter().skip(3 - retained) {
                 assert_eq!(h.redo_label(), Some(label));
                 p = h.redo(&p).unwrap();
                 assert_eq!(&p, state);
-                assert_eq!(h.bytes, retained * cost);
+                assert_eq!(h.bytes, charge(retained));
             }
             assert!(h.redo(&p).is_none());
             if retained > 0 {
@@ -523,7 +567,7 @@ mod tests {
                 p.graphs[0].first_layer_mut().spec.rows = Some((2, 5));
                 h.changed();
                 assert!(h.commit(&p));
-                assert_eq!(h.bytes, retained * cost);
+                assert_eq!(h.bytes, charge(retained));
                 assert!(h.redo(&p).is_none());
             }
         }
@@ -544,7 +588,7 @@ mod tests {
         let bytes = h.bytes;
         h.begin(&p, "放弃");
         let crate::ColumnData::Num { values, .. } =
-            &h.pending.as_ref().unwrap().before.project.books[0].columns[0].data
+            &*h.pending.as_ref().unwrap().before.project.books[0].columns[0].data
         else {
             panic!("numeric");
         };
@@ -555,7 +599,7 @@ mod tests {
         assert!(h.has_changes());
         p = h.rollback().unwrap();
         assert_eq!(p, initial);
-        let crate::ColumnData::Num { values, .. } = &p.books[0].columns[0].data else {
+        let crate::ColumnData::Num { values, .. } = &*p.books[0].columns[0].data else {
             panic!("numeric");
         };
         assert_eq!(values.as_ptr(), allocation, "回滚移动原快照而非再次克隆");
@@ -592,5 +636,60 @@ mod tests {
         assert_eq!(h.bytes, bytes);
         assert_eq!(h.redo_label(), Some("已提交"));
         assert!(h.undo_label().is_none());
+    }
+}
+
+#[cfg(test)]
+mod review_tests {
+    use super::*;
+    #[test]
+    fn save_generations_follow_undo_redo_and_branch_without_reusing_ids() {
+        let mut p = Project::sample();
+        let mut h = History::default();
+        let saved = h.generation();
+        h.begin(&p, "编辑");
+        p.books[0].columns[0].set(0, "123".into());
+        h.changed();
+        h.commit(&p);
+        let changed = h.generation();
+        assert_ne!(saved, changed);
+        p = h.undo(&p).unwrap();
+        assert_eq!(h.generation(), saved);
+        p = h.redo(&p).unwrap();
+        assert_eq!(h.generation(), changed);
+        p = h.undo(&p).unwrap();
+        h.begin(&p, "分支");
+        p.books[0].name.push('x');
+        h.changed();
+        h.commit(&p);
+        assert_ne!(h.generation(), changed);
+        let generation = h.generation();
+        h.begin(&p, "无变化");
+        h.changed();
+        assert!(!h.commit(&p));
+        assert_eq!(h.generation(), generation);
+    }
+    #[test]
+    fn snapshots_share_columns_and_only_changed_column_is_copied() {
+        let mut p = Project::sample();
+        let before = p.clone();
+        let mut h = History::default();
+        assert_eq!(
+            p.books[0].columns[0].data.identity(),
+            before.books[0].columns[0].data.identity()
+        );
+        h.begin(&p, "单元格");
+        p.books[0].columns[0].set(0, "99".into());
+        h.changed();
+        h.commit(&p);
+        assert_ne!(
+            p.books[0].columns[0].data.identity(),
+            before.books[0].columns[0].data.identity()
+        );
+        assert_eq!(
+            p.books[0].columns[1].data.identity(),
+            before.books[0].columns[1].data.identity()
+        );
+        assert_eq!(h.undo(&p).unwrap(), before);
     }
 }

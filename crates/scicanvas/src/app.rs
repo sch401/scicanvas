@@ -66,7 +66,28 @@ enum EditAbort {
     Failed(String),
 }
 
+#[derive(Clone, Debug)]
+pub(crate) enum PendingDiscard {
+    Quit,
+    Open(PathBuf),
+    OpenDialog,
+    Reset,
+    New,
+    Recover(PathBuf),
+}
+
 pub struct SciApp {
+    session_enabled: bool,
+    saved_generation: Option<u64>,
+    pending_discard: Option<PendingDiscard>,
+    close_confirmed: bool,
+    pub(crate) settings: scicanvas_core::project_file::session::Settings,
+    save_error: Option<String>,
+    recovery_candidates: Vec<PathBuf>,
+    recovery_file: Option<PathBuf>,
+    recovery_lock: Option<std::fs::File>,
+    last_recovery: std::time::Instant,
+    recalc_inputs: Option<Vec<scicanvas_core::Book>>,
     analysis_curves: HashMap<(u64, usize), Vec<scicanvas_core::plotspec::DataRef>>,
     pub(crate) project: Project,
     pub(crate) history: History,
@@ -157,15 +178,41 @@ fn header_field(column: &mut scicanvas_core::Column, row: usize) -> &mut String 
 
 impl SciApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
-        crate::fonts::setup(&cc.egui_ctx);
+        let has_cjk = crate::fonts::setup(&cc.egui_ctx);
         theme::install(&cc.egui_ctx);
         // 功能区图标经共用渲染栈加载。
         crate::icons::install_loaders(&cc.egui_ctx);
-        Self::initial(theme::palette(cc.egui_ctx.theme()))
+        let mut app = Self::initial(theme::palette(cc.egui_ctx.theme()));
+        app.session_enabled = true;
+        app.settings = scicanvas_core::project_file::session::load_settings();
+        app.theme_pref = match app.settings.theme.as_str() {
+            "light" => egui::ThemePreference::Light,
+            "dark" => egui::ThemePreference::Dark,
+            _ => egui::ThemePreference::System,
+        };
+        app.pending_theme = Some(app.theme_pref);
+        if let Some(directory) = scicanvas_core::project_file::session::recovery_dir() {
+            app.recovery_candidates = scicanvas_core::project_file::session::recoveries(&directory);
+        }
+        if !has_cjk {
+            app.status = "系统缺少中文字体，可通过 SCICANVAS_FONT 指定字体文件".into();
+        }
+        app
     }
 
     fn initial(pal: Palette) -> Self {
         let mut app = SciApp {
+            session_enabled: false,
+            saved_generation: Some(0),
+            pending_discard: None,
+            close_confirmed: false,
+            settings: Default::default(),
+            save_error: None,
+            recovery_candidates: Vec::new(),
+            recovery_file: None,
+            recovery_lock: None,
+            last_recovery: std::time::Instant::now(),
+            recalc_inputs: None,
             analysis_curves: HashMap::new(),
             book_preview: None,
             project: Project::default(),
@@ -220,6 +267,7 @@ impl SciApp {
     }
 
     fn load_project(&mut self, project: Project, path: Option<PathBuf>) {
+        self.dialog = None;
         self.book_preview = None;
         self.analysis_curves.clear();
         self.active_layers.clear();
@@ -228,6 +276,8 @@ impl SciApp {
         self.plot_epoch = self.plot_epoch.wrapping_add(1);
         self.plot_draft = None;
         self.history = History::default();
+        self.saved_generation = Some(self.history.generation());
+        self.recalc_inputs = None;
         self.history_group = None;
         self.last_history_group = None;
         self.open.clear();
@@ -250,6 +300,7 @@ impl SciApp {
             .or(project.books.last().map(|b| b.id))
             .or(project.notes.last().map(|n| n.id));
         self.project = project;
+        self.recalc_inputs = Some(self.project.books.clone());
         self.explorer_target = self.active;
         self.explorer_selection = self.active.into_iter().collect();
         self.explorer_anchor = self.active;
@@ -340,7 +391,8 @@ impl SciApp {
     }
 
     pub(crate) fn import_csv(&mut self) {
-        let Some(path) = rfd::FileDialog::new()
+        let Some(path) = self
+            .file_dialog()
             .set_title("导入数据")
             .add_filter("数据文件", &["csv", "txt", "tsv", "dat", "xlsx", "xlsm", "xls"])
             .add_filter("Excel 工作簿", &["xlsx", "xlsm", "xls"])
@@ -358,6 +410,9 @@ impl SciApp {
     }
 
     fn import_paths(&mut self, paths: &[PathBuf]) {
+        if let Some(path) = paths.first() {
+            self.settings.last_dir = path.parent().map(std::path::Path::to_path_buf);
+        }
         let parent = self.current_folder();
         self.edit_with(
             "导入数据",
@@ -463,15 +518,33 @@ impl SciApp {
         Ok((last.unwrap(), format!("已导入 {}：{}", path.display(), done.join("、"))))
     }
 
+    pub(super) fn file_dialog(&self) -> rfd::FileDialog {
+        rfd::FileDialog::new().set_directory(
+            self.settings
+                .last_dir
+                .as_deref()
+                .unwrap_or_else(|| std::path::Path::new(".")),
+        )
+    }
     pub(crate) fn open_project(&mut self) {
-        let Some(path) = rfd::FileDialog::new()
+        self.request_discard(PendingDiscard::OpenDialog);
+    }
+    fn pick_project(&mut self) {
+        let Some(path) = self
+            .file_dialog()
             .set_title("打开项目")
             .add_filter("SciCanvas 项目", &["scv", "scproj"])
+            .set_directory(
+                self.settings
+                    .last_dir
+                    .as_deref()
+                    .unwrap_or_else(|| std::path::Path::new(".")),
+            )
             .pick_file()
         else {
             return;
         };
-        self.open_path(&path);
+        self.open_path_now(&path);
     }
 
     pub(crate) fn save_graph_template(&mut self) {
@@ -486,7 +559,8 @@ impl SciApp {
                 return;
             }
         };
-        let Some(path) = rfd::FileDialog::new()
+        let Some(path) = self
+            .file_dialog()
             .set_title("保存图形模板")
             .add_filter("SciCanvas 图形模板", &["scgt"])
             .set_file_name(format!("{}.scgt", graph.name))
@@ -502,7 +576,8 @@ impl SciApp {
 
     pub(crate) fn apply_graph_template_dialog(&mut self) {
         let Some(book_id) = self.active_book_id() else { return };
-        let Some(path) = rfd::FileDialog::new()
+        let Some(path) = self
+            .file_dialog()
             .set_title("应用图形模板")
             .add_filter("SciCanvas 图形模板", &["scgt"])
             .pick_file()
@@ -535,9 +610,15 @@ impl SciApp {
     }
 
     fn open_path(&mut self, path: &std::path::Path) {
+        self.request_discard(PendingDiscard::Open(path.to_path_buf()));
+    }
+    fn open_path_now(&mut self, path: &std::path::Path) {
         match scicanvas_core::project_file::load(path) {
             Ok(p) => {
+                self.clear_recovery();
                 self.load_project(p, Some(path.to_path_buf()));
+                self.settings.remember(path);
+                self.persist_settings();
                 self.status = format!("已打开 {}", path.display());
             }
             Err(e) => self.status = format!("无法打开项目：{}", e),
@@ -605,6 +686,14 @@ impl SciApp {
     }
 
     pub(crate) fn save_project(&mut self, save_as: bool) {
+        self.try_save_project(save_as);
+    }
+
+    fn try_save_project(&mut self, save_as: bool) -> bool {
+        if !self.flush_sheet_edits() {
+            return false;
+        }
+        self.finish_edit();
         let path = match (&self.project_path, save_as) {
             (Some(p), false) => p.clone(),
             _ => {
@@ -613,25 +702,49 @@ impl SciApp {
                     .as_ref()
                     .and_then(|p| p.file_stem())
                     .map_or_else(|| "项目".into(), |s| s.to_string_lossy());
-                let Some(p) = rfd::FileDialog::new()
+                let Some(p) = self
+                    .file_dialog()
                     .set_title("保存项目")
+                    .set_directory(
+                        self.settings
+                            .last_dir
+                            .as_deref()
+                            .unwrap_or_else(|| std::path::Path::new(".")),
+                    )
                     .add_filter("SciCanvas 项目", &["scv"])
                     .add_filter("旧版 JSON 项目", &["scproj"])
                     .set_file_name(format!("{stem}.scv"))
                     .save_file()
                 else {
-                    return;
+                    return false;
                 };
                 p
             }
         };
-        let result = scicanvas_core::project_file::save(&path, &self.project);
-        match result {
+        self.save_project_to(&path)
+    }
+
+    fn save_project_to(&mut self, path: &std::path::Path) -> bool {
+        if !self.flush_sheet_edits() {
+            return false;
+        }
+        self.finish_edit();
+        match scicanvas_core::project_file::save(path, &self.project) {
             Ok(()) => {
+                self.saved_generation = Some(self.history.generation());
+                self.project_path = Some(path.to_path_buf());
+                self.settings.remember(path);
+                self.persist_settings();
+                self.clear_recovery();
+                self.save_error = None;
                 self.status = format!("已保存到 {}", path.display());
-                self.project_path = Some(path);
+                true
             }
-            Err(e) => self.status = format!("保存失败：{}", e),
+            Err(e) => {
+                self.status = format!("保存失败：{e}");
+                self.save_error = Some(e);
+                false
+            }
         }
     }
 
@@ -641,7 +754,8 @@ impl SciApp {
             return;
         };
         let content = svg::render_page(&g, &self.project);
-        let Some(path) = rfd::FileDialog::new()
+        let Some(path) = self
+            .file_dialog()
             .set_title("导出图形")
             .add_filter("SVG 矢量图", &["svg"])
             .set_file_name(format!("{}.svg", g.name))
@@ -649,6 +763,7 @@ impl SciApp {
         else {
             return;
         };
+        self.settings.last_dir = path.parent().map(std::path::Path::to_path_buf);
         self.status = match std::fs::write(&path, content) {
             Ok(()) => format!("已导出 {}", path.display()),
             Err(e) => format!("导出失败：{}", e),
@@ -658,7 +773,8 @@ impl SciApp {
     pub(crate) fn export_pdf(&mut self) {
         let Some(gid) = self.target_graph() else { return };
         let Some(g) = self.project.graph(gid) else { return };
-        let Some(path) = rfd::FileDialog::new()
+        let Some(path) = self
+            .file_dialog()
             .set_title("导出 PDF")
             .add_filter("PDF 矢量图（嵌入字体）", &["pdf"])
             .set_file_name(format!("{}.pdf", g.name))
@@ -666,6 +782,7 @@ impl SciApp {
         else {
             return;
         };
+        self.settings.last_dir = path.parent().map(std::path::Path::to_path_buf);
         // Finish conversion and font checks before opening/replacing the chosen output file.
         let result = crate::export::pdf_bytes(&svg::render_page(g, &self.project))
             .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
@@ -689,7 +806,8 @@ impl SciApp {
         let Some(g) = self.project.graph(gid).cloned() else {
             return;
         };
-        let Some(path) = rfd::FileDialog::new()
+        let Some(path) = self
+            .file_dialog()
             .set_title("导出 PNG")
             .add_filter("PNG 图像", &["png"])
             .set_file_name(format!("{}.png", g.name))
@@ -714,7 +832,8 @@ impl SciApp {
         let Some(book) = self.project.book(id) else { return };
         let content = scicanvas_core::project_file::book_csv(book);
         let (name, rows, cols) = (book.name.clone(), book.nrows(), book.columns.len());
-        let Some(path) = rfd::FileDialog::new()
+        let Some(path) = self
+            .file_dialog()
             .set_title("导出 CSV")
             .add_filter("CSV 表格", &["csv"])
             .set_file_name(format!("{name}.csv"))
@@ -722,6 +841,7 @@ impl SciApp {
         else {
             return;
         };
+        self.settings.last_dir = path.parent().map(std::path::Path::to_path_buf);
         self.status = match std::fs::write(&path, content) {
             Ok(()) => format!("已导出 {}（{rows} 行 × {cols} 列）", path.display()),
             Err(e) => format!("导出失败：{e}"),
@@ -835,6 +955,7 @@ impl SciApp {
         if outer {
             if let Some(abort) = self.edit_abort.take() {
                 self.project = self.history.rollback().unwrap();
+                self.recalc_inputs = Some(self.project.books.clone());
                 if let EditAbort::Failed(error) = abort {
                     self.status = error;
                 }
@@ -889,6 +1010,7 @@ impl SciApp {
             Err(error) => {
                 if fresh {
                     self.project = self.history.rollback().unwrap();
+                    self.recalc_inputs = Some(self.project.books.clone());
                 }
                 Err(error)
             }
@@ -910,6 +1032,7 @@ impl SciApp {
     /// “重算”命令：公式列和全部分析结果列（含手动的）按依赖顺序重算，一步撤销。
     pub(crate) fn recalc_all(&mut self) {
         let problems = self.project.recalc_computed(true);
+        self.recalc_inputs = Some(self.project.books.clone());
         self.status = if problems.is_empty() {
             "已重算公式列和分析结果".into()
         } else {
@@ -919,8 +1042,9 @@ impl SciApp {
 
     /// 有改动时按保存的列公式重算（并入同一步撤销）；出错时在状态栏说明。
     fn recalc_formulas(&mut self) {
-        if self.history.has_changes() {
+        if self.history.has_changes() && self.recalc_inputs.as_ref() != Some(&self.project.books) {
             let problems = self.project.recalc_computed(false);
+            self.recalc_inputs = Some(self.project.books.clone());
             if !problems.is_empty() {
                 self.status = format!("公式重算出错：{}", problems.join("；"));
             }
@@ -970,6 +1094,7 @@ impl SciApp {
         });
         self.book_preview = None;
         self.project = project;
+        self.recalc_inputs = Some(self.project.books.clone());
         match &mut self.dialog {
             Some(Dialog::CustomNlFit(edit)) => edit.sync_saved(&self.project.fit_functions),
             Some(d @ Dialog::NlFitReport(_)) => d.sync_fit_reports(&self.project),
@@ -1047,20 +1172,7 @@ impl SciApp {
                 false
             }
         });
-        self.sheets.retain(|id, state| {
-            if let Some(book) = self.project.book(*id) {
-                state.edit = None;
-                state.drag = None;
-                if book.columns.is_empty() {
-                    state.range = None;
-                } else if let Some(range) = state.range.as_mut() {
-                    range.clamp(book.columns.len());
-                }
-                true
-            } else {
-                false
-            }
-        });
+        self.restore_sheet_states();
         for id in &ids {
             self.open.entry(*id).or_insert(true);
         }
@@ -1165,11 +1277,16 @@ impl SciApp {
 
     /// 标题栏里显示的当前窗口名称。
     pub(crate) fn doc_title(&self) -> String {
-        match self.active.and_then(|id| self.project.name_of(id).map(|n| (id, n))) {
+        let title = match self.active.and_then(|id| self.project.name_of(id).map(|n| (id, n))) {
             Some((id, n)) if self.project.book(id).is_some() => format!("{} · 工作簿", n),
             Some((id, n)) if self.project.note(id).is_some() => format!("{} · Note", n),
             Some((_, n)) => format!("{} · 图形", n),
             None => "未选中窗口".to_string(),
+        };
+        if self.is_dirty() {
+            format!("{title} •")
+        } else {
+            title
         }
     }
 
@@ -1199,8 +1316,7 @@ impl SciApp {
     }
 
     pub(crate) fn reset_project(&mut self) {
-        self.load_project(Project::sample(), None);
-        self.status = "已恢复示例项目".into();
+        self.request_discard(PendingDiscard::Reset);
     }
 
     pub(crate) fn open_layer_contents(&mut self) {
@@ -1375,6 +1491,10 @@ impl eframe::App for SciApp {
 
 impl SciApp {
     fn ui_frame(&mut self, ctx: &egui::Context) {
+        if ctx.input(|i| i.viewport().close_requested()) && !self.close_confirmed {
+            ctx.send_viewport_cmd(egui::ViewportCommand::CancelClose);
+            self.request_discard(PendingDiscard::Quit);
+        }
         let reset = egui::Modifiers {
             shift: true,
             ..egui::Modifiers::COMMAND
@@ -1505,7 +1625,9 @@ impl SciApp {
             ctx.request_repaint();
         }
 
-        if self.quit {
+        self.session_dialogs(ctx);
+        self.session_tick(ctx);
+        if self.quit && self.close_confirmed {
             ctx.send_viewport_cmd(egui::ViewportCommand::Close);
         }
     }
@@ -1522,3 +1644,292 @@ mod snap_assist_tests;
 #[cfg(test)]
 #[path = "ui_review.rs"]
 mod ui_review;
+
+impl SciApp {
+    pub(crate) fn is_dirty(&self) -> bool {
+        self.history.has_changes()
+            || self.saved_generation != Some(self.history.generation())
+            || self.sheets.iter().any(|(id, s)| {
+                s.edit.as_ref().is_some_and(|e| {
+                    self.project
+                        .book(*id)
+                        .and_then(|b| b.columns.get(e.cell.c))
+                        .is_some_and(|c| c.data.text_at(e.cell.r) != e.buf)
+                })
+            })
+    }
+    pub(crate) fn request_discard(&mut self, action: PendingDiscard) {
+        if !self.flush_sheet_edits() {
+            return;
+        }
+        self.finish_edit();
+        if self.is_dirty() {
+            self.pending_discard = Some(action);
+        } else {
+            self.execute_discard(action);
+        }
+    }
+    fn execute_discard(&mut self, action: PendingDiscard) {
+        self.pending_discard = None;
+        match action {
+            PendingDiscard::Quit => {
+                self.clear_recovery();
+                self.persist_settings();
+                self.close_confirmed = true;
+                self.quit = true;
+            }
+            PendingDiscard::Open(path) => self.open_path_now(&path),
+            PendingDiscard::Recover(path) => {
+                self.clear_recovery();
+                self.restore_recovery(&path);
+            }
+            PendingDiscard::OpenDialog => self.pick_project(),
+            PendingDiscard::Reset => {
+                self.clear_recovery();
+                self.load_project(Project::sample(), None);
+                self.status = "已恢复示例项目，撤销历史已清空".into();
+            }
+            PendingDiscard::New => {
+                self.clear_recovery();
+                let mut p = Project::default();
+                p.new_book();
+                self.load_project(p, None);
+                self.status = "已新建空白项目".into();
+            }
+        }
+    }
+    fn persist_settings(&mut self) {
+        if !self.session_enabled {
+            return;
+        }
+        self.settings.theme = match self.theme_pref {
+            egui::ThemePreference::Light => "light",
+            egui::ThemePreference::Dark => "dark",
+            _ => "system",
+        }
+        .into();
+        if let Err(error) = scicanvas_core::project_file::session::save_settings(&self.settings) {
+            self.status = error;
+        }
+    }
+    fn clear_recovery(&mut self) {
+        if let Some(file) = self.recovery_file.take() {
+            let _ = std::fs::remove_file(&file);
+            self.recovery_lock = None;
+            let _ = std::fs::remove_file(file.with_extension("lock"));
+        }
+        self.last_recovery = std::time::Instant::now();
+    }
+    fn session_dialogs(&mut self, ctx: &egui::Context) {
+        if self.pending_discard.is_some() {
+            let mut choice = 0;
+            dialogs::window(ctx, "未保存的修改").show(ctx, |ui| {
+                ui.label("项目有未保存的修改，是否保存？");
+                ui.horizontal(|ui| {
+                    if ui.button("保存").clicked() {
+                        choice = 1;
+                    }
+                    if ui.button("不保存").clicked() {
+                        choice = 2;
+                    }
+                    if ui.button("取消").clicked() {
+                        choice = 3;
+                    }
+                });
+            });
+            if ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                choice = 3;
+            }
+            if choice == 3 {
+                self.pending_discard = None;
+            } else if choice == 2 || (choice == 1 && self.try_save_project(false)) {
+                self.clear_recovery();
+                if let Some(action) = self.pending_discard.take() {
+                    self.execute_discard(action);
+                }
+            }
+        }
+        if let Some(error) = self.save_error.clone() {
+            let mut open = true;
+            dialogs::window(ctx, "保存失败").open(&mut open).show(ctx, |ui| {
+                ui.label(error);
+                if ui.button("知道了").clicked() {
+                    self.save_error = None;
+                }
+            });
+            if !open {
+                self.save_error = None;
+            }
+        }
+        if let Some(path) = self.recovery_candidates.first().cloned() {
+            let mut choice = 0;
+            dialogs::window(ctx, "恢复未保存的工作").show(ctx, |ui| {
+                ui.label("发现上次会话的自动备份，是否恢复？");
+                let source = scicanvas_core::project_file::session::recovery_source(&path);
+                ui.label(source.map_or("未命名项目".into(), |p| p.display().to_string()));
+                ui.horizontal(|ui| {
+                    if ui.button("恢复").clicked() {
+                        choice = 1;
+                    }
+                    if ui.button("放弃这份备份").clicked() {
+                        choice = 2;
+                    }
+                    if ui.button("稍后").clicked() {
+                        choice = 3;
+                    }
+                });
+            });
+            if choice == 1 {
+                self.request_discard(PendingDiscard::Recover(path.clone()));
+                self.recovery_candidates.clear();
+            }
+            if choice == 2 {
+                match scicanvas_core::project_file::session::discard_recovery(&path) {
+                    Ok(()) => {
+                        self.recovery_candidates.remove(0);
+                    }
+                    Err(error) => self.status = error,
+                }
+            }
+            if choice == 3 || ctx.input(|i| i.key_pressed(egui::Key::Escape)) {
+                self.recovery_candidates.clear();
+            }
+        }
+    }
+    fn restore_recovery(&mut self, path: &std::path::Path) {
+        match (
+            scicanvas_core::project_file::session::lock_recovery(path),
+            scicanvas_core::project_file::load(path),
+        ) {
+            (Ok(lock), Ok(project)) => {
+                let source = scicanvas_core::project_file::session::recovery_source(path);
+                self.load_project(project, source);
+                self.saved_generation = None;
+                self.recovery_file = Some(path.to_path_buf());
+                self.recovery_lock = Some(lock);
+                self.status = "已恢复自动备份，请保存项目".into();
+            }
+            (_, Err(error)) => self.status = format!("恢复失败：{error}"),
+            (Err(error), _) => self.status = format!("恢复文件正在使用：{error}"),
+        }
+    }
+    fn backup_recovery(&mut self) -> Result<(), String> {
+        use scicanvas_core::project_file::session;
+        if !self.is_dirty() {
+            return Ok(());
+        }
+        if self.recovery_file.is_none() {
+            let directory = session::recovery_dir().ok_or("没有可用的恢复目录")?;
+            std::fs::create_dir_all(&directory).map_err(|e| e.to_string())?;
+            let stamp = std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap_or_default()
+                .as_nanos();
+            let path = directory.join(format!("recovery-{}-{stamp}.scproj", std::process::id()));
+            self.recovery_lock = Some(session::lock_recovery(&path).map_err(|e| e.to_string())?);
+            self.recovery_file = Some(path);
+        }
+        let mut snapshot = self.project.clone();
+        for (id, state) in &self.sheets {
+            if let Some(e) = &state.edit {
+                if let Some(col) = snapshot.book_mut(*id).and_then(|b| b.columns.get_mut(e.cell.c)) {
+                    if !col.data.accepts(&e.buf) {
+                        col.data = col.data.converted(scicanvas_core::DataKind::Text)?.into();
+                    }
+                    col.set(e.cell.r, e.buf.clone());
+                }
+            }
+        }
+        snapshot.recalc_computed(false);
+        session::save_recovery(
+            self.recovery_file.as_ref().unwrap(),
+            &snapshot,
+            self.project_path.as_deref(),
+        )
+    }
+    fn session_tick(&mut self, ctx: &egui::Context) {
+        ctx.input(|i| {
+            let v = i.viewport();
+            self.settings.maximized = v.maximized.unwrap_or(false);
+            if !self.settings.maximized {
+                if let Some(r) = v.outer_rect {
+                    self.settings.window = Some([r.left(), r.top(), r.width(), r.height()]);
+                }
+            }
+        });
+        if self.session_enabled && self.is_dirty() {
+            let interval = std::time::Duration::from_secs(300);
+            let elapsed = self.last_recovery.elapsed();
+            if elapsed >= interval {
+                if let Err(error) = self.backup_recovery() {
+                    self.status = error;
+                }
+                self.last_recovery = std::time::Instant::now();
+            }
+            ctx.request_repaint_after(interval.saturating_sub(self.last_recovery.elapsed()));
+        }
+    }
+}
+
+impl SciApp {
+    /// 保存和切换项目先接收有效的单元格草稿，类型转换沿用原确认窗口。
+    fn flush_sheet_edits(&mut self) -> bool {
+        let edits: Vec<_> = self
+            .sheets
+            .iter()
+            .filter_map(|(&id, s)| s.edit.as_ref().map(|e| (id, e.clone())))
+            .collect();
+        for (id, edit) in &edits {
+            if let Some(col) = self.project.book(*id).and_then(|b| b.columns.get(edit.cell.c)) {
+                if !col.data.accepts(&edit.buf) {
+                    self.dialog = Some(Dialog::ConvertText {
+                        book: *id,
+                        key: col.key.clone(),
+                        row: edit.cell.r,
+                        value: edit.buf.clone(),
+                    });
+                    self.status = "请先确认当前单元格的类型转换，再保存或切换项目".into();
+                    return false;
+                }
+            }
+        }
+        if edits.is_empty() {
+            return true;
+        }
+        self.edit("编辑单元格", |p| {
+            for (id, e) in &edits {
+                if let Some(c) = p.book_mut(*id).and_then(|b| b.columns.get_mut(e.cell.c)) {
+                    if c.data.text_at(e.cell.r) != e.buf {
+                        c.set(e.cell.r, e.buf.clone());
+                    }
+                }
+            }
+            Ok(Some(()))
+        });
+        for (id, _) in edits {
+            if let Some(sheet) = self.sheets.get_mut(&id) {
+                sheet.edit = None;
+            }
+        }
+        true
+    }
+}
+
+impl SciApp {
+    fn restore_sheet_states(&mut self) {
+        self.sheets.retain(|id, state| {
+            if let Some(book) = self.project.book(*id) {
+                state.edit = None;
+                state.drag = None;
+                if book.columns.is_empty() {
+                    state.range = None;
+                } else if let Some(range) = state.range.as_mut() {
+                    range.clamp(book.columns.len());
+                }
+                true
+            } else {
+                false
+            }
+        });
+    }
+}

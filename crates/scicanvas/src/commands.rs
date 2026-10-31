@@ -160,6 +160,7 @@ fn build() -> Vec<Command> {
     workspace::objects(&mut commands);
     window::current(&mut commands);
     file::project(&mut commands);
+    file::recent(&mut commands);
     plot::annotations(&mut commands);
     file::graphics(&mut commands);
     edit::graph_copy(&mut commands);

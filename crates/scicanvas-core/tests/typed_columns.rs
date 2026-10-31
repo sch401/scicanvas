@@ -77,7 +77,7 @@ fn conversions_are_atomic_and_dates_use_utc_milliseconds() {
     assert_eq!(dates.text_at(0), "2026-10-18T10:00:00+01:00");
     assert!(cells(&["bad date"]).converted(DataKind::DateTime).is_err());
     let mut project = Project::sample();
-    project.books[0].columns[1].data = cells(&["bad"]);
+    project.books[0].columns[1].data = (cells(&["bad"])).into();
     let before = project.clone();
     assert!(project.books[0]
         .convert_columns(&["A".into(), "B".into()], DataKind::DateTime)
@@ -150,23 +150,24 @@ fn dates_saved_as_millisecond_integers_by_the_first_v9_build_still_load() {
 fn typed_sorting_is_stable_and_keeps_missing_values_last_in_both_directions() {
     let mut p = Project::sample();
     p.books[0].columns.truncate(2);
-    p.books[0].columns[0].data = cells(&["2", "", "1", "1"]);
-    p.books[0].columns[1].data = cells(&["a", "blank", "b", "c"]);
+    p.books[0].columns[0].data = (cells(&["2", "", "1", "1"])).into();
+    p.books[0].columns[1].data = (cells(&["a", "blank", "b", "c"])).into();
     p.sort_book(1, 0, true).unwrap();
     assert_eq!(p.books[0].columns[1].data, vec!["b", "c", "a", "blank"]);
     assert_eq!(p.books[0].columns[0].data.kind(), DataKind::Num);
     p.sort_book(1, 0, false).unwrap();
     assert_eq!(p.books[0].columns[1].data, vec!["a", "b", "c", "blank"]);
-    p.books[0].columns[0].data = cells(&["late", "early", "late", ""])
+    p.books[0].columns[0].data = (cells(&["late", "early", "late", ""])
         .converted(DataKind::Category)
-        .unwrap();
-    if let ColumnData::Category { ordered, .. } = &mut p.books[0].columns[0].data {
+        .unwrap())
+    .into();
+    if let ColumnData::Category { ordered, .. } = &mut *p.books[0].columns[0].data {
         *ordered = true;
     }
     p.sort_book(1, 0, true).unwrap();
     assert_eq!(p.books[0].columns[0].data, vec!["late", "late", "early"]);
     assert!(
-        matches!(&p.books[0].columns[0].data,ColumnData::Category {levels,ordered:true,..} if levels==&["late","early"])
+        matches!(&*p.books[0].columns[0].data,ColumnData::Category {levels,ordered:true,..} if levels==&["late","early"])
     );
 }
 
@@ -182,10 +183,10 @@ fn million_numeric_cells_use_compact_storage() {
 fn calculations_preserve_explicit_target_types_and_failed_date_writes_are_atomic() {
     use scicanvas_core::stats::Sequence;
     let mut p = Project::sample();
-    p.books[0].columns[0].data = ColumnData::Text(vec!["1".into(), "2".into()]);
+    p.books[0].columns[0].data = (ColumnData::Text(vec!["1".into(), "2".into()])).into();
     p.set_column_values(1, "A", "i*2").unwrap();
     assert_eq!(p.books[0].columns[0].data.kind(), DataKind::Text);
-    p.books[0].columns[0].data = cells(&["2026-10-18", ""]).converted(DataKind::DateTime).unwrap();
+    p.books[0].columns[0].data = (cells(&["2026-10-18", ""]).converted(DataKind::DateTime).unwrap()).into();
     let before = p.clone();
     assert!(p
         .fill_sequence(1, "A", Sequence::Arithmetic { start: 0.5, step: 0.2 }, 3, 1)
@@ -221,8 +222,8 @@ mod files {
     #[test]
     fn v8_string_arrays_migrate_losslessly_and_keep_csv_and_svg_bytes() {
         let mut p = Project::sample();
-        p.books[0].columns[0].data = cells(&["001", "2.0", " 3,000 ", "4e0", "NaN", "", "7"]);
-        p.books[0].columns[1].data = cells(&["1", "2", "bad", "4", "5", "6", "7"]);
+        p.books[0].columns[0].data = (cells(&["001", "2.0", " 3,000 ", "4e0", "NaN", "", "7"])).into();
+        p.books[0].columns[1].data = (cells(&["1", "2", "bad", "4", "5", "6", "7"])).into();
         let old = v8_json(&p);
         let restored = project_file::from_json(&old.to_string()).unwrap();
         assert_eq!(restored, p);
@@ -248,17 +249,18 @@ mod files {
     #[test]
     fn v9_roundtrips_all_types_masks_and_exact_nonfinite_bits_in_json_and_scv() {
         let mut p = Project::sample();
-        p.books[0].columns[0].data = cells(&["-0", "NaN", "", "inf"]);
-        if let ColumnData::Num { values, .. } = &mut p.books[0].columns[0].data {
+        p.books[0].columns[0].data = (cells(&["-0", "NaN", "", "inf"])).into();
+        if let ColumnData::Num { values, .. } = &mut *p.books[0].columns[0].data {
             values[1] = f64::from_bits(0x7ff8000000000123);
         }
-        p.books[0].columns[1].data = cells(&["2026-10-18T10:00:00+01:00", "", "2026-10-19"])
+        p.books[0].columns[1].data = (cells(&["2026-10-18T10:00:00+01:00", "", "2026-10-19"])
             .converted(DataKind::DateTime)
-            .unwrap();
-        p.books[0].columns[2].data = cells(&["类别甲", "", "类别乙"]).converted(DataKind::Category).unwrap();
+            .unwrap())
+        .into();
+        p.books[0].columns[2].data = (cells(&["类别甲", "", "类别乙"]).converted(DataKind::Category).unwrap()).into();
         let key = p.books[0].push_column(scicanvas_core::Role::Ignore);
         let index = p.books[0].column_index(&key).unwrap();
-        p.books[0].columns[index].data = ColumnData::Text(vec!["literal".into(), "001".into(), "".into()]);
+        p.books[0].columns[index].data = (ColumnData::Text(vec!["literal".into(), "001".into(), "".into()])).into();
         let restored = project_file::from_json(&project_file::to_json(&p).unwrap()).unwrap();
         assert_eq!(restored, p);
         assert_eq!(project_file::from_bytes(&project_file::to_scv(&p).unwrap()).unwrap(), p);
@@ -299,8 +301,8 @@ fn column_time_zones_keep_wall_time_for_naive_entries_and_instants_for_zoned_one
     use scicanvas_core::{format::DateFormat, Column, Role};
     let ms = |t: &str| chrono::DateTime::parse_from_rfc3339(t).unwrap().timestamp_millis() as f64;
     let mut c = Column::new("A", Role::X);
-    c.data = cells(&["2026-10-18 08:00", "2026-10-18T00:00:00Z"]);
-    c.data = c.data.converted(DataKind::DateTime).unwrap();
+    c.data = (cells(&["2026-10-18 08:00", "2026-10-18T00:00:00Z"])).into();
+    c.data = (c.data.converted(DataKind::DateTime).unwrap()).into();
     c.format.date = DateFormat::DateMinute;
     // UTC+8：不带时区的 08:00 是当地时间（UTC 00:00）；带 Z 的保持原时刻，两者显示相同
     c.set_utc_offset(480);
@@ -328,8 +330,8 @@ fn date_axes_align_to_local_midnight_and_save_the_zone() {
     let mut p = Project::default();
     p.new_book();
     let b = p.book_mut(1).unwrap();
-    b.columns[0].data = cells(&["2026-10-18", "2026-10-19", "2026-10-20"]);
-    b.columns[1].data = cells(&["1", "3", "2"]);
+    b.columns[0].data = (cells(&["2026-10-18", "2026-10-19", "2026-10-20"])).into();
+    b.columns[1].data = (cells(&["1", "3", "2"])).into();
     b.convert_columns(&["A".into()], DataKind::DateTime).unwrap();
     b.columns[0].set_utc_offset(480);
     let (id, _) = p.plot_from_selection(1, &[], PlotType::LineSymbol).unwrap();

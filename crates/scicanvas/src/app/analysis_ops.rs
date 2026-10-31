@@ -112,7 +112,8 @@ impl SciApp {
                 true
             }
             CustomFitAction::LoadFile => {
-                let Some(path) = rfd::FileDialog::new()
+                let Some(path) = self
+                    .file_dialog()
                     .set_title("载入拟合函数")
                     .add_filter("SciCanvas 拟合函数", &["scfn"])
                     .pick_file()
@@ -129,7 +130,8 @@ impl SciApp {
                         return false;
                     }
                 };
-                let Some(path) = rfd::FileDialog::new()
+                let Some(path) = self
+                    .file_dialog()
                     .set_title("导出拟合函数")
                     .add_filter("SciCanvas 拟合函数", &["scfn"])
                     .set_file_name(format!("{}.scfn", definition.name))
@@ -949,7 +951,7 @@ impl SciApp {
         self.edit_with(
             "修改拟合设置",
             |project| {
-                if project.nlfit_operation(&reference)? != &target.before {
+                if !project.nlfit_operation(&reference)?.same_settings(&target.before) {
                     return Err("拟合设置已改变，请从报告重新打开编辑器".into());
                 }
                 project.edit_nlfit(&reference, recipe).map(Some)

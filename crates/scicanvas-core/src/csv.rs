@@ -201,7 +201,7 @@ fn finish_columns(book: &mut Book) {
             && (0..col.data.len()).any(|r| !col.data.text_at(r).trim().is_empty())
         {
             if let Ok(dates) = col.data.converted(crate::DataKind::DateTime) {
-                col.data = dates;
+                col.data = dates.into();
             }
         }
     }

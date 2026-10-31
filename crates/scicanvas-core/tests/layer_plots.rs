@@ -311,11 +311,13 @@ fn deleting_mapped_style_columns_clears_the_mapping_and_keeps_the_graph_saveable
         let book = project.book_mut(1).unwrap();
         let key = book.push_column(Role::Ignore);
         let rows = book.nrows();
-        book.columns.iter_mut().find(|column| column.key == key).unwrap().data = scicanvas_core::ColumnData::Category {
-            codes: (0..rows).map(|row| (row % 2) as u32).collect(),
-            levels: vec!["one".into(), "two".into()],
-            ordered: true,
-        };
+        book.columns.iter_mut().find(|column| column.key == key).unwrap().data =
+            (scicanvas_core::ColumnData::Category {
+                codes: (0..rows).map(|row| (row % 2) as u32).collect(),
+                levels: vec!["one".into(), "two".into()],
+                ordered: true,
+            })
+            .into();
         key
     };
     project.graph_mut(2).unwrap().first_layer_mut().set_plot_style(

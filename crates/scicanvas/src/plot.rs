@@ -1078,11 +1078,12 @@ mod tests {
             keys.push(book.push_column(Role::Ignore));
             book.columns.last_mut().unwrap().data = (0..rows).map(|row| row.to_string()).collect();
         }
-        book.columns.last_mut().unwrap().data = ColumnData::Category {
+        book.columns.last_mut().unwrap().data = (ColumnData::Category {
             codes: (0..rows).map(|row| (row % 2) as u32).collect(),
             levels: vec!["first".into(), "second".into()],
             ordered: true,
-        };
+        })
+        .into();
         p.graphs[0].first_layer_mut().set_plot_style(
             "B",
             Some(CurveStyle {
@@ -1182,9 +1183,10 @@ mod tests {
         p.books[0].columns[0].data = vec!["0".to_string(), "86400000".into()].into();
         before = render(&p);
         p.books[0].columns[0].data =
-            scicanvas_core::ColumnData::from(vec!["1970-01-01".to_string(), "1970-01-02".into()])
+            (scicanvas_core::ColumnData::from(vec!["1970-01-01".to_string(), "1970-01-02".into()])
                 .converted(DataKind::DateTime)
-                .unwrap();
+                .unwrap())
+            .into();
         verify(&p, &before);
     }
 

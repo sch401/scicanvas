@@ -171,8 +171,30 @@ pub fn migrate(mut value: Value) -> Result<Value, String> {
 }
 
 pub fn from_json(text: &str) -> Result<Project, String> {
-    let value = serde_json::from_str(text).map_err(|e| format!("JSON 格式错误：{e}"))?;
+    let mut value: Value = serde_json::from_str(text).map_err(|e| format!("JSON 格式错误：{e}"))?;
+    let old_version = value.get("version").and_then(Value::as_u64).unwrap_or(0);
+    if old_version < 21 {
+        for column in value
+            .get_mut("books")
+            .and_then(Value::as_array_mut)
+            .into_iter()
+            .flatten()
+            .filter_map(|b| b.get_mut("columns").and_then(Value::as_array_mut))
+            .flatten()
+        {
+            if let Some(recipe) = column.pointer_mut("/op/kind/Nonlinear").and_then(Value::as_object_mut) {
+                for (old, new) in [("input_hash", "input_digest"), ("attempted_hash", "attempted_digest")] {
+                    if let Some(v) = recipe.remove(old) {
+                        recipe.insert(new.into(), v);
+                    }
+                }
+            }
+        }
+    }
     let mut project: Project = serde_json::from_value(migrate(value)?).map_err(|e| format!("项目字段错误：{e}"))?;
+    if old_version < 21 {
+        migrate_fit_state(&mut project);
+    }
     let max_id = project
         .books
         .iter()
@@ -273,7 +295,10 @@ fn validate(project: &Project) -> Result<(), String> {
             if let Some(report) = &col.fit_report {
                 report.validate()?;
                 if report.book_id != book.id || report.curve.1 != col.key {
-                    return Err("拟合报告与结果列关联不一致".into());
+                    return Err(format!(
+                        "工作簿 {} 列 {}：拟合报告与结果列关联不一致",
+                        book.name, col.key
+                    ));
                 }
                 if let Some(crate::ops::Operation {
                     kind: crate::ops::OpKind::Nonlinear(recipe),
@@ -283,31 +308,43 @@ fn validate(project: &Project) -> Result<(), String> {
                     if recipe.output_x != report.curve.0
                         || recipe.function != crate::ops::FitMethod::from_function(&report.fit.model)
                     {
-                        return Err("拟合报告与操作定义不一致".into());
+                        return Err(format!("工作簿 {} 列 {}：拟合报告与操作定义不一致", book.name, col.key));
                     }
                 }
             }
             if let Some(op) = &col.op {
                 if let crate::ops::OpKind::Nonlinear(recipe) = &op.kind {
                     recipe.validate()?;
+                    if col.formula.is_some() {
+                        return Err(format!("工作簿 {} 列 {}：拟合与列公式同时占用结果", book.name, col.key));
+                    }
                     let mut outputs = BTreeSet::from([col.key.as_str()]);
                     for key in std::iter::once(&recipe.output_x).chain(recipe.bands.iter().flat_map(|b| &b.columns)) {
                         if !outputs.insert(key.as_str())
                             || book.column(key).is_none()
                             || book.column(key).is_some_and(|c| c.formula.is_some() || c.op.is_some())
                         {
-                            return Err("非线性重算输出列缺失、重复或有其他计算定义".into());
+                            return Err(format!(
+                                "工作簿 {} 列 {}：非线性输出列 {key} 缺失、重复或有其他计算定义",
+                                book.name, col.key
+                            ));
                         }
                     }
                     if outputs.iter().any(|key| !fit_outputs.insert(*key)) {
-                        return Err("多次非线性拟合重复占用同一输出列".into());
+                        return Err(format!(
+                            "工作簿 {} 列 {}：多次非线性拟合重复占用同一输出列",
+                            book.name, col.key
+                        ));
                     }
                     if outputs.contains(op.y.as_str())
                         || op.x.as_ref().is_some_and(|x| outputs.contains(x.as_str()))
                         || book.column(&op.y).is_none()
                         || op.x.as_ref().is_some_and(|x| book.column(x).is_none())
                     {
-                        return Err("非线性重算来源缺失或引用自身输出".into());
+                        return Err(format!(
+                            "工作簿 {} 列 {}：非线性重算来源缺失或引用自身输出",
+                            book.name, col.key
+                        ));
                     }
                 }
             }
@@ -800,4 +837,289 @@ fn write_atomic(path: &Path, content: &[u8], missing_name: &str, failure_prefix:
         let _ = std::fs::remove_file(&temporary);
     }
     result.map_err(|e| format!("{failure_prefix}{e}"))
+}
+
+fn migrate_fit_state(project: &mut Project) {
+    use crate::ops::{OpKind, Operation};
+    for book in &mut project.books {
+        let updates: Vec<_> = book
+            .columns
+            .iter()
+            .filter_map(|col| {
+                let op = col.op.as_ref()?;
+                let OpKind::Nonlinear(r) = &op.kind else { return None };
+                let legacy = r.legacy_fingerprint(op, book);
+                let digest = r.fingerprint(op, book);
+                Some((
+                    col.key.clone(),
+                    r.input_digest.filter(|v| *v == legacy || *v == digest).map(|_| digest),
+                    r.attempted_digest
+                        .filter(|v| *v == legacy || *v == digest)
+                        .map(|_| digest),
+                ))
+            })
+            .collect();
+        for (key, input, attempted) in updates {
+            let col = book.columns.iter_mut().find(|c| c.key == key).unwrap();
+            if let Some(Operation {
+                kind: OpKind::Nonlinear(r),
+                ..
+            }) = &mut col.op
+            {
+                r.input_digest = input;
+                r.attempted_digest = attempted;
+            }
+            if input.is_none() {
+                if let Some(report) = &mut col.fit_report {
+                    report.current = false;
+                }
+            }
+        }
+    }
+    // 旧文件中已有明确的拟合操作或独立结果 X 时恢复行域。
+    let grids: Vec<_> = project
+        .graphs
+        .iter()
+        .flat_map(|g| g.page.layers())
+        .flat_map(|l| l.plots(&|id| project.book(id)))
+        .filter_map(|p| {
+            let x = p.mapping.x?;
+            let col = project.book(x.book)?.column(&x.col)?;
+            col.derived_from.as_ref()?;
+            Some((x, p.mapping.y))
+        })
+        .collect();
+    for (x, y) in grids {
+        for reference in [x, y] {
+            if let Some(book) = project.book_mut(reference.book) {
+                if let Some(c) = book.columns.iter_mut().find(|c| c.key == reference.col) {
+                    c.independent_rows = true;
+                }
+            }
+        }
+    }
+    for book in &mut project.books {
+        let keys: Vec<String> = book
+            .columns
+            .iter()
+            .flat_map(|col| match &col.op {
+                Some(Operation {
+                    kind: OpKind::Nonlinear(r),
+                    ..
+                }) => std::iter::once(col.key.clone())
+                    .chain(std::iter::once(r.output_x.clone()))
+                    .chain(r.bands.iter().flat_map(|b| b.columns.clone()))
+                    .collect(),
+                Some(Operation {
+                    kind: OpKind::PolyFitX { .. } | OpKind::PolyFitY { .. },
+                    ..
+                }) => vec![col.key.clone()],
+                _ => vec![],
+            })
+            .collect();
+        for c in &mut book.columns {
+            if keys.contains(&c.key) {
+                c.independent_rows = true;
+            }
+        }
+    }
+}
+
+/// 桌面偏好与恢复文件。恢复使用项目 JSON，避免生成图形预览。
+pub mod session {
+    use super::*;
+    #[derive(Clone, Debug, Default, serde::Serialize, serde::Deserialize)]
+    #[serde(default)]
+    pub struct Settings {
+        pub window: Option<[f32; 4]>,
+        pub maximized: bool,
+        pub recent: Vec<std::path::PathBuf>,
+        pub last_dir: Option<std::path::PathBuf>,
+        pub theme: String,
+    }
+    impl Settings {
+        pub fn remember(&mut self, path: &Path) {
+            let path = path.canonicalize().unwrap_or_else(|_| path.to_path_buf());
+            self.last_dir = path.parent().map(Path::to_path_buf);
+            self.recent.retain(|p| p != &path);
+            self.recent.insert(0, path);
+            self.recent.truncate(10);
+        }
+    }
+    pub fn settings_path() -> Option<std::path::PathBuf> {
+        std::env::var_os("APPDATA").map(|p| std::path::PathBuf::from(p).join("SciCanvas/settings.json"))
+    }
+    pub fn load_settings() -> Settings {
+        let mut settings: Settings = settings_path()
+            .and_then(|p| std::fs::read(p).ok())
+            .and_then(|s| serde_json::from_slice(&s).ok())
+            .unwrap_or_default();
+        settings.recent.truncate(10);
+        settings
+    }
+    pub fn save_settings(settings: &Settings) -> Result<(), String> {
+        let path = settings_path().ok_or("没有可用的偏好保存目录")?;
+        std::fs::create_dir_all(path.parent().unwrap()).map_err(|e| e.to_string())?;
+        write_atomic(
+            &path,
+            &serde_json::to_vec(settings).map_err(|e| e.to_string())?,
+            "偏好文件名为空",
+            "保存偏好失败：",
+        )
+    }
+    pub fn recovery_dir() -> Option<std::path::PathBuf> {
+        std::env::var_os("LOCALAPPDATA").map(|p| std::path::PathBuf::from(p).join("SciCanvas/recovery"))
+    }
+    pub fn lock_recovery(path: &Path) -> std::io::Result<std::fs::File> {
+        let mut options = std::fs::OpenOptions::new();
+        options.read(true).write(true).create(true).truncate(false);
+        #[cfg(windows)]
+        {
+            use std::os::windows::fs::OpenOptionsExt;
+            options.share_mode(0);
+        }
+        options.open(path.with_extension("lock"))
+    }
+    pub fn discard_recovery(path: &Path) -> Result<(), String> {
+        let lock = lock_recovery(path).map_err(|e| format!("恢复文件正在其他会话使用：{e}"))?;
+        std::fs::remove_file(path).map_err(|e| e.to_string())?;
+        drop(lock);
+        let _ = std::fs::remove_file(path.with_extension("lock"));
+        Ok(())
+    }
+    pub fn save_recovery(path: &Path, project: &Project, source: Option<&Path>) -> Result<(), String> {
+        let mut value: Value = serde_json::from_str(&to_json(project)?).map_err(|e| e.to_string())?;
+        value["recovery_source"] = serde_json::to_value(source).map_err(|e| e.to_string())?;
+        write_atomic(
+            path,
+            &serde_json::to_vec(&value).map_err(|e| e.to_string())?,
+            "恢复文件名为空",
+            "自动备份失败：",
+        )
+    }
+    pub fn recovery_source(path: &Path) -> Option<std::path::PathBuf> {
+        let value: Value = serde_json::from_slice(&std::fs::read(path).ok()?).ok()?;
+        serde_json::from_value(value.get("recovery_source")?.clone()).ok()
+    }
+    pub fn recoveries(directory: &Path) -> Vec<std::path::PathBuf> {
+        let mut files: Vec<_> = std::fs::read_dir(directory)
+            .into_iter()
+            .flatten()
+            .filter_map(Result::ok)
+            .map(|f| f.path())
+            .filter(|p| p.extension().is_some_and(|e| e == "scproj"))
+            .filter(|p| {
+                // Windows 的独占句柄区分正在运行的会话和已退出的会话。
+                if lock_recovery(p).is_err() {
+                    return false;
+                }
+                let backup = p.metadata().and_then(|m| m.modified()).ok();
+                let saved = recovery_source(p)
+                    .and_then(|p| p.metadata().ok())
+                    .and_then(|m| m.modified().ok());
+                saved.is_none() || backup > saved
+            })
+            .collect();
+        files.sort_by_key(|p| std::cmp::Reverse(p.metadata().and_then(|m| m.modified()).ok()));
+        files
+    }
+    pub fn install_panic_log() {
+        let previous = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            if let Some(directory) = recovery_dir() {
+                let _ = std::fs::create_dir_all(&directory);
+                if let Ok(mut file) = std::fs::OpenOptions::new()
+                    .create(true)
+                    .append(true)
+                    .open(directory.join("crash.log"))
+                {
+                    let stamp = std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .unwrap_or_default()
+                        .as_secs();
+                    let _ = writeln!(file, "{stamp} PID {}：{info}", std::process::id());
+                }
+            }
+            previous(info);
+        }));
+    }
+}
+
+#[cfg(test)]
+mod review_session_tests {
+    use super::*;
+    #[test]
+    fn recovery_is_a_readable_project_and_settings_bound_recent_files() {
+        let directory = std::env::temp_dir().join(format!(
+            "scicanvas-recovery-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("session.scproj");
+        let p = Project::sample();
+        session::save_recovery(&path, &p, None).unwrap();
+        assert_eq!(load(&path).unwrap(), p);
+        let mut settings = session::Settings::default();
+        for i in 0..12 {
+            settings.remember(&directory.join(format!("{i}.scv")));
+        }
+        assert_eq!(settings.recent.len(), 10);
+        let first = settings.recent[3].clone();
+        settings.remember(&first);
+        assert_eq!(settings.recent[0], first);
+        assert_eq!(settings.recent.len(), 10);
+        let lock = session::lock_recovery(&path).unwrap();
+        #[cfg(windows)]
+        assert!(session::recoveries(&directory).is_empty());
+        #[cfg(windows)]
+        {
+            assert!(session::discard_recovery(&path).is_err());
+            assert!(path.exists());
+        }
+        drop(lock);
+        assert_eq!(session::recoveries(&directory), vec![path.clone()]);
+        session::discard_recovery(&path).unwrap();
+        std::fs::remove_dir(directory).unwrap();
+    }
+}
+
+#[cfg(test)]
+mod review_legacy_versions {
+    use super::*;
+    #[test]
+    fn all_versions_zero_through_twenty_load_into_twenty_one() {
+        for version in 0..=20 {
+            let mut p = Project::default();
+            p.new_book();
+            p.books[0].columns[0].data = vec!["0".into(), "1".into()].into();
+            p.books[0].columns[1].data = vec!["2".into(), "3".into()].into();
+            let mut value = serde_json::to_value(&p).unwrap();
+            value["version"] = version.into();
+            if version < 9 {
+                for (index, col) in value["books"][0]["columns"]
+                    .as_array_mut()
+                    .unwrap()
+                    .iter_mut()
+                    .enumerate()
+                {
+                    col["data"] = serde_json::to_value(
+                        p.books[0].columns[index]
+                            .data
+                            .iter()
+                            .map(|s| s.into_owned())
+                            .collect::<Vec<_>>(),
+                    )
+                    .unwrap();
+                }
+            }
+            let loaded = from_json(&value.to_string()).unwrap();
+            assert_eq!(loaded.version, 21);
+            assert_eq!(loaded.books, p.books, "v{version}");
+            assert_eq!(from_json(&to_json(&loaded).unwrap()).unwrap(), loaded);
+        }
+    }
 }

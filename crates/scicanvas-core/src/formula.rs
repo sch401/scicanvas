@@ -309,6 +309,7 @@ fn lex(src: &str) -> Result<Vec<Tok>, String> {
 struct Parser {
     toks: Vec<Tok>,
     pos: usize,
+    depth: usize,
 }
 
 impl Parser {
@@ -347,6 +348,7 @@ impl Parser {
     // sum := term (('+' | '-') term)*
     fn sum(&mut self) -> Result<Expr, String> {
         let mut e = self.term()?;
+        let mut terms = 0;
         loop {
             let op = if self.eat('+') {
                 '+'
@@ -355,13 +357,19 @@ impl Parser {
             } else {
                 return Ok(e);
             };
+            terms += 1;
+            if terms > 64 {
+                return Err("公式连续运算过长，请拆分为多列".into());
+            }
             e = Expr::Bin(op, Box::new(e), Box::new(self.term()?));
+            expression_size(&e)?;
         }
     }
 
     // term := unary (('*' | '/') unary)*
     fn term(&mut self) -> Result<Expr, String> {
         let mut e = self.unary()?;
+        let mut terms = 0;
         loop {
             let op = if self.eat('*') {
                 '*'
@@ -370,12 +378,29 @@ impl Parser {
             } else {
                 return Ok(e);
             };
+            terms += 1;
+            if terms > 64 {
+                return Err("公式连续运算过长，请拆分为多列".into());
+            }
             e = Expr::Bin(op, Box::new(e), Box::new(self.unary()?));
+            expression_size(&e)?;
         }
     }
 
     // unary := ('-' | '+') unary | power
     fn unary(&mut self) -> Result<Expr, String> {
+        if self.depth >= 64 {
+            return Err("公式嵌套过深（最多 64 层）".into());
+        }
+        self.depth += 1;
+        let result = self.unary_inner();
+        self.depth -= 1;
+        result.and_then(|e| {
+            expression_size(&e)?;
+            Ok(e)
+        })
+    }
+    fn unary_inner(&mut self) -> Result<Expr, String> {
         if self.eat('-') {
             return Ok(Expr::Neg(Box::new(self.unary()?)));
         }
@@ -454,11 +479,17 @@ impl Parser {
 
 /// 解析公式。
 pub fn parse(src: &str) -> Result<Expr, String> {
+    if src.len() > 16_384 {
+        return Err("公式过长（最多 16 KiB）".into());
+    }
     let toks = lex(src)?;
+    if toks.len() > 4096 {
+        return Err("公式节点过多，请拆分为多列".into());
+    }
     if toks.is_empty() {
         return Err("公式为空".into());
     }
-    let mut p = Parser { toks, pos: 0 };
+    let mut p = Parser { toks, pos: 0, depth: 0 };
     let e = p.compare()?;
     match p.peek() {
         None => Ok(e),
@@ -1379,5 +1410,42 @@ mod tests {
             let got = at(src);
             assert!((got - want).abs() < 1e-12, "{src}: {got} vs {want}");
         }
+    }
+}
+
+fn expression_size(root: &Expr) -> Result<(), String> {
+    let mut pending = vec![(root, 1)];
+    let mut count = 0;
+    while let Some((e, depth)) = pending.pop() {
+        count += 1;
+        if depth > 128 || count > 4096 {
+            return Err("公式结构过深或节点过多，请拆分为多列".into());
+        }
+        match e {
+            Expr::Neg(e) => pending.push((e, depth + 1)),
+            Expr::Bin(_, a, b) => {
+                pending.push((a, depth + 1));
+                pending.push((b, depth + 1));
+            }
+            Expr::Call(_, args) => pending.extend(args.iter().map(|e| (e, depth + 1))),
+            _ => {}
+        }
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod review_limits_tests {
+    use super::*;
+    #[test]
+    fn nested_unary_and_binary_chains_are_rejected_before_deep_trees_form() {
+        for source in [
+            format!("{}1{}", "(".repeat(200), ")".repeat(200)),
+            format!("{}1", "-".repeat(1000)),
+            std::iter::repeat_n("1", 1000).collect::<Vec<_>>().join("+"),
+        ] {
+            assert!(parse(&source).is_err());
+        }
+        assert!(parse("sin(A)+sqrt(abs(B))+2^3").is_ok());
     }
 }
