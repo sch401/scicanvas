@@ -1516,6 +1516,25 @@ mod round_two_tests {
                 assert_eq!(parse_file(&calls).unwrap().eval(0, &|_, _| 0.), 0.);
                 let chain = std::iter::repeat_n("1", 200).collect::<Vec<_>>().join("+");
                 assert_eq!(parse_file(&chain).unwrap().eval(0, &|_, _| 0.), 200.);
+                // 语法嵌套合计 200 层；函数与加法构成的表达式树不超过 256 层。
+                for (parens, calls, terms) in [(145, 55, 200), (1, 199, 56)] {
+                    let chain = std::iter::repeat_n("A", terms).collect::<Vec<_>>().join("+");
+                    let mixed = format!(
+                        "{}{}{chain}{}{}",
+                        "(".repeat(parens),
+                        "abs(".repeat(calls),
+                        ")".repeat(calls),
+                        ")".repeat(parens)
+                    );
+                    let expr = parse_file(&mixed).unwrap();
+                    assert_eq!(expr.eval(0, &|_, _| 1.), terms as f64);
+                    assert_eq!(expr.columns(), vec!["A"]);
+                    assert_eq!(expr.scalar_variables().unwrap(), vec!["A"]);
+                    let copied = expr.clone();
+                    assert_eq!(copied, expr);
+                    drop(copied);
+                    drop(expr);
+                }
             })
             .unwrap()
             .join()

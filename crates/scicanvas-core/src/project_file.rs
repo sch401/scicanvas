@@ -1084,6 +1084,20 @@ pub mod session {
             .filter_map(Result::ok)
         {
             let path = entry.path();
+            if path.extension().is_some_and(|e| e == "source" || e == "lock") {
+                let project = path.with_extension("scproj");
+                if !project.exists() {
+                    // 活跃备份先写 source 再写项目；两种附属文件都先取得会话锁。
+                    if let Ok(lock) = lock_recovery(&project) {
+                        if !project.exists() {
+                            let _ = std::fs::remove_file(project.with_extension("source"));
+                            drop(lock);
+                            let _ = std::fs::remove_file(project.with_extension("lock"));
+                        }
+                    }
+                }
+                continue;
+            }
             if !path.extension().is_some_and(|e| e == "scproj") {
                 continue;
             }
@@ -1103,8 +1117,15 @@ pub mod session {
         let path = std::path::absolute(path).unwrap_or_else(|_| path.to_path_buf());
         #[cfg(windows)]
         if let Some(rest) = path.to_str().and_then(|p| p.strip_prefix(r"\\?\")) {
-            if rest.as_bytes().get(1) == Some(&b':') {
-                return rest.into();
+            let normalized = if let Some(unc) = rest.strip_prefix(r"UNC\") {
+                Some(format!(r"\\{unc}"))
+            } else if rest.as_bytes().get(1) == Some(&b':') {
+                Some(rest.to_owned())
+            } else {
+                None
+            };
+            if let Some(normalized) = normalized.filter(|p| p.encode_utf16().count() <= 259) {
+                return normalized.into();
             }
         }
         path
@@ -1249,8 +1270,12 @@ mod round_two_tests {
         );
         assert_eq!(
             normalize_path(Path::new(r"\\?\UNC\server\share\x.scv")),
-            std::path::PathBuf::from(r"\\?\UNC\server\share\x.scv")
+            std::path::PathBuf::from(r"\\server\share\x.scv")
         );
+        for prefix in [r"\\?\D:\", r"\\?\UNC\server\share\"] {
+            let long = format!("{prefix}{}.scv", "字".repeat(260));
+            assert_eq!(normalize_path(Path::new(&long)), std::path::PathBuf::from(&long));
+        }
         let mut settings = Settings {
             recent: vec![r"\\?\D:\a\b.scv".into(), r"d:\A\B.SCV".into()],
             last_dir: Some(r"\\?\D:\a".into()),
@@ -1303,6 +1328,27 @@ mod round_two_tests {
         assert!(!recoveries(&dir).contains(&retired));
         assert!(!retired.exists());
         assert!(!retired.with_extension("source").exists());
+        for name in ["orphan-source", "orphan-lock"] {
+            let orphan = dir.join(format!("{name}.scproj"));
+            std::fs::write(orphan.with_extension("source"), b"{}").unwrap();
+            drop(lock_recovery(&orphan).unwrap());
+            assert!(recoveries(&dir).contains(&backup));
+            assert!(!orphan.with_extension("source").exists());
+            assert!(!orphan.with_extension("lock").exists());
+        }
+        let writing = dir.join("writing.scproj");
+        let writer = lock_recovery(&writing).unwrap();
+        std::fs::write(writing.with_extension("source"), b"{}").unwrap();
+        #[cfg(windows)]
+        {
+            recoveries(&dir);
+            assert!(writing.with_extension("source").exists());
+            assert!(writing.with_extension("lock").exists());
+        }
+        drop(writer);
+        recoveries(&dir);
+        assert!(!writing.with_extension("source").exists());
+        assert!(!writing.with_extension("lock").exists());
         discard_recovery(&backup).unwrap();
         std::fs::remove_file(source).unwrap();
         std::fs::remove_dir(&dir).unwrap();

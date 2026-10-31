@@ -77,6 +77,13 @@ mod monitors {
             rect.size().min(area.size() - 2. * margin),
         ))
     }
+    pub fn restore_size(outer: Rect, inner: Rect, target: Rect) -> Option<egui::Vec2> {
+        if outer.width() <= target.width() && outer.height() <= target.height() {
+            return None;
+        }
+        let chrome = (outer.size() - inner.size()).max(egui::Vec2::ZERO);
+        Some((target.size() - chrome).max(egui::vec2(1., 1.)))
+    }
     pub fn work_areas(scale: f32) -> Vec<Rect> {
         #[cfg(windows)]
         {
@@ -153,6 +160,17 @@ mod monitors {
     #[cfg(test)]
     mod tests {
         use super::*;
+        #[test]
+        fn restored_inner_size_accounts_for_window_chrome() {
+            let outer = Rect::from_min_size(egui::pos2(8000., 8000.), egui::vec2(1280., 800.));
+            let inner = Rect::from_min_size(outer.min, egui::vec2(1264., 761.));
+            let moved = Rect::from_min_size(egui::pos2(40., 40.), outer.size());
+            assert_eq!(restore_size(outer, inner, moved), None);
+            let target = Rect::from_min_size(moved.min, egui::vec2(900., 600.));
+            let size = restore_size(outer, inner, target).unwrap();
+            assert_eq!(size, egui::vec2(884., 561.));
+            assert_eq!(size + outer.size() - inner.size(), target.size());
+        }
         #[test]
         fn monitor_origins_and_title_visibility_control_recovery() {
             let areas = [
