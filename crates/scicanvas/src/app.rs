@@ -76,7 +76,51 @@ pub(crate) enum PendingDiscard {
     Recover(PathBuf),
 }
 
+#[derive(Clone, Debug, PartialEq)]
+struct RecalcInputs(Vec<RecalcBook>);
+#[derive(Clone, Debug, PartialEq)]
+struct RecalcBook {
+    id: u64,
+    columns: Vec<RecalcColumn>,
+}
+#[derive(Clone, Debug, PartialEq)]
+struct RecalcColumn {
+    key: String,
+    version: u64,
+    formula: Option<String>,
+    operation: Option<scicanvas_core::ops::Operation>,
+    role: Role,
+    error_for: Option<String>,
+}
+impl RecalcInputs {
+    fn of(project: &Project) -> Self {
+        Self(
+            project
+                .books
+                .iter()
+                .map(|b| RecalcBook {
+                    id: b.id,
+                    columns: b
+                        .columns
+                        .iter()
+                        .map(|c| RecalcColumn {
+                            key: c.key.clone(),
+                            version: c.data.version(),
+                            formula: c.formula.clone(),
+                            operation: c.op.clone(),
+                            role: c.role,
+                            error_for: c.error_for.clone(),
+                        })
+                        .collect(),
+                })
+                .collect(),
+        )
+    }
+}
+
 pub struct SciApp {
+    backup_job: Option<std::thread::JoinHandle<Result<(), String>>>,
+    window_checked: bool,
     session_enabled: bool,
     saved_generation: Option<u64>,
     pending_discard: Option<PendingDiscard>,
@@ -87,7 +131,7 @@ pub struct SciApp {
     recovery_file: Option<PathBuf>,
     recovery_lock: Option<std::fs::File>,
     last_recovery: std::time::Instant,
-    recalc_inputs: Option<Vec<scicanvas_core::Book>>,
+    recalc_inputs: Option<RecalcInputs>,
     analysis_curves: HashMap<(u64, usize), Vec<scicanvas_core::plotspec::DataRef>>,
     pub(crate) project: Project,
     pub(crate) history: History,
@@ -202,6 +246,8 @@ impl SciApp {
 
     fn initial(pal: Palette) -> Self {
         let mut app = SciApp {
+            backup_job: None,
+            window_checked: false,
             session_enabled: false,
             saved_generation: Some(0),
             pending_discard: None,
@@ -300,7 +346,7 @@ impl SciApp {
             .or(project.books.last().map(|b| b.id))
             .or(project.notes.last().map(|n| n.id));
         self.project = project;
-        self.recalc_inputs = Some(self.project.books.clone());
+        self.recalc_inputs = Some(RecalcInputs::of(&self.project));
         self.explorer_target = self.active;
         self.explorer_selection = self.active.into_iter().collect();
         self.explorer_anchor = self.active;
@@ -955,7 +1001,7 @@ impl SciApp {
         if outer {
             if let Some(abort) = self.edit_abort.take() {
                 self.project = self.history.rollback().unwrap();
-                self.recalc_inputs = Some(self.project.books.clone());
+                self.recalc_inputs = Some(RecalcInputs::of(&self.project));
                 if let EditAbort::Failed(error) = abort {
                     self.status = error;
                 }
@@ -1010,7 +1056,7 @@ impl SciApp {
             Err(error) => {
                 if fresh {
                     self.project = self.history.rollback().unwrap();
-                    self.recalc_inputs = Some(self.project.books.clone());
+                    self.recalc_inputs = Some(RecalcInputs::of(&self.project));
                 }
                 Err(error)
             }
@@ -1032,7 +1078,7 @@ impl SciApp {
     /// “重算”命令：公式列和全部分析结果列（含手动的）按依赖顺序重算，一步撤销。
     pub(crate) fn recalc_all(&mut self) {
         let problems = self.project.recalc_computed(true);
-        self.recalc_inputs = Some(self.project.books.clone());
+        self.recalc_inputs = Some(RecalcInputs::of(&self.project));
         self.status = if problems.is_empty() {
             "已重算公式列和分析结果".into()
         } else {
@@ -1042,9 +1088,9 @@ impl SciApp {
 
     /// 有改动时按保存的列公式重算（并入同一步撤销）；出错时在状态栏说明。
     fn recalc_formulas(&mut self) {
-        if self.history.has_changes() && self.recalc_inputs.as_ref() != Some(&self.project.books) {
+        if self.history.has_changes() && self.recalc_inputs.as_ref() != Some(&RecalcInputs::of(&self.project)) {
             let problems = self.project.recalc_computed(false);
-            self.recalc_inputs = Some(self.project.books.clone());
+            self.recalc_inputs = Some(RecalcInputs::of(&self.project));
             if !problems.is_empty() {
                 self.status = format!("公式重算出错：{}", problems.join("；"));
             }
@@ -1094,7 +1140,7 @@ impl SciApp {
         });
         self.book_preview = None;
         self.project = project;
-        self.recalc_inputs = Some(self.project.books.clone());
+        self.recalc_inputs = Some(RecalcInputs::of(&self.project));
         match &mut self.dialog {
             Some(Dialog::CustomNlFit(edit)) => edit.sync_saved(&self.project.fit_functions),
             Some(d @ Dialog::NlFitReport(_)) => d.sync_fit_reports(&self.project),
@@ -1712,11 +1758,24 @@ impl SciApp {
             self.status = error;
         }
     }
+    fn finish_backup(&mut self) -> Result<(), String> {
+        self.backup_job.take().map_or(Ok(()), |job| {
+            job.join().unwrap_or_else(|_| Err("自动备份任务中断".into()))
+        })
+    }
     fn clear_recovery(&mut self) {
+        if let Err(error) = self.finish_backup() {
+            self.status = error;
+        }
         if let Some(file) = self.recovery_file.take() {
-            let _ = std::fs::remove_file(&file);
+            let _ = scicanvas_core::project_file::session::retire_recovery(&file);
+            let removed =
+                std::fs::remove_file(&file).map_or_else(|e| e.kind() == std::io::ErrorKind::NotFound, |_| true);
             self.recovery_lock = None;
             let _ = std::fs::remove_file(file.with_extension("lock"));
+            if removed {
+                let _ = std::fs::remove_file(file.with_extension("source"));
+            }
         }
         self.last_recovery = std::time::Instant::now();
     }
@@ -1765,6 +1824,9 @@ impl SciApp {
             let mut choice = 0;
             dialogs::window(ctx, "恢复未保存的工作").show(ctx, |ui| {
                 ui.label("发现上次会话的自动备份，是否恢复？");
+                if let Some(notice) = scicanvas_core::project_file::session::recovery_notice(&path) {
+                    ui.label(notice);
+                }
                 let source = scicanvas_core::project_file::session::recovery_source(&path);
                 ui.label(source.map_or("未命名项目".into(), |p| p.display().to_string()));
                 ui.horizontal(|ui| {
@@ -1801,7 +1863,8 @@ impl SciApp {
             scicanvas_core::project_file::session::lock_recovery(path),
             scicanvas_core::project_file::load(path),
         ) {
-            (Ok(lock), Ok(project)) => {
+            (Ok(lock), Ok(mut project)) => {
+                project.recalc_computed(false);
                 let source = scicanvas_core::project_file::session::recovery_source(path);
                 self.load_project(project, source);
                 self.saved_generation = None;
@@ -1815,7 +1878,7 @@ impl SciApp {
     }
     fn backup_recovery(&mut self) -> Result<(), String> {
         use scicanvas_core::project_file::session;
-        if !self.is_dirty() {
+        if !self.is_dirty() || self.backup_job.is_some() {
             return Ok(());
         }
         if self.recovery_file.is_none() {
@@ -1830,24 +1893,41 @@ impl SciApp {
             self.recovery_file = Some(path);
         }
         let mut snapshot = self.project.clone();
-        for (id, state) in &self.sheets {
-            if let Some(e) = &state.edit {
-                if let Some(col) = snapshot.book_mut(*id).and_then(|b| b.columns.get_mut(e.cell.c)) {
-                    if !col.data.accepts(&e.buf) {
-                        col.data = col.data.converted(scicanvas_core::DataKind::Text)?.into();
+        let drafts: Vec<_> = self
+            .sheets
+            .iter()
+            .filter_map(|(&id, s)| s.edit.as_ref().map(|e| (id, e.clone())))
+            .collect();
+        let path = self.recovery_file.as_ref().unwrap().clone();
+        let source = self.project_path.clone();
+        self.backup_job = Some(
+            std::thread::Builder::new()
+                .name("scicanvas-recovery".into())
+                .spawn(move || {
+                    for (id, e) in drafts {
+                        if let Some(col) = snapshot.book_mut(id).and_then(|b| b.columns.get_mut(e.cell.c)) {
+                            if !col.data.accepts(&e.buf) {
+                                col.data = col.data.converted(scicanvas_core::DataKind::Text)?.into();
+                            }
+                            col.set(e.cell.r, e.buf);
+                        }
                     }
-                    col.set(e.cell.r, e.buf.clone());
-                }
-            }
-        }
-        snapshot.recalc_computed(false);
-        session::save_recovery(
-            self.recovery_file.as_ref().unwrap(),
-            &snapshot,
-            self.project_path.as_deref(),
-        )
+                    session::save_recovery(&path, &snapshot, source.as_deref())
+                })
+                .map_err(|e| e.to_string())?,
+        );
+        Ok(())
     }
     fn session_tick(&mut self, ctx: &egui::Context) {
+        self.check_window_position(ctx);
+        if self.backup_job.as_ref().is_some_and(|j| j.is_finished()) {
+            if let Err(error) = self.finish_backup() {
+                self.status = error;
+            }
+        }
+        if self.backup_job.is_some() {
+            ctx.request_repaint_after(std::time::Duration::from_millis(100));
+        }
         ctx.input(|i| {
             let v = i.viewport();
             self.settings.maximized = v.maximized.unwrap_or(false);
@@ -1931,5 +2011,33 @@ impl SciApp {
                 false
             }
         });
+    }
+}
+
+impl SciApp {
+    fn check_window_position(&mut self, ctx: &egui::Context) {
+        if self.window_checked {
+            return;
+        }
+        let Some(rect) = ctx.input(|i| i.viewport().outer_rect) else {
+            return;
+        };
+        let areas = crate::monitors::work_areas(ctx.pixels_per_point());
+        if areas.is_empty() {
+            return;
+        }
+        self.window_checked = true;
+        if let Some(target) = crate::monitors::visible_window(rect, &areas) {
+            ctx.send_viewport_cmd(egui::ViewportCommand::OuterPosition(target.min));
+            ctx.send_viewport_cmd(egui::ViewportCommand::MinInnerSize(
+                egui::vec2(800., 500.).min(target.size()),
+            ));
+            ctx.send_viewport_cmd(egui::ViewportCommand::InnerSize(target.size()));
+        }
+    }
+}
+impl Drop for SciApp {
+    fn drop(&mut self) {
+        let _ = self.finish_backup();
     }
 }

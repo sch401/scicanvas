@@ -98,10 +98,11 @@ impl FitMethod {
                 name,
                 formula,
                 parameters,
-            } => crate::nlfit::FitFunction::Custom(crate::nlfit::CustomFitFunction::new(
+            } => crate::nlfit::FitFunction::Custom(crate::nlfit::CustomFitFunction::new_with(
                 name,
                 formula,
                 parameters.clone(),
+                &crate::formula::FILE_LIMITS,
             )?),
         })
     }
@@ -147,7 +148,7 @@ impl NonlinearRecipe {
             .as_ref()
             .is_some_and(|p| p.len() != count || p.iter().any(|v| !v.is_finite()))
             || self.limits.len() > count
-            || self.constraints.len() > 16384
+            || self.constraints.len() > crate::formula::FILE_LIMITS.bytes
         {
             return Err("非线性重算参数数量、初值或约束无效".into());
         }
@@ -161,7 +162,7 @@ impl NonlinearRecipe {
                 return Err("非线性重算参数限制无效".into());
             }
         }
-        crate::nlfit::parse_constraints_for_function(&function, &self.constraints)?;
+        crate::nlfit::parse_constraints_for_function_with(&function, &self.constraints, &crate::formula::FILE_LIMITS)?;
         if self.output_x.is_empty()
             || self.bands.iter().any(|b| {
                 !b.level.is_finite()
@@ -208,7 +209,11 @@ impl NonlinearRecipe {
             book.column(x).ok_or("来源 X 列已删除")?;
         }
         let function = self.function.resolve()?;
-        let constraints = crate::nlfit::parse_constraints_for_function(&function, &self.constraints)?;
+        let constraints = crate::nlfit::parse_constraints_for_function_with(
+            &function,
+            &self.constraints,
+            &crate::formula::FILE_LIMITS,
+        )?;
         let (xs, ys, _) = get_xy(book, &item);
         let fit = crate::nlfit::fit_function(function, &xs, &ys, self.initial.as_deref(), &self.limits, &constraints)?;
         if !fit.converged {
@@ -395,8 +400,13 @@ impl Operation {
 }
 
 /// 按公式计算目标列的新数据（保持目标列类型）；结果不是有限数的单元格留空，末尾空行去掉。
-fn formula_data(book: &Book, target: &str, formula: &str) -> Result<crate::ColumnData, String> {
-    let expr = crate::formula::parse(formula)?;
+fn formula_data(
+    book: &Book,
+    target: &str,
+    formula: &str,
+    limits: &crate::formula::Limits,
+) -> Result<crate::ColumnData, String> {
+    let expr = crate::formula::parse_with(formula, limits)?;
     let mut cols = std::collections::HashMap::new();
     for k in expr.columns() {
         let c = book
@@ -440,7 +450,7 @@ fn computed_order(book: &Book, manual: bool) -> Result<Vec<String>, String> {
             if let Some(f) = c.formula.as_deref() {
                 return Some((
                     c.key.clone(),
-                    crate::formula::parse(f).map(|e| e.columns()).unwrap_or_default(),
+                    crate::formula::parse_file(f).map(|e| e.columns()).unwrap_or_default(),
                 ));
             }
             let op = c.op.as_ref()?;
@@ -510,7 +520,15 @@ impl Project {
     pub fn set_column_values(&mut self, book_id: u64, target: &str, formula: &str) -> Result<usize, String> {
         let book = self.book(book_id).ok_or("找不到工作簿")?;
         book.column(target).ok_or("找不到目标列")?;
-        let data = formula_data(book, target, formula)?;
+        let limits = if book
+            .column(target)
+            .is_some_and(|c| c.formula.as_deref() == Some(formula))
+        {
+            &crate::formula::FILE_LIMITS
+        } else {
+            &crate::formula::INPUT_LIMITS
+        };
+        let data = formula_data(book, target, formula, limits)?;
         let n = data.len();
         let book = self.book_mut(book_id).unwrap();
         book.freeze_error_sources();
@@ -534,7 +552,19 @@ impl Project {
                     book.name
                 ));
             }
-            if crate::formula::parse(formula)?.columns().iter().any(|k| k == target) {
+            let limits = if book
+                .column(target)
+                .is_some_and(|c| c.formula.as_deref() == Some(formula))
+            {
+                &crate::formula::FILE_LIMITS
+            } else {
+                &crate::formula::INPUT_LIMITS
+            };
+            if crate::formula::parse_with(formula, limits)?
+                .columns()
+                .iter()
+                .any(|k| k == target)
+            {
                 return Err("保存的公式不能引用目标列自身（会循环重算）".into());
             }
             let mut trial = book.clone();
@@ -644,7 +674,7 @@ impl Project {
                 let Some(formula) = col.formula.clone() else {
                     continue;
                 };
-                match formula_data(book, &key, &formula) {
+                match formula_data(book, &key, &formula, &crate::formula::FILE_LIMITS) {
                     Ok(data) => {
                         let col = self.books[b].columns.iter_mut().find(|c| c.key == key).unwrap();
                         if col.data != data {

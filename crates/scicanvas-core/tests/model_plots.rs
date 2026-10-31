@@ -580,3 +580,22 @@ fn shared_foreign_cleanup_preserves_hidden_unbound_and_missing_base_rules() {
         }
     }
 }
+
+#[test]
+fn independent_grid_range_is_frozen_only_for_its_own_book() {
+    let mut p = Project::sample();
+    let mut foreign = p.books[0].clone();
+    foreign.id = 10;
+    foreign.name = "foreign".into();
+    p.books.push(foreign);
+    p.next_id = 11;
+    p.books[0].columns[2].independent_rows = true;
+    p.graph_mut(2).unwrap().first_layer_mut().spec.rows = Some((2, 6));
+    p.add_curves(2, 0, 10, &["C".into()]).unwrap();
+    let key = scicanvas_core::plotspec::DataRef::new(10, "C").key(Some(1));
+    let before = p.graph(2).unwrap().first_layer().draft().row_by_y.get(&key).cloned();
+    p.insert_rows(1, 1, 3);
+    let draft = p.graph(2).unwrap().first_layer().draft();
+    assert_eq!(draft.row_by_y.get(&key).cloned(), before);
+    assert_eq!(draft.row_by_y.get("C"), Some(&Some((2, 6))));
+}

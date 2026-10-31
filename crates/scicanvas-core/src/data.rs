@@ -500,6 +500,22 @@ impl ColumnData {
     pub fn push(&mut self, text: String) {
         self.set_text(self.len(), text);
     }
+    pub fn empty_like(&self) -> Self {
+        match self {
+            Self::Num { .. } => Self::default(),
+            Self::Text(_) => Self::Text(Vec::new()),
+            Self::DateTime { .. } => Self::DateTime {
+                values: Vec::new(),
+                missing: Vec::new(),
+                lexemes: Default::default(),
+            },
+            Self::Category { levels, ordered, .. } => Self::Category {
+                codes: Vec::new(),
+                levels: levels.clone(),
+                ordered: *ordered,
+            },
+        }
+    }
     pub fn clear(&mut self) {
         self.truncate(0);
     }
@@ -962,8 +978,17 @@ mod serialization {
 }
 
 /// 项目快照共享未改动的列；首次写入仅复制被修改的列。
-#[derive(Clone, Debug, Default)]
-pub struct SharedData(std::sync::Arc<ColumnData>);
+#[derive(Clone, Debug)]
+pub struct SharedData(std::sync::Arc<ColumnData>, u64);
+static NEXT_DATA_VERSION: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+fn next_data_version() -> u64 {
+    NEXT_DATA_VERSION.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+}
+impl Default for SharedData {
+    fn default() -> Self {
+        ColumnData::default().into()
+    }
+}
 impl std::ops::Deref for SharedData {
     type Target = ColumnData;
     fn deref(&self) -> &ColumnData {
@@ -972,10 +997,17 @@ impl std::ops::Deref for SharedData {
 }
 impl std::ops::DerefMut for SharedData {
     fn deref_mut(&mut self) -> &mut ColumnData {
+        self.1 = next_data_version();
         std::sync::Arc::make_mut(&mut self.0)
     }
 }
 impl SharedData {
+    pub fn version(&self) -> u64 {
+        self.1
+    }
+    pub fn clear(&mut self) {
+        *self = self.empty_like().into();
+    }
     pub fn estimated_bytes(&self) -> usize {
         std::mem::size_of::<ColumnData>() + 2 * std::mem::size_of::<usize>() + self.0.estimated_bytes()
     }
@@ -990,7 +1022,7 @@ impl PartialEq for SharedData {
 }
 impl From<ColumnData> for SharedData {
     fn from(value: ColumnData) -> Self {
-        Self(std::sync::Arc::new(value))
+        Self(std::sync::Arc::new(value), next_data_version())
     }
 }
 impl From<Vec<String>> for SharedData {
@@ -1029,5 +1061,34 @@ impl<'de> serde::Deserialize<'de> for SharedData {
 impl PartialEq<ColumnData> for SharedData {
     fn eq(&self, other: &ColumnData) -> bool {
         self.0.as_ref() == other
+    }
+}
+
+#[cfg(test)]
+mod round_two_tests {
+    use super::*;
+    #[test]
+    fn shared_versions_and_clear_preserve_snapshot_type_and_dictionary() {
+        let mut a: SharedData = vec!["1".into(), "2".into()].into();
+        let saved = a.clone();
+        let version = a.version();
+        assert_eq!(saved.version(), version);
+        a.text_at(0);
+        assert_eq!(a.version(), version);
+        a.set_text(0, "3".into());
+        assert_ne!(a.version(), saved.version());
+        assert_eq!(saved.text_at(0), "1");
+        for kind in DataKind::ALL {
+            let raw: ColumnData = vec!["2026".into(), "2027".into()].into();
+            let mut value: SharedData = raw.converted(kind).unwrap().into();
+            let before = value.clone();
+            let levels = value.category_levels();
+            value.clear();
+            assert_eq!(value.kind(), kind);
+            assert_eq!(value.len(), 0);
+            assert_eq!(value.category_levels(), levels);
+            assert_eq!(before.len(), 2);
+            assert_ne!(value.version(), before.version());
+        }
     }
 }
