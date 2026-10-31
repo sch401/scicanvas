@@ -109,11 +109,7 @@ impl SciApp {
                 ui.set_clip_rect(ws);
                 ui.allocate_exact_size(area.size(), Sense::hover());
                 let painter = ui.painter().clone();
-                let backdrop = if pal.dark {
-                    Color32::from_rgba_unmultiplied(30, 34, 42, 225)
-                } else {
-                    Color32::from_rgba_unmultiplied(236, 240, 246, 225)
-                };
+                let backdrop = pal.hud_bg;
                 painter.rect_filled(panel, 8.0, backdrop);
                 painter.rect_stroke(panel, 8.0, Stroke::new(1.0_f32, pal.line));
                 for (&id, &rect) in candidates.iter().zip(&cards) {
@@ -156,7 +152,7 @@ impl SciApp {
             pos2(icon.right() + 6.0, bar.center().y),
             egui::Align2::LEFT_CENTER,
             self.project.name_of(id).unwrap_or(""),
-            egui::FontId::proportional(crate::theme::size::MONO),
+            egui::FontId::proportional(crate::theme::size::HUD),
             Color32::WHITE,
         );
         let thumb = Rect::from_min_max(pos2(rect.left(), bar.bottom()), rect.max).shrink(4.0);

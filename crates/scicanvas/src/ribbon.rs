@@ -598,11 +598,11 @@ fn button_bg(ui: &egui::Ui, rect: Rect, resp: &egui::Response, enabled: bool, ch
     ui.painter().rect(rect, 4.0, fill, stroke);
 }
 
-fn dim(enabled: bool) -> Color32 {
+fn dim(enabled: bool, pal: &Palette) -> Color32 {
     if enabled {
-        Color32::WHITE
+        pal.on_accent
     } else {
-        Color32::from_rgba_unmultiplied(255, 255, 255, 105)
+        pal.on_accent_alpha(105)
     }
 }
 
@@ -626,7 +626,9 @@ fn big_button(ui: &mut egui::Ui, app: &SciApp, c: &Command, pal: &Palette) -> eg
     let (rect, resp) = ui.allocate_exact_size(size, if enabled { Sense::click() } else { Sense::hover() });
     button_bg(ui, rect, &resp, enabled, checked, pal);
     let icon_rect = Rect::from_center_size(egui::pos2(rect.center().x, rect.top() + 22.0), vec2(30.0, 30.0));
-    icons::icon(c.icon, pal.dark).tint(dim(enabled)).paint_at(ui, icon_rect);
+    icons::icon(c.icon, pal.dark)
+        .tint(dim(enabled, pal))
+        .paint_at(ui, icon_rect);
     let text_pos = egui::pos2(rect.center().x - galley.size().x / 2.0, rect.top() + 44.0);
     ui.painter().galley(text_pos, galley, pal.ink);
     resp.on_hover_text(commands::tooltip(app, c))
@@ -650,7 +652,9 @@ fn small_button(
     let (rect, resp) = ui.allocate_exact_size(size, if enabled { Sense::click() } else { Sense::hover() });
     button_bg(ui, rect, &resp, enabled, checked, pal);
     let icon_rect = Rect::from_min_size(egui::pos2(rect.left() + 5.0, rect.center().y - 8.5), vec2(17.0, 17.0));
-    icons::icon(c.icon, pal.dark).tint(dim(enabled)).paint_at(ui, icon_rect);
+    icons::icon(c.icon, pal.dark)
+        .tint(dim(enabled, pal))
+        .paint_at(ui, icon_rect);
     let text_pos = egui::pos2(rect.left() + 28.0, rect.center().y - galley.size().y / 2.0);
     ui.painter().galley(text_pos, galley, pal.ink);
     // 图型命令（如“图形”选项卡里的图类型）与画廊相同：悬停显示缩略图、用法和示例
@@ -697,7 +701,7 @@ fn gallery_tile(
     button_bg(ui, rect, &resp, enabled, false, pal);
     let kind = c.id.split('.').nth(1).unwrap_or("line");
     let thumb_rect = Rect::from_center_size(egui::pos2(rect.center().x, rect.top() + 24.0), vec2(58.0, 40.0));
-    icons::thumb(kind).tint(dim(enabled)).paint_at(ui, thumb_rect);
+    icons::thumb(kind).tint(dim(enabled, pal)).paint_at(ui, thumb_rect);
     ui.painter().text(
         egui::pos2(rect.center().x, rect.bottom() - 9.0),
         Align2::CENTER_CENTER,
@@ -716,7 +720,7 @@ fn icon_button(ui: &mut egui::Ui, app: &SciApp, c: &Command, dark: bool, pal: &P
     );
     button_bg(ui, rect, &resp, enabled, false, pal);
     icons::icon(c.icon, dark)
-        .tint(dim(enabled))
+        .tint(dim(enabled, pal))
         .paint_at(ui, Rect::from_center_size(rect.center(), vec2(size, size)));
     resp.on_hover_text(commands::tooltip(app, c))
 }
@@ -725,7 +729,7 @@ fn file_tab(ui: &mut egui::Ui, pal: &Palette) -> egui::Response {
     let galley = ui.painter().layout_no_wrap(
         "文件".to_string(),
         FontId::proportional(crate::theme::size::BODY),
-        Color32::WHITE,
+        pal.on_accent,
     );
     let (rect, resp) = ui.allocate_exact_size(vec2(galley.size().x + 28.0, 26.0), Sense::click());
     let fill = if resp.hovered() {
@@ -735,7 +739,7 @@ fn file_tab(ui: &mut egui::Ui, pal: &Palette) -> egui::Response {
     };
     ui.painter().rect_filled(rect, 4.0, fill);
     ui.painter()
-        .galley(rect.center() - galley.size() / 2.0, galley, Color32::WHITE);
+        .galley(rect.center() - galley.size() / 2.0, galley, pal.on_accent);
     resp.on_hover_text("新建、打开、保存、导出")
 }
 
@@ -810,14 +814,14 @@ pub fn backstage(
         )
         .show(ctx, |ui| {
             ui.spacing_mut().item_spacing = vec2(0.0, 2.0);
-            if nav_item(ui, "back", "返回", "Esc", true).clicked() {
+            if nav_item(ui, "back", "返回", "Esc", true, pal).clicked() {
                 st.backstage = false;
             }
             ui.add_space(8.0);
             for id in BACKSTAGE_NAV {
                 if let Some(c) = commands::find(id) {
                     let enabled = (c.when)(app).is_ok();
-                    let r = nav_item(ui, c.icon, c.label, c.keys, enabled);
+                    let r = nav_item(ui, c.icon, c.label, c.keys, enabled, pal);
                     if enabled && r.clicked() {
                         st.backstage = false;
                         *clicked = Some(c.id);
@@ -912,7 +916,7 @@ pub fn backstage(
     open
 }
 
-fn nav_item(ui: &mut egui::Ui, icon: &str, label: &str, keys: &str, enabled: bool) -> egui::Response {
+fn nav_item(ui: &mut egui::Ui, icon: &str, label: &str, keys: &str, enabled: bool, pal: &Palette) -> egui::Response {
     let w = ui.available_width();
     let (rect, resp) = ui.allocate_exact_size(vec2(w, 36.0), if enabled { Sense::click() } else { Sense::hover() });
     if enabled && resp.hovered() {
@@ -920,13 +924,11 @@ fn nav_item(ui: &mut egui::Ui, icon: &str, label: &str, keys: &str, enabled: boo
     }
     let alpha = if enabled { 255 } else { 120 };
     // 图标在蓝底上统一染成白色
-    icons::icon(icon, true)
-        .tint(Color32::from_rgba_unmultiplied(255, 255, 255, alpha))
-        .paint_at(
-            ui,
-            Rect::from_min_size(egui::pos2(rect.left() + 18.0, rect.center().y - 9.0), vec2(18.0, 18.0)),
-        );
-    let white = Color32::from_rgba_unmultiplied(255, 255, 255, alpha);
+    icons::icon(icon, true).tint(pal.on_accent_alpha(alpha)).paint_at(
+        ui,
+        Rect::from_min_size(egui::pos2(rect.left() + 18.0, rect.center().y - 9.0), vec2(18.0, 18.0)),
+    );
+    let white = pal.on_accent_alpha(alpha);
     ui.painter().text(
         egui::pos2(rect.left() + 46.0, rect.center().y),
         Align2::LEFT_CENTER,
@@ -940,7 +942,7 @@ fn nav_item(ui: &mut egui::Ui, icon: &str, label: &str, keys: &str, enabled: boo
             Align2::RIGHT_CENTER,
             keys,
             FontId::proportional(crate::theme::size::SMALL),
-            Color32::from_rgba_unmultiplied(255, 255, 255, alpha / 2 + 40),
+            pal.on_accent_alpha(alpha / 2 + 40),
         );
     }
     resp
@@ -1055,21 +1057,17 @@ pub fn palette(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palett
                         ui.painter().rect_filled(rect, 5.0, pal.hover);
                     }
                     let fg = if selected {
-                        Color32::WHITE
+                        pal.on_accent
                     } else if ok.is_ok() {
                         pal.ink
                     } else {
                         pal.ink.gamma_multiply(0.45)
                     };
-                    let sub = if selected {
-                        Color32::from_white_alpha(200)
-                    } else {
-                        pal.weak
-                    };
+                    let sub = if selected { pal.on_accent_alpha(200) } else { pal.weak };
                     let icon_tint = if ok.is_ok() {
-                        Color32::WHITE
+                        pal.on_accent
                     } else {
-                        Color32::from_rgba_unmultiplied(255, 255, 255, 110)
+                        pal.on_accent_alpha(110)
                     };
                     icons::icon(c.icon, pal.dark || selected).tint(icon_tint).paint_at(
                         ui,

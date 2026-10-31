@@ -358,89 +358,66 @@ impl Parser<'_> {
         }
     }
 
-    // compare := sum (比较运算符 sum)?
-    fn compare(&mut self) -> Result<Expr, String> {
-        let e = self.sum()?;
-        for op in ['<', '>', '≤', '≥', '=', '≠'] {
-            if self.eat(op) {
-                return Ok(Expr::Bin(op, Box::new(e), Box::new(self.sum()?)));
-            }
-        }
-        Ok(e)
-    }
-
-    // sum := term (('+' | '-') term)*
-    fn sum(&mut self) -> Result<Expr, String> {
-        let mut e = self.term()?;
-        let mut terms = 1;
-        loop {
-            let op = if self.eat('+') {
-                '+'
-            } else if self.eat('-') {
-                '-'
-            } else {
-                return Ok(e);
+    // 优先级爬升合并原来的 compare/sum/term/power，避免每层括号叠加多层解析栈。
+    fn expression(&mut self, minimum: u8) -> Result<Expr, String> {
+        let mut left = self.prefix()?;
+        let (mut sums, mut products) = (1, 1);
+        while let Some(Tok::Op(op)) = self.peek().cloned() {
+            let (power, right_power) = match op {
+                '<' | '>' | '≤' | '≥' | '=' | '≠' => (0, 1),
+                '+' | '-' => (1, 2),
+                '*' | '/' => (3, 4),
+                '^' => (7, 7),
+                _ => break,
             };
-            terms += 1;
-            if terms > self.limits.chain {
+            if power < minimum {
+                break;
+            }
+            self.pos += 1;
+            if power == 1 {
+                sums += 1;
+                products = 1;
+            }
+            if power == 3 {
+                products += 1;
+            }
+            if sums > self.limits.chain || products > self.limits.chain {
                 return Err("公式连续运算过长，请拆分为多列".into());
             }
-            e = Expr::Bin(op, Box::new(e), Box::new(self.term()?));
-            expression_size(&e, self.limits)?;
-        }
-    }
-
-    // term := unary (('*' | '/') unary)*
-    fn term(&mut self) -> Result<Expr, String> {
-        let mut e = self.unary()?;
-        let mut terms = 1;
-        loop {
-            let op = if self.eat('*') {
-                '*'
-            } else if self.eat('/') {
-                '/'
-            } else {
-                return Ok(e);
-            };
-            terms += 1;
-            if terms > self.limits.chain {
-                return Err("公式连续运算过长，请拆分为多列".into());
+            // 只有幂的右侧延续语法嵌套，普通左右结合运算仍按链长度限制。
+            if op == '^' {
+                self.depth += 1;
             }
-            e = Expr::Bin(op, Box::new(e), Box::new(self.unary()?));
-            expression_size(&e, self.limits)?;
+            let right = self.expression(right_power);
+            if op == '^' {
+                self.depth -= 1;
+            }
+            left = Expr::Bin(op, Box::new(left), Box::new(right?));
+            expression_size(&left, self.limits)?;
+            if power == 0 {
+                break;
+            }
         }
+        Ok(left)
     }
 
-    // unary := ('-' | '+') unary | power
-    fn unary(&mut self) -> Result<Expr, String> {
+    fn prefix(&mut self) -> Result<Expr, String> {
         if self.depth > self.limits.depth {
             return Err("公式嵌套过深".into());
         }
         self.depth += 1;
-        let result = self.unary_inner();
+        let result = if self.eat('-') {
+            self.expression(5).map(|e| Expr::Neg(Box::new(e)))
+        } else if self.eat('+') {
+            self.expression(5)
+        } else {
+            self.atom()
+        };
         self.depth -= 1;
         result.and_then(|e| {
             expression_size(&e, self.limits)?;
             Ok(e)
         })
-    }
-    fn unary_inner(&mut self) -> Result<Expr, String> {
-        if self.eat('-') {
-            return Ok(Expr::Neg(Box::new(self.unary()?)));
-        }
-        if self.eat('+') {
-            return self.unary();
-        }
-        self.power()
-    }
-
-    // power := atom ('^' unary)?   右结合
-    fn power(&mut self) -> Result<Expr, String> {
-        let base = self.atom()?;
-        if self.eat('^') {
-            return Ok(Expr::Bin('^', Box::new(base), Box::new(self.unary()?)));
-        }
-        Ok(base)
     }
 
     fn atom(&mut self) -> Result<Expr, String> {
@@ -451,7 +428,7 @@ impl Parser<'_> {
             }
             Some(Tok::Op('(')) => {
                 self.pos += 1;
-                let e = self.compare()?;
+                let e = self.expression(0)?;
                 self.expect(')')?;
                 Ok(e)
             }
@@ -470,7 +447,7 @@ impl Parser<'_> {
                     let mut args = vec![];
                     if !self.eat(')') {
                         loop {
-                            args.push(self.compare()?);
+                            args.push(self.expression(0)?);
                             if self.eat(')') {
                                 break;
                             }
@@ -519,18 +496,6 @@ pub fn parse_with(src: &str, limits: &Limits) -> Result<Expr, String> {
     if toks.is_empty() {
         return Err("公式为空".into());
     }
-    // 长旧表达式使用有界的独立解析栈，主线程和调用方的小栈保持可用。
-    if limits.depth > INPUT_LIMITS.depth && toks.len() > 128 {
-        return std::thread::scope(|scope| {
-            std::thread::Builder::new()
-                .name("scicanvas-formula".into())
-                .stack_size(8 << 20)
-                .spawn_scoped(scope, move || parse_tokens(toks, limits))
-                .map_err(|e| e.to_string())?
-                .join()
-                .map_err(|_| "旧公式解析任务中断".to_string())?
-        });
-    }
     parse_tokens(toks, limits)
 }
 fn parse_tokens(toks: Vec<Tok>, limits: &Limits) -> Result<Expr, String> {
@@ -540,7 +505,7 @@ fn parse_tokens(toks: Vec<Tok>, limits: &Limits) -> Result<Expr, String> {
         depth: 0,
         limits,
     };
-    let e = p.compare()?;
+    let e = p.expression(0)?;
     expression_size(&e, limits)?;
     match p.peek() {
         None => Ok(e),
@@ -1539,6 +1504,31 @@ mod round_two_tests {
             .unwrap()
             .join()
             .unwrap();
+    }
+    #[test]
+    fn precedence_associativity_and_limits_survive_direct_parsing() {
+        for (text, expected) in [
+            ("-2^2", -4.),
+            ("2^-2", 0.25),
+            ("2^3^2", 512.),
+            ("-2^-2", -0.25),
+            ("8/4/2", 1.),
+            ("1-2-3", -4.),
+            ("1+2*3", 7.),
+            ("2^3*4", 32.),
+            ("1+2<4", 1.),
+            ("1<2+3", 1.),
+            ("max(2,abs(-3))+col(A)", 7.),
+        ] {
+            assert_eq!(parse(text).unwrap().eval(0, &|_, _| 4.), expected, "{text}");
+        }
+        for op in ["+", "*"] {
+            assert!(parse(&std::iter::repeat_n("1", 120).collect::<Vec<_>>().join(op)).is_ok());
+            assert!(parse(&std::iter::repeat_n("1", 121).collect::<Vec<_>>().join(op)).is_err());
+        }
+        for text in ["1<2<3", "1=1=1", "max(1,)", "col(A,1)"] {
+            assert!(parse(text).is_err(), "{text}");
+        }
     }
     #[test]
     fn input_and_file_limits_count_operands() {

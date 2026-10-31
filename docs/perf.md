@@ -95,6 +95,10 @@ Windows 本机优化构建，执行 `cargo bench --locked -p scicanvas-core --be
 
 峰值指标来自 Win32 GetProcessMemoryInfo 的 PeakWorkingSetSize，是整个基准进程的峰值工作集。此处记录单次同机构建对照，恢复后的拟合、实际 GUI 帧时间和文件系统缓存变化分别看待。
 
+## L1 直接解析与 L2/L3 主题常量（2026-10-31）
+
+删除长旧公式独立解析线程后，原递归优先级层级在 1 MB 调用栈上复现 STATUS_STACK_OVERFLOW。改为优先级爬升后，原 200 层括号、200 层函数、200 项连加及混合深树测试直接在同一 1 MB 栈上通过，涵盖 eval、columns、scalar_variables、Clone/Drop；重算继续复用第三轮已解析的 Expr。界面颜色和字号收为常量，保持原值和字体族，不新增每帧求解/解析。
+
 ## K0 启动后端探测（2026-10-31）
 
 本机 Windows，AMD Radeon 780M Graphics，驱动 32.0.32015.7029，release 示例项目一次测量：DX12 适配器探测 221.235 ms；SCICANVAS_SMOKE_TEST=1 从启动进程至首帧后正常退出共 1726.079 ms。前者包含创建/枚举图形实例，不包含完整应用启动；后者包含启动、首帧和退出，不能作为单独首帧时间。DX12 有适配器时不初始化 Vulkan；否则再探测 Vulkan。实际后端和适配器写入日志。
