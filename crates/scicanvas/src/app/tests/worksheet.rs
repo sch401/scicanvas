@@ -1418,3 +1418,179 @@ fn million_rows_scroll_to_the_last_value_without_rendering_every_row() {
     );
     assert!(output.shapes.len() < 20_000, "only visible rows should be drawn");
 }
+
+#[test]
+fn find_replace_searches_selected_cells_wraps_and_matches_whole_cells() {
+    let mut app = app();
+    app.active = Some(1);
+    let book = app.project.book_mut(1).unwrap();
+    book.columns[1].data = ["Alpha", "ALPHA", "other"].map(str::to_string).to_vec().into();
+    book.columns[2].data = ["alpha", "alphabet", "other"].map(str::to_string).to_vec().into();
+    app.sheets.insert(
+        1,
+        SheetState {
+            range: Some(Range {
+                a: Cell { c: 1, r: 0 },
+                b: Cell { c: 2, r: 1 },
+            }),
+            ..Default::default()
+        },
+    );
+    app.run_command("edit.find");
+    let Some(Dialog::FindReplace(state)) = &mut app.dialog else {
+        panic!("find dialog")
+    };
+    state.needle = "alpha".into();
+    state.whole_cell = true;
+    let before = app.project.clone();
+    for cell in [
+        Cell { c: 1, r: 0 },
+        Cell { c: 2, r: 0 },
+        Cell { c: 1, r: 1 },
+        Cell { c: 1, r: 0 },
+    ] {
+        app.find_next();
+        assert_eq!(app.sheets[&1].range, Some(Range::single(cell.c, cell.r)));
+    }
+    let Some(Dialog::FindReplace(state)) = &mut app.dialog else {
+        panic!()
+    };
+    state.match_case = true;
+    state.cursor = None;
+    app.find_next();
+    assert_eq!(app.sheets[&1].range, Some(Range::single(2, 0)));
+    assert_eq!(app.project, before);
+    let Some(Dialog::FindReplace(state)) = &mut app.dialog else {
+        panic!()
+    };
+    state.match_case = false;
+    state.replacement = "done".into();
+    app.replace_matches(true);
+    let book = app.project.book(1).unwrap();
+    assert_eq!(book.columns[1].data.text_at(0), "done");
+    assert_eq!(book.columns[1].data.text_at(1), "done");
+    assert_eq!(book.columns[2].data.text_at(0), "done");
+    assert_eq!(book.columns[2].data.text_at(1), "alphabet");
+    roundtrip(&mut app, &before);
+}
+
+#[test]
+fn find_replace_is_atomic_preserves_invalid_numbers_and_handles_unicode() {
+    let mut app = app();
+    app.active = Some(1);
+    let book = app.project.book_mut(1).unwrap();
+    book.columns[0].data = ["12", "31", "44"].map(str::to_string).to_vec().into();
+    book.columns[1].data = ["a1b", "A1", "İSTANBUL"].map(str::to_string).to_vec().into();
+    book.columns[2].data.clear();
+    app.run_command("edit.replace");
+    let Some(Dialog::FindReplace(state)) = &mut app.dialog else {
+        panic!("replace dialog")
+    };
+    state.needle = "1".into();
+    state.replacement = "x".into();
+    let before = app.project.clone();
+    app.replace_matches(true);
+    let book = app.project.book(1).unwrap();
+    assert_eq!(book.columns[0].data.text_at(0), "12");
+    assert_eq!(book.columns[0].data.text_at(1), "31");
+    assert_eq!(book.columns[1].data.text_at(0), "axb");
+    assert_eq!(book.columns[1].data.text_at(1), "Ax");
+    assert!(matches!(&app.dialog, Some(Dialog::FindReplace(state)) if state.message.contains("2 个因类型不符")));
+    assert_eq!(app.history.undo_label(), Some("替换"));
+    roundtrip(&mut app, &before);
+    app.active = Some(1);
+    app.open_find_replace(true);
+    let Some(Dialog::FindReplace(state)) = &mut app.dialog else {
+        panic!()
+    };
+    state.needle = "i".into();
+    state.replacement = "X".into();
+    state.cursor = Some(Cell { c: 1, r: 2 });
+    app.replace_matches(false);
+    assert_eq!(app.project.book(1).unwrap().columns[1].data.text_at(2), "XSTANBUL");
+    app.undo();
+    let current = app.project.clone();
+    let redo = app.history.redo_label().unwrap().to_owned();
+    app.active = Some(1);
+    app.open_find_replace(true);
+    let Some(Dialog::FindReplace(state)) = &mut app.dialog else {
+        panic!()
+    };
+    state.needle = "no-match".into();
+    app.replace_matches(true);
+    assert_eq!(app.project, current);
+    assert_eq!(app.history.redo_label(), Some(redo.as_str()));
+}
+
+#[test]
+fn find_replace_buttons_and_shortcuts_open_and_apply() {
+    let ctx = egui::Context::default();
+    let mut app = app();
+    app.active = Some(1);
+    let input = egui::RawInput {
+        modifiers: egui::Modifiers::COMMAND,
+        events: vec![egui::Event::Key {
+            key: egui::Key::H,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::COMMAND,
+        }],
+        ..Default::default()
+    };
+    let _ = ctx.run(input, |ctx| app.shortcuts(ctx));
+    let Some(Dialog::FindReplace(state)) = &mut app.dialog else {
+        panic!("Ctrl+H should open replace")
+    };
+    assert!(state.replace_mode);
+    state.needle = "0".into();
+    press_dialog_button(&mut app, "查找下一个");
+    assert!(matches!(&app.dialog, Some(Dialog::FindReplace(state)) if state.cursor.is_some()));
+    press_dialog_button(&mut app, "关闭");
+    assert!(app.dialog.is_none());
+    let input = egui::RawInput {
+        modifiers: egui::Modifiers::COMMAND,
+        events: vec![egui::Event::Key {
+            key: egui::Key::F,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::COMMAND,
+        }],
+        ..Default::default()
+    };
+    let _ = ctx.run(input, |ctx| app.shortcuts(ctx));
+    assert!(matches!(&app.dialog, Some(Dialog::FindReplace(state)) if !state.replace_mode));
+}
+
+#[test]
+fn find_open_commits_valid_cell_draft_and_keeps_invalid_draft_for_confirmation() {
+    let mut app = app();
+    app.active = Some(1);
+    app.sheets.insert(
+        1,
+        SheetState {
+            range: Some(Range::single(0, 0)),
+            edit: Some(Edit {
+                cell: Cell { c: 0, r: 0 },
+                buf: "777".into(),
+                focused: false,
+            }),
+            ..Default::default()
+        },
+    );
+    app.open_find_replace(false);
+    assert_eq!(app.project.book(1).unwrap().columns[0].data.text_at(0), "777");
+    assert!(app.sheets[&1].edit.is_none());
+    assert!(matches!(app.dialog, Some(Dialog::FindReplace(_))));
+    app.dialog = None;
+    app.sheets.get_mut(&1).unwrap().edit = Some(Edit {
+        cell: Cell { c: 0, r: 0 },
+        buf: "not-a-number".into(),
+        focused: false,
+    });
+    app.open_find_replace(false);
+    assert_eq!(app.project.book(1).unwrap().columns[0].data.text_at(0), "777");
+    assert!(matches!(app.dialog, Some(Dialog::ConvertText { .. })));
+    assert!(app.sheets[&1].edit.is_some());
+}

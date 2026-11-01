@@ -191,7 +191,10 @@ pub static TABS: &[Tab] = &[
         groups: &[
             Group {
                 label: "选区",
-                items: &[Smalls(&["edit.copy", "edit.clear"])],
+                items: &[
+                    Smalls(&["edit.copy", "edit.clear"]),
+                    Smalls(&["edit.find", "edit.replace"]),
+                ],
             },
             Group {
                 label: "列属性",

@@ -3,6 +3,7 @@
 
 mod analysis_ops;
 mod dialog_actions;
+mod find_replace;
 mod notes;
 mod props;
 mod windows;
@@ -2146,7 +2147,7 @@ impl SciApp {
                         value: edit.buf.clone(),
                     });
                     self.pending_discard = None;
-                    self.status = "请先确认当前单元格的类型转换，再保存或切换项目".into();
+                    self.status = "请先确认当前单元格的类型转换".into();
                     return false;
                 }
             }

@@ -26,6 +26,7 @@ mod docking;
 mod fft;
 mod fft_filter;
 mod fill;
+mod find_replace;
 mod fit_report;
 mod frequency;
 mod ifft;
@@ -54,6 +55,7 @@ mod window;
 
 pub use column_props::ColumnEdit;
 pub(crate) use docking::{begin_docks, end_docks, has_docks, place_docks, reset_docks, DockSide};
+pub(crate) use find_replace::FindReplace;
 pub(crate) use import_wizard::ImportWizard;
 pub use layer_contents::LayerContents;
 pub(crate) use modal::{backdrop, modal};
@@ -67,6 +69,7 @@ pub(crate) use widgets::{actions, center_buttons, edit_group, plain, primary, Ac
 pub(crate) use window::{floating_bounds, window};
 
 pub enum Dialog {
+    FindReplace(Box<FindReplace>),
     ImportWizard(Box<ImportWizard>),
     LayerContents(Box<LayerContents>),
     AnalysisCurves {
@@ -244,6 +247,9 @@ pub enum Dialog {
 
 /// 对话框里用户做出的选择，由 app.rs 执行。
 pub enum Action {
+    FindNext,
+    ReplaceCurrent,
+    ReplaceAll,
     Import(std::path::PathBuf, scicanvas_core::csv::ImportOptions),
     LayerContents(Box<LayerContents>),
     AnalysisCurves(u64, usize, Vec<scicanvas_core::plotspec::DataRef>),
@@ -299,6 +305,7 @@ impl Dialog {
         let esc = ctx.input(|i| i.key_pressed(egui::Key::Escape)) && ctx.memory(|m| m.focused().is_none());
         let mut action = match self {
             Self::LayerContents(contents) => contents.show(ctx, project, pal),
+            Self::FindReplace(state) => state.show(ctx, &mut open),
             Self::ImportWizard(wizard) => wizard.show(ctx, pal, &mut open),
             Self::AnalysisCurves { .. } => self.show_analysis_curves(ctx, pal, &mut open, esc),
             Self::ColumnProps { .. } => self.show_column_props(ctx, pal, &mut open, esc),

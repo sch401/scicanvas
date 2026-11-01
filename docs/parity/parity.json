@@ -547,11 +547,29 @@
   "feature": "查找与替换",
   "ref": "Finding and Replacing Worksheet Data",
   "pri": "P1",
-  "status": "未开始",
-  "how": "",
-  "verify": "手动操作",
+  "status": "已实现待验收",
+  "how": "Ctrl+F 查找、Ctrl+H 替换，可选择工作表或原选区，支持区分大小写、整格匹配、循环定位和 Unicode；替换当前或全部替换均为一步撤销，数值列无法解析的结果保留原值并提示数量。",
+  "verify": "范围与循环、大小写和整格、数值失败保留、Unicode、撤销重做、快捷键及实际按钮测试；Windows 人工验收待做。",
   "id": "F031",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas/src/app/tests/worksheet.rs::find_replace_searches_selected_cells_wraps_and_matches_whole_cells",
+    "crates/scicanvas/src/app/tests/worksheet.rs::find_replace_is_atomic_preserves_invalid_numbers_and_handles_unicode",
+    "crates/scicanvas/src/app/tests/worksheet.rs::find_replace_buttons_and_shortcuts_open_and_apply",
+    "crates/scicanvas/src/app/tests/worksheet.rs::find_open_commits_valid_cell_draft_and_keeps_invalid_draft_for_confirmation"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/worksheet.md#F031",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "工作表",
