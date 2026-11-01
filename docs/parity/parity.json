@@ -1952,7 +1952,7 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "X 标准化后的正规方程与高斯–约当求逆；2–6 阶拟合、参数标准误、R²、曲线及撤销已接入",
-  "verify": "解析/仿真回归已通过；完整 NIST 参考值对照待做；NIST StRD 认证对照及已知失败见 docs/parity/nist.md；NoInt1/NoInt2 过原点回归尚不支持，登记 S2-5",
+  "verify": "解析/仿真回归已通过；完整 NIST 参考值对照待做；NIST StRD 认证对照及已知失败见 docs/parity/nist.md；NoInt1/NoInt2 过原点回归尚不支持，登记 S2-5；可复现 NumPy/SciPy 多组参考见 tests/reference 与 tools/reference/README.md（六阶容差原因单列），Windows 人工结果另记",
   "id": "F131",
   "milestone": "M1 日常够用",
   "sub_items": {
@@ -1969,7 +1969,8 @@
   ],
   "evidence": {
    "auto": [
-    "crates/scicanvas-core/tests/nist.rs::linear_certified_values"
+    "crates/scicanvas-core/tests/nist.rs::linear_certified_values",
+    "crates/scicanvas-core/tests/reference_scipy.rs::polynomial_degrees_two_to_six_match_numpy_with_large_x_offset"
    ],
    "reference": [
     "crates/scicanvas-core/tests/nist/lls/Filip.dat",
@@ -1982,7 +1983,8 @@
     "crates/scicanvas-core/tests/nist/lls/Wampler2.dat",
     "crates/scicanvas-core/tests/nist/lls/Wampler3.dat",
     "crates/scicanvas-core/tests/nist/lls/Wampler4.dat",
-    "crates/scicanvas-core/tests/nist/lls/Wampler5.dat"
+    "crates/scicanvas-core/tests/nist/lls/Wampler5.dat",
+    "crates/scicanvas-core/tests/reference/polynomial.json"
    ]
   }
  },
@@ -2598,13 +2600,21 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "analysis.rs/ops.rs 已实现梯形积分、累计积分结果与绝对面积选项",
-  "verify": "解析积分、行对齐与结果写回回归已通过；SciPy/NIST 参考值对照待做",
+  "verify": "解析积分、行对齐与结果写回回归已通过；SciPy/NIST 参考值对照待做；可复现 NumPy/SciPy 多组参考见 tests/reference 与 tools/reference/README.md（六阶容差原因单列），Windows 人工结果另记",
   "id": "F164",
   "milestone": "M1 日常够用",
   "needs": [
    "auto",
    "reference"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/reference_scipy.rs::integrate_matches_numpy_scipy_with_missing_rows_and_absolute_area"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/integrate.json"
+   ]
+  }
  },
  {
   "module": "数学运算",
@@ -2650,12 +2660,20 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "分析 → 列运算：两列或列与常数的加减乘除，结果新列与单位推导；不同 X 网格的曲线先线性插值后相减，范围外留空；一步撤销",
-  "verify": "逐行、常数、单位、除零与“原始减拟合”残差回归；SciPy/NIST 参考值对照待做",
+  "verify": "逐行、常数、单位、除零与“原始减拟合”残差回归；SciPy/NIST 参考值对照待做；可复现 NumPy/SciPy 多组参考见 tests/reference 与 tools/reference/README.md（六阶容差原因单列），Windows 人工结果另记",
   "id": "F168",
   "milestone": "M1 日常够用",
   "needs": [
    "auto"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/reference_scipy.rs::column_arithmetic_and_interpolated_subtraction_match_numpy"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/column_math.json"
+   ]
+  }
  },
  {
   "module": "数学运算",
@@ -2664,13 +2682,21 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "已接入除以最大值、Z 分数、区间缩放，结果写入派生列并支持撤销",
-  "verify": "算法参考值、写回及撤销回归已通过；SciPy/NIST 参考值对照待做",
+  "verify": "算法参考值、写回及撤销回归已通过；SciPy/NIST 参考值对照待做；可复现 NumPy/SciPy 多组参考见 tests/reference 与 tools/reference/README.md（六阶容差原因单列），Windows 人工结果另记",
   "id": "F169",
   "milestone": "M1 日常够用",
   "needs": [
    "auto",
    "reference"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/reference_scipy.rs::normalize_matches_numpy_and_scipy_sample_zscore"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/normalize.json"
+   ]
+  }
  },
  {
   "module": "数学运算",
@@ -2726,13 +2752,21 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "已接入 N、均值、样本标准差、标准误、中位数、线性插值分位数、极值与总和，生成结果工作簿",
-  "verify": "描述统计与结果表回归已通过；SciPy/NIST 参考值对照待做",
+  "verify": "描述统计与结果表回归已通过；SciPy/NIST 参考值对照待做；可复现 NumPy/SciPy 多组参考见 tests/reference 与 tools/reference/README.md（六阶容差原因单列），Windows 人工结果另记",
   "id": "F174",
   "milestone": "M1 日常够用",
   "needs": [
    "auto",
    "reference"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/reference_scipy.rs::describe_matches_numpy_and_scipy_linear_quantiles"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/describe.json"
+   ]
+  }
  },
  {
   "module": "统计",

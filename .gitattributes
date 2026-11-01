@@ -10,3 +10,6 @@ crates/scicanvas-core/tests/golden/*.svg text eol=lf
 
 # Keep NIST StRD source downloads byte-for-byte (including upstream CRLF).
 crates/scicanvas-core/tests/nist/**/*.dat -text -whitespace
+
+# Reproducible reference JSON uses LF on Windows and in CI.
+crates/scicanvas-core/tests/reference/*.json text eol=lf
