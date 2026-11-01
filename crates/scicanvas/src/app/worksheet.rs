@@ -6,6 +6,42 @@ use super::*;
 use table::SheetFrame;
 
 impl SciApp {
+    pub(crate) fn open_sheet_transform(&mut self, kind: dialogs::TransformKind) {
+        let Some(book_id) = self.active_book_id() else { return };
+        let Some(book) = self.project.book(book_id) else { return };
+        if book.columns.is_empty() {
+            self.status = "工作表没有列".into();
+            return;
+        }
+        let selected = self.selected_keys(book_id);
+        let columns = book
+            .columns
+            .iter()
+            .map(|c| {
+                (
+                    c.key.clone(),
+                    format!("{}（{}）", c.key, c.display_name()),
+                    selected.contains(&c.key),
+                )
+            })
+            .collect();
+        let value = self.sort_column(book_id).unwrap_or(0);
+        let category = book
+            .columns
+            .iter()
+            .position(|c| c.data.kind() == scicanvas_core::DataKind::Category)
+            .unwrap_or(0);
+        self.dialog = Some(Dialog::SheetTransform(Box::new(dialogs::SheetTransform {
+            book: book_id,
+            kind,
+            columns,
+            value,
+            category,
+            step: 2,
+            average: false,
+        })));
+    }
+
     pub(crate) fn transpose_book(&mut self) {
         let Some(id) = self.active_book() else { return };
         if !self.flush_sheet_edits() {

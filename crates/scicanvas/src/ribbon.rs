@@ -223,7 +223,10 @@ pub static TABS: &[Tab] = &[
             },
             Group {
                 label: "变换",
-                items: &[Smalls(&["book.transpose"])],
+                items: &[
+                    Smalls(&["book.transpose", "sheet.stack", "sheet.split"]),
+                    Smalls(&["sheet.reduce"]),
+                ],
             },
             Group {
                 label: "导出",

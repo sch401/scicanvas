@@ -1614,3 +1614,28 @@ fn transpose_command_creates_a_workbook_in_one_undo_step() {
     assert_eq!(app.history.undo_label(), Some("转置"));
     roundtrip(&mut app, &before);
 }
+
+#[test]
+fn sheet_transforms_each_create_one_undo_step() {
+    use crate::dialogs::{Action, TransformAction};
+    let ctx = egui::Context::default();
+    for operation in 0..3 {
+        let mut app = app();
+        app.active = Some(1);
+        let book = app.project.book(1).unwrap();
+        let a = book.columns[0].key.clone();
+        let b = book.columns[1].key.clone();
+        let action = match operation {
+            0 => TransformAction::Stack(vec![a, b]),
+            1 => {
+                let keys = app.project.stack_columns(1, &[a, b]).unwrap();
+                TransformAction::Split(keys[0].clone(), keys[1].clone())
+            }
+            _ => TransformAction::Reduce(a, 2, true),
+        };
+        let before = app.project.clone();
+        assert!(app.apply_dialog_action(&ctx, Action::SheetTransform(1, action)));
+        assert_eq!(app.history.undo_label(), Some("工作表变换"));
+        roundtrip(&mut app, &before);
+    }
+}

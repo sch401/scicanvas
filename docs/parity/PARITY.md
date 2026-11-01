@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 97 项，P1 146 项，P2 259 项，不做 12 项。
-状态：已完成 72 项，已实现待验收 54 项，部分实现 17 项，未开始 359 项，不做 12 项。
+状态：已完成 72 项，已实现待验收 56 项，部分实现 17 项，未开始 357 项，不做 12 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -70,9 +70,9 @@
 | F039 | 数据筛选 | Data Filter | P1 | 未开始 | — | 手动操作 | — |
 | F040 | 条件格式（按值着色） | Conditional Formatting | P2 | 未开始 | — | 目视检查 | — |
 | F041 | 转置 | Transposing Worksheets | P1 | 已实现待验收 | 将当前工作簿转置为同文件夹的新工作簿，第一列为原列显示名，后续各列对应原数据行；保留缺失位置和原数据，操作一步撤销。 | 数值、文本、缺失值、列名、文件夹、空表及命令撤销重做测试。 | — |
-| F042 | 堆叠 / 拆分列 | Stacking and Unstacking Worksheet Columns | P1 | 未开始 | — | 与 Origin 结果比较 | — |
+| F042 | 堆叠 / 拆分列 | Stacking and Unstacking Worksheet Columns | P1 | 已实现待验收 | 选择多列堆叠生成值列与分类来源列，或按分类列拆分值列；保持同类型、缺失值和原列，每次操作可撤销。 | 数据类型、缺失值和撤销测试；按人工清单与 Origin 比较。 | — |
 | F043 | 合并工作表（按列、按标签） | Join Multiple Sheets by Column | P2 | 未开始 | polars join | 与 Origin 结果比较 | — |
-| F044 | 数据精简（隔行抽取、平均合并） | Data Reduction | P1 | 未开始 | — | 与 Origin 结果比较 | — |
+| F044 | 数据精简（隔行抽取、平均合并） | Data Reduction | P1 | 已实现待验收 | 按指定 N 行取第一行，或对每组有限数值求平均，生成独立新列；每次操作可撤销。 | 缺失值、部分分组、非法间隔和撤销测试；按人工清单与 Origin 比较。 | — |
 | F045 | 删除重复行 | Reduce Duplicated Rows | P2 | 未开始 | — | 单元测试 | — |
 | F046 | 数据透视表 | Pivot Table | P2 | 未开始 | polars pivot | 与 Origin 结果比较 | — |
 | F047 | 工作表查询（条件提取） | Worksheet Query - Quick Start | P2 | 未开始 | — | 与 Origin 结果比较 | — |
