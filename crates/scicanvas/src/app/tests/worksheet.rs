@@ -1639,3 +1639,96 @@ fn sheet_transforms_each_create_one_undo_step() {
         roundtrip(&mut app, &before);
     }
 }
+
+#[test]
+fn create_workbook_from_template_is_one_undo_step() {
+    let mut app = app();
+    let template = scicanvas_core::project_file::workbook_template_from_book(app.project.book(1).unwrap());
+    let before = app.project.clone();
+    let id = app.create_book_from_template(template).unwrap();
+    assert_eq!(app.project.book(id).unwrap().nrows(), 0);
+    assert_eq!(app.history.undo_label(), Some("从模板新建工作簿"));
+    roundtrip(&mut app, &before);
+}
+
+#[test]
+fn frozen_columns_scroll_horizontally_and_keep_rows_aligned() {
+    let mut app = app();
+    app.active = Some(1);
+    let book = app.project.book_mut(1).unwrap();
+    book.ensure_columns(8);
+    for (column, col) in book.columns.iter_mut().enumerate() {
+        col.data = (0..100)
+            .map(|row| (10101 + column * 1000 + row).to_string())
+            .collect::<Vec<_>>()
+            .into();
+    }
+    let before = app.project.clone();
+    app.selection.insert(1, vec!["A".into()]);
+    app.run_command("sheet.freeze");
+    assert_eq!(app.sheets[&1].frozen_columns, 1);
+    app.sheets.get_mut(&1).unwrap().scroll_to = Some(70);
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut harness = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(600.0, 450.0)),
+        |app: &mut SciApp, ctx: &egui::Context| {
+            egui::CentralPanel::default().show(ctx, |ui| app.book_ui(ui, 1));
+        },
+    )
+    .with_step(1.0);
+    let mut output = harness.frame(&mut app, vec![]);
+    for _ in 0..3 {
+        output = harness.frame(&mut app, vec![]);
+    }
+    let fixed = crate::test_ui::find_text(&output, "10171").expect("fixed row visible");
+    let right = crate::test_ui::find_text(&output, "11171").expect("scrolling row visible");
+    assert!((fixed.y - right.y).abs() < 1.0, "frozen and scrolling rows align");
+    let y_before = app.sheets[&1].frozen_scroll_y;
+    harness.frame(
+        &mut app,
+        vec![
+            egui::Event::PointerMoved(egui::pos2(70.0, 200.0)),
+            egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: egui::vec2(0.0, -66.0),
+                modifiers: egui::Modifiers::NONE,
+            },
+        ],
+    );
+    for _ in 0..3 {
+        output = harness.frame(&mut app, vec![]);
+    }
+    assert!(
+        app.sheets[&1].frozen_scroll_y > y_before,
+        "wheel over frozen region scrolls both sides"
+    );
+    let fixed = crate::test_ui::find_text(&output, "10174").expect("new fixed row visible");
+    let right = crate::test_ui::find_text(&output, "11174").expect("new scrolling row visible");
+    assert!((fixed.y - right.y).abs() < 1.0);
+    harness.frame(
+        &mut app,
+        vec![
+            egui::Event::PointerMoved(egui::pos2(450.0, 200.0)),
+            egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: egui::vec2(-300.0, 0.0),
+                modifiers: egui::Modifiers::NONE,
+            },
+        ],
+    );
+    for _ in 0..3 {
+        output = harness.frame(&mut app, vec![]);
+    }
+    let after = crate::test_ui::find_text(&output, "10174").expect("fixed column remains visible");
+    assert!((after.x - fixed.x).abs() < 1.0);
+    if let Some(after_right) = crate::test_ui::find_text(&output, "11174") {
+        assert!(after_right.x < right.x - 20.0, "scrolling columns move horizontally");
+    }
+    harness.click(&mut app, after + egui::vec2(4.0, 4.0));
+    assert_eq!(app.sheets[&1].range.unwrap().a.c, 0);
+    assert_eq!(app.project, before);
+    app.run_command("sheet.unfreeze");
+    assert_eq!(app.sheets[&1].frozen_columns, 0);
+}

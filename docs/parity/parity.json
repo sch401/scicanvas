@@ -844,11 +844,26 @@
   "feature": "冻结行列",
   "ref": "Freeze Rows Columns",
   "pri": "P1",
-  "status": "未开始",
-  "how": "",
-  "verify": "手动操作",
+  "status": "已实现待验收",
+  "how": "冻结前 K 列及行号，横向滚动时保持可见，纵向滚动同步；设置只保存在界面会话。冻结数据行尚未实现。",
+  "verify": "界面滚动、行对齐及选择测试；按人工清单检查冻结和取消。",
   "id": "F048",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas/src/app/tests/worksheet.rs::frozen_columns_scroll_horizontally_and_keep_rows_aligned"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/worksheet.md#F048",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "工作表",
@@ -866,11 +881,27 @@
   "feature": "工作簿模板",
   "ref": "What is Saved with the Workbook Template (*.OTW or *.OTWU) File?",
   "pri": "P1",
-  "status": "未开始",
-  "how": "保存列定义与格式",
-  "verify": "套模板后结构一致",
+  "status": "已实现待验收",
+  "how": "保存工作簿列定义、类型、格式和公式到 .scbt，不保存数据；从模板新建工作簿支持撤销。",
+  "verify": "模板文件读写、数据隔离、结构和撤销测试；按人工清单检查。",
   "id": "F050",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/workbook_template.rs::workbook_template_roundtrips_column_definitions_without_data",
+    "crates/scicanvas/src/app/tests/worksheet.rs::create_workbook_from_template_is_one_undo_step"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/worksheet.md#F050",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "工作表",
