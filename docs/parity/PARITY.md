@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 97 项，P1 146 项，P2 259 项，不做 12 项。
-状态：已完成 52 项，已实现待验收 71 项，部分实现 17 项，未开始 362 项，不做 12 项。
+状态：已完成 57 项，已实现待验收 66 项，部分实现 17 项，未开始 362 项，不做 12 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -247,17 +247,17 @@
 | F174 | 列统计（均值、标准差、中位数、分位数等） | Statistics on Columns | P0 | 已完成 | 已接入 N、均值、样本标准差、标准误、中位数、线性插值分位数、极值与总和，生成结果工作簿 | 描述统计与结果表回归已通过；可复现 NumPy/SciPy 多组参考见 tests/reference 与 tools/reference/README.md（六阶容差原因单列），Windows 人工结果另记；2026-11 验收：自动测试 + 参考值 | — |
 | F175 | 行统计 | Statistics on Rows | P1 | 已实现待验收 | 统计 → 行统计：对点选的各列逐行求均值、标准差、标准误、N，写在最后一列右边；标准差设为 Y 误差列，可直接画误差棒 | 单元测试覆盖缺失值、单值行与列属性 | — |
 | F176 | 整表统计 | Statistics on Whole Sheet | P1 | 未开始 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
-| F177 | 频数统计 / 分箱 | Frequency Counts | P0 | 已实现待验收 | 统计 → 频数统计：等宽分箱（Sturges 或指定区间数、可选范围），每列生成区间、频数、累积与相对频率表，一步撤销 | 与 numpy.histogram 的边界与计数一致 | — |
+| F177 | 频数统计 / 分箱 | Frequency Counts | P0 | 已完成 | 统计 → 频数统计：等宽分箱（Sturges 或指定区间数、可选范围），每列生成区间、频数、累积与相对频率表，一步撤销 | 与 numpy.histogram 的边界与计数一致；2026-11：可复现 SciPy 参考数据和直接测试通过。 | — |
 | F178 | 二维频数统计 | 2D Frequency Counts/Binning | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
 | F179 | 正态性检验（Shapiro-Wilk、KS、Anderson-Darling 等） | Normality Test | P1 | 部分实现 | 统计 → 正态性检验：Shapiro–Wilk（Royston AS R94，3 ≤ N ≤ 5000），每个点选列一行；KS、Anderson–Darling 待做 | 与 SciPy 1.17.1 shapiro 一致（W 1e-6，SciPy 内部为单精度；p 1e-4） | 列明的正态性方法：已完成 0/3，待验收 1，部分实现 0；Shapiro–Wilk 已接入；KS、Anderson–Darling 未开始；仅计本条列明方法 |
-| F180 | 相关系数（Pearson、Spearman、Kendall） | Correlation Coefficient (Pro Only) | P1 | 已实现待验收 | 统计 → 相关系数：点选列两两计算 Pearson、Spearman（平均秩）、Kendall τ-b（并列校正）及双侧 p 值 | 与 SciPy 1.17.1 pearsonr、spearmanr、kendalltau(method="asymptotic") 一致（1e-9），含并列值与负相关 | — |
+| F180 | 相关系数（Pearson、Spearman、Kendall） | Correlation Coefficient (Pro Only) | P1 | 已完成 | 统计 → 相关系数：点选列两两计算 Pearson、Spearman（平均秩）、Kendall τ-b（并列校正）及双侧 p 值 | 与 SciPy 1.17.1 pearsonr、spearmanr、kendalltau(method="asymptotic") 一致（1e-9），含并列值与负相关；2026-11：可复现 SciPy 参考数据和直接测试通过。 | — |
 | F181 | 偏相关系数 | Partial Correlation Coefficient (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
 | F182 | 分布拟合 | Distribution Fit (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
 | F183 | 列联表与卡方检验 | Cross Tabulation and Chi-square (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
 | F184 | Grubbs / Dixon Q 异常值检验 | Grubbs' Test | P1 | 部分实现 | 统计 → Grubbs 异常值：双侧检验离均值最远的点，给出 G、临界值 G(0.05) 与 p 值；Dixon Q 待做 | 临界值与 p 值与按 scipy.stats.t 计算的 Grubbs 公式一致（1e-9） | 列明的异常值方法：已完成 0/2，待验收 1，部分实现 0；Grubbs 已接入；Dixon Q 未开始 |
-| F185 | 单样本 t 检验 | One-Sample T-Test | P0 | 已实现待验收 | 统计 → t 检验（单样本）：自写正则化不完全 Beta 求 t 分布，报告 t、自由度、双侧 p、置信区间 | 与 SciPy 1.17.1 ttest_1samp 一致（1e-9） | — |
-| F186 | 双样本 t 检验（含 Welch） | Two-Sample T-Test | P0 | 已实现待验收 | 统计 → t 检验（双样本）：方差相等的 Student 检验与 Welch 检验，置信区间针对均值差 | 与 SciPy 1.17.1 ttest_ind（equal_var 真/假）一致（1e-9） | — |
-| F187 | 配对 t 检验 | Pair-Sample T-Test | P0 | 已实现待验收 | 统计 → t 检验（配对）：按行配对，只用两列都有数值的行 | 与 SciPy 1.17.1 ttest_rel 一致（1e-9） | — |
+| F185 | 单样本 t 检验 | One-Sample T-Test | P0 | 已完成 | 统计 → t 检验（单样本）：自写正则化不完全 Beta 求 t 分布，报告 t、自由度、双侧 p、置信区间 | 与 SciPy 1.17.1 ttest_1samp 一致（1e-9）；2026-11：可复现 SciPy 参考数据和直接测试通过。 | — |
+| F186 | 双样本 t 检验（含 Welch） | Two-Sample T-Test | P0 | 已完成 | 统计 → t 检验（双样本）：方差相等的 Student 检验与 Welch 检验，置信区间针对均值差 | 与 SciPy 1.17.1 ttest_ind（equal_var 真/假）一致（1e-9）；2026-11：可复现 SciPy 参考数据和直接测试通过。 | — |
+| F187 | 配对 t 检验 | Pair-Sample T-Test | P0 | 已完成 | 统计 → t 检验（配对）：按行配对，只用两列都有数值的行 | 与 SciPy 1.17.1 ttest_rel 一致（1e-9）；2026-11：可复现 SciPy 参考数据和直接测试通过。 | — |
 | F188 | 方差检验（单样本、F 检验） | Two Sample Test for Variances (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
 | F189 | 比例检验、泊松率检验 | One-Sample Proportion Test (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
 | F190 | 单因素 / 双因素 / 三因素方差分析（含多重比较） | One, Two, and Three Way ANOVA | P1 | 部分实现 | 统计 → 单因素方差分析：每列一组，ANOVA 表、各组描述统计与 Tukey HSD 多重比较（组大小不等时为 Tukey–Kramer）；双因素、三因素待做 | 与 SciPy 1.17.1 f_oneway、f.sf（1e-9）及 tukey_hsd（置信限 1e-7、p 值 1e-5）、studentized_range 一致 | 列明的 ANOVA 维数：已完成 0/3，待验收 1，部分实现 0；单因素及 Tukey/Tukey–Kramer 已接入；双因素、三因素未开始 |

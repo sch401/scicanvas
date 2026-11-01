@@ -149,9 +149,32 @@ def polynomial():
     write("polynomial", cases)
 
 
+def statistical_tests():
+    a = np.array([5.1, 4.9, 6.2, 5.8, 6.0, 5.5, 5.3, 6.1])
+    b = np.array([4.6, 5.0, 4.4, 5.2, 4.8, 4.1, 5.4, 4.7, 4.3, 5.0])
+    x = np.array([1.2, 2.4, 2.4, 3.1, 4.8, 5.0, 5.5, 6.1, 7.3, 7.3, 8.0, 9.6])
+    y = np.array([2.0, 2.9, 3.5, 3.1, 4.2, 6.0, 5.1, 6.6, 6.6, 8.1, 7.7, 9.0])
+    raw = np.array([-2, -1, 0, 1, 1, 2, 3, 4, 5, np.nan])
+    counts, edges = np.histogram(raw[np.isfinite(raw)], bins=4, range=(-1, 3))
+    cases = [dict(name="histogram", values=raw, counts=counts, edges=edges)]
+    for name, fn in [("pearson", stats.pearsonr), ("spearman", stats.spearmanr),
+                     ("kendall", lambda a, b: stats.kendalltau(a, b, method="asymptotic"))]:
+        r = fn(x, y)
+        cases.append(dict(name=name, x=x, y=y, r=r.statistic, p=r.pvalue))
+    for name, result in [("one", stats.ttest_1samp(a, 5.0)),
+                         ("student", stats.ttest_ind(a, b, equal_var=True)),
+                         ("welch", stats.ttest_ind(a, b, equal_var=False)),
+                         ("paired", stats.ttest_rel(a, b[:len(a)]))]:
+        ci = result.confidence_interval(confidence_level=.95)
+        cases.append(dict(name=name, a=a, b=b[:len(a)] if name == "paired" else b,
+                          t=result.statistic, df=result.df, p=result.pvalue, ci=[ci.low, ci.high]))
+    write("statistics", cases)
+
+
 if __name__ == "__main__":
     integrals()
     normalization()
     descriptive()
     column_math()
     polynomial()
+    statistical_tests()

@@ -1015,7 +1015,13 @@
   "milestone": "M1 日常够用",
   "needs": [
    "auto"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/xlsx_files.rs::legacy_xls_and_xlsx_from_excel_read_identically_with_dates_and_merged_cells",
+    "crates/scicanvas/src/app/tests/import_export.rs::excel_workbooks_import_each_non_empty_sheet"
+   ]
+  }
  },
  {
   "module": "导入导出",
@@ -1071,7 +1077,10 @@
     "result": "待做",
     "date": "",
     "build": ""
-   }
+   },
+   "auto": [
+    "crates/scicanvas/src/app/tests/import_export.rs::dropped_data_files_import_as_one_step_and_project_files_open"
+   ]
   }
  },
  {
@@ -1094,7 +1103,10 @@
     "result": "待做",
     "date": "",
     "build": ""
-   }
+   },
+   "auto": [
+    "crates/scicanvas/src/app/tests/import_export.rs::mixed_imports_keep_successful_files_folder_windows_and_one_undo_step"
+   ]
   }
  },
  {
@@ -2079,7 +2091,14 @@
   "milestone": "M1 日常够用",
   "needs": [
    "auto"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/src/analysis.rs::linear_fit_textbook",
+    "crates/scicanvas-core/src/ops.rs::linear_fit_adds_columns_and_graph_curve",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::fit_report_residual_plot_button_creates_scatter_and_undoes"
+   ]
+  }
  },
  {
   "module": "回归与拟合",
@@ -2233,7 +2252,9 @@
   "evidence": {
    "auto": [
     "crates/scicanvas-core/tests/nist.rs::nonlinear_from_start_one",
-    "crates/scicanvas-core/tests/nist.rs::nonlinear_from_start_two"
+    "crates/scicanvas-core/tests/nist.rs::nonlinear_from_start_two",
+    "crates/scicanvas-core/src/nlfit.rs::auto_initial_values_converge_to_scipy_curve_fit",
+    "crates/scicanvas-core/src/nlfit.rs::rational1_fits_a_synthetic_curve_from_automatic_initial_values"
    ],
    "reference": [
     "crates/scicanvas-core/tests/nist/nls/Bennett5.dat",
@@ -2279,7 +2300,15 @@
   "needs": [
    "auto",
    "reference"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/src/nlfit.rs::linear_constraints_match_scipy_substitution",
+    "crates/scicanvas-core/src/nlfit.rs::bounded_parameters_match_scipy_trf",
+    "crates/scicanvas-core/src/nlfit.rs::fixed_parameters_match_scipy_with_the_parameter_held",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::nlfit_dialog_linear_constraint_holds_and_bad_text_keeps_the_dialog"
+   ]
+  }
  },
  {
   "module": "回归与拟合",
@@ -2505,7 +2534,10 @@
     "result": "待做",
     "date": "",
     "build": ""
-   }
+   },
+   "auto": [
+    "crates/scicanvas/src/app/tests/graph.rs::graph_analysis_curve_dialog_selects_foreign_source_and_history_is_atomic"
+   ]
   }
  },
  {
@@ -2521,7 +2553,13 @@
   "needs": [
    "auto",
    "reference"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/src/nlfit.rs::auto_initial_values_converge_to_scipy_curve_fit",
+    "crates/scicanvas-core/src/nlfit.rs::voigt_profile_matches_scipy"
+   ]
+  }
  },
  {
   "module": "回归与拟合",
@@ -2536,7 +2574,12 @@
   "needs": [
    "auto",
    "reference"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/src/nlfit.rs::auto_initial_values_converge_to_scipy_curve_fit"
+   ]
+  }
  },
  {
   "module": "回归与拟合",
@@ -2551,7 +2594,12 @@
   "needs": [
    "auto",
    "reference"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/src/nlfit.rs::auto_initial_values_converge_to_scipy_curve_fit"
+   ]
+  }
  },
  {
   "module": "回归与拟合",
@@ -2566,7 +2614,12 @@
   "needs": [
    "auto",
    "reference"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/src/nlfit.rs::auto_initial_values_converge_to_scipy_curve_fit"
+   ]
+  }
  },
  {
   "module": "回归与拟合",
@@ -2677,7 +2730,13 @@
   "needs": [
    "auto",
    "reference"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/src/interpolate.rs::matches_scipy_inside_and_when_extrapolating",
+    "crates/scicanvas-core/src/ops.rs::interpolation_writes_xy_columns_and_adds_lines_to_the_graph"
+   ]
+  }
  },
  {
   "module": "数学运算",
@@ -2781,7 +2840,13 @@
   "needs": [
    "auto",
    "reference"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/src/analysis.rs::savitzky_golay_derivatives_match_scipy",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::sg_derivative_dialog_writes_second_derivative_column_and_undoes"
+   ]
+  }
  },
  {
   "module": "数学运算",
@@ -2884,7 +2949,12 @@
   "milestone": "M2 论文全流程",
   "needs": [
    "auto"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::baseline_subtraction_runs_on_picked_columns_in_one_undo_step"
+   ]
+  }
  },
  {
   "module": "统计",
@@ -2921,7 +2991,13 @@
   "milestone": "M2 论文全流程",
   "needs": [
    "auto"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/src/ops.rs::row_stats_writes_mean_sd_se_and_n_after_the_last_column",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::row_stats_and_fft_filter_add_columns_in_one_undo_step"
+   ]
+  }
  },
  {
   "module": "统计",
@@ -2939,15 +3015,24 @@
   "feature": "频数统计 / 分箱",
   "ref": "Frequency Counts",
   "pri": "P0",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "统计 → 频数统计：等宽分箱（Sturges 或指定区间数、可选范围），每列生成区间、频数、累积与相对频率表，一步撤销",
-  "verify": "与 numpy.histogram 的边界与计数一致",
+  "verify": "与 numpy.histogram 的边界与计数一致；2026-11：可复现 SciPy 参考数据和直接测试通过。",
   "id": "F177",
   "milestone": "M1 日常够用",
   "needs": [
    "auto",
    "reference"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/reference_scipy.rs::histogram_correlations_and_t_tests_match_generated_scipy_reference",
+    "crates/scicanvas-core/src/ops.rs::frequency_counts_build_one_table_per_column_next_to_the_source"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/statistics.json"
+   ]
+  }
  },
  {
   "module": "统计",
@@ -2984,15 +3069,24 @@
   "feature": "相关系数（Pearson、Spearman、Kendall）",
   "ref": "Correlation Coefficient (Pro Only)",
   "pri": "P1",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "统计 → 相关系数：点选列两两计算 Pearson、Spearman（平均秩）、Kendall τ-b（并列校正）及双侧 p 值",
-  "verify": "与 SciPy 1.17.1 pearsonr、spearmanr、kendalltau(method=\"asymptotic\") 一致（1e-9），含并列值与负相关",
+  "verify": "与 SciPy 1.17.1 pearsonr、spearmanr、kendalltau(method=\"asymptotic\") 一致（1e-9），含并列值与负相关；2026-11：可复现 SciPy 参考数据和直接测试通过。",
   "id": "F180",
   "milestone": "M2 论文全流程",
   "needs": [
    "auto",
    "reference"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/reference_scipy.rs::histogram_correlations_and_t_tests_match_generated_scipy_reference",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::correlations_cover_every_pair_of_picked_columns"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/statistics.json"
+   ]
+  }
  },
  {
   "module": "统计",
@@ -3051,45 +3145,72 @@
   "feature": "单样本 t 检验",
   "ref": "One-Sample T-Test",
   "pri": "P0",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "统计 → t 检验（单样本）：自写正则化不完全 Beta 求 t 分布，报告 t、自由度、双侧 p、置信区间",
-  "verify": "与 SciPy 1.17.1 ttest_1samp 一致（1e-9）",
+  "verify": "与 SciPy 1.17.1 ttest_1samp 一致（1e-9）；2026-11：可复现 SciPy 参考数据和直接测试通过。",
   "id": "F185",
   "milestone": "M1 日常够用",
   "needs": [
    "auto",
    "reference"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/reference_scipy.rs::histogram_correlations_and_t_tests_match_generated_scipy_reference",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::ttest_uses_the_picked_columns_in_click_order_and_leaves_data_alone"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/statistics.json"
+   ]
+  }
  },
  {
   "module": "统计",
   "feature": "双样本 t 检验（含 Welch）",
   "ref": "Two-Sample T-Test",
   "pri": "P0",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "统计 → t 检验（双样本）：方差相等的 Student 检验与 Welch 检验，置信区间针对均值差",
-  "verify": "与 SciPy 1.17.1 ttest_ind（equal_var 真/假）一致（1e-9）",
+  "verify": "与 SciPy 1.17.1 ttest_ind（equal_var 真/假）一致（1e-9）；2026-11：可复现 SciPy 参考数据和直接测试通过。",
   "id": "F186",
   "milestone": "M1 日常够用",
   "needs": [
    "auto",
    "reference"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/reference_scipy.rs::histogram_correlations_and_t_tests_match_generated_scipy_reference",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::ttest_uses_the_picked_columns_in_click_order_and_leaves_data_alone"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/statistics.json"
+   ]
+  }
  },
  {
   "module": "统计",
   "feature": "配对 t 检验",
   "ref": "Pair-Sample T-Test",
   "pri": "P0",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "统计 → t 检验（配对）：按行配对，只用两列都有数值的行",
-  "verify": "与 SciPy 1.17.1 ttest_rel 一致（1e-9）",
+  "verify": "与 SciPy 1.17.1 ttest_rel 一致（1e-9）；2026-11：可复现 SciPy 参考数据和直接测试通过。",
   "id": "F187",
   "milestone": "M1 日常够用",
   "needs": [
    "auto",
    "reference"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/reference_scipy.rs::histogram_correlations_and_t_tests_match_generated_scipy_reference",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::ttest_uses_the_picked_columns_in_click_order_and_leaves_data_alone"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/statistics.json"
+   ]
+  }
  },
  {
   "module": "统计",
@@ -3263,7 +3384,14 @@
   "needs": [
    "auto",
    "reference"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/src/analysis.rs::smoothing",
+    "crates/scicanvas-core/src/analysis.rs::lowess_and_fft_smoothing_match_numpy_references",
+    "crates/scicanvas-core/src/ops.rs::fft_smoothing_needs_even_x_spacing"
+   ]
+  }
  },
  {
   "module": "信号处理",
@@ -3286,7 +3414,13 @@
   "needs": [
    "auto",
    "reference"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/src/fft.rs::filters_match_numpy_masked_rfft",
+    "crates/scicanvas-core/src/ops.rs::fft_filter_adds_a_filtered_column_and_curve"
+   ]
+  }
  },
  {
   "module": "信号处理",
@@ -3312,7 +3446,14 @@
   "needs": [
    "auto",
    "reference"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/src/fft.rs::matches_numpy_rfft_for_bluestein_and_radix2_lengths",
+    "crates/scicanvas-core/src/fft.rs::inverse_transforms_match_numpy_and_round_trip",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::ifft_dialog_finds_fft_columns_and_creates_a_signal_table"
+   ]
+  }
  },
  {
   "module": "信号处理",
@@ -3349,7 +3490,13 @@
   "needs": [
    "auto",
    "reference"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/src/stats.rs::cross_and_auto_correlation_match_numpy",
+    "crates/scicanvas-core/src/ops.rs::correlation_function_builds_a_lag_table_and_graph"
+   ]
+  }
  },
  {
   "module": "信号处理",
@@ -3462,7 +3609,13 @@
   "milestone": "M2 论文全流程",
   "needs": [
    "auto"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/src/ops.rs::baseline_subtraction_adds_baseline_and_corrected_columns",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::baseline_subtraction_runs_on_picked_columns_in_one_undo_step"
+   ]
+  }
  },
  {
   "module": "峰分析",
@@ -3488,7 +3641,13 @@
   "needs": [
    "auto",
    "reference"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/src/peaks.rs::peaks_prominences_and_widths_match_scipy",
+    "crates/scicanvas-core/src/peaks.rs::plateaus_and_edges_follow_scipy"
+   ]
+  }
  },
  {
   "module": "峰分析",
@@ -3596,7 +3755,10 @@
     "result": "待做",
     "date": "",
     "build": ""
-   }
+   },
+   "auto": [
+    "crates/scicanvas/src/export.rs::png_size_and_resolution_follow_page_millimetres_and_dpi"
+   ]
   }
  },
  {
@@ -3628,7 +3790,10 @@
     "result": "待做",
     "date": "",
     "build": ""
-   }
+   },
+   "auto": [
+    "crates/scicanvas/src/export.rs::pdf_exports_vectors_embedded_fonts_and_page_sizes_for_every_preset"
+   ]
   }
  },
  {
@@ -6816,7 +6981,12 @@
     "result": "待做",
     "date": "",
     "build": ""
-   }
+   },
+   "auto": [
+    "crates/scicanvas-core/src/ops.rs::nonlinear_auto_recalc_preserves_keys_styles_bands_and_dependency_order",
+    "crates/scicanvas-core/src/ops.rs::nonlinear_manual_none_and_failed_recalc_keep_last_good_result",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::persisted_fit_reports_refresh_with_undo_and_keep_notes_as_snapshots"
+   ]
   }
  },
  {

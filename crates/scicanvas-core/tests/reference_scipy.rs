@@ -172,3 +172,51 @@ fn polynomial_degrees_two_to_six_match_numpy_with_large_x_offset() {
         );
     }
 }
+
+#[test]
+fn histogram_correlations_and_t_tests_match_generated_scipy_reference() {
+    use scicanvas_core::stats::{self, CorrMethod, TTestKind};
+    for case in cases("statistics") {
+        let name = case["name"].as_str().unwrap();
+        match name {
+            "histogram" => {
+                let bins = stats::histogram(&numbers(&case["values"]), 4, Some((-1.0, 3.0))).unwrap();
+                let counts: Vec<_> = bins.iter().map(|bin| bin.count as u64).collect();
+                let expected: Vec<_> = case["counts"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|x| x.as_u64().unwrap())
+                    .collect();
+                assert_eq!(counts, expected);
+                let mut edges: Vec<_> = bins.iter().map(|bin| bin.lo).collect();
+                edges.push(bins.last().unwrap().hi);
+                array(&edges, &case["edges"], 1e-12, name);
+            }
+            "pearson" | "spearman" | "kendall" => {
+                let method = match name {
+                    "pearson" => CorrMethod::Pearson,
+                    "spearman" => CorrMethod::Spearman,
+                    _ => CorrMethod::Kendall,
+                };
+                let r = stats::correlation(&numbers(&case["x"]), &numbers(&case["y"]), method).unwrap();
+                near(r.r, &case["r"], 1e-9, name);
+                near(r.p, &case["p"], 1e-9, name);
+            }
+            _ => {
+                let kind = match name {
+                    "one" => TTestKind::OneSample { mu: 5.0 },
+                    "student" => TTestKind::TwoSample { equal_var: true },
+                    "welch" => TTestKind::TwoSample { equal_var: false },
+                    "paired" => TTestKind::Paired,
+                    _ => panic!("unexpected case {name}"),
+                };
+                let r = stats::t_test(kind, &numbers(&case["a"]), &numbers(&case["b"]), 0.95).unwrap();
+                near(r.t, &case["t"], 1e-9, name);
+                near(r.df, &case["df"], 1e-9, name);
+                near(r.p, &case["p"], 1e-9, name);
+                array(&[r.ci.0, r.ci.1], &case["ci"], 1e-9, name);
+            }
+        }
+    }
+}
