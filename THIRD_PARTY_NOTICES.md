@@ -87,6 +87,7 @@ Windows 系统字体通过用户电脑读取，本发行包不附加微软雅黑
 | gpu-allocator 0.26.0 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/gpu-allocator-0.26.0/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/gpu-allocator-0.26.0/LICENSE-MIT) |
 | gpu-descriptor 0.3.2 | MIT OR Apache-2.0 | [COPYING](licenses/third-party/gpu-descriptor-0.3.2/upstream/COPYING), [APACHE](licenses/third-party/gpu-descriptor-0.3.2/upstream/license/APACHE), [MIT](licenses/third-party/gpu-descriptor-0.3.2/upstream/license/MIT) |
 | gpu-descriptor-types 0.2.0 | MIT OR Apache-2.0 | [COPYING](licenses/third-party/gpu-descriptor-types-0.2.0/upstream/COPYING), [APACHE](licenses/third-party/gpu-descriptor-types-0.2.0/upstream/license/APACHE), [MIT](licenses/third-party/gpu-descriptor-types-0.2.0/upstream/license/MIT) |
+| half 2.7.1 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/half-2.7.1/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/half-2.7.1/LICENSE-MIT) |
 | hashbrown 0.15.5 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/hashbrown-0.15.5/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/hashbrown-0.15.5/LICENSE-MIT) |
 | hashbrown 0.17.1 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/hashbrown-0.17.1/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/hashbrown-0.17.1/LICENSE-MIT) |
 | hassle-rs 0.11.0 | MIT | [LICENSE](licenses/third-party/hassle-rs-0.11.0/LICENSE), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/hassle-rs-0.11.0/SOURCE_COPYRIGHT_HEADERS.txt) |
@@ -144,6 +145,7 @@ Windows 系统字体通过用户电脑读取，本发行包不附加微软雅黑
 | proc-macro2 1.0.107 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/proc-macro2-1.0.107/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/proc-macro2-1.0.107/LICENSE-MIT) |
 | profiling 1.0.18 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/profiling-1.0.18/upstream/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/profiling-1.0.18/upstream/LICENSE-MIT) |
 | pxfm 0.1.30 | BSD-3-Clause OR Apache-2.0 | [LICENSE-APACHE.md](licenses/third-party/pxfm-0.1.30/LICENSE-APACHE.md), [LICENSE.md](licenses/third-party/pxfm-0.1.30/LICENSE.md), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/pxfm-0.1.30/SOURCE_COPYRIGHT_HEADERS.txt) |
+| quick-error 2.0.1 | MIT/Apache-2.0 | [LICENSE-APACHE](licenses/third-party/quick-error-2.0.1/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/quick-error-2.0.1/LICENSE-MIT) |
 | quote 1.0.47 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/quote-1.0.47/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/quote-1.0.47/LICENSE-MIT) |
 | range-alloc 0.1.5 | MIT OR Apache-2.0 | [LICENSE.APACHE](licenses/third-party/range-alloc-0.1.5/LICENSE.APACHE), [LICENSE.MIT](licenses/third-party/range-alloc-0.1.5/LICENSE.MIT) |
 | raw-window-handle 0.6.2 | MIT OR Apache-2.0 OR Zlib | [LICENSE-APACHE.md](licenses/third-party/raw-window-handle-0.6.2/LICENSE-APACHE.md), [LICENSE-MIT.md](licenses/third-party/raw-window-handle-0.6.2/LICENSE-MIT.md), [LICENSE-ZLIB.md](licenses/third-party/raw-window-handle-0.6.2/LICENSE-ZLIB.md) |
@@ -186,6 +188,7 @@ Windows 系统字体通过用户电脑读取，本发行包不附加微软雅黑
 | termcolor 1.4.1 | Unlicense OR MIT | [COPYING](licenses/third-party/termcolor-1.4.1/COPYING), [LICENSE-MIT](licenses/third-party/termcolor-1.4.1/LICENSE-MIT), [UNLICENSE](licenses/third-party/termcolor-1.4.1/UNLICENSE) |
 | thiserror 1.0.69 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/thiserror-1.0.69/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/thiserror-1.0.69/LICENSE-MIT) |
 | thiserror-impl 1.0.69 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/thiserror-impl-1.0.69/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/thiserror-impl-1.0.69/LICENSE-MIT) |
+| tiff 0.11.3 | MIT | [LICENSE](licenses/third-party/tiff-0.11.3/LICENSE), [COPYRIGHT](licenses/third-party/tiff-0.11.3/tests/COPYRIGHT) |
 | tiny-skia 0.11.4 | BSD-3-Clause | [LICENSE](licenses/third-party/tiny-skia-0.11.4/LICENSE), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/tiny-skia-0.11.4/SOURCE_COPYRIGHT_HEADERS.txt) |
 | tiny-skia-path 0.11.4 | BSD-3-Clause | [LICENSE](licenses/third-party/tiny-skia-path-0.11.4/LICENSE), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/tiny-skia-path-0.11.4/SOURCE_COPYRIGHT_HEADERS.txt) |
 | tinystr 0.8.4 | Unicode-3.0 | [LICENSE](licenses/third-party/tinystr-0.8.4/LICENSE) |
@@ -211,6 +214,7 @@ Windows 系统字体通过用户电脑读取，本发行包不附加微软雅黑
 | version_check 0.9.5 | MIT/Apache-2.0 | [LICENSE-APACHE](licenses/third-party/version_check-0.9.5/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/version_check-0.9.5/LICENSE-MIT) |
 | web-time 1.1.0 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/web-time-1.1.0/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/web-time-1.1.0/LICENSE-MIT) |
 | webbrowser 1.2.4 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/webbrowser-1.2.4/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/webbrowser-1.2.4/LICENSE-MIT) |
+| weezl 0.1.12 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/weezl-0.1.12/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/weezl-0.1.12/LICENSE-MIT) |
 | wgpu 22.1.0 | MIT OR Apache-2.0 | [LICENSE.APACHE](licenses/third-party/wgpu-22.1.0/LICENSE.APACHE), [LICENSE.MIT](licenses/third-party/wgpu-22.1.0/LICENSE.MIT), [LICENSE.APACHE](licenses/third-party/wgpu-22.1.0/upstream/LICENSE.APACHE), [LICENSE.MIT](licenses/third-party/wgpu-22.1.0/upstream/LICENSE.MIT) |
 | wgpu-core 22.1.0 | MIT OR Apache-2.0 | [LICENSE.APACHE](licenses/third-party/wgpu-core-22.1.0/LICENSE.APACHE), [LICENSE.MIT](licenses/third-party/wgpu-core-22.1.0/LICENSE.MIT), [LICENSE.APACHE](licenses/third-party/wgpu-core-22.1.0/upstream/LICENSE.APACHE), [LICENSE.MIT](licenses/third-party/wgpu-core-22.1.0/upstream/LICENSE.MIT) |
 | wgpu-hal 22.0.0 | MIT OR Apache-2.0 | [LICENSE.APACHE](licenses/third-party/wgpu-hal-22.0.0/LICENSE.APACHE), [LICENSE.MIT](licenses/third-party/wgpu-hal-22.0.0/LICENSE.MIT), [LICENSE.APACHE](licenses/third-party/wgpu-hal-22.0.0/upstream/LICENSE.APACHE), [LICENSE.MIT](licenses/third-party/wgpu-hal-22.0.0/upstream/LICENSE.MIT) |
@@ -243,6 +247,7 @@ Windows 系统字体通过用户电脑读取，本发行包不附加微软雅黑
 | yoke 0.8.3 | Unicode-3.0 | [LICENSE](licenses/third-party/yoke-0.8.3/LICENSE) |
 | yoke-derive 0.8.4 | Unicode-3.0 | [LICENSE](licenses/third-party/yoke-derive-0.8.4/LICENSE) |
 | zerocopy 0.8.63 | BSD-2-Clause OR Apache-2.0 OR MIT | [LICENSE-APACHE](licenses/third-party/zerocopy-0.8.63/LICENSE-APACHE), [LICENSE-BSD](licenses/third-party/zerocopy-0.8.63/LICENSE-BSD), [LICENSE-MIT](licenses/third-party/zerocopy-0.8.63/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/zerocopy-0.8.63/SOURCE_COPYRIGHT_HEADERS.txt) |
+| zerocopy-derive 0.8.63 | BSD-2-Clause OR Apache-2.0 OR MIT | [LICENSE-APACHE](licenses/third-party/zerocopy-derive-0.8.63/LICENSE-APACHE), [LICENSE-BSD](licenses/third-party/zerocopy-derive-0.8.63/LICENSE-BSD), [LICENSE-MIT](licenses/third-party/zerocopy-derive-0.8.63/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/zerocopy-derive-0.8.63/SOURCE_COPYRIGHT_HEADERS.txt) |
 | zerofrom 0.1.8 | Unicode-3.0 | [LICENSE](licenses/third-party/zerofrom-0.1.8/LICENSE) |
 | zerofrom-derive 0.1.8 | Unicode-3.0 | [LICENSE](licenses/third-party/zerofrom-derive-0.1.8/LICENSE) |
 | zerotrie 0.2.5 | Unicode-3.0 | [LICENSE](licenses/third-party/zerotrie-0.2.5/LICENSE) |

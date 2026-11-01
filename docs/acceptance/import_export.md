@@ -108,3 +108,15 @@
 | 3 | 取消表头重新导出并打开 | 数据从第一行开始，工作表和数据保持一致 | |
 
 结果：待做；日期：；提交号：。
+
+### F230 TIFF 导出
+
+使用 [Excel 与 TIFF 导出分支的 Windows 检查](https://github.com/sch401/scicanvas/actions/workflows/ci.yml?query=branch%3Afeat%2Fexport-xlsx)生成的 `SciCanvas-Windows-x64`，打开示例图。
+
+| 步骤 | 操作 | 预期结果 | 结果 |
+|---|---|---|---|
+| 1 | 选择图形，执行“导出 TIFF”，选择 300 dpi | `.tif` 文件生成成功 | |
+| 2 | 用图像查看器打开并查看文件属性 | 图形完整，像素尺寸和 300 dpi 与页面尺寸一致 | |
+| 3 | 使用透明页面背景再导出 | 图像透明区域保持透明 | |
+
+结果：待做；日期：；提交号：。

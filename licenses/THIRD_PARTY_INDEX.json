@@ -1,7 +1,7 @@
 {
   "target": "x86_64-pc-windows-msvc",
   "scope": "normal,build; all workspace features",
-  "cargo_lock_sha256": "477f4f59d173c3e434fc372381edae450dd7e9c33c63a023bc8dd359ba67959d",
+  "cargo_lock_sha256": "12625e33b580d72be16f58715d4ca333ab6e69b4282300e6dbd5f963b782169a",
   "packages": [
     {
       "name": "ab_glyph",
@@ -1446,6 +1446,24 @@
       ]
     },
     {
+      "name": "half",
+      "version": "2.7.1",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/VoidStarKat/half-rs",
+      "crate_sha256": "6ea2d84b969582b4b1864a92dc5d27cd2b77b622a8d79306834f1be5ba20d84b",
+      "revision": "8cc891f3e4aad956eca7fa79b1f42f87ecd141ae",
+      "files": [
+        {
+          "path": "licenses/third-party/half-2.7.1/LICENSE-APACHE",
+          "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
+        },
+        {
+          "path": "licenses/third-party/half-2.7.1/LICENSE-MIT",
+          "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
+        }
+      ]
+    },
+    {
       "name": "hashbrown",
       "version": "0.15.5",
       "license": "MIT OR Apache-2.0",
@@ -2512,6 +2530,24 @@
       ]
     },
     {
+      "name": "quick-error",
+      "version": "2.0.1",
+      "license": "MIT/Apache-2.0",
+      "repository": "http://github.com/tailhook/quick-error",
+      "crate_sha256": "a993555f31e5a609f617c12db6250dedcac1b0a85076912c436e6fc9b2c8e6a3",
+      "revision": "25ab982bb0c43130ae48485151f4a232eeab7d0c",
+      "files": [
+        {
+          "path": "licenses/third-party/quick-error-2.0.1/LICENSE-APACHE",
+          "sha256": "c6596eb7be8581c18be736c846fb9173b69eccf6ef94c5135893ec56bd92ba08"
+        },
+        {
+          "path": "licenses/third-party/quick-error-2.0.1/LICENSE-MIT",
+          "sha256": "058f01fe181608d027fcde7e528fc03ea3cf90f30903c407644b0a9bbc54f500"
+        }
+      ]
+    },
+    {
       "name": "quote",
       "version": "1.0.47",
       "license": "MIT OR Apache-2.0",
@@ -3304,6 +3340,24 @@
       ]
     },
     {
+      "name": "tiff",
+      "version": "0.11.3",
+      "license": "MIT",
+      "repository": "https://github.com/image-rs/image-tiff",
+      "crate_sha256": "b63feaf3343d35b6ca4d50483f94843803b0f51634937cc2ec519fc32232bc52",
+      "revision": "e41159ce058bf193718b017599e2d7d53e9ccc92",
+      "files": [
+        {
+          "path": "licenses/third-party/tiff-0.11.3/LICENSE",
+          "sha256": "20c097d0de27e2adc179140a3d542091951a030699c7e1c78655f2a2d08d4e3e"
+        },
+        {
+          "path": "licenses/third-party/tiff-0.11.3/tests/COPYRIGHT",
+          "sha256": "c6d1d56bb6e2fe4f0aed4aa8553261dd65247db6db50c87c9e9f3fbe095e2202"
+        }
+      ]
+    },
+    {
       "name": "tiny-skia",
       "version": "0.11.4",
       "license": "BSD-3-Clause",
@@ -3818,6 +3872,24 @@
         {
           "path": "licenses/third-party/webbrowser-1.2.4/LICENSE-MIT",
           "sha256": "7f0f4f8802c102d35110806d1755b7681127575b644f64750810cc47fa78df5b"
+        }
+      ]
+    },
+    {
+      "name": "weezl",
+      "version": "0.1.12",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/image-rs/weezl",
+      "crate_sha256": "a28ac98ddc8b9274cb41bb4d9d4d5c425b6020c50c46f25559911905610b4a88",
+      "revision": "c75ea1f6d935cc56bad8674396b7cb0dd7275f99",
+      "files": [
+        {
+          "path": "licenses/third-party/weezl-0.1.12/LICENSE-APACHE",
+          "sha256": "769f80b5bcb42ed0af4e4d2fd74e1ac9bf843cb80c5a29219d1ef3544428a6bb"
+        },
+        {
+          "path": "licenses/third-party/weezl-0.1.12/LICENSE-MIT",
+          "sha256": "573f5227db835cd30bbdd3aed3f82615f80119a4d5c82b4daf642dbfe2b6afde"
         }
       ]
     },
@@ -4426,6 +4498,32 @@
         {
           "path": "licenses/third-party/zerocopy-0.8.63/SOURCE_COPYRIGHT_HEADERS.txt",
           "sha256": "a6ef4b79e7e2a9a215a3ff5f68f582faab32c5f68bb872720cd047fc7fa0d2a2"
+        }
+      ]
+    },
+    {
+      "name": "zerocopy-derive",
+      "version": "0.8.63",
+      "license": "BSD-2-Clause OR Apache-2.0 OR MIT",
+      "repository": "https://github.com/google/zerocopy",
+      "crate_sha256": "863ad3ac83293fb4d740aedbfdc9240dd8d1a50c1099acd76ce80ce7c7230c7f",
+      "revision": "c55af491426ef53f35fb8c6e83f220fa07712e66",
+      "files": [
+        {
+          "path": "licenses/third-party/zerocopy-derive-0.8.63/LICENSE-APACHE",
+          "sha256": "9d185ac6703c4b0453974c0d85e9eee43e6941009296bb1f5eb0b54e2329e9f3"
+        },
+        {
+          "path": "licenses/third-party/zerocopy-derive-0.8.63/LICENSE-BSD",
+          "sha256": "83c1763356e822adde0a2cae748d938a73fdc263849ccff6b27776dff213bd32"
+        },
+        {
+          "path": "licenses/third-party/zerocopy-derive-0.8.63/LICENSE-MIT",
+          "sha256": "1a2f5c12ddc934d58956aa5dbdd3255fe55fd957633ab7d0d39e4f0daa73f7df"
+        },
+        {
+          "path": "licenses/third-party/zerocopy-derive-0.8.63/SOURCE_COPYRIGHT_HEADERS.txt",
+          "sha256": "1abb74a3b8184801fd365dd7e5737122cab136c2250309a2b080764ad853880b"
         }
       ]
     },

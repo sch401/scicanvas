@@ -4010,11 +4010,27 @@
   "feature": "导出 TIFF（期刊要求）",
   "ref": "Which Export Format Should I Choose",
   "pri": "P1",
-  "status": "未开始",
-  "how": "image",
-  "verify": "尺寸与 DPI 检查",
+  "status": "已实现待验收",
+  "how": "使用与 PNG 相同的图形输出，导出 LZW 压缩 TIFF，保留透明度和 DPI；CMYK 不做。",
+  "verify": "像素、透明度、LZW、DPI 和命令测试；按人工清单查看图像。",
   "id": "F230",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas/src/export.rs::tiff_preserves_rgba_lzw_and_dpi",
+    "crates/scicanvas/src/app/tests/worksheet.rs::tiff_export_command_opens_resolution_settings"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/import_export.md#F230",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "导出与发布",

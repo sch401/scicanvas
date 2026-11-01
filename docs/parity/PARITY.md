@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 97 项，P1 146 项，P2 259 项，不做 12 项。
-状态：已完成 72 项，已实现待验收 59 项，部分实现 17 项，未开始 354 项，不做 12 项。
+状态：已完成 72 项，已实现待验收 60 项，部分实现 17 项，未开始 353 项，不做 12 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -324,7 +324,7 @@
 | F227 | 导出 PNG（指定 DPI） | The Export Graph as Image Dialog Box | P0 | 已实现待验收 | 图形 → 导出 PNG：SVG 版面经 resvg 栅格化，可选 150/300/600/1200 dpi 或自定义；写入 pHYs 物理分辨率，像素尺寸按页面毫米换算；中文回退到系统字体；字体集与屏幕/核心度量共用同一字节，SVG 使用自然字宽和明确基线，支持科学文字分段字号/上下标偏移/粗斜体 | 自动化回归核对像素尺寸、pHYs、可解码和绘制内容；插入 Word 的实际尺寸待人工验收；字体实际字节匹配及 96/300/600 DPI 标题栅格边界回归；科学文字真实字形、屏幕/SVG 基线对照与 96/300/600 DPI 边界回归 | — |
 | F228 | 导出 PDF（矢量，嵌入字体） | Which Export Format Should I Choose | P0 | 已实现待验收 | 文件页、功能区、图形右键和命令搜索导出 PDF；复用页面 SVG 为矢量，保持毫米尺寸、裁剪、透明面积、双轴、多图层与科学文字；嵌入实际字体子集并保留 Unicode 文本。按实际使用字体的 fsType 拒绝受限/仅位图/禁止子集等权限，导出不改项目；自由文字和手动图例沿用相同页面比例位置 | 14 图型+科学文字/中文/误差棒/双轴+多面板/插图共 16 样例回归；独立 pypdf 检查字体流、Unicode、页面尺寸和无页面位图，Poppler 渲染与 PNG 对照并逐图查看；实际打印与 Windows 文件对话框人工验收待做；新增自由文字和手动图例的 PDF/PNG 独立渲染对照 | PDF 导出：已完成 0/4，待验收 4，部分实现 0；矢量/裁剪/透明度、毫米页面尺寸、字体子集/Unicode、科学文字排版均已接入并通过专项核对；最终人工验收待做 |
 | F229 | 导出 EPS | Which Export Format Should I Choose | P1 | 未开始 | 自写 PostScript 输出 | LaTeX 编译检查 | — |
-| F230 | 导出 TIFF（期刊要求） | Which Export Format Should I Choose | P1 | 未开始 | image | 尺寸与 DPI 检查 | — |
+| F230 | 导出 TIFF（期刊要求） | Which Export Format Should I Choose | P1 | 已实现待验收 | 使用与 PNG 相同的图形输出，导出 LZW 压缩 TIFF，保留透明度和 DPI；CMYK 不做。 | 像素、透明度、LZW、DPI 和命令测试；按人工清单查看图像。 | — |
 | F231 | 复制图形到剪贴板（粘贴到 Word / PPT） | Pasting or Embedding Graphs in Other Applications | P0 | 已实现待验收 | 复制图形（Ctrl+J）：按 300 dpi 栅格化后经 arboard 写入剪贴板位图；矢量 EMF 待评估 | 与 PNG 共用栅格化回归；粘贴到 Word / PPT 待人工验收 | — |
 | F232 | 导出 EMF（Office 可编辑矢量） | Which Export Format Should I Choose | P1 | 未开始 | 自写 EMF 写出器 | 插入 Word 检查 | — |
 | F233 | 批量导出多张图 | The Export Graph Dialog Box | P1 | 未开始 | — | 手动操作 | — |

@@ -212,6 +212,10 @@ impl SciApp {
                 self.finish_dialog_input();
                 self.frequency_counts(bins, range);
             }
+            dialogs::Action::ExportTiff(dpi) => {
+                self.dialog = None;
+                self.export_tiff(dpi);
+            }
             dialogs::Action::ExportPng(dpi) => {
                 self.dialog = None;
                 self.export_png(dpi);

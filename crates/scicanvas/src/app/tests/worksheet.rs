@@ -1755,3 +1755,11 @@ fn excel_export_dialog_lets_user_choose_headers() {
     harness.click_text(&mut dialog, &output, "包含长名、单位和注释三行表头");
     assert!(matches!(dialog, Dialog::ExportXlsx { headers: false }));
 }
+
+#[test]
+fn tiff_export_command_opens_resolution_settings() {
+    let mut app = app();
+    app.active = Some(2);
+    app.run_command("graph.export_tiff");
+    assert!(matches!(app.dialog, Some(Dialog::Tiff { dpi: 600, .. })));
+}

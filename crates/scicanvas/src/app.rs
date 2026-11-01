@@ -7,6 +7,7 @@ mod excel_export;
 mod find_replace;
 mod notes;
 mod props;
+mod tiff_export;
 mod windows;
 mod worksheet;
 mod workspace;

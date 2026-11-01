@@ -112,6 +112,30 @@ pub fn png_bytes(pixmap: &Pixmap, dpi: u32) -> Result<Vec<u8>, String> {
     Ok(out)
 }
 
+/// 使用与 PNG 相同的图形结果，写入 LZW 压缩 TIFF 和每英寸分辨率。
+pub fn tiff_bytes(pixmap: &Pixmap, dpi: u32) -> Result<Vec<u8>, String> {
+    use tiff::encoder::{colortype::RGBA8, Compression, Rational, TiffEncoder};
+    use tiff::tags::{ResolutionUnit, Tag};
+    let mut output = std::io::Cursor::new(Vec::new());
+    {
+        let mut encoder = TiffEncoder::new(&mut output)
+            .map_err(|e| format!("编码 TIFF 失败：{e}"))?
+            .with_compression(Compression::Lzw);
+        let mut image = encoder
+            .new_image::<RGBA8>(pixmap.width(), pixmap.height())
+            .map_err(|e| format!("编码 TIFF 失败：{e}"))?;
+        image.resolution(ResolutionUnit::Inch, Rational { n: dpi, d: 1 });
+        image
+            .encoder()
+            .write_tag(Tag::ExtraSamples, &[2_u16][..])
+            .map_err(|e| format!("编码 TIFF 失败：{e}"))?;
+        image
+            .write_data(&straight_rgba(pixmap))
+            .map_err(|e| format!("编码 TIFF 失败：{e}"))?;
+    }
+    Ok(output.into_inner())
+}
+
 /// 非预乘的 RGBA，供剪贴板使用。
 pub fn straight_rgba(pixmap: &Pixmap) -> Vec<u8> {
     pixmap
@@ -557,5 +581,32 @@ mod tests {
     fn absurd_dpi_is_rejected_instead_of_allocating() {
         let p = Project::sample();
         assert!(rasterize(&svg::render_page(&p.graphs[0], &p), 100_000).is_err());
+    }
+
+    #[test]
+    fn tiff_preserves_rgba_lzw_and_dpi() {
+        use tiff::decoder::{Decoder, DecodingResult};
+        use tiff::tags::Tag;
+        let mut pixmap = Pixmap::new(3, 2).unwrap();
+        pixmap.fill(resvg::tiny_skia::Color::from_rgba8(120, 80, 200, 128));
+        let expected = straight_rgba(&pixmap);
+        let encoded = tiff_bytes(&pixmap, 600).unwrap();
+        let mut decoder = Decoder::new(std::io::Cursor::new(encoded)).unwrap();
+        assert_eq!(decoder.dimensions().unwrap(), (3, 2));
+        assert_eq!(decoder.get_tag_u32(Tag::Compression).unwrap(), 5);
+        assert_eq!(decoder.get_tag_u32(Tag::ResolutionUnit).unwrap(), 2);
+        assert_eq!(
+            decoder.get_tag(Tag::XResolution).unwrap(),
+            tiff::decoder::ifd::Value::Rational(600, 1)
+        );
+        assert_eq!(
+            decoder.get_tag(Tag::YResolution).unwrap(),
+            tiff::decoder::ifd::Value::Rational(600, 1)
+        );
+        assert_eq!(decoder.get_tag_u32(Tag::ExtraSamples).unwrap(), 2);
+        let DecodingResult::U8(actual) = decoder.read_image().unwrap() else {
+            panic!("expected RGBA8")
+        };
+        assert_eq!(actual, expected);
     }
 }

@@ -252,6 +252,10 @@ pub enum Dialog {
         dpi: u32,
         page_mm: (f64, f64),
     },
+    Tiff {
+        dpi: u32,
+        page_mm: (f64, f64),
+    },
 }
 
 /// 对话框里用户做出的选择，由 app.rs 执行。
@@ -282,6 +286,7 @@ pub enum Action {
     Ifft(u64, String, Option<String>, scicanvas_core::fft::InverseInput),
     Normalize(NormalizeMethod),
     ExportPng(u32),
+    ExportTiff(u32),
     Interpolate(InterpMethod, usize, Option<(f64, f64)>),
     TTest(TTestKind, f64),
     Frequency(Option<usize>, Option<(f64, f64)>),
@@ -349,7 +354,7 @@ impl Dialog {
             Self::Frequency { .. } => self.show_frequency(ctx, pal, &mut open, esc),
             Self::TTest { .. } => self.show_t_test(ctx, pal, &mut open, esc),
             Self::TTestReport { .. } => self.show_t_test_report(ctx, pal, &mut open, esc),
-            Self::Png { .. } => self.show_png(ctx, pal, &mut open, esc),
+            Self::Png { .. } | Self::Tiff { .. } => self.show_png(ctx, pal, &mut open, esc),
         };
         if !open || (esc && matches!(action, Action::None)) {
             action = Action::Close;
