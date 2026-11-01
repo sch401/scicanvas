@@ -429,14 +429,21 @@
   "feature": "列属性：X / Y / Z / X误差 / Y误差 / 标签 / 忽略",
   "ref": "Setting Column Designation",
   "pri": "P0",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "列角色 X/Y/Z/X误差/Y误差/标签/忽略：功能区、列标题右键和列属性对话框均可设置；误差列自动关联；Z 列和标签列不参与二维作图与分析取列；数据标签选“指定列文本”而未指定列时自动使用标签列；角色随项目保存",
-  "verify": "Z/标签列不作为曲线和分析数据、标签列作为数据标签来源、项目往返的核心测试；设为 Z/标签命令撤销/重做回归；Z 列用于等高线/三维图需随对应图型验收",
+  "verify": "Z/标签列不作为曲线和分析数据、标签列作为数据标签来源、项目往返的核心测试；设为 Z/标签命令撤销/重做回归；Z 列用于等高线/三维图需随对应图型验收；2026-11：七种列角色与撤销、错误和标签/Z 绘图测试通过。",
   "id": "F026",
   "milestone": "M1 日常够用",
   "needs": [
    "auto"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas/src/app/tests/worksheet.rs::all_column_roles_apply_and_undo_without_changing_values",
+    "crates/scicanvas/src/app/tests/graph.rs::error_role_commands_and_visibility_control_are_undoable",
+    "crates/scicanvas-core/tests/spline_labels.rs::label_and_z_columns_are_not_curves_and_label_column_feeds_data_labels"
+   ]
+  }
  },
  {
   "module": "工作表",
@@ -516,7 +523,7 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "Rust app.rs/sheet.rs 已接入拖动框选、Shift 扩展、复制/剪切/粘贴与清空选区",
-  "verify": "选区边界、键盘、剪贴板及撤销回归已通过；真实鼠标与长表人工验收待做",
+  "verify": "选区边界、键盘、剪贴板及撤销回归已通过；真实鼠标与长表人工验收待做；2026-11：真实鼠标拖选、Shift 扩展及复制测试通过，Windows 人工验收待做。",
   "id": "F030",
   "milestone": "M1 日常够用",
   "needs": [
@@ -529,7 +536,10 @@
     "result": "待做",
     "date": "",
     "build": ""
-   }
+   },
+   "auto": [
+    "crates/scicanvas/src/app/tests/worksheet.rs::mouse_drag_shift_extension_and_copy_select_the_visible_cells"
+   ]
   }
  },
  {
@@ -840,12 +850,18 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "类型化数值列、缺失位图和可见行表格；CSV 由文本流式建表（不生成整张字符串表）；折线按像素列保留首/末/最小/最大点抽稀，散点按半像素网格去重；图形场景按图形设置、视图和所引用数据的指纹缓存，数据不变时复用。本机 release 百万行十列：导入 0.81 秒，含完整界面的首帧 246 ms、次帧 12.6 ms，进程峰值内存 494 MB（字体约 56 MB、数值列约 80 MB，原 <150 MB 目标不现实）；设置/图形窗口移动复用矢量绘制指令和文字排版，数据/设置/视图/尺寸/DPI 改变时更新；Windows 使用 wgpu FIFO 呈现",
-  "verify": "流式导入与行表导入结果一致、抽稀保形的核心与界面测试；百万行首帧测量（忽略测试，外部采样峰值内存），数据见 docs/perf.md；拖动修复 4f74ec7 本地完整检查与 Windows CI 通过，用户已确认快速拖动正常；不扩大为整项大数据性能验收",
+  "verify": "流式导入与行表导入结果一致、抽稀保形的核心与界面测试；百万行首帧测量（忽略测试，外部采样峰值内存），数据见 docs/perf.md；拖动修复 4f74ec7 本地完整检查与 Windows CI 通过，用户已确认快速拖动正常；不扩大为整项大数据性能验收；2026-11：百万行可滚动到末尾且只绘制可见区域；滚动流畅度性能门禁待 S1-3。",
   "id": "F053",
   "milestone": "M1 日常够用",
   "needs": [
    "auto"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas/src/app/tests/worksheet.rs::million_rows_scroll_to_the_last_value_without_rendering_every_row",
+    "crates/scicanvas-core/tests/typed_columns.rs::million_numeric_cells_use_compact_storage"
+   ]
+  }
  },
  {
   "module": "矩阵",
@@ -1058,7 +1074,7 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "工作表 → 导出 CSV：UTF-8 BOM、CRLF，表头为“长名称 (单位)”，与 .scv 内的 CSV 同一实现",
-  "verify": "导出后重新导入的往返测试；Excel 打开待人工验收",
+  "verify": "导出后重新导入的往返测试；Excel 打开待人工验收；2026-11：CSV 名称、单位和单元格往返测试通过，Windows 人工验收待做。",
   "id": "F068",
   "milestone": "M1 日常够用",
   "needs": [
@@ -1071,7 +1087,10 @@
     "result": "待做",
     "date": "",
     "build": ""
-   }
+   },
+   "auto": [
+    "crates/scicanvas-core/tests/scv_files.rs::exported_csv_reimports_with_names_units_and_cells"
+   ]
   }
  },
  {
