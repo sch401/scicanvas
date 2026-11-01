@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 97 项，P1 146 项，P2 259 项，不做 12 项。
-状态：已完成 26 项，已实现待验收 97 项，部分实现 17 项，未开始 362 项，不做 12 项。
+状态：已完成 44 项，已实现待验收 79 项，部分实现 17 项，未开始 362 项，不做 12 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -151,7 +151,7 @@
 | F103 | LaTeX 公式 | Creating Text Labels | P1 | 未开始 | 评估 typst 或 MathJax 转 SVG | 目视比较 | — |
 | F104 | 绘图对象（直线、箭头、矩形、圆） | Creating and Editing Drawing Objects | P1 | 未开始 | — | 手动操作 | — |
 | F105 | 数据标签 | Adding Labels to Plots | P1 | 已实现待验收 | 数值/X-Y/原始行号/指定列文本，字号/偏移、边缘定位、屏幕/SVG 和撤销均已接入；文字边界使用共享真实度量，过长文本按绘图区适配；启用科学文字后，指定列文本支持上下标与局部粗斜体，共用格式排版 | 行对齐、文本转义、柱段值、图层与真实开关回归已通过；matplotlib 同数据视觉对照待做；真实字宽/行高、屏幕缩放及 SVG 文字边界回归 | 标签来源：已完成 0/4，待验收 4，部分实现 0；数值、X/Y、行号、指定列；自动化回归已通过，Origin 对照待验收 |
-| F106 | 误差棒 | Adding Error Bars to Your Graph | P0 | 已实现待验收 | 对称 X/Y 误差列、稳定自动关联、端帽/线宽、分组定位与屏幕/SVG 已实现；本条当前范围为对称误差 | 行对齐、对数裁剪、分组柱、往返与撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收） | — |
+| F106 | 误差棒 | Adding Error Bars to Your Graph | P0 | 已完成 | 对称 X/Y 误差列、稳定自动关联、端帽/线宽、分组定位与屏幕/SVG 已实现；本条当前范围为对称误差 | 行对齐、对数裁剪、分组柱、往返与撤销回归已通过；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）；2026-11 验收：自动测试 + 视觉对照 | — |
 | F107 | 插入图片 / 表格到图中 | Inserting Image into Graph | P2 | 未开始 | — | 目视检查 | — |
 | F108 | 合并多张图 / 拆分图层 | The Merge Graph Dialog Box | P1 | 未开始 | — | 目视检查 | — |
 | F109 | 图层排列（行列网格、间距） | The Arrange Layers Dialog Box | P0 | 已实现待验收 | 上下/左右/四面板快捷创建、网格列数、自由矩形与透明叠放；网格面板按行列统一边距对齐坐标框；属性窗口可设网格横向/纵向间距（mm）；图层的 X、Y 轴可分别联动到另一图层（范围与刻度跟随目标图层，目标缩放时一起变化，删除目标图层时联动取消，联动到自身或不存在的图层被拒绝）；未设置时项目文件不变 | 间距平移面板与缩小宽度、联动范围与刻度相同、目标缩放跟随、无效联动拒绝、删除图层后联动清理的布局测试；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收） | — |
@@ -189,10 +189,10 @@
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
 |---|---|---|---|---|---|---|---|
 | F130 | 线性回归（斜率、截距、标准误、R²、残差） | The Linear Regression Dialog Box | P0 | 已实现待验收 | 斜率/截距、标准误、R²、残差平方和及报告；拟合时为每条数据写入逐点残差列（Y − 拟合值，与原数据同行，未参与拟合的行留空），拟合结果对话框“残差图”生成残差对 X 的散点图，一步撤销 | 残差逐行等于 Y − 拟合值且和为 0、残差图曲线映射的核心测试；残差图按钮的真实界面点击与撤销/重做回归；SciPy/NIST 参考值对照待做；NoInt1/NoInt2 过原点回归尚不支持，登记 S2-5 | — |
-| F131 | 多项式回归 | The Polynomial Regression Dialog Box | P0 | 已实现待验收 | X 标准化后的正规方程与高斯–约当求逆；2–6 阶拟合、参数标准误、R²、曲线及撤销已接入 | 解析/仿真回归已通过；完整 NIST 参考值对照待做；NIST StRD 认证对照及已知失败见 docs/parity/nist.md；NoInt1/NoInt2 过原点回归尚不支持，登记 S2-5；可复现 NumPy/SciPy 多组参考见 tests/reference 与 tools/reference/README.md（六阶容差原因单列），Windows 人工结果另记 | 多项式阶次：已完成 0/5，待验收 5，部分实现 0；2–6 阶；认证数据与稳定性验收待完成 |
-| F132 | 多元线性回归 | The Multiple Linear Regression Dialog Box | P1 | 已实现待验收 | 分析 → 多元线性回归：先点选自变量、最后点选因变量；参数表（值、标准误、t、p）与 R²、调整 R²、F 检验、残差标准差 | 与 numpy.linalg.lstsq 及 scipy.stats.t / f 计算的参数、标准误、p 值一致（1e-9），含缺失行与共线提示；NIST StRD 认证对照及已知失败见 docs/parity/nist.md | — |
+| F131 | 多项式回归 | The Polynomial Regression Dialog Box | P0 | 已完成 | X 标准化后使用列主元 Householder QR 和残差修正；2–6 阶拟合、参数标准误、R²、曲线及撤销已接入 | 解析/仿真回归已通过；NIST StRD 认证对照及已知失败见 docs/parity/nist.md；NoInt1/NoInt2 过原点回归尚不支持，登记 S2-5；可复现 NumPy/SciPy 多组参考见 tests/reference 与 tools/reference/README.md（六阶容差原因单列），Windows 人工结果另记；2026-11 验收：自动测试 + 参考值 | 多项式阶次：已完成 0/5，待验收 5，部分实现 0；2–6 阶；认证数据与稳定性验收待完成 |
+| F132 | 多元线性回归 | The Multiple Linear Regression Dialog Box | P1 | 已完成 | 分析 → 多元线性回归：先点选自变量、最后点选因变量；参数表（值、标准误、t、p）与 R²、调整 R²、F 检验、残差标准差 | 与 numpy.linalg.lstsq 及 scipy.stats.t / f 计算的参数、标准误、p 值一致（1e-9），含缺失行与共线提示；NIST StRD 认证对照及已知失败见 docs/parity/nist.md；2026-11 验收：自动测试 + 参考值 | — |
 | F133 | 含 X 误差的线性拟合（York 法） | The Linear Fit with X Error Dialog (Pro Only) | P2 | 未开始 | — | 与 Origin 比较 | — |
-| F134 | 非线性拟合引擎（Levenberg–Marquardt） | Theory of Nonlinear Curve Fitting | P0 | 已实现待验收 | Levenberg–Marquardt（中心差分雅可比、自适应阻尼），参数固定、上下界与线性约束（活动集），标准误 (JᵀJ)⁻¹·RSS/(n−p)（有约束时在零空间计算），28 种内置函数与自动初值；用户自定义函数见 F142；自定义标量函数复用同一求解器，用户函数库范围见 F142；新结果保存完整重算定义，支持自动/手动/不重算，报告与曲线/带同次求解同步。 | 原 24 种函数的 SciPy 1.17.1 curve_fit 参数/标准误参考回归、上下界与线性约束回归通过；新增 Rational1 自动初值和自定义公式合成数据回归通过；完整 NIST 参考值对照待做；NIST StRD 认证对照及已知失败见 docs/parity/nist.md；Nelson 双自变量尚不支持，登记 S2-5；Gauss1–3/ENSO 已纳入正式测试；Gauss1–3 双起点达标，ENSO 参数 LRE 约 6.03/5.93 < 7，登记已知失败，RSS/SE 达标 | — |
+| F134 | 非线性拟合引擎（Levenberg–Marquardt） | Theory of Nonlinear Curve Fitting | P0 | 已完成 | Levenberg–Marquardt（中心差分雅可比、自适应阻尼），参数固定、上下界与线性约束（活动集），标准误 (JᵀJ)⁻¹·RSS/(n−p)（有约束时在零空间计算），28 种内置函数与自动初值；用户自定义函数见 F142；自定义标量函数复用同一求解器，用户函数库范围见 F142；新结果保存完整重算定义，支持自动/手动/不重算，报告与曲线/带同次求解同步。 | 原 24 种函数的 SciPy 1.17.1 curve_fit 参数/标准误参考回归、上下界与线性约束回归通过；新增 Rational1 自动初值和自定义公式合成数据回归通过；NIST StRD 认证对照及已知失败见 docs/parity/nist.md；Nelson 双自变量尚不支持，登记 S2-5；Gauss1–3/ENSO 已纳入正式测试；Gauss1–3 双起点达标，ENSO 两起点符合原始 LRE 或认证标准误尺度的验收条件；Lanczos1 残差与标准误的浮点限制继续记录；2026-11 验收：自动测试 + 参考值 | — |
 | F135 | 参数初值自动估计 | Fitting Functions | P0 | 已实现待验收 | 当前 28 种内置非线性模型均有数据驱动初值估计，含 Rational1/12/22/33；支持固定参数并报告未收敛状态。自定义函数当前由用户提供初值 | 原模型初值/SciPy 拟合回归及 Rational1 自动初值合成数据回归通过；退化数据与复杂初值实例验收待做；NIST StRD 认证对照及已知失败见 docs/parity/nist.md；StRD 使用官方给定初值，自动初值本身继续单独验收 | 当前模型自动初值：已完成 0/28，待验收 28，部分实现 0；28 为当前 Model::ALL 数量，含四种有理模型。完整函数库见 F514；自定义函数由用户输入初值，复杂数据与 Origin 实例待验收。 |
 | F136 | 参数固定、上下界、线性约束 | Parameters,Bounds,Constraints and Weighting | P0 | 已实现待验收 | 非线性拟合对话框每个参数可设固定值、下限、上限，并可写参数间线性约束（每行一条，=、<=、>=，如 A1 + A2 = 1、t2 >= t1 + 3）：固定参数不计入自由度；上下界与约束用活动集方法——等式与贴边且下降方向朝外的不等式在零空间求步，其余不等式和上下界截断步长，挡路的约束加入活动集重新求步；初值先投影到可行域，约束互相矛盾时报错；标准误按停止点约束零空间计算，自由度扣除约束个数；报告列出约束并标出停在边界的参数；A5 第二批内置/自定义报告重新载入原初值、固定参数、上下界及线性约束，执行后原位更新结果组，一步撤销重做。 | 上下界与 SciPy curve_fit(bounds, trf) 一致；等式约束、生效与不生效的不等式与 SciPy 代入消元拟合的参数（1e-5）、标准误（1e-3）、RSS 一致；约束解析与矛盾约束报错测试；对话框约束生效与写错保留对话框的界面回归 | — |
 | F137 | 加权拟合（误差列权重等） | Parameters,Bounds,Constraints and Weighting | P1 | 未开始 | — | 与 Origin 比较 | — |
@@ -228,12 +228,12 @@
 | F161 | XYZ 轨迹插值 | XYZ Trace Interpolation | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
 | F162 | 二维插值 | 2D Interpolate/Extrapolate | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
 | F163 | 三维插值 | 3D Interpolation | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
-| F164 | 数值积分（梯形法、曲线下面积） | Integrate | P0 | 已实现待验收 | analysis.rs/ops.rs 已实现梯形积分、累计积分结果与绝对面积选项 | 解析积分、行对齐与结果写回回归已通过；SciPy/NIST 参考值对照待做；可复现 NumPy/SciPy 多组参考见 tests/reference 与 tools/reference/README.md（六阶容差原因单列），Windows 人工结果另记 | — |
+| F164 | 数值积分（梯形法、曲线下面积） | Integrate | P0 | 已完成 | analysis.rs/ops.rs 已实现梯形积分、累计积分结果与绝对面积选项 | 解析积分、行对齐与结果写回回归已通过；可复现 NumPy/SciPy 多组参考见 tests/reference 与 tools/reference/README.md（六阶容差原因单列），Windows 人工结果另记；2026-11 验收：自动测试 + 参考值 | — |
 | F165 | 二维体积积分 | 2D Volume Integrate (Pro Only) | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
 | F166 | 数值微分（含 Savitzky-Golay 平滑求导） | Differentiate | P0 | 已实现待验收 | 有限差分微分和独立 Savitzky–Golay 平滑；“SG 平滑求导”对话框可选一阶/二阶导数、窗口点数和多项式阶数，按实际 X 在窗口内做最小二乘多项式并对其求导，两端平移窗口，结果写成新列（单位按 Y/X 或 Y/X² 推导），一步撤销 | 与 SciPy 1.17.1 savgol_filter(deriv, delta, mode=interp) 三组参数逐点一致（相对误差 < 1e-9，含两端）；二次函数二阶导为常数；对话框真实点击与撤销/重做回归 | — |
 | F167 | 多条曲线平均 / 合并 | Average/Merge Multiple Curves | P1 | 部分实现 | 已把多曲线线性插值到共同 X 范围求均值/标准差，输出结果表、Y 误差及线图；通用曲线合并工作流待做 | 平均结果、缺失值、结果输出和一步撤销回归通过；通用合并入口与参考软件验收待做 | — |
-| F168 | 简单列运算（加减乘除、两曲线相减） | Simple Column/Curve Math | P0 | 已实现待验收 | 分析 → 列运算：两列或列与常数的加减乘除，结果新列与单位推导；不同 X 网格的曲线先线性插值后相减，范围外留空；一步撤销 | 逐行、常数、单位、除零与“原始减拟合”残差回归；SciPy/NIST 参考值对照待做；可复现 NumPy/SciPy 多组参考见 tests/reference 与 tools/reference/README.md（六阶容差原因单列），Windows 人工结果另记 | — |
-| F169 | 归一化（最大值、Z 分数、区间缩放） | Normalize | P0 | 已实现待验收 | 已接入除以最大值、Z 分数、区间缩放，结果写入派生列并支持撤销 | 算法参考值、写回及撤销回归已通过；SciPy/NIST 参考值对照待做；可复现 NumPy/SciPy 多组参考见 tests/reference 与 tools/reference/README.md（六阶容差原因单列），Windows 人工结果另记 | — |
+| F168 | 简单列运算（加减乘除、两曲线相减） | Simple Column/Curve Math | P0 | 已完成 | 分析 → 列运算：两列或列与常数的加减乘除，结果新列与单位推导；不同 X 网格的曲线先线性插值后相减，范围外留空；一步撤销 | 逐行、常数、单位、除零与“原始减拟合”残差回归；可复现 NumPy/SciPy 多组参考见 tests/reference 与 tools/reference/README.md（六阶容差原因单列），Windows 人工结果另记；2026-11 验收：自动测试 + 数值参考 | — |
+| F169 | 归一化（最大值、Z 分数、区间缩放） | Normalize | P0 | 已完成 | 已接入除以最大值、Z 分数、区间缩放，结果写入派生列并支持撤销 | 算法参考值、写回及撤销回归已通过；可复现 NumPy/SciPy 多组参考见 tests/reference 与 tools/reference/README.md（六阶容差原因单列），Windows 人工结果另记；2026-11 验收：自动测试 + 参考值 | — |
 | F170 | 多边形面积 | Polygon Area | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
 | F171 | 反函数（交换 X、Y 求逆） | Inverse | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
 | F172 | 自定义滤波 / 中值滤波 | Median Filter | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
@@ -244,7 +244,7 @@
 
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
 |---|---|---|---|---|---|---|---|
-| F174 | 列统计（均值、标准差、中位数、分位数等） | Statistics on Columns | P0 | 已实现待验收 | 已接入 N、均值、样本标准差、标准误、中位数、线性插值分位数、极值与总和，生成结果工作簿 | 描述统计与结果表回归已通过；SciPy/NIST 参考值对照待做；可复现 NumPy/SciPy 多组参考见 tests/reference 与 tools/reference/README.md（六阶容差原因单列），Windows 人工结果另记 | — |
+| F174 | 列统计（均值、标准差、中位数、分位数等） | Statistics on Columns | P0 | 已完成 | 已接入 N、均值、样本标准差、标准误、中位数、线性插值分位数、极值与总和，生成结果工作簿 | 描述统计与结果表回归已通过；可复现 NumPy/SciPy 多组参考见 tests/reference 与 tools/reference/README.md（六阶容差原因单列），Windows 人工结果另记；2026-11 验收：自动测试 + 参考值 | — |
 | F175 | 行统计 | Statistics on Rows | P1 | 已实现待验收 | 统计 → 行统计：对点选的各列逐行求均值、标准差、标准误、N，写在最后一列右边；标准差设为 Y 误差列，可直接画误差棒 | 单元测试覆盖缺失值、单值行与列属性 | — |
 | F176 | 整表统计 | Statistics on Whole Sheet | P1 | 未开始 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
 | F177 | 频数统计 / 分箱 | Frequency Counts | P0 | 已实现待验收 | 统计 → 频数统计：等宽分箱（Sturges 或指定区间数、可选范围），每列生成区间、频数、累积与相对频率表，一步撤销 | 与 numpy.histogram 的边界与计数一致 | — |
@@ -359,8 +359,8 @@
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
 |---|---|---|---|---|---|---|---|
 | F254 | 折线图 | Line Graph | P0 | 已完成 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收） | — |
-| F255 | 水平阶梯图 | Horizontal Step Graph | P1 | 已实现待验收 | 水平阶梯：先横后竖，共享折线图元与 SVG | 拐点几何、拟合线、保存与撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收） | — |
-| F256 | 垂直阶梯图 | Vertical Step Graph | P1 | 已实现待验收 | 垂直阶梯：先竖后横，共享折线图元与 SVG | 拐点几何、拟合线、保存与撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收） | — |
+| F255 | 水平阶梯图 | Horizontal Step Graph | P1 | 已完成 | 水平阶梯：先横后竖，共享折线图元与 SVG | 拐点几何、拟合线、保存与撤销回归已通过；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）；2026-11 验收：自动测试 + 视觉对照 | — |
+| F256 | 垂直阶梯图 | Vertical Step Graph | P1 | 已完成 | 垂直阶梯：先竖后横，共享折线图元与 SVG | 拐点几何、拟合线、保存与撤销回归已通过；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）；2026-11 验收：自动测试 + 视觉对照 | — |
 | F257 | Y 偏移堆叠线图 | Stacked Lines by Y Offsets Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F258 | 棒棒糖图 | Lollipop Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F259 | 颜色映射线系列 | Colormapped Line Series | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
@@ -373,10 +373,10 @@
 | F261 | 散点图 | 2D Scatter Graph | P0 | 已完成 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收） | — |
 | F262 | 中心坐标散点图 | 2D Scatter Central Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F263 | 列散点图 | Column Scatter | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
-| F264 | Y 误差棒图 | Y Error Bar Graph | P0 | 已实现待验收 | Y 对称误差列自动关联、端帽/线宽、裁剪与共享线段图元 | 端点几何、无效值、保存与撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收） | — |
-| F265 | XY 误差棒图 | XY Error Bar Graph | P0 | 已实现待验收 | 对称 X/Y 误差列自动关联、方向转换、端帽/线宽与共享图元 | 关联、端点几何、裁剪及撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收） | — |
+| F264 | Y 误差棒图 | Y Error Bar Graph | P0 | 已完成 | Y 对称误差列自动关联、端帽/线宽、裁剪与共享线段图元 | 端点几何、无效值、保存与撤销回归已通过；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）；2026-11 验收：自动测试 + 视觉对照 | — |
+| F265 | XY 误差棒图 | XY Error Bar Graph | P0 | 已完成 | 对称 X/Y 误差列自动关联、方向转换、端帽/线宽与共享图元 | 关联、端点几何、裁剪及撤销回归已通过；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）；2026-11 验收：自动测试 + 视觉对照 | — |
 | F266 | 散点 + 地毯图 | Scatter+Rug Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
-| F267 | 垂线图 | Vertical Drop Line | P1 | 已实现待验收 | 原始点到零基线的垂线，对数轴使用显示下界；符号/线宽与 SVG 共用 | 正负值、对数基线、SVG 线段和撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收） | — |
+| F267 | 垂线图 | Vertical Drop Line | P1 | 已完成 | 原始点到零基线的垂线，对数轴使用显示下界；符号/线宽与 SVG 共用 | 正负值、对数基线、SVG 线段和撤销回归已通过；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）；2026-11 验收：自动测试 + 视觉对照 | — |
 | F268 | 气泡图 | Indexed Size Bubble Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F269 | 颜色映射散点图 | Color Mapped Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F270 | 气泡 + 颜色映射图 | Indexed Size (Bubble) and Color Map Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
@@ -402,13 +402,13 @@
 |---|---|---|---|---|---|---|---|
 | F281 | 柱状图 | Column Graph | P0 | 已完成 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收） | — |
 | F282 | 带标签柱状图 | Column + Label Graph | P1 | 已实现待验收 | 柱图配合数值/X-Y/行号/指定列数据标签，字号与偏移可调 | 标签行对齐、段值、边缘定位、SVG 与撤销回归已通过；matplotlib 同数据视觉对照待做 | — |
-| F283 | 条形图 | Bar Graph | P0 | 已实现待验收 | 数值型条形图、并排分组、误差换向、物理轴范围与共享矩形 | 轴方向、正负值、分组误差、SVG 与撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收） | — |
-| F284 | 堆叠柱状图 | Stacked Column Graph | P1 | 已实现待验收 | 按原始行与 X 对齐，正负柱段分别累加，共享矩形与 SVG | 缺失行、正负值、段几何、误差与撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收） | — |
+| F283 | 条形图 | Bar Graph | P0 | 已完成 | 数值型条形图、并排分组、误差换向、物理轴范围与共享矩形 | 轴方向、正负值、分组误差、SVG 与撤销回归已通过；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）；2026-11 验收：自动测试 + 视觉对照 | — |
+| F284 | 堆叠柱状图 | Stacked Column Graph | P1 | 已完成 | 按原始行与 X 对齐，正负柱段分别累加，共享矩形与 SVG | 缺失行、正负值、段几何、误差与撤销回归已通过；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）；2026-11 验收：自动测试 + 视觉对照 | — |
 | F285 | 浮动条形图 | Floating Bar Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F286 | 堆叠条形图 | Stacked Bar Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F287 | 百分比堆叠柱状图 | 100% Stacked Column Graph | P1 | 已实现待验收 | 按行正负组分别归一至 ±100%，零总量与极端尺度处理，共享 SVG | 归一化参考值、极端数值、误差缩放及撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收） | — |
 | F288 | 百分比堆叠条形图 | 100% Stacked Bar Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
-| F289 | 浮动柱状图 | Floating Column Graph | P2 | 已实现待验收 | 上下端列稳定配对、完整行过滤、反向区间、多组排列与共享 SVG | 配对、删列/复用、矩形、对数裁剪与撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收） | — |
+| F289 | 浮动柱状图 | Floating Column Graph | P2 | 已完成 | 上下端列稳定配对、完整行过滤、反向区间、多组排列与共享 SVG | 配对、删列/复用、矩形、对数裁剪与撤销回归已通过；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）；2026-11 验收：自动测试 + 视觉对照 | — |
 | F290 | 百分比丝带图 | 100% Ribbon Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F291 | 丝带图 | Ribbon Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F292 | 圆堆积图 | Circular Packing Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
@@ -434,7 +434,7 @@
 
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
 |---|---|---|---|---|---|---|---|
-| F305 | 双 Y 轴图 | Double Y Graph | P0 | 已实现待验收 | 曲线样式里勾选“右侧 Y 轴”：右轴曲线独立自动/手动定范围，可单独设刻度数字格式（缺省跟随左 Y）；存在右轴曲线时绘图属性显示右轴设置；右侧显示轴线、刻度、标签和标题，符号自动范围端点留 4%；对数开关仍左右共用；屏幕、SVG、PNG、PDF 和数据点吸附共用 AxisSet/YAxis，拟合/平滑结果线保留来源轴 | 左右轴范围互不影响、独立刻度格式、v14 默认外观迁移、右轴坐标框/标题/边距、数据拾取、保存重开和导出一致性回归；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收） | — |
+| F305 | 双 Y 轴图 | Double Y Graph | P0 | 已完成 | 曲线样式里勾选“右侧 Y 轴”：右轴曲线独立自动/手动定范围，可单独设刻度数字格式（缺省跟随左 Y）；存在右轴曲线时绘图属性显示右轴设置；右侧显示轴线、刻度、标签和标题，符号自动范围端点留 4%；对数开关仍左右共用；屏幕、SVG、PNG、PDF 和数据点吸附共用 AxisSet/YAxis，拟合/平滑结果线保留来源轴 | 左右轴范围互不影响、独立刻度格式、v14 默认外观迁移、右轴坐标框/标题/边距、数据拾取、保存重开和导出一致性回归；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）；2026-11 验收：自动测试 + 视觉对照 | — |
 | F306 | 双 Y 轴柱状图 | Double-Y Column Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F307 | 双 Y 轴柱状 + 点线图 | Double-Y Column Line+Symbol Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F308 | 双 X 轴独立图 | Double X - Independent XY Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
@@ -558,7 +558,7 @@
 
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
 |---|---|---|---|---|---|---|---|
-| F399 | 面积图 | Area Graph | P1 | 已实现待验收 | 按连续有效行分段、跨零三角剖分、透明度、边界线与共享 SVG | 面积积分、缺口、对数裁剪、网格缩放与撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收） | — |
+| F399 | 面积图 | Area Graph | P1 | 已完成 | 按连续有效行分段、跨零三角剖分、透明度、边界线与共享 SVG | 面积积分、缺口、对数裁剪、网格缩放与撤销回归已通过；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）；2026-11 验收：自动测试 + 视觉对照 | — |
 | F400 | 堆叠面积图 | Stacked Area Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F401 | 百分比堆叠面积图 | 100% Stacked Area Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F402 | 填充面积图 | Fill Area Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
