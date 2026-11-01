@@ -5,6 +5,7 @@
 import json
 from pathlib import Path
 import re
+import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -22,6 +23,7 @@ def suggest(row):
 
 
 def main():
+    sys.stdout.reconfigure(encoding="utf-8")
     rows = json.loads((ROOT / "docs/parity/parity.json").read_text(encoding="utf-8"))
     print("| 编号 | 功能 | needs |")
     print("|---|---|---|")
