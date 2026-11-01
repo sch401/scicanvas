@@ -474,6 +474,43 @@ def percent_bar_cases():
     write("percent_bars",cases)
 
 
+def fit_report_cases():
+    cases=[]
+    x=np.linspace(-3,3,21); i=np.arange(len(x)); y=1.5+1.1*x-.25*x*x+.1*(np.sin(1.7*i)*.6+np.cos(.37*i*i)*.4)
+    for name,xx,yy,order,shift in [
+        ("normal",x,y,2,0.), ("missing",np.r_[x,np.nan],np.r_[y,2.],2,0.),
+        ("ties",np.r_[x,x[7]],np.r_[y,y[7]],2,0.),
+        ("small",np.array([0.,1.,2.]),np.array([1.,2.,5.]),1,0.),
+        ("large",x,y+1e6,2,1e6),
+    ]:
+        valid=np.isfinite(xx)&np.isfinite(yy); xxv,yyv=xx[valid],yy[valid]-shift
+        design=np.polynomial.polynomial.polyvander(xxv,order)
+        coef=np.linalg.lstsq(design,yyv,rcond=None)[0]; fitted=design@coef
+        rss=np.sum((yyv-fitted)**2); tss=np.sum((yyv-np.mean(yyv))**2); dof=len(xxv)-order-1
+        cov=np.linalg.inv(design.T@design)*rss/dof; se=np.sqrt(np.diag(cov))
+        coef[0]+=shift; t=coef/se; p=2*stats.t.sf(np.abs(t),dof)
+        f=((tss-rss)/order)/(rss/dof); fp=stats.f.sf(f,order,dof)
+        at=np.array([xxv[0],np.mean(xxv),xxv[-1]]); a=np.polynomial.polynomial.polyvander(at,order)
+        var=np.einsum('ij,jk,ik->i',a,cov,a); critical=stats.t.ppf(.975,dof)
+        case=dict(name=name,kind="poly",x=xx,y=yy,order=order,input_shift=shift,params=coef,se=se,
+                  rss=rss,tss=tss,f=f,fp=fp,t=t,p=p,at=at,
+                  conf=critical*np.sqrt(var),pred=critical*np.sqrt(var+rss/dof))
+        if name=="large":
+            case.update(tolerance=1e-8,tolerance_reason="输入有 1e6 常数基线，标准误实测相对差 1.89e-10；取 1e-8 留浮点余量。")
+        cases.append(case)
+    x=np.linspace(0,8,41); i=np.arange(len(x))
+    def exp1(x,y0,a,t):return y0+a*np.exp(-x/t)
+    y=exp1(x,.3,5,1.7)+.05*(np.sin(1.7*i)*.6+np.cos(.37*i*i)*.4)
+    p,cov=optimize.curve_fit(exp1,x,y,p0=[.3,5,1.7],maxfev=100000,ftol=1e-12,xtol=1e-12,gtol=1e-12)
+    rss=np.sum((y-exp1(x,*p))**2); dof=len(x)-len(p); at=np.array([0.,1.,2.5,8.])
+    exp=np.exp(-at/p[2]); jac=np.column_stack([np.ones(len(at)),exp,p[1]*exp*at/p[2]**2])
+    var=np.einsum('ij,jk,ik->i',jac,cov,jac); critical=stats.t.ppf(.975,dof); se=np.sqrt(np.diag(cov)); t=p/se
+    cases.append(dict(name="nonlinear",kind="nonlinear",x=x,y=y,params=p,se=se,rss=rss,t=t,
+                      p=2*stats.t.sf(np.abs(t),dof),at=at,conf=critical*np.sqrt(var),pred=critical*np.sqrt(var+rss/dof),
+                      p_tolerance=1e-5,p_tolerance_reason="极小 p 值（约 1e-30 至 1e-65）实测最大相对差 1.50e-6，取 1e-5 留数值余量。"))
+    write("fit_reports",cases)
+
+
 if __name__ == "__main__":
     integrals()
     normalization()
@@ -489,3 +526,4 @@ if __name__ == "__main__":
     builtin_fit_cases()
     smoothing_cases()
     percent_bar_cases()
+    fit_report_cases()
