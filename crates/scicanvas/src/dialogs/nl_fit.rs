@@ -78,35 +78,31 @@ impl CustomFitEditor {
         self.limits
             .resize(names.len().min(scicanvas_core::nlfit::MAX_PARAMS), Default::default());
         self.limit_values.resize(self.limits.len(), [0.0; 3]);
-        egui::ScrollArea::vertical()
-            .id_salt("custom-fit-parameter-limits")
-            .max_height(240.0)
-            .show(ui, |ui| {
-                for ((name, limit), remembered) in names.iter().zip(&mut self.limits).zip(&mut self.limit_values) {
-                    ui.strong(*name);
-                    for ((label, value), remembered) in [
-                        ("固定", &mut limit.fixed),
-                        ("下限", &mut limit.lower),
-                        ("上限", &mut limit.upper),
-                    ]
-                    .into_iter()
-                    .zip(remembered.iter_mut())
-                    {
-                        ui.horizontal(|ui| {
-                            if let Some(value) = value {
-                                *remembered = *value;
-                            }
-                            let mut on = value.is_some();
-                            if ui.checkbox(&mut on, label).changed() {
-                                *value = on.then_some(*remembered);
-                            }
-                            if let Some(value) = value {
-                                ui.add(egui::DragValue::new(value).speed(0.01));
-                            }
-                        });
+        // 设置窗口已提供限高滚动；参数共用同一滚动区，窄窗口也可到达末行。
+        for ((name, limit), remembered) in names.iter().zip(&mut self.limits).zip(&mut self.limit_values) {
+            ui.strong(*name);
+            for ((label, value), remembered) in [
+                ("固定", &mut limit.fixed),
+                ("下限", &mut limit.lower),
+                ("上限", &mut limit.upper),
+            ]
+            .into_iter()
+            .zip(remembered.iter_mut())
+            {
+                ui.horizontal(|ui| {
+                    if let Some(value) = value {
+                        *remembered = *value;
                     }
-                }
-            });
+                    let mut on = value.is_some();
+                    if ui.checkbox(&mut on, label).changed() {
+                        *value = on.then_some(*remembered);
+                    }
+                    if let Some(value) = value {
+                        ui.add(egui::DragValue::new(value).speed(0.01));
+                    }
+                });
+            }
+        }
     }
     pub fn from_definition(definition: &CustomFitDefinition) -> Self {
         Self {
