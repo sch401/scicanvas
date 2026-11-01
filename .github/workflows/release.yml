@@ -20,6 +20,8 @@ jobs:
         run: |
           rustup toolchain install stable --profile minimal
           rustup default stable
+      - name: 下载 Windows 依赖
+        run: cargo fetch --locked --target x86_64-pc-windows-msvc
       - name: 检查版本标签
         run: |
           $version = python -c "import tomllib; print(tomllib.load(open('Cargo.toml','rb'))['workspace']['package']['version'])"
