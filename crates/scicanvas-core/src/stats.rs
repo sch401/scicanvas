@@ -990,38 +990,6 @@ pub struct Regression {
     pub s: f64,
 }
 
-/// 对称矩阵求逆（Gauss–Jordan，部分主元）；奇异时返回 None。
-fn invert(mut a: Vec<Vec<f64>>) -> Option<Vec<Vec<f64>>> {
-    let n = a.len();
-    let mut inv: Vec<Vec<f64>> = (0..n).map(|i| (0..n).map(|j| f64::from(i == j)).collect()).collect();
-    let scale = a.iter().flatten().fold(0.0_f64, |m, v| m.max(v.abs()));
-    for c in 0..n {
-        let piv = (c..n).max_by(|i, j| a[*i][c].abs().total_cmp(&a[*j][c].abs()))?;
-        if a[piv][c].abs() <= 1e-12 * scale {
-            return None;
-        }
-        a.swap(c, piv);
-        inv.swap(c, piv);
-        let d = a[c][c];
-        for j in 0..n {
-            a[c][j] /= d;
-            inv[c][j] /= d;
-        }
-        for r in 0..n {
-            if r != c {
-                let f = a[r][c];
-                if f != 0.0 {
-                    for j in 0..n {
-                        a[r][j] -= f * a[c][j];
-                        inv[r][j] -= f * inv[c][j];
-                    }
-                }
-            }
-        }
-    }
-    Some(inv)
-}
-
 /// 多元线性回归（最小二乘）。`xs` 是各自变量的列；任一变量缺失的行整行跳过。
 pub fn multiple_regression(xs: &[Vec<f64>], y: &[f64]) -> Result<Regression, String> {
     if xs.is_empty() {
@@ -1035,18 +1003,12 @@ pub fn multiple_regression(xs: &[Vec<f64>], y: &[f64]) -> Result<Regression, Str
         return Err(format!("有效行数（{n}）必须多于参数个数（{k}）"));
     }
     let design = |i: usize, j: usize| if j == 0 { 1.0 } else { xs[j - 1][i] };
-    let mut xtx = vec![vec![0.0; k]; k];
-    let mut xty = vec![0.0; k];
-    for &i in &rows {
-        for (a, row) in xtx.iter_mut().enumerate() {
-            xty[a] += design(i, a) * y[i];
-            for (b, cell) in row.iter_mut().enumerate() {
-                *cell += design(i, a) * design(i, b);
-            }
-        }
-    }
-    let inv = invert(xtx).ok_or("自变量之间线性相关（或某一列为常数），无法回归")?;
-    let coef: Vec<f64> = (0..k).map(|a| (0..k).map(|b| inv[a][b] * xty[b]).sum()).collect();
+    let matrix: Vec<Vec<f64>> = rows.iter().map(|&i| (0..k).map(|j| design(i, j)).collect()).collect();
+    let values: Vec<f64> = rows.iter().map(|&i| y[i]).collect();
+    let solution =
+        crate::linalg::lstsq(&matrix, &values).map_err(|_| "自变量之间线性相关（或某一列为常数），无法回归")?;
+    let inv = solution.cov_unscaled;
+    let coef = solution.coef;
     let my = rows.iter().map(|&i| y[i]).sum::<f64>() / n as f64;
     let (mut sse, mut sst) = (0.0, 0.0);
     for &i in &rows {

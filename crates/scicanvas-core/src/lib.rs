@@ -15,6 +15,7 @@ pub mod format;
 pub mod formula;
 pub mod history;
 pub mod interpolate;
+pub mod linalg;
 mod mark;
 pub mod model;
 pub mod nlfit;

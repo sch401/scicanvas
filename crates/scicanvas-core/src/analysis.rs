@@ -201,7 +201,7 @@ fn binom(n: usize, k: usize) -> f64 {
 
 /// 最小二乘多项式拟合。
 ///
-/// 先把 x 标准化 t = (x − x̄)/s，在 t 上解正规方程（条件数小得多），
+/// 先把 x 标准化 t = (x − x̄)/s，在 t 上用 QR 求解，
 /// 再用二项式展开把系数和协方差换算回原始 x。数据点不足或矩阵奇异时返回 None。
 pub fn polyfit(xs: &[f64], ys: &[f64], order: usize) -> Option<PolyFit> {
     let n = xs.len().min(ys.len());
@@ -218,26 +218,30 @@ pub fn polyfit(xs: &[f64], ys: &[f64], order: usize) -> Option<PolyFit> {
             1.0
         }
     };
-    let mut a = vec![vec![0.0; p]; p];
-    let mut b = vec![0.0; p];
-    for i in 0..n {
-        let t = (xs[i] - mx) / sx;
-        let mut pw = vec![1.0; p];
-        for j in 1..p {
-            pw[j] = pw[j - 1] * t;
-        }
-        for r in 0..p {
-            b[r] += pw[r] * ys[i];
-            for c in 0..p {
-                a[r][c] += pw[r] * pw[c];
-            }
-        }
-    }
-    let inv = mat_inv(&a)?;
-    let bt: Vec<f64> = inv
+    let design: Vec<Vec<f64>> = xs[..n]
         .iter()
-        .map(|r| r.iter().zip(&b).map(|(v, bj)| v * bj).sum())
+        .map(|x| {
+            let t = (x - mx) / sx;
+            let mut row = vec![1.0; p];
+            for j in 1..p {
+                row[j] = row[j - 1] * t;
+            }
+            row
+        })
         .collect();
+    let solution = crate::linalg::lstsq(&design, &ys[..n]).ok()?;
+    let inv = solution.cov_unscaled;
+    let mut bt = solution.coef;
+    // Iterative refinement uses the original design matrix and fused residuals.
+    let residual: Vec<f64> = design
+        .iter()
+        .zip(&ys[..n])
+        .map(|(row, y)| row.iter().zip(&bt).fold(*y, |r, (x, b)| (-x).mul_add(*b, r)))
+        .collect();
+    let correction = crate::linalg::lstsq(&design, &residual).ok()?;
+    for (b, delta) in bt.iter_mut().zip(correction.coef) {
+        *b += delta;
+    }
     let mut fit = PolyFit {
         coef: vec![],
         se: vec![],

@@ -1,5 +1,9 @@
 # SciCanvas 技术路线（第二阶段）
 
+## S0-4 FIX-1: Householder QR
+
+多元回归和多项式拟合使用列主元 Householder QR，多项式在标准化坐标上增加一次残差修正。项目格式保持 v22。NIST Longley、Wampler1–5、Filip、Norris 和 Pontius 通过原有阈值。
+
 ## S0-4 FIX-2a
 
 拟合停滞时区分收敛、浮点精度极限和失败，报告提示对应状态。按用户确认升级项目格式 v22 以保存状态，v21 和旧版项目继续读取。已增加约束停滞、边界收敛、格式往返和 NIST 参考测试。停止阈值与雅可比保持原样，精修留给 FIX-2b。
