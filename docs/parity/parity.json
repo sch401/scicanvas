@@ -2224,8 +2224,8 @@
   "ref": "Interpreting Regression Results",
   "pri": "P0",
   "status": "已实现待验收",
-  "how": "线性/多项式报告：参数、标准误、t、双侧 p，R²/调整 R²/Pearson r/RSS/N，以及方差分析表（回归、残差、总计的自由度、平方和、均方、F、p）；非线性报告：参数、标准误、t、p 与统计量；两类报告的“置信/预测带”按钮按 95% 写出置信下/上限、预测下/上限四列并加到拟合曲线所在图层（多项式用参数协方差，非线性用 Δ 法），一步撤销；报告可复制或保存为 Markdown Note 持久保存；多元回归另有 t/p 与整体 F 检验。A5 第二批非线性数值报告随结果列持久保存，通过“分析 → 拟合报告…”重开，使用 Book/结果列/独立报告编号隔离多个拟合。报告与曲线同次重算，失败保留上次结果并标记失败，来源删除保留快照；原位重编辑完整设置，保留样式，报告跟随撤销重做。Note 为用户快照。统一报告表及线性/其他统计联动仍待推进。；重算保留用户备注及跨 Book 名称，草稿比较排除重算缓存，手动重算恢复改动过的输出；报告关联显示实际工作簿名，重编辑按钮集中在报告块末尾。拟合报告区分收敛、浮点精度极限和失败，状态随 v22 项目保存。线性和多项式回归使用列主元 QR，NIST Longley 及 Wampler1–5 达到原有精度阈值。非线性拟合支持自适应差分和停滞精修",
-  "verify": "多项式置信/预测带、方差分析、t/p 与 NumPy 范德蒙德最小二乘 + scipy.stats 一致（1e-9，p 值 1e-6，极小 p 值不下溢）；非线性置信/预测带与 scipy curve_fit pcov + 解析梯度 Δ 法一致；按钮真实点击与撤销/重做回归；报告同步/失败保留/重编辑/跨表隔离/删除与标识复用/v19 兼容/v20 往返/撤销重做/Note 保留回归，Windows 人工验收待做",
+  "how": "线性/多项式报告：参数、标准误、t、双侧 p，R²/调整 R²/Pearson r/RSS/N，以及方差分析表（回归、残差、总计的自由度、平方和、均方、F、p）；非线性报告：参数、标准误、t、p 与统计量；两类报告的“置信/预测带”按钮按 95% 写出置信下/上限、预测下/上限四列并加到拟合曲线所在图层（多项式用参数协方差，非线性用 Δ 法），一步撤销；报告可复制或保存为 Markdown Note 持久保存；多元回归另有 t/p 与整体 F 检验。A5 第二批非线性数值报告随结果列持久保存，通过“分析 → 拟合报告…”重开，使用 Book/结果列/独立报告编号隔离多个拟合。报告与曲线同次重算，失败保留上次结果并标记失败，来源删除保留快照；原位重编辑完整设置，保留样式，报告跟随撤销重做。Note 为用户快照。统一报告表及线性/其他统计联动仍待推进。；重算保留用户备注及跨 Book 名称，草稿比较排除重算缓存，手动重算恢复改动过的输出；报告关联显示实际工作簿名，重编辑按钮集中在报告块末尾。拟合报告区分收敛、浮点精度极限和失败，状态随 v22 项目保存。线性和多项式回归使用列主元 QR，NIST Longley 及 Wampler1–5 达到原有精度阈值。非线性拟合支持自适应差分和停滞精修。拟合结果的高相对标准误、高协方差条件数或负调整 R² 会触发局部极小或不可辨识提示",
+  "verify": "多项式置信/预测带、方差分析、t/p 与 NumPy 范德蒙德最小二乘 + scipy.stats 一致（1e-9，p 值 1e-6，极小 p 值不下溢）；非线性置信/预测带与 scipy curve_fit pcov + 解析梯度 Δ 法一致；按钮真实点击与撤销/重做回归；报告同步/失败保留/重编辑/跨表隔离/删除与标识复用/v19 兼容/v20 往返/撤销重做/Note 保留回归，Windows 人工验收待做；NIST MGH17 和 BoxBOD 双起点提示检查，界面、复制、Note、重拟合和新旧项目往返回归",
   "id": "F138",
   "milestone": "M1 日常够用",
   "needs": [
@@ -2235,7 +2235,11 @@
   ],
   "evidence": {
    "auto": [
-    "crates/scicanvas-core/src/ops.rs::report_recalc_reuses_solver_statistics_and_failure_retains_values_and_bands"
+    "crates/scicanvas-core/src/ops.rs::report_recalc_reuses_solver_statistics_and_failure_retains_values_and_bands",
+    "crates/scicanvas-core/tests/nist.rs::mgh17_local_minimum_warning",
+    "crates/scicanvas-core/tests/nist.rs::boxbod_local_minimum_warning",
+    "crates/scicanvas-core/src/ops.rs::fit_warning_roundtrips_and_updates_on_reedit",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::nonlinear_fit_warning_is_visible_in_report"
    ],
    "manual": {
     "checklist": "docs/acceptance/fitting.md#F138",

@@ -308,6 +308,8 @@ pub struct NlFit {
     pub converged: bool,
     #[cfg_attr(feature = "serde", serde(default))]
     pub status: FitStatus,
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Vec::is_empty"))]
+    pub warnings: Vec<String>,
     /// 被固定的参数（标准误记为 0，不计入自由度）。
     pub fixed: Vec<bool>,
     /// 结果停在下限或上限上的参数。
@@ -657,6 +659,36 @@ fn null_space(rows: &[Vec<f64>], dim: usize) -> Vec<Vec<f64>> {
         }
     }
     out
+}
+
+/// 用 QR 求逆估计协方差矩阵的无穷范数条件数。
+fn covariance_ill_conditioned(cov: &[Vec<f64>], design: impl FnOnce() -> Vec<Vec<f64>>) -> bool {
+    let n = cov.len();
+    if n == 0 {
+        return false;
+    }
+    let scale = cov.iter().flatten().fold(0.0_f64, |m, v| m.max(v.abs()));
+    if scale == 0.0 {
+        let design = design();
+        return crate::linalg::lstsq(&design, &vec![0.0; design.len()]).is_err();
+    }
+    let matrix: Vec<Vec<f64>> = cov.iter().map(|row| row.iter().map(|v| v / scale).collect()).collect();
+    let norm = matrix
+        .iter()
+        .map(|row| row.iter().map(|v| v.abs()).sum::<f64>())
+        .fold(0.0_f64, f64::max);
+    let mut inverse_rows = vec![0.0; n];
+    for col in 0..n {
+        let mut rhs = vec![0.0; n];
+        rhs[col] = 1.0;
+        let Ok(solution) = crate::linalg::lstsq(&matrix, &rhs) else {
+            return true;
+        };
+        for (sum, value) in inverse_rows.iter_mut().zip(solution.coef) {
+            *sum += value.abs();
+        }
+    }
+    norm * inverse_rows.into_iter().fold(0.0_f64, f64::max) > 1e12
 }
 
 /// 拟合 `model`；`initial` 为空时自动估计初值。`fixed` 为空或逐个参数给出固定值（`Some`）。
@@ -1586,18 +1618,54 @@ impl<'a> FitSession<'a> {
         let mean = self.ys.iter().sum::<f64>() / n as f64;
         let tss: f64 = self.ys.iter().map(|y| (y - mean).powi(2)).sum();
         let r2 = if tss > 0.0 { 1.0 - self.cost / tss } else { f64::NAN };
+        let adj_r2 = 1.0 - (1.0 - r2) * (n as f64 - 1.0) / dof;
+        let reduced_cov: Vec<Vec<f64>> = basis
+            .iter()
+            .map(|left| {
+                basis
+                    .iter()
+                    .map(|right| {
+                        (0..m)
+                            .map(|u| (0..m).map(|v| left[u] * cov[free[u]][free[v]] * right[v]).sum::<f64>())
+                            .sum()
+                    })
+                    .collect()
+            })
+            .collect();
+
+        let uncertain = free
+            .iter()
+            .any(|&k| se[k].is_finite() && se[k] > 10.0 * params[k].abs());
+        let warnings = if converged
+            && (uncertain
+                || adj_r2 < 0.0
+                || covariance_ill_conditioned(&reduced_cov, || {
+                    j.iter()
+                        .map(|row| {
+                            basis
+                                .iter()
+                                .map(|z| row.iter().zip(z).map(|(v, z)| v * z).sum())
+                                .collect()
+                        })
+                        .collect()
+                })) {
+            vec!["结果可能停在局部极小或参数不可辨识：请尝试其他初值，或固定部分参数。".to_owned()]
+        } else {
+            Vec::new()
+        };
         Ok(NlFit {
             model,
             params,
             se,
             rss: cost,
             r2,
-            adj_r2: 1.0 - (1.0 - r2) * (n as f64 - 1.0) / dof,
+            adj_r2,
             reduced_chi2: reduced,
             n,
             iterations,
             converged,
             status: if converged { self.status } else { FitStatus::Failed },
+            warnings,
             fixed: fixed_flags,
             at_bound,
             dof: dof_n,
@@ -2404,6 +2472,36 @@ mod tests {
     }
 
     #[test]
+    fn fit_warning_covers_high_relative_error_and_negative_adjusted_r2() {
+        let line = || CustomFitFunction::new("line", "a+b*x", vec!["a".into(), "b".into()]).unwrap();
+        let x = [-2.0, -1.0, 0.0, 1.0, 2.0];
+        let y = [1.4, 0.9, 0.8, 0.9, 1.4];
+        let fit = fit_custom(line(), &x, &y, &[1.08, 0.0], &[], &[]).unwrap();
+        assert!(fit.converged);
+        assert!(fit.se[1] > 10.0 * fit.params[1].abs());
+        assert!(!fit.warnings.is_empty());
+        let x = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0];
+        let y = [-1.0, 0.0, 1.0, 0.0, -1.0, 1.0];
+        let limits = [ParamLimits::fixed(10.0), ParamLimits::default()];
+        let fit = fit_custom(line(), &x, &y, &[10.0, -2.0], &limits, &[]).unwrap();
+        assert!(fit.converged);
+        assert!(fit.adj_r2 < 0.0);
+        assert!(!fit.warnings.is_empty());
+    }
+
+    #[test]
+    fn covariance_condition_respects_fixed_and_identifiable_directions() {
+        let design = || vec![vec![1.0, 0.0], vec![0.0, 1.0], vec![1.0, 1.0]];
+        assert!(!covariance_ill_conditioned(&[vec![1.0, 0.0], vec![0.0, 1e-10]], design));
+        assert!(covariance_ill_conditioned(&[vec![1.0, 0.0], vec![0.0, 1e-13]], design));
+        assert!(!covariance_ill_conditioned(&[vec![0.0, 0.0], vec![0.0, 0.0]], design));
+        assert!(covariance_ill_conditioned(&[vec![0.0, 0.0], vec![0.0, 0.0]], || vec![
+            vec![1.0, 1.0],
+            vec![2.0, 2.0]
+        ]));
+    }
+
+    #[test]
     fn unidentifiable_parameters_are_not_reported_as_converged() {
         let function = CustomFitFunction::new("sum", "a+b", vec!["a".into(), "b".into()]).unwrap();
         let result = fit_custom(
@@ -3004,6 +3102,7 @@ impl PartialEq for NlFit {
             && self.iterations == other.iterations
             && self.converged == other.converged
             && self.status == other.status
+            && self.warnings == other.warnings
             && self.fixed == other.fixed
             && self.at_bound == other.at_bound
             && self.dof == other.dof

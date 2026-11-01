@@ -439,3 +439,35 @@ fn certified_starts_keep_relative_parameter_drift_below_1e8() {
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
+
+fn assert_local_minimum_warning(name: &str) {
+    let d = read("nls", name);
+    let xs: Vec<_> = d.rows.iter().map(|r| r[1]).collect();
+    let ys: Vec<_> = d.rows.iter().map(|r| r[0]).collect();
+    for (index, initial) in d.start.iter().enumerate() {
+        let function = nlfit::CustomFitFunction::new(
+            name,
+            formula(name),
+            (1..=d.coef.len()).map(|i| format!("b{i}")).collect(),
+        )
+        .unwrap();
+        let fit = nlfit::fit_custom(function, &xs, &ys, initial, &[], &[]).unwrap();
+        assert_eq!(
+            !fit.warnings.is_empty(),
+            index == 0,
+            "{name} start {}: {:?}",
+            index + 1,
+            fit
+        );
+    }
+}
+
+#[test]
+fn mgh17_local_minimum_warning() {
+    assert_local_minimum_warning("MGH17");
+}
+
+#[test]
+fn boxbod_local_minimum_warning() {
+    assert_local_minimum_warning("BoxBOD");
+}
