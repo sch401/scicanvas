@@ -1,5 +1,7 @@
 """运行与 Windows CI 对应的完整检查。"""
+import os
 import pathlib
+import shutil
 import subprocess
 import sys
 from install_cargo_deny import install
@@ -7,6 +9,11 @@ from install_cargo_deny import install
 
 def main():
     root = pathlib.Path(__file__).resolve().parents[1]
+    # Put the discovered tools first so malformed entries later in PATH cannot hide them from child processes.
+    for name in ("cargo", "git"):
+        executable = shutil.which(name)
+        if executable:
+            os.environ["PATH"] = str(pathlib.Path(executable).parent) + os.pathsep + os.environ["PATH"]
     subprocess.run([str(install()), "--locked", "check", "--hide-inclusion-graph"], cwd=root, check=True)
     subprocess.run([sys.executable, "tools/third_party.py", "--check"], cwd=root, check=True)
     subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "tools", "-p", "test_*.py"], cwd=root, check=True)
