@@ -3,6 +3,7 @@
 
 mod analysis_ops;
 mod batch_export;
+mod batch_plot;
 mod dialog_actions;
 mod excel_export;
 mod find_replace;

@@ -107,6 +107,9 @@ impl SciApp {
     pub(super) fn apply_dialog_action(&mut self, ctx: &egui::Context, action: dialogs::Action) -> bool {
         match action {
             dialogs::Action::FindNext => self.find_next(),
+            dialogs::Action::BatchPlot(graph, books) => {
+                self.create_batch_plots(graph, books);
+            }
             dialogs::Action::BatchExport(graphs, format, dpi) => {
                 self.finish_dialog_input();
                 self.export_graphs(graphs, format, dpi);

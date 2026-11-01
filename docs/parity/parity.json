@@ -1538,11 +1538,27 @@
   "feature": "批量绘图（同一模板换数据）",
   "ref": "Batch Plotting",
   "pri": "P1",
-  "status": "未开始",
-  "how": "",
-  "verify": "手动操作",
+  "status": "已实现待验收",
+  "how": "选择现有图形作为模板和多个工作簿，按列长名匹配并保留图形样式；列无长名时按列标识匹配，整批操作一步撤销。",
+  "verify": "列顺序不同、样式保留、缺失列时整批回滚及撤销测试；按人工清单检查。",
   "id": "F088",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas/src/app/batch_plot.rs::batch_plot_matches_column_names_and_is_atomic_and_undoable",
+    "crates/scicanvas/src/app/batch_plot.rs::batch_plot_command_opens_target_selection"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/plotting.md#F088",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "绘图基础",

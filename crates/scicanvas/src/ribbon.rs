@@ -120,7 +120,11 @@ pub static TABS: &[Tab] = &[
             },
             Group {
                 label: "模板",
-                items: &[Smalls(&["graph.template.save", "graph.template.apply"])],
+                items: &[Smalls(&[
+                    "graph.template.save",
+                    "graph.template.apply",
+                    "graph.template.batch",
+                ])],
             },
         ],
     },
@@ -284,13 +288,8 @@ pub static TABS: &[Tab] = &[
                 label: "导出",
                 items: &[
                     Big("graph.export"),
-                    Smalls(&[
-                        "graph.export_pdf",
-                        "graph.export_png",
-                        "graph.export_tiff",
-                        "graph.export_batch",
-                        "graph.copy",
-                    ]),
+                    Smalls(&["graph.export_pdf", "graph.export_png", "graph.export_tiff"]),
+                    Smalls(&["graph.export_batch", "graph.copy"]),
                 ],
             },
         ],

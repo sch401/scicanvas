@@ -112,6 +112,16 @@ pub(super) fn builder(commands: &mut Vec<Command>) {
 pub(super) fn templates(commands: &mut Vec<Command>) {
     commands.extend([
         c(
+            "graph.template.batch",
+            "批量绘图…",
+            "grid",
+            "",
+            "绘图",
+            "batch plot 多工作簿 批量绘图",
+            always,
+            |a| a.open_batch_plot(),
+        ),
+        c(
             "graph.template.save",
             "保存为模板",
             "save",
