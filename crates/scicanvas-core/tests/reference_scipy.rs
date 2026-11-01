@@ -358,3 +358,44 @@ fn peaks_match_generated_scipy_and_numpy_reference() {
         }
     }
 }
+
+#[test]
+fn constrained_fits_match_generated_scipy_reference() {
+    use scicanvas_core::nlfit::{self, Model, ParamLimits};
+    for case in cases("constraints") {
+        let name = case["name"].as_str().unwrap();
+        let x = numbers(&case["x"]);
+        let y = numbers(&case["y"]);
+        if name == "small" {
+            assert!(nlfit::fit(Model::ExpDec1, &x, &y, None, &[]).is_err());
+            continue;
+        }
+        let fit = if case["model"] == "ExpDec2" {
+            let constraints = nlfit::parse_constraints(Model::ExpDec2, case["constraint"].as_str().unwrap()).unwrap();
+            nlfit::fit_constrained(Model::ExpDec2, &x, &y, None, &[], &constraints).unwrap()
+        } else if name == "bound" {
+            let limits = [
+                ParamLimits::default(),
+                ParamLimits::default(),
+                ParamLimits {
+                    upper: Some(1.5),
+                    ..Default::default()
+                },
+            ];
+            nlfit::fit_with(Model::ExpDec1, &x, &y, Some(&numbers(&case["initial"])), &limits).unwrap()
+        } else {
+            nlfit::fit(
+                Model::ExpDec1,
+                &x,
+                &y,
+                Some(&numbers(&case["initial"])),
+                &[Some(case["fixed"].as_f64().unwrap())],
+            )
+            .unwrap()
+        };
+        assert!(fit.converged, "{name}");
+        array(&fit.params, &case["params"], 1e-5, name);
+        array(&fit.se, &case["se"], 1e-3, name);
+        near(fit.rss, &case["rss"], 1e-6, name);
+    }
+}

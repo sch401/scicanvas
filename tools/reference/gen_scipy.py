@@ -11,7 +11,7 @@ import warnings
 
 import numpy as np
 import scipy
-from scipy import integrate, interpolate, signal, stats
+from scipy import integrate, interpolate, optimize, signal, stats
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "crates/scicanvas-core/tests/reference"
@@ -304,6 +304,51 @@ def peak_cases():
     write("peaks", cases)
 
 
+def constrained_fit_cases():
+    cases = []
+    def exp1(x, y0, a, t):
+        return y0 + a*np.exp(-x/t)
+    def exp2(x, y0, a1, t1, a2, t2):
+        return y0 + a1*np.exp(-x/t1) + a2*np.exp(-x/t2)
+    def noise(n):
+        i = np.arange(n, dtype=float)
+        return np.sin(1.7*i)*.6 + np.cos(.37*i*i)*.4
+    x = np.linspace(0, 8, 41); y = exp1(x, .3, 5., 1.7) + .05*noise(len(x))
+    for name, xx, yy, fixed in [
+        ("fixed", x, y, .3),
+        ("missing", np.r_[x, np.nan], np.r_[y, 2.], .3),
+        ("ties", np.r_[x, x[10]], np.r_[y, y[10]], .3),
+        ("large", x, y-.3+1e6, 1e6),
+    ]:
+        valid = np.isfinite(xx) & np.isfinite(yy)
+        # Removing a fixed constant leaves the fitted amplitudes unchanged and avoids cancellation.
+        def reduced(x, a, t): return a*np.exp(-x/t)
+        p, cov = optimize.curve_fit(reduced, xx[valid], yy[valid]-fixed, p0=[5., 1.7], maxfev=50000)
+        full = [fixed, *p]; se = [0., *np.sqrt(np.diag(cov))]
+        rss = np.sum((yy[valid]-exp1(xx[valid], *full))**2)
+        cases.append(dict(name=name, model="ExpDec1", x=xx, y=yy, fixed=fixed,
+                          initial=[fixed, 5., 1.7], params=full, se=se, rss=rss))
+    upper = [np.inf, np.inf, 1.5]
+    p, cov = optimize.curve_fit(exp1, x, y, p0=[.3, 5., 1.4], bounds=([-np.inf, -np.inf, .01], upper), maxfev=50000)
+    cases.append(dict(name="bound", model="ExpDec1", x=x, y=y, upper=1.5, initial=[.3, 5., 1.4],
+                      params=p, se=np.sqrt(np.diag(cov)), rss=np.sum((y-exp1(x,*p))**2)))
+    x2=np.linspace(0,10,41); y2=exp2(x2,.5,4.,.8,2.,4.)+.02*noise(len(x2))
+    for name, constraint, reduction, p0 in [
+        ("equality", "A1 + A2 = 6.5", lambda x,y0,a1,t1,t2: exp2(x,y0,a1,t1,6.5-a1,t2), [.5,4.,.8,4.]),
+        ("active", "t2 >= t1 + 3.5", lambda x,y0,a1,t1,a2: exp2(x,y0,a1,t1,a2,t1+3.5), [.5,4.,.8,2.]),
+        ("inactive", "t2 - t1 >= 1", exp2, [.5,4.,.8,2.,4.]),
+    ]:
+        p,cov=optimize.curve_fit(reduction,x2,y2,p0=p0,maxfev=100000,ftol=1e-13,xtol=1e-13,gtol=1e-13)
+        err=np.sqrt(np.diag(cov))
+        if name=="equality": full=[p[0],p[1],p[2],6.5-p[1],p[3]]; se=[err[0],err[1],err[2],err[1],err[3]]
+        elif name=="active": full=[p[0],p[1],p[2],p[3],p[2]+3.5]; se=[err[0],err[1],err[2],err[3],err[2]]
+        else: full=p; se=err
+        cases.append(dict(name=name, model="ExpDec2", x=x2, y=y2, constraint=constraint,
+                          params=full, se=se, rss=np.sum((y2-exp2(x2,*full))**2)))
+    cases.append(dict(name="small", model="ExpDec1", x=[0.,1.,2.], y=[5.,3.,2.]))
+    write("constraints", cases)
+
+
 if __name__ == "__main__":
     integrals()
     normalization()
@@ -315,3 +360,4 @@ if __name__ == "__main__":
     interpolation_cases()
     derivative_cases()
     peak_cases()
+    constrained_fit_cases()
