@@ -272,5 +272,16 @@ fn import_wizard_confirm_and_cancel_use_real_dialog_buttons() {
     let book = app.project.books.last().unwrap();
     assert_eq!(book.columns[1].data.f64_at(1), Some(4.0));
     roundtrip(&mut app, &before);
+    let numeric = dir.join("numbers.csv");
+    let numeric_bytes = b"1,2\n3,4\n".to_vec();
+    std::fs::write(&numeric, &numeric_bytes).unwrap();
+    app.dialog = Some(Dialog::ImportWizard(Box::new(dialogs::ImportWizard::new(
+        numeric,
+        numeric_bytes,
+    ))));
+    press_dialog_button(&mut app, "导入");
+    let book = app.project.books.last().unwrap();
+    assert_eq!(book.nrows(), 2);
+    assert_eq!(book.columns[0].data.f64_at(0), Some(1.0));
     std::fs::remove_dir_all(dir).unwrap();
 }

@@ -262,6 +262,12 @@ pub fn preview_import(text: &str, options: &ImportOptions, limit: usize) -> Vec<
     lines.iter().map(|line| split_line(line, delim)).collect()
 }
 
+/// Match automatic header detection from the existing text importer.
+pub fn guess_import_header(text: &str, options: &ImportOptions) -> usize {
+    let rows = preview_import(text, options, 2);
+    usize::from(rows.len() > 1 && rows[0].iter().any(|s| !s.trim().is_empty() && !looks_numeric(s)))
+}
+
 fn import_delimiter(lines: &[&str], delimiter: u8) -> Delim {
     match delimiter {
         1 => Delim::Char(','),
@@ -554,6 +560,8 @@ mod import_wizard_tests {
     #[test]
     fn options_preview_import_and_template_round_trip() {
         let text = "ignored\nTime;Group\ns;\nnote;label\n0;one\n1;two\n";
+        assert_eq!(guess_import_header("1,2\n3,4\n", &ImportOptions::default()), 0);
+        assert_eq!(guess_import_header("X,Y\n3,4\n", &ImportOptions::default()), 1);
         let options = ImportOptions {
             delimiter: 3,
             encoding: 1,

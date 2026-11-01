@@ -14,8 +14,9 @@ pub(crate) struct ImportWizard {
 
 impl ImportWizard {
     pub(crate) fn new(path: PathBuf, bytes: Vec<u8>) -> Self {
-        let options = ImportOptions::default();
+        let mut options = ImportOptions::default();
         let text = csv::decode(&bytes);
+        options.header_rows = csv::guess_import_header(&text, &options);
         Self {
             path,
             bytes,
