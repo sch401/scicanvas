@@ -1280,3 +1280,141 @@ fn selection_status_statistics_use_only_finite_selected_cells() {
         "平均值 = -1   总和 = -2   计数 = 2   最小 = -4   最大 = 2"
     );
 }
+
+#[test]
+fn all_column_roles_apply_and_undo_without_changing_values() {
+    for role in [
+        Role::X,
+        Role::Y,
+        Role::Z,
+        Role::XError,
+        Role::YError,
+        Role::Label,
+        Role::Ignore,
+    ] {
+        let mut app = app();
+        app.active = Some(1);
+        app.project.book_mut(1).unwrap().columns[1].role = if role == Role::Y { Role::X } else { Role::Y };
+        app.selection.insert(1, vec!["B".into()]);
+        app.run_command("col.props");
+        let Some(Dialog::ColumnProps { edit, .. }) = &app.dialog else {
+            panic!("column properties should open")
+        };
+        let mut edit = edit.clone();
+        edit.role = role;
+        app.dialog = None;
+        let before = app.project.clone();
+        let values = before.book(1).unwrap().column("B").unwrap().data.clone();
+        app.apply_column_props(1, edit.clone()).unwrap();
+        let column = app.project.book(1).unwrap().column("B").unwrap();
+        assert_eq!(column.role, role);
+        assert_eq!(column.data, values);
+        roundtrip(&mut app, &before);
+        let current = app.project.clone();
+        edit.key = "missing".into();
+        assert!(app.apply_column_props(1, edit).is_err());
+        assert_eq!(app.project, current);
+    }
+}
+
+#[test]
+fn mouse_drag_shift_extension_and_copy_select_the_visible_cells() {
+    let mut app = app();
+    app.active = Some(1);
+    let book = app.project.book_mut(1).unwrap();
+    book.columns[0].data = ["10101", "10102", "10103", "10104"].map(str::to_string).to_vec().into();
+    book.columns[1].data = ["20201", "20202", "20203", "20204"].map(str::to_string).to_vec().into();
+    book.columns[2].data = ["30301", "30302", "30303", "30304"].map(str::to_string).to_vec().into();
+    let before = app.project.clone();
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut harness = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1200.0, 900.0)),
+        |app: &mut SciApp, ctx: &egui::Context| {
+            egui::CentralPanel::default().show(ctx, |ui| app.book_ui(ui, 1));
+        },
+    )
+    .with_step(0.05);
+    let mut output = harness.frame(&mut app, vec![]);
+    for _ in 0..3 {
+        output = harness.frame(&mut app, vec![]);
+    }
+    let pos = |label| crate::test_ui::find_text(&output, label).unwrap() + egui::vec2(4.0, 4.0);
+    let start = pos("10101");
+    let end = pos("20203");
+    let extend = pos("30304");
+    harness.frame(&mut app, vec![egui::Event::PointerMoved(start)]);
+    harness.frame(&mut app, vec![crate::test_ui::button(start, true)]);
+    harness.frame(&mut app, vec![egui::Event::PointerMoved(end)]);
+    harness.frame(&mut app, vec![crate::test_ui::button(end, false)]);
+    assert_eq!(
+        app.sheets[&1].range,
+        Some(Range {
+            a: Cell { c: 0, r: 0 },
+            b: Cell { c: 1, r: 2 }
+        })
+    );
+    harness.modifiers.shift = true;
+    harness.click(&mut app, extend);
+    harness.modifiers.shift = false;
+    assert_eq!(
+        app.sheets[&1].range,
+        Some(Range {
+            a: Cell { c: 0, r: 0 },
+            b: Cell { c: 2, r: 3 }
+        })
+    );
+    let copied = harness
+        .frame(&mut app, vec![egui::Event::Copy])
+        .platform_output
+        .copied_text;
+    assert_eq!(
+        copied,
+        "10101\t20201\t30301\n10102\t20202\t30302\n10103\t20203\t30303\n10104\t20204\t30304"
+    );
+    assert_eq!(app.project, before);
+}
+
+#[test]
+fn million_rows_scroll_to_the_last_value_without_rendering_every_row() {
+    let mut app = app();
+    app.active = Some(1);
+    let rows = 1_000_000usize;
+    let mut values = vec![0.0; rows];
+    values[rows - 1] = 98765.4321;
+    let book = app.project.book_mut(1).unwrap();
+    book.columns.truncate(1);
+    book.columns[0].data = scicanvas_core::ColumnData::Num {
+        values,
+        missing: vec![0; rows.div_ceil(64)],
+        lexemes: Default::default(),
+    }
+    .into();
+    app.sheets.insert(
+        1,
+        SheetState {
+            scroll_to: Some(rows - 1),
+            ..Default::default()
+        },
+    );
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut harness = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1200.0, 900.0)),
+        |app: &mut SciApp, ctx: &egui::Context| {
+            egui::CentralPanel::default().show(ctx, |ui| app.book_ui(ui, 1));
+        },
+    )
+    .with_step(1.0);
+    let mut output = harness.frame(&mut app, vec![]);
+    for _ in 0..3 {
+        output = harness.frame(&mut app, vec![]);
+    }
+    assert!(
+        crate::test_ui::find_text(&output, "98765.4321").is_some(),
+        "last row should be visible"
+    );
+    assert!(output.shapes.len() < 20_000, "only visible rows should be drawn");
+}
