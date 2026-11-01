@@ -16,6 +16,7 @@ pub struct Palette {
     /// 强调色：当前窗口标题、选中状态、链接。
     pub accent: Color32,
     pub accent_fill: Color32,
+    /// 强调色、危险色和深色遮罩上的文字与图标。
     pub on_accent: Color32,
     pub hud_bg: Color32,
     pub danger: Color32,
@@ -54,6 +55,11 @@ pub struct Palette {
 }
 
 impl Palette {
+    /// 遮罩和阴影：黑色加透明度，两个主题相同。
+    pub fn scrim(&self, alpha: u8) -> Color32 {
+        Color32::from_black_alpha(alpha)
+    }
+
     pub fn on_accent_alpha(&self, alpha: u8) -> Color32 {
         Color32::from_rgba_unmultiplied(self.on_accent.r(), self.on_accent.g(), self.on_accent.b(), alpha)
     }
@@ -343,6 +349,7 @@ mod consistency_tests {
             let pal = palette(theme);
             assert_eq!(pal.hud_bg, expected);
             assert_eq!(pal.on_accent, Color32::WHITE);
+            assert_eq!(pal.scrim(110), Color32::from_black_alpha(110));
             assert_eq!(
                 pal.on_accent_alpha(105),
                 Color32::from_rgba_unmultiplied(255, 255, 255, 105)
@@ -376,6 +383,11 @@ mod consistency_tests {
                     "Color32::from_rgb(",
                     "Color32::from_rgba_unmultiplied(",
                     "Color32::from_gray(",
+                    "Color32::WHITE",
+                    "Color32::BLACK",
+                    "from_white_alpha(",
+                    "from_black_alpha(",
+                    "from_rgba_premultiplied(",
                 ] {
                     assert!(
                         exempt || !text.contains(pattern),

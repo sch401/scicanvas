@@ -924,7 +924,7 @@ fn nav_item(ui: &mut egui::Ui, icon: &str, label: &str, keys: &str, enabled: boo
     let w = ui.available_width();
     let (rect, resp) = ui.allocate_exact_size(vec2(w, 36.0), if enabled { Sense::click() } else { Sense::hover() });
     if enabled && resp.hovered() {
-        ui.painter().rect_filled(rect, 0.0, Color32::from_white_alpha(40));
+        ui.painter().rect_filled(rect, 0.0, pal.on_accent_alpha(40));
     }
     let alpha = if enabled { 255 } else { 120 };
     // 图标在蓝底上统一染成白色

@@ -20,8 +20,9 @@ pub(crate) fn center_buttons(ui: &mut egui::Ui, n: usize) {
 
 /// 主按钮：强调色底、白字。
 pub(crate) fn primary(ui: &egui::Ui, text: &str) -> egui::Button<'static> {
-    egui::Button::new(RichText::new(text).color(egui::Color32::WHITE).strong())
-        .fill(crate::theme::palette_for(ui.ctx()).accent_fill)
+    let pal = crate::theme::palette_for(ui.ctx());
+    egui::Button::new(RichText::new(text).color(pal.on_accent).strong())
+        .fill(pal.accent_fill)
         .min_size(BUTTON)
 }
 
@@ -43,7 +44,7 @@ pub(crate) enum Keys {
     Modal,
 }
 
-/// 普通面板不接管键盘；模态确认框在文字输入框未持有焦点时响应快捷键。
+/// 普通面板不接管键盘；模态 Enter 只触发主按钮，危险按钮需要点击或先获得焦点。
 pub(crate) fn actions(ui: &mut egui::Ui, items: &[(ActionKind, &str)], keys: Keys) -> Option<usize> {
     let pal = crate::theme::palette_for(ui.ctx());
     let mut selected = None;
@@ -72,7 +73,7 @@ pub(crate) fn actions(ui: &mut egui::Ui, items: &[(ActionKind, &str)], keys: Key
                 ActionKind::Primary => primary(ui, label),
                 ActionKind::Plain => plain(*label),
                 ActionKind::Danger => {
-                    egui::Button::new(RichText::new(*label).color(egui::Color32::WHITE).strong()).fill(pal.danger)
+                    egui::Button::new(RichText::new(*label).color(pal.on_accent).strong()).fill(pal.danger)
                 }
             };
             let response = ui.add_sized(egui::vec2(width, BUTTON.y), button);
@@ -85,7 +86,7 @@ pub(crate) fn actions(ui: &mut egui::Ui, items: &[(ActionKind, &str)], keys: Key
     let focus = ui.memory(|m| m.focused());
     if keys == Keys::Modal && selected.is_none() && (focus.is_none() || focus.is_some_and(|id| ids.contains(&id))) {
         if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter)) {
-            selected = items.iter().position(|(k, _)| !matches!(k, ActionKind::Plain));
+            selected = items.iter().position(|(k, _)| matches!(k, ActionKind::Primary));
         }
         if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
             selected = items.iter().rposition(|(k, _)| matches!(k, ActionKind::Plain));

@@ -1,7 +1,7 @@
 //! Windows 11 式贴靠助手：子窗口贴到半边或角落后，在剩下的位置列出其他窗口的缩略图，
 //! 点击即把该窗口填进去；四分之一贴靠依次填满其余三格。按 Esc 或在缩略图以外按下鼠标取消。
 
-use eframe::egui::{self, pos2, vec2, Color32, Rect, Sense, Stroke};
+use eframe::egui::{self, pos2, vec2, Rect, Sense, Stroke};
 use scicanvas_core::scene;
 
 use crate::app::SciApp;
@@ -131,7 +131,7 @@ impl SciApp {
     fn paint_card(&self, ui: &egui::Ui, id: u64, rect: Rect, hovered: bool) {
         let pal = self.pal;
         let painter = ui.painter_at(rect.expand(3.0));
-        painter.rect_filled(rect.translate(vec2(2.0, 3.0)), 4.0, Color32::from_black_alpha(40));
+        painter.rect_filled(rect.translate(vec2(2.0, 3.0)), 4.0, pal.scrim(40));
         painter.rect_filled(rect, 4.0, pal.window);
         let bar = Rect::from_min_size(rect.min, vec2(rect.width(), CARD_TITLE_H));
         painter.rect_filled(bar, 4.0, if hovered { pal.title } else { pal.title_in });
@@ -153,10 +153,10 @@ impl SciApp {
             egui::Align2::LEFT_CENTER,
             self.project.name_of(id).unwrap_or(""),
             egui::FontId::proportional(crate::theme::size::HUD),
-            Color32::WHITE,
+            pal.on_accent,
         );
         let thumb = Rect::from_min_max(pos2(rect.left(), bar.bottom()), rect.max).shrink(4.0);
-        painter.rect_filled(thumb, 0.0, Color32::WHITE);
+        painter.rect_filled(thumb, 0.0, crate::plot::PAGE_BG);
         if let Some(graph) = self.project.graph(id) {
             let sc = scene::layout_page(graph, &self.project, &[]);
             crate::plot::paint(ui, thumb, &sc);
@@ -167,7 +167,7 @@ impl SciApp {
                     egui::Align2::LEFT_TOP,
                     text,
                     egui::FontId::monospace(crate::theme::size::MICRO),
-                    Color32::BLACK,
+                    crate::plot::PAGE_INK,
                 );
             }
         } else if let Some(book) = self.project.book(id) {

@@ -166,14 +166,22 @@ fn gradient(painter: &egui::Painter, r: Rect, left: Color32, right: Color32) {
     painter.add(m);
 }
 
-fn title_button(ui: &mut egui::Ui, id: egui::Id, r: Rect, kind: Btn, state: WinState, fg: Color32) -> egui::Response {
+fn title_button(
+    ui: &mut egui::Ui,
+    id: egui::Id,
+    r: Rect,
+    kind: Btn,
+    state: WinState,
+    fg: Color32,
+    pal: &Palette,
+) -> egui::Response {
     let resp = ui.interact(r, id, Sense::click());
     let p = ui.painter();
     if resp.hovered() {
         let bg = if kind == Btn::Close {
-            crate::theme::palette_for(ui.ctx()).danger
+            pal.danger
         } else {
-            Color32::from_white_alpha(56)
+            pal.on_accent_alpha(56)
         };
         p.rect_filled(r, 2.0, bg);
     }
@@ -181,7 +189,7 @@ fn title_button(ui: &mut egui::Ui, id: egui::Id, r: Rect, kind: Btn, state: WinS
     let s = Stroke::new(
         1.2_f32,
         if resp.hovered() && kind == Btn::Close {
-            Color32::WHITE
+            pal.on_accent
         } else {
             fg
         },
@@ -269,7 +277,7 @@ pub fn window(
                         offset: vec2(2.0, 3.0),
                         blur: 10.0,
                         spread: 0.0,
-                        color: Color32::from_black_alpha(if pal.dark { 110 } else { 50 }),
+                        color: pal.scrim(if pal.dark { 110 } else { 50 }),
                     }
                     .as_shape(rect, 0.0),
                 );
@@ -283,7 +291,7 @@ pub fn window(
             } else {
                 painter.rect_filled(bar, 0.0, pal.title_in);
             }
-            let fg = if active { Color32::WHITE } else { pal.ink };
+            let fg = if active { pal.on_accent } else { pal.ink };
             let bar_resp = ui.interact(bar, id.with("title"), Sense::click_and_drag());
             out.pressed = bar_resp.is_pointer_button_down_on();
             let ic = Rect::from_center_size(pos2(bar.left() + 14.0, bar.center().y), vec2(14.0, 14.0));
@@ -310,13 +318,10 @@ pub fn window(
                 .with_clip_rect(title_clip)
                 .galley(pos2(title_clip.left(), by - galley.size().y / 2.0), galley, fg);
 
-            let close = title_button(ui, id.with("close"), btn_rect(0), Btn::Close, geom.state, fg);
-            let max = title_button(ui, id.with("max"), btn_rect(1), Btn::Max, geom.state, fg);
-            let min = if geom.state == WinState::Min {
-                None
-            } else {
-                Some(title_button(ui, id.with("min"), btn_rect(2), Btn::Min, geom.state, fg))
-            };
+            let close = title_button(ui, id.with("close"), btn_rect(0), Btn::Close, geom.state, fg, pal);
+            let max = title_button(ui, id.with("max"), btn_rect(1), Btn::Max, geom.state, fg, pal);
+            let min = (geom.state != WinState::Min)
+                .then(|| title_button(ui, id.with("min"), btn_rect(2), Btn::Min, geom.state, fg, pal));
             if close.clicked() {
                 out.close = true;
             }

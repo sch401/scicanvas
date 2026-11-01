@@ -6,6 +6,8 @@ use crate::theme::Palette;
 /// 边缘可拖动调整大小的宽度（逻辑像素）。
 const EDGE: f32 = 5.0;
 pub const CAPTION_HEIGHT: f32 = 30.0;
+const BUTTON_W: f32 = 46.0;
+pub const BUTTONS_W: f32 = 3. * BUTTON_W + 8.;
 
 pub fn store_caption(ctx: &egui::Context, rect: Rect) {
     ctx.data_mut(|d| d.insert_temp(egui::Id::new("window-caption"), rect));
@@ -78,7 +80,9 @@ pub fn buttons(ui: &mut egui::Ui, pal: &Palette) -> bool {
 pub fn modal_caption(ui: &mut egui::Ui, caption: Rect, pal: &Palette) {
     ui.spacing_mut().item_spacing = vec2(4., 0.);
     drag_area(ui, caption);
-    let buttons = Rect::from_min_max(egui::pos2(caption.right() - 3. * 46. - 8., caption.top()), caption.max);
+    let buttons = Rect::from_min_max(egui::pos2(caption.right() - BUTTONS_W, caption.top()), caption.max);
+    let rest = Rect::from_min_max(caption.min, egui::pos2(buttons.left(), caption.bottom()));
+    ui.painter().rect_filled(rest, 0., crate::dialogs::backdrop(ui.ctx()));
     ui.painter().rect_filled(buttons, 0., pal.chrome);
     ui.allocate_ui_with_layout(caption.size(), egui::Layout::right_to_left(egui::Align::Center), |ui| {
         if draw_buttons(ui, pal) {
@@ -90,7 +94,7 @@ pub fn modal_caption(ui: &mut egui::Ui, caption: Rect, pal: &Palette) {
 fn draw_buttons(ui: &mut egui::Ui, pal: &Palette) -> bool {
     let ctx = ui.ctx().clone();
     let max = maximized(&ctx);
-    let size = vec2(46.0, CAPTION_HEIGHT);
+    let size = vec2(BUTTON_W, CAPTION_HEIGHT);
     let ink = pal.ink;
     let button = |ui: &mut egui::Ui, hover_fill: Color32, tip: &str| {
         let (rect, response) = ui.allocate_exact_size(size, Sense::click());
@@ -105,7 +109,7 @@ fn draw_buttons(ui: &mut egui::Ui, pal: &Palette) -> bool {
     // 关闭：悬停时红底白叉
     let (rect, close, hovered) = button(ui, pal.danger, "关闭");
     let c = rect.center();
-    let color = if hovered { Color32::WHITE } else { ink };
+    let color = if hovered { pal.on_accent } else { ink };
     for (a, b) in [(vec2(-5.0, -5.0), vec2(5.0, 5.0)), (vec2(-5.0, 5.0), vec2(5.0, -5.0))] {
         ui.painter().line_segment([c + a, c + b], stroke(color));
     }
