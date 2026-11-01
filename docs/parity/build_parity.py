@@ -6,11 +6,56 @@ The optional --desktop also updates the user's copy next to this checkout.
 import argparse
 from collections import Counter
 import json
+import re
 from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 STATUSES = ["已完成", "已实现待验收", "部分实现", "未开始", "不做"]
 MILESTONES = {"P0": "M1 日常够用", "P1": "M2 论文全流程", "P2": "M3 高级功能", "不做": "—"}
+
+
+EVIDENCE_KINDS = ("auto", "reference", "visual", "manual")
+ROOT = HERE.parents[1]
+
+
+def validate_evidence(row):
+    feature_id = row["id"]
+    needs = row.get("needs", [])
+    if not isinstance(needs, list) or any(k not in EVIDENCE_KINDS for k in needs) or len(set(needs)) != len(needs):
+        raise ValueError(f"Invalid needs: {feature_id}")
+    evidence = row.get("evidence", {})
+    if not isinstance(evidence, dict) or any(k not in EVIDENCE_KINDS for k in evidence):
+        raise ValueError(f"Invalid evidence: {feature_id}")
+    for kind in ("auto", "reference", "visual"):
+        entries = evidence.get(kind, [])
+        if not isinstance(entries, list) or any(not isinstance(v, str) or not v for v in entries):
+            raise ValueError(f"Invalid {kind} evidence: {feature_id}")
+        for entry in entries:
+            filename, separator, name = entry.partition("::") if kind == "auto" else (entry, "", "")
+            path = ROOT / filename
+            if not path.is_file():
+                raise ValueError(f"Missing evidence file: {feature_id}/{entry}")
+            if kind == "auto" and (not separator or not re.fullmatch(r"[A-Za-z_][A-Za-z_0-9]*", name) or not re.search(r"\bfn\s+" + re.escape(name) + r"\b", path.read_text(encoding="utf-8"))):
+                raise ValueError(f"Missing test function: {feature_id}/{entry}")
+    if "manual" in evidence:
+        manual = evidence["manual"]
+        if not isinstance(manual, dict) or manual.get("result") not in ("通过", "未通过", "待做"):
+            raise ValueError(f"Invalid manual result: {feature_id}")
+        filename, separator, anchor = manual.get("checklist", "").partition("#")
+        path = ROOT / filename
+        if not separator or not path.is_file() or not re.search(r"^### " + re.escape(anchor) + r"(?:\s|$)", path.read_text(encoding="utf-8"), re.M):
+            raise ValueError(f"Missing manual heading: {feature_id}")
+        if manual["result"] != "待做" and (not manual.get("date") or not manual.get("build")):
+            raise ValueError(f"Missing manual date/build: {feature_id}")
+    if row["status"] == "已完成":
+        for kind in needs:
+            if not evidence.get(kind) or (kind == "manual" and evidence[kind]["result"] != "通过"):
+                raise ValueError(f"Incomplete accepted evidence: {feature_id}/{kind}")
+
+
+def missing_evidence(row):
+    evidence = row.get("evidence", {})
+    return [k for k in row.get("needs", []) if not evidence.get(k) or (k == "manual" and evidence[k]["result"] != "通过")]
 
 
 def validate(rows):
@@ -20,6 +65,7 @@ def validate(rows):
         if feature_id in ids or not feature_id.startswith("F") or not feature_id[1:].isdigit():
             raise ValueError(f"Duplicate or invalid ID: {feature_id}")
         ids.add(feature_id)
+        validate_evidence(row)
         if row["status"] not in STATUSES or row["milestone"] != MILESTONES[row["pri"]]:
             raise ValueError(f"Invalid status or milestone: {feature_id}")
         for field in ["feature", "module", "ref", "how", "verify"]:
@@ -58,7 +104,7 @@ def render(rows):
         "- 子项独立于共享存储中的条目状态，修改条目状态不会自动增加子项完成数。规划目标与路线参考基数在备注中标明；重叠目录分别查看，避免重复加总。",
         "- F489 起补充第三阶段需求。F514 为 F148–F156 的目录总览，239 是路线参考数；当前通用线性/多项式回归单独计数。",
         "- Origin 私有格式与脚本兼容保留原范围；扩展包采用 SciCanvas 自有格式。", "",
-        "验证原则：分析与 Origin、NIST StRD、SciPy / R 对照；图形与 Origin 同数据出图比较。", "",
+        "验证原则：分析与 NIST StRD、SciPy / R 对照；图形与 matplotlib 同数据出图比较数据位置与刻度。", "",
     ]
     for module in dict.fromkeys(r["module"] for r in rows):
         md += [f"## {module}", "", "| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |", "|---|---|---|---|---|---|---|---|"]
