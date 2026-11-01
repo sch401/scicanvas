@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 97 项，P1 146 项，P2 259 项，不做 12 项。
-状态：已完成 68 项，已实现待验收 56 项，部分实现 17 项，未开始 361 项，不做 12 项。
+状态：已完成 71 项，已实现待验收 53 项，部分实现 17 项，未开始 361 项，不做 12 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -280,7 +280,7 @@
 
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
 |---|---|---|---|---|---|---|---|
-| F201 | 平滑（移动平均、Savitzky-Golay、FFT 平滑、LOWESS） | Smoothing | P0 | 已实现待验收 | 平滑对话框四种方法：移动平均、二阶 Savitzky–Golay、LOWESS（每点取最近的窗口点数个近邻，tricube 权重局部加权线性回归，X 可无序、不等间距）、FFT 滤波（去掉首尾连线趋势后低通，截止频率 1/(窗口点数·ΔX)，再加回趋势；X 不等间距时提示先插值）；结果写新列，来源是图形时加为曲线，一步撤销 | LOWESS 与 NumPy 逐点暴力实现（k=5/9，无序不等间距 X）一致、直线不变；FFT 平滑与 numpy rfft 掩模参考一致（误差 < 1e-9）；不等间距 X 拒绝 FFT 平滑；LOWESS 稳健迭代验收待做 | 平滑方法：已完成 0/4，待验收 2，部分实现 0；移动平均、Savitzky–Golay 已实现待验收；FFT、LOWESS 未开始 |
+| F201 | 平滑（移动平均、Savitzky-Golay、FFT 平滑、LOWESS） | Smoothing | P0 | 已实现待验收 | 平滑对话框四种方法：移动平均、二阶 Savitzky–Golay、LOWESS（每点取最近的窗口点数个近邻，tricube 权重局部加权线性回归，X 可无序、不等间距）、FFT 滤波（去掉首尾连线趋势后低通，截止频率 1/(窗口点数·ΔX)，再加回趋势；X 不等间距时提示先插值）；结果写新列，来源是图形时加为曲线，一步撤销 | LOWESS 与 NumPy 逐点暴力实现（k=5/9，无序不等间距 X）一致、直线不变；FFT 平滑与 numpy rfft 掩模参考一致（误差 < 1e-9）；不等间距 X 拒绝 FFT 平滑；LOWESS 稳健迭代验收待做；2026-11：四种方法的 NumPy/SciPy 参考对照通过；LOWESS 稳健迭代尚未实现，保留待验收。 | 平滑方法：已完成 0/4，待验收 4，部分实现 0；四种方法已实现并通过参考对照；LOWESS 稳健迭代待做。 |
 | F202 | FFT 滤波（低通、高通、带通、带阻） | FFT Filters | P1 | 已完成 | 分析 → 信号处理 → FFT 滤波：低通、高通、带通、带阻理想滤波（频域置零后逆变换），结果写成新列，来源是图形时画进图里 | 与 numpy rfft / irfft 掩模滤波逐点一致（1e-12）；带通 + 带阻 = 原信号；2026-11：生成 NumPy 参考数据并通过对照。 | 频域滤波类型：已完成 0/4，待验收 4，部分实现 0；低通、高通、带通、带阻理想滤波；不代表 IIR 或其他滤波器实现 |
 | F203 | IIR 滤波（巴特沃斯、切比雪夫等） | IIR Filters (Pro Only) | P2 | 未开始 | 自写或 biquad | 与 Origin 及 SciPy.signal 结果比较 | — |
 | F204 | 傅里叶变换 FFT / IFFT（幅值、相位、功率谱、窗函数） | Fast Fourier Transform (FFT) | P0 | 已完成 | 任意点数 FFT（基 2/Bluestein）、矩形/Hann/Hamming 窗、单边幅值/相位/功率谱及幅值图；独立 IFFT 命令：选中实部/虚部列或在 FFT 结果表直接运行，单边谱按实数信号逆变换（可选偶/奇输出点数，同 numpy.fft.irfft），双边谱做复数逆变换（同 numpy.fft.ifft，输出实部和虚部），时间间隔按 1/(N·df) 换算，生成信号表与曲线图 | FFT 与 numpy.fft 一致；irfft（8/9/7 点）与 ifft 与 NumPy 2.4.4 参考值误差 < 1e-12；任意长度往返还原；FFT→IFFT 项目往返、对话框真实点击与撤销/重做回归；2026-11：生成 NumPy 参考数据并通过对照。 | — |
@@ -364,7 +364,7 @@
 | F257 | Y 偏移堆叠线图 | Stacked Lines by Y Offsets Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F258 | 棒棒糖图 | Lollipop Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F259 | 颜色映射线系列 | Colormapped Line Series | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
-| F260 | 样条曲线图 | Spline Graph | P1 | 已实现待验收 | 自然三次样条、缺失/重复 X 分段、自动范围与共享折线图元 | 解析值和 SciPy 1.17.1 自然边界对照、分段及 SVG 回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收） | — |
+| F260 | 样条曲线图 | Spline Graph | P1 | 已完成 | 自然三次样条、缺失/重复 X 分段、自动范围与共享折线图元 | 解析值和 SciPy 1.17.1 自然边界对照、分段及 SVG 回归已通过；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）；已核对自然样条直接测试、参考数据和视觉对照。 | — |
 
 ## 图类型 · 2D 散点图
 
@@ -392,7 +392,7 @@
 | F275 | 线系列图 | Line Series Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F276 | 两点线段图 | 2 Point Segment Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F277 | 三点线段图 | 3 Point Segment Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
-| F278 | 样条连接点线图 | Spline Connected Graph | P1 | 已实现待验收 | 自然三次样条连接，符号与误差保持原始点；派生线独立绘制 | SciPy 数值、符号数、分段、自动范围及撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收） | — |
+| F278 | 样条连接点线图 | Spline Connected Graph | P1 | 已完成 | 自然三次样条连接，符号与误差保持原始点；派生线独立绘制 | SciPy 数值、符号数、分段、自动范围及撤销回归已通过；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）；已核对自然样条直接测试、参考数据和视觉对照。 | — |
 | F279 | 按行绘图 | Row Wise Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F280 | 前后对比图 | Before and After Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 
@@ -406,7 +406,7 @@
 | F284 | 堆叠柱状图 | Stacked Column Graph | P1 | 已完成 | 按原始行与 X 对齐，正负柱段分别累加，共享矩形与 SVG | 缺失行、正负值、段几何、误差与撤销回归已通过；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）；2026-11 验收：自动测试 + 视觉对照 | — |
 | F285 | 浮动条形图 | Floating Bar Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F286 | 堆叠条形图 | Stacked Bar Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
-| F287 | 百分比堆叠柱状图 | 100% Stacked Column Graph | P1 | 已实现待验收 | 按行正负组分别归一至 ±100%，零总量与极端尺度处理，共享 SVG | 归一化参考值、极端数值、误差缩放及撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收） | — |
+| F287 | 百分比堆叠柱状图 | 100% Stacked Column Graph | P1 | 已完成 | 按行正负组分别归一至 ±100%，零总量与极端尺度处理，共享 SVG | 归一化参考值、极端数值、误差缩放及撤销回归已通过；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）；已核对直接测试、NumPy 参考数据和视觉对照。 | — |
 | F288 | 百分比堆叠条形图 | 100% Stacked Bar Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F289 | 浮动柱状图 | Floating Column Graph | P2 | 已完成 | 上下端列稳定配对、完整行过滤、反向区间、多组排列与共享 SVG | 配对、删列/复用、矩形、对数裁剪与撤销回归已通过；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）；2026-11 验收：自动测试 + 视觉对照 | — |
 | F290 | 百分比丝带图 | 100% Ribbon Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
