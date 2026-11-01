@@ -1938,7 +1938,7 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "斜率/截距、标准误、R²、残差平方和及报告；拟合时为每条数据写入逐点残差列（Y − 拟合值，与原数据同行，未参与拟合的行留空），拟合结果对话框“残差图”生成残差对 X 的散点图，一步撤销",
-  "verify": "残差逐行等于 Y − 拟合值且和为 0、残差图曲线映射的核心测试；残差图按钮的真实界面点击与撤销/重做回归；SciPy/NIST 参考值对照待做",
+  "verify": "残差逐行等于 Y − 拟合值且和为 0、残差图曲线映射的核心测试；残差图按钮的真实界面点击与撤销/重做回归；SciPy/NIST 参考值对照待做；NoInt1/NoInt2 过原点回归尚不支持，登记 S2-5",
   "id": "F130",
   "milestone": "M1 日常够用",
   "needs": [
@@ -1952,7 +1952,7 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "X 标准化后的正规方程与高斯–约当求逆；2–6 阶拟合、参数标准误、R²、曲线及撤销已接入",
-  "verify": "解析/仿真回归已通过；完整 NIST 参考值对照待做",
+  "verify": "解析/仿真回归已通过；完整 NIST 参考值对照待做；NIST StRD 认证对照及已知失败见 docs/parity/nist.md；NoInt1/NoInt2 过原点回归尚不支持，登记 S2-5",
   "id": "F131",
   "milestone": "M1 日常够用",
   "sub_items": {
@@ -1966,7 +1966,25 @@
   "needs": [
    "auto",
    "reference"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/nist.rs::linear_certified_values"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/nist/lls/Filip.dat",
+    "crates/scicanvas-core/tests/nist/lls/Longley.dat",
+    "crates/scicanvas-core/tests/nist/lls/NoInt1.dat",
+    "crates/scicanvas-core/tests/nist/lls/NoInt2.dat",
+    "crates/scicanvas-core/tests/nist/lls/Norris.dat",
+    "crates/scicanvas-core/tests/nist/lls/Pontius.dat",
+    "crates/scicanvas-core/tests/nist/lls/Wampler1.dat",
+    "crates/scicanvas-core/tests/nist/lls/Wampler2.dat",
+    "crates/scicanvas-core/tests/nist/lls/Wampler3.dat",
+    "crates/scicanvas-core/tests/nist/lls/Wampler4.dat",
+    "crates/scicanvas-core/tests/nist/lls/Wampler5.dat"
+   ]
+  }
  },
  {
   "module": "回归与拟合",
@@ -1975,13 +1993,21 @@
   "pri": "P1",
   "status": "已实现待验收",
   "how": "分析 → 多元线性回归：先点选自变量、最后点选因变量；参数表（值、标准误、t、p）与 R²、调整 R²、F 检验、残差标准差",
-  "verify": "与 numpy.linalg.lstsq 及 scipy.stats.t / f 计算的参数、标准误、p 值一致（1e-9），含缺失行与共线提示",
+  "verify": "与 numpy.linalg.lstsq 及 scipy.stats.t / f 计算的参数、标准误、p 值一致（1e-9），含缺失行与共线提示；NIST StRD 认证对照及已知失败见 docs/parity/nist.md",
   "id": "F132",
   "milestone": "M2 论文全流程",
   "needs": [
    "auto",
    "reference"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/nist.rs::linear_certified_values"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/nist/lls/Longley.dat"
+   ]
+  }
  },
  {
   "module": "回归与拟合",
@@ -2001,13 +2027,48 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "Levenberg–Marquardt（中心差分雅可比、自适应阻尼），参数固定、上下界与线性约束（活动集），标准误 (JᵀJ)⁻¹·RSS/(n−p)（有约束时在零空间计算），28 种内置函数与自动初值；用户自定义函数见 F142；自定义标量函数复用同一求解器，用户函数库范围见 F142；新结果保存完整重算定义，支持自动/手动/不重算，报告与曲线/带同次求解同步。",
-  "verify": "原 24 种函数的 SciPy 1.17.1 curve_fit 参数/标准误参考回归、上下界与线性约束回归通过；新增 Rational1 自动初值和自定义公式合成数据回归通过；完整 NIST 参考值对照待做",
+  "verify": "原 24 种函数的 SciPy 1.17.1 curve_fit 参数/标准误参考回归、上下界与线性约束回归通过；新增 Rational1 自动初值和自定义公式合成数据回归通过；完整 NIST 参考值对照待做；NIST StRD 认证对照及已知失败见 docs/parity/nist.md；Nelson 双自变量尚不支持，登记 S2-5；Gauss1–3/ENSO 受 7 参数上限限制，O4 补测",
   "id": "F134",
   "milestone": "M1 日常够用",
   "needs": [
    "auto",
    "reference"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/nist.rs::nonlinear_from_start_one",
+    "crates/scicanvas-core/tests/nist.rs::nonlinear_from_start_two"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/nist/nls/Bennett5.dat",
+    "crates/scicanvas-core/tests/nist/nls/BoxBOD.dat",
+    "crates/scicanvas-core/tests/nist/nls/Chwirut1.dat",
+    "crates/scicanvas-core/tests/nist/nls/Chwirut2.dat",
+    "crates/scicanvas-core/tests/nist/nls/DanWood.dat",
+    "crates/scicanvas-core/tests/nist/nls/Eckerle4.dat",
+    "crates/scicanvas-core/tests/nist/nls/ENSO.dat",
+    "crates/scicanvas-core/tests/nist/nls/Gauss1.dat",
+    "crates/scicanvas-core/tests/nist/nls/Gauss2.dat",
+    "crates/scicanvas-core/tests/nist/nls/Gauss3.dat",
+    "crates/scicanvas-core/tests/nist/nls/Hahn1.dat",
+    "crates/scicanvas-core/tests/nist/nls/Kirby2.dat",
+    "crates/scicanvas-core/tests/nist/nls/Lanczos1.dat",
+    "crates/scicanvas-core/tests/nist/nls/Lanczos2.dat",
+    "crates/scicanvas-core/tests/nist/nls/Lanczos3.dat",
+    "crates/scicanvas-core/tests/nist/nls/MGH09.dat",
+    "crates/scicanvas-core/tests/nist/nls/MGH10.dat",
+    "crates/scicanvas-core/tests/nist/nls/MGH17.dat",
+    "crates/scicanvas-core/tests/nist/nls/Misra1a.dat",
+    "crates/scicanvas-core/tests/nist/nls/Misra1b.dat",
+    "crates/scicanvas-core/tests/nist/nls/Misra1c.dat",
+    "crates/scicanvas-core/tests/nist/nls/Misra1d.dat",
+    "crates/scicanvas-core/tests/nist/nls/Nelson.dat",
+    "crates/scicanvas-core/tests/nist/nls/Rat42.dat",
+    "crates/scicanvas-core/tests/nist/nls/Rat43.dat",
+    "crates/scicanvas-core/tests/nist/nls/Roszman1.dat",
+    "crates/scicanvas-core/tests/nist/nls/Thurber.dat"
+   ]
+  }
  },
  {
   "module": "回归与拟合",
@@ -2016,7 +2077,7 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "当前 28 种内置非线性模型均有数据驱动初值估计，含 Rational1/12/22/33；支持固定参数并报告未收敛状态。自定义函数当前由用户提供初值",
-  "verify": "原模型初值/SciPy 拟合回归及 Rational1 自动初值合成数据回归通过；退化数据与复杂初值实例验收待做",
+  "verify": "原模型初值/SciPy 拟合回归及 Rational1 自动初值合成数据回归通过；退化数据与复杂初值实例验收待做；NIST StRD 认证对照及已知失败见 docs/parity/nist.md；StRD 使用官方给定初值，自动初值本身继续单独验收",
   "id": "F135",
   "milestone": "M1 日常够用",
   "sub_items": {
@@ -2030,7 +2091,42 @@
   "needs": [
    "auto",
    "reference"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/nist.rs::nonlinear_from_start_one",
+    "crates/scicanvas-core/tests/nist.rs::nonlinear_from_start_two"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/nist/nls/Bennett5.dat",
+    "crates/scicanvas-core/tests/nist/nls/BoxBOD.dat",
+    "crates/scicanvas-core/tests/nist/nls/Chwirut1.dat",
+    "crates/scicanvas-core/tests/nist/nls/Chwirut2.dat",
+    "crates/scicanvas-core/tests/nist/nls/DanWood.dat",
+    "crates/scicanvas-core/tests/nist/nls/Eckerle4.dat",
+    "crates/scicanvas-core/tests/nist/nls/ENSO.dat",
+    "crates/scicanvas-core/tests/nist/nls/Gauss1.dat",
+    "crates/scicanvas-core/tests/nist/nls/Gauss2.dat",
+    "crates/scicanvas-core/tests/nist/nls/Gauss3.dat",
+    "crates/scicanvas-core/tests/nist/nls/Hahn1.dat",
+    "crates/scicanvas-core/tests/nist/nls/Kirby2.dat",
+    "crates/scicanvas-core/tests/nist/nls/Lanczos1.dat",
+    "crates/scicanvas-core/tests/nist/nls/Lanczos2.dat",
+    "crates/scicanvas-core/tests/nist/nls/Lanczos3.dat",
+    "crates/scicanvas-core/tests/nist/nls/MGH09.dat",
+    "crates/scicanvas-core/tests/nist/nls/MGH10.dat",
+    "crates/scicanvas-core/tests/nist/nls/MGH17.dat",
+    "crates/scicanvas-core/tests/nist/nls/Misra1a.dat",
+    "crates/scicanvas-core/tests/nist/nls/Misra1b.dat",
+    "crates/scicanvas-core/tests/nist/nls/Misra1c.dat",
+    "crates/scicanvas-core/tests/nist/nls/Misra1d.dat",
+    "crates/scicanvas-core/tests/nist/nls/Nelson.dat",
+    "crates/scicanvas-core/tests/nist/nls/Rat42.dat",
+    "crates/scicanvas-core/tests/nist/nls/Rat43.dat",
+    "crates/scicanvas-core/tests/nist/nls/Roszman1.dat",
+    "crates/scicanvas-core/tests/nist/nls/Thurber.dat"
+   ]
+  }
  },
  {
   "module": "回归与拟合",
@@ -2125,7 +2221,7 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "自定义标量拟合支持 1–7 个命名参数、手动初值和线性等式/不等式约束，复用公式解析器与 LM。项目函数库可保存、载入、重命名及重新编辑；.scfn v1 文件供跨项目复用。新增函数文件载入直接进入当前项目，同名文件先载入编辑器，点击保存函数后更新；拟合报告可载入原函数快照、原初值及完整限制，原位更新结果组和报告。函数库新增/修改与拟合结果均支持一步撤销重做，项目 v20 保存完整定义和数值报告",
-  "verify": "7 项新增回归覆盖稳定编号/重命名/过期草稿、函数库内存预算、v17 空库与 v18 JSON/SCV 往返、独立函数文件载入后实际拟合、损坏/新版/重复输入和保存失败保留原文件；原生文件选择、Windows 人工验收及完整 NIST 对照待做",
+  "verify": "7 项新增回归覆盖稳定编号/重命名/过期草稿、函数库内存预算、v17 空库与 v18 JSON/SCV 往返、独立函数文件载入后实际拟合、损坏/新版/重复输入和保存失败保留原文件；原生文件选择、Windows 人工验收及完整 NIST 对照待做；NIST StRD 认证对照及已知失败见 docs/parity/nist.md；Nelson 双自变量尚不支持，登记 S2-5；Gauss1–3/ENSO 受 7 参数上限限制，O4 补测",
   "id": "F142",
   "milestone": "M1 日常够用",
   "sub_items": {
@@ -2147,7 +2243,40 @@
     "result": "待做",
     "date": "",
     "build": ""
-   }
+   },
+   "auto": [
+    "crates/scicanvas-core/tests/nist.rs::nonlinear_from_start_one",
+    "crates/scicanvas-core/tests/nist.rs::nonlinear_from_start_two"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/nist/nls/Bennett5.dat",
+    "crates/scicanvas-core/tests/nist/nls/BoxBOD.dat",
+    "crates/scicanvas-core/tests/nist/nls/Chwirut1.dat",
+    "crates/scicanvas-core/tests/nist/nls/Chwirut2.dat",
+    "crates/scicanvas-core/tests/nist/nls/DanWood.dat",
+    "crates/scicanvas-core/tests/nist/nls/Eckerle4.dat",
+    "crates/scicanvas-core/tests/nist/nls/ENSO.dat",
+    "crates/scicanvas-core/tests/nist/nls/Gauss1.dat",
+    "crates/scicanvas-core/tests/nist/nls/Gauss2.dat",
+    "crates/scicanvas-core/tests/nist/nls/Gauss3.dat",
+    "crates/scicanvas-core/tests/nist/nls/Hahn1.dat",
+    "crates/scicanvas-core/tests/nist/nls/Kirby2.dat",
+    "crates/scicanvas-core/tests/nist/nls/Lanczos1.dat",
+    "crates/scicanvas-core/tests/nist/nls/Lanczos2.dat",
+    "crates/scicanvas-core/tests/nist/nls/Lanczos3.dat",
+    "crates/scicanvas-core/tests/nist/nls/MGH09.dat",
+    "crates/scicanvas-core/tests/nist/nls/MGH10.dat",
+    "crates/scicanvas-core/tests/nist/nls/MGH17.dat",
+    "crates/scicanvas-core/tests/nist/nls/Misra1a.dat",
+    "crates/scicanvas-core/tests/nist/nls/Misra1b.dat",
+    "crates/scicanvas-core/tests/nist/nls/Misra1c.dat",
+    "crates/scicanvas-core/tests/nist/nls/Misra1d.dat",
+    "crates/scicanvas-core/tests/nist/nls/Nelson.dat",
+    "crates/scicanvas-core/tests/nist/nls/Rat42.dat",
+    "crates/scicanvas-core/tests/nist/nls/Rat43.dat",
+    "crates/scicanvas-core/tests/nist/nls/Roszman1.dat",
+    "crates/scicanvas-core/tests/nist/nls/Thurber.dat"
+   ]
   }
  },
  {
