@@ -277,6 +277,15 @@ impl TryFrom<crate::ops::FitMethod> for FitFunction {
         method.resolve()
     }
 }
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum FitStatus {
+    #[default]
+    Converged,
+    PrecisionLimit,
+    Failed,
+}
+
 /// 拟合结果。
 #[derive(Clone, Debug)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
@@ -297,6 +306,8 @@ pub struct NlFit {
     pub n: usize,
     pub iterations: usize,
     pub converged: bool,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub status: FitStatus,
     /// 被固定的参数（标准误记为 0，不计入自由度）。
     pub fixed: Vec<bool>,
     /// 结果停在下限或上限上的参数。
@@ -674,6 +685,7 @@ struct FitSession<'a> {
     cost: f64,
     lambda: f64,
     converged: bool,
+    status: FitStatus,
     iterations: usize,
     constraint_text: Vec<String>,
 }
@@ -834,6 +846,7 @@ impl<'a> FitSession<'a> {
             cost,
             lambda: 1e-3,
             converged: false,
+            status: FitStatus::Converged,
             iterations: 0,
             constraint_text: constraints.iter().map(|c| c.text.clone()).collect(),
         })
@@ -885,13 +898,8 @@ impl<'a> FitSession<'a> {
                 self.constrained_step(&a, &g, &open)
             };
             if !stepped {
-                // 有理模型阻尼耗尽不等于收敛，按剩余可行方向的尺度化梯度判断。
-                self.converged = !self.rows.is_empty()
-                    || !matches!(&self.model, FitFunction::Builtin(m) if m.rational_degrees().is_some())
-                    || self.cost <= f64::EPSILON * self.ys.iter().map(|y| y * y).sum::<f64>()
-                    || open
-                        .iter()
-                        .all(|&u| g[u].abs() <= 1e-6 * (a[u][u] * self.cost).sqrt().max(1e-30));
+                self.status = self.classify_stall(&a, &g, &open);
+                self.converged = self.status != FitStatus::Failed;
                 break;
             }
             if self.converged {
@@ -1061,10 +1069,122 @@ impl<'a> FitSession<'a> {
             }
             self.lambda *= 10.0;
         }
-        if !stepped {
-            self.converged = true;
-        }
         stepped
+    }
+
+    fn classify_stall(&self, a: &[Vec<f64>], g: &[f64], open: &[usize]) -> FitStatus {
+        if self.cost <= f64::EPSILON * self.ys.iter().map(|y| y * y).sum::<f64>() {
+            return FitStatus::Converged;
+        }
+        if open.is_empty() {
+            return FitStatus::Converged;
+        }
+        let mut active: Vec<(Vec<f64>, bool)> = self
+            .rows
+            .iter()
+            .filter(|r| r.1 == Rel::Eq || (self.lhs(&self.params, &r.0) - r.2).abs() <= self.active_tol(&self.params))
+            .map(|r| {
+                let sign = if r.1 == Rel::Ge { -1.0 } else { 1.0 };
+                (open.iter().map(|&u| sign * r.0[u]).collect(), r.1 == Rel::Eq)
+            })
+            .collect();
+        while !active.is_empty() {
+            let gram: Vec<Vec<f64>> = active
+                .iter()
+                .map(|(a, _)| {
+                    active
+                        .iter()
+                        .map(|(b, _)| a.iter().zip(b).map(|(a, b)| a * b).sum())
+                        .collect()
+                })
+                .collect();
+            let Some(inv) = mat_inv(&gram) else {
+                return FitStatus::Failed;
+            };
+            let rhs: Vec<f64> = active
+                .iter()
+                .map(|(row, _)| row.iter().zip(open).map(|(a, &u)| a * g[u]).sum())
+                .collect();
+            let multipliers: Vec<f64> = inv
+                .iter()
+                .map(|row| row.iter().zip(&rhs).map(|(a, b)| a * b).sum())
+                .collect();
+            let remove = active
+                .iter()
+                .enumerate()
+                .filter(|(i, (_, equality))| !equality && multipliers[*i] < -1e-12)
+                .min_by(|(i, _), (j, _)| multipliers[*i].total_cmp(&multipliers[*j]))
+                .map(|(i, _)| i);
+            match remove {
+                Some(i) => {
+                    active.remove(i);
+                }
+                None => break,
+            }
+        }
+        let active: Vec<Vec<f64>> = active.into_iter().map(|(row, _)| row).collect();
+        let basis = null_space(&active, open.len());
+        if basis.is_empty() {
+            return FitStatus::Converged;
+        }
+        let grad: Vec<f64> = basis
+            .iter()
+            .map(|z| open.iter().enumerate().map(|(i, &u)| z[i] * g[u]).sum())
+            .collect();
+        let h: Vec<Vec<f64>> = basis
+            .iter()
+            .map(|z| {
+                basis
+                    .iter()
+                    .map(|w| {
+                        open.iter()
+                            .enumerate()
+                            .map(|(i, &u)| z[i] * open.iter().enumerate().map(|(j, &v)| a[u][v] * w[j]).sum::<f64>())
+                            .sum()
+                    })
+                    .collect()
+            })
+            .collect();
+        let scaled = grad
+            .iter()
+            .enumerate()
+            .map(|(i, g)| {
+                let denom = (h[i][i].max(0.0) * self.cost).sqrt();
+                if denom == 0.0 {
+                    if *g == 0.0 {
+                        0.0
+                    } else {
+                        f64::INFINITY
+                    }
+                } else {
+                    g.abs() / denom
+                }
+            })
+            .fold(0.0_f64, f64::max);
+        if scaled <= 1e-6 {
+            return FitStatus::Converged;
+        }
+        let mut damped = h.clone();
+        for (i, row) in damped.iter_mut().enumerate() {
+            row[i] += 1e-12 * h[i][i].max(1e-12);
+        }
+        let Some(inv) = mat_inv(&damped) else {
+            return FitStatus::Failed;
+        };
+        let delta: Vec<f64> = inv
+            .iter()
+            .map(|row| row.iter().zip(&grad).map(|(a, g)| a * g).sum())
+            .collect();
+        let predicted: f64 = delta
+            .iter()
+            .enumerate()
+            .map(|(i, d)| d * (grad[i] - 0.5 * h[i].iter().zip(&delta).map(|(a, d)| a * d).sum::<f64>()))
+            .sum();
+        if predicted >= 0.0 && predicted <= 10.0 * self.xs.len() as f64 * f64::EPSILON * self.cost {
+            FitStatus::PrecisionLimit
+        } else {
+            FitStatus::Failed
+        }
     }
 
     fn finish(self) -> Result<NlFit, String> {
@@ -1175,6 +1295,7 @@ impl<'a> FitSession<'a> {
             n,
             iterations,
             converged,
+            status: if converged { self.status } else { FitStatus::Failed },
             fixed: fixed_flags,
             at_bound,
             dof: dof_n,
@@ -1858,6 +1979,55 @@ mod tests {
     }
 
     #[test]
+    fn constraint_boundary_optimum_is_converged() {
+        let function =
+            FitFunction::Custom(CustomFitFunction::new("line", "a + b*x", vec!["a".into(), "b".into()]).unwrap());
+        let constraints = parse_constraints_for_function(&function, "a >= 0").unwrap();
+        let xs = [0.0, 1.0, 2.0, 3.0, 4.0];
+        let ys = [-1.0, 1.0, 3.0, 5.0, 7.0];
+        let result = fit_function(function, &xs, &ys, Some(&[0.0, 1.0]), &[], &constraints).unwrap();
+        assert!(result.converged);
+        assert_eq!(result.status, FitStatus::Converged);
+        assert!(result.params[0].abs() < 1e-8);
+    }
+
+    #[test]
+    fn constrained_damping_exhaustion_is_not_convergence() {
+        let function =
+            FitFunction::Custom(CustomFitFunction::new("line", "a + b*x", vec!["a".into(), "b".into()]).unwrap());
+        let constraints = parse_constraints_for_function(&function, "a >= 0").unwrap();
+        let mut session = FitSession::new(
+            function,
+            &[0.0, 1.0, 2.0, 3.0],
+            &[2.0, 4.0, 6.0, 8.0],
+            Some(&[1.0, 0.1]),
+            &[],
+            &constraints,
+        )
+        .unwrap();
+        session.lambda = 1e16;
+        session.optimize();
+        let result = session.finish().unwrap();
+        assert!(!result.converged);
+        assert_eq!(result.status, FitStatus::Failed);
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn precision_status_roundtrips_and_legacy_report_defaults() {
+        let x = [0.0, 1.0, 2.0, 3.0, 4.0];
+        let y: Vec<f64> = x.iter().map(|x| Model::Gauss.eval(*x, &[0.1, 1.0, 1.2, 2.0])).collect();
+        let mut result = fit(Model::Gauss, &x, &y, Some(&[0.1, 1.0, 1.2, 2.0]), &[]).unwrap();
+        result.status = FitStatus::PrecisionLimit;
+        let mut value = serde_json::to_value(&result).unwrap();
+        let restored: NlFit = serde_json::from_value(value.clone()).unwrap();
+        assert_eq!(restored.status, FitStatus::PrecisionLimit);
+        value.as_object_mut().unwrap().remove("status");
+        let legacy: NlFit = serde_json::from_value(value).unwrap();
+        assert_eq!(legacy.status, FitStatus::Converged);
+    }
+
+    #[test]
     fn rational_derivatives_near_poles_and_exhausted_damping_are_reported() {
         let p = [2., 1., -1. / (1. + 1e-6)];
         let j = jacobian(&FitFunction::Builtin(Model::Rational1), &[1.], &p, &[0, 1, 2]);
@@ -1894,7 +2064,13 @@ mod tests {
             limits.last_mut().unwrap().upper = Some(0.5);
             let constraints = parse_constraints(model, "b1 >= 0").unwrap();
             let result = fit_constrained(model, &xs, &ys, None, &limits, &constraints).unwrap();
-            assert!(result.converged);
+            assert!(
+                result.converged,
+                "model={} rss={} iterations={}",
+                model.name(),
+                result.rss,
+                result.iterations
+            );
             assert_eq!(result.params[0], truth[0]);
             assert!(result.rss < 1e-12);
             assert!(result.params.last().is_some_and(|p| (0.0..=0.5).contains(p)));
@@ -2399,6 +2575,7 @@ impl PartialEq for NlFit {
             && self.n == other.n
             && self.iterations == other.iterations
             && self.converged == other.converged
+            && self.status == other.status
             && self.fixed == other.fixed
             && self.at_bound == other.at_bound
             && self.dof == other.dof

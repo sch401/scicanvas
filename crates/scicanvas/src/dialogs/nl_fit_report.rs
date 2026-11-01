@@ -195,8 +195,10 @@ fn report_status(r: &NlFitReport) -> String {
         if r.fit.converged {
             "上次成功结果 · 来源或设置已改变，等待重算".into()
         } else {
-            "拟合尚未收敛 · 以下为停止时的数值".into()
+            "未收敛：无法继续降低残差，请检查初值或模型".into()
         }
+    } else if r.fit.status == scicanvas_core::nlfit::FitStatus::PrecisionLimit {
+        "已达到浮点精度极限，结果可用".into()
     } else {
         "当前有效结果 · 已收敛".into()
     }

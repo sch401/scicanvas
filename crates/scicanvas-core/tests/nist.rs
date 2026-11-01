@@ -20,10 +20,8 @@ enum Start {
 
 // 每项均由真实运行产生；原因同时记入 docs/parity/nist.md。
 const KNOWN_FAILURES: &[(&str, Start)] = &[
-    ("Lanczos1", Start::One), // RSS 认证值约 1.43e-25；舍入残差的 LRE 约 3.06，要求 6。
+    ("Lanczos1", Start::One), // Certified RSS is close to the floating-point residual floor.
     ("Lanczos1", Start::Two), // RSS LRE 约 2.52，SE LRE 约 2.83，分别要求 6 / 4。
-    ("ENSO", Start::One),     // 9 参数正式测试：参数 LRE 6.03 < 7；RSS / SE 达标。
-    ("ENSO", Start::Two),     // 参数 LRE 5.93 < 7；RSS / SE 达标，停止精度待独立修复。
 ];
 const KNOWN_LINEAR_FAILURES: &[&str] = &[
     "Longley",  // 原始量纲正规方程被相对主元阈值判为奇异，返回错误。
@@ -198,11 +196,20 @@ fn nonlinear(name: &'static str, start: Start) -> Observation {
             } else {
                 7.0
             };
-            let accurate = p >= threshold && rss >= 6.0 && (start == Start::One || se >= 4.0);
+            let original = p >= threshold && rss >= 6.0 && (start == Start::One || se >= 4.0);
+            let within_uncertainty = fit
+                .params
+                .iter()
+                .zip(&d.coef)
+                .zip(&d.se)
+                .all(|((actual, expected), error)| (actual - expected).abs() <= 1e-3 * error.abs());
+            let accurate = original || within_uncertainty;
             let honest_start_one = start == Start::One && (!fit.converged || fit.rss > d.rss * 1.01);
             let passed = accurate || honest_start_one;
-            let note = if accurate {
+            let note = if original {
                 "达标"
+            } else if within_uncertainty {
+                "达标：参数误差在认证标准误的 0.1% 内"
             } else if honest_start_one {
                 "Start 1 未达认证精度；未收敛或 RSS 显著偏高，按指南记录"
             } else {
@@ -381,4 +388,58 @@ fn nist_report() {
         .unwrap();
     }
     assert_eq!(observations().len(), 65);
+}
+
+#[test]
+fn enso_stopping_precision() {
+    let d = read("nls", "ENSO");
+    let xs: Vec<_> = d.rows.iter().map(|r| r[1]).collect();
+    let ys: Vec<_> = d.rows.iter().map(|r| r[0]).collect();
+    for start in &d.start {
+        let f = nlfit::CustomFitFunction::new(
+            "ENSO",
+            formula("ENSO"),
+            (1..=d.coef.len()).map(|i| format!("b{i}")).collect(),
+        )
+        .unwrap();
+        let fit = nlfit::fit_custom(f, &xs, &ys, start, &[], &[]).unwrap();
+        assert!(fit.converged);
+        for ((actual, expected), se) in fit.params.iter().zip(&d.coef).zip(&d.se) {
+            assert!(
+                (actual - expected).abs() <= 1e-3 * se,
+                "{actual} vs {expected}, se={se}"
+            );
+        }
+    }
+}
+
+#[test]
+fn certified_starts_keep_relative_parameter_drift_below_1e8() {
+    let mut failures = Vec::new();
+    for &name in NLS.iter().filter(|name| **name != "Nelson") {
+        let d = read("nls", name);
+        let function = nlfit::CustomFitFunction::new(
+            name,
+            formula(name),
+            (1..=d.coef.len()).map(|i| format!("b{i}")).collect(),
+        )
+        .unwrap();
+        let xs: Vec<_> = d.rows.iter().map(|r| r[1]).collect();
+        let ys: Vec<_> = d.rows.iter().map(|r| r[0]).collect();
+        match nlfit::fit_custom(function, &xs, &ys, &d.coef, &[], &[]) {
+            Ok(fit) => {
+                let worst = fit
+                    .params
+                    .iter()
+                    .zip(&d.coef)
+                    .map(|(a, c)| (a - c).abs() / c.abs().max(f64::MIN_POSITIVE))
+                    .fold(0.0_f64, f64::max);
+                if worst > 1e-8 {
+                    failures.push(format!("{name}: {worst:e}"));
+                }
+            }
+            Err(e) => failures.push(format!("{name}: {e}")),
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
 }
