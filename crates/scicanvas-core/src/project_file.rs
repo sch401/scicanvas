@@ -14,6 +14,9 @@ use zip::CompressionMethod;
 
 use crate::{Book, Graph, GraphTemplate, Project};
 
+mod workbook_template;
+pub use workbook_template::*;
+
 pub const CURRENT_VERSION: u32 = crate::model::PROJECT_VERSION;
 
 /// `.scv` 容器版本，与 `project.json` 的项目版本分开演进。

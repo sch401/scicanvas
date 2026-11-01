@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 97 项，P1 146 项，P2 259 项，不做 12 项。
-状态：已完成 72 项，已实现待验收 56 项，部分实现 17 项，未开始 357 项，不做 12 项。
+状态：已完成 72 项，已实现待验收 58 项，部分实现 17 项，未开始 355 项，不做 12 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -76,9 +76,9 @@
 | F045 | 删除重复行 | Reduce Duplicated Rows | P2 | 未开始 | — | 单元测试 | — |
 | F046 | 数据透视表 | Pivot Table | P2 | 未开始 | polars pivot | 与 Origin 结果比较 | — |
 | F047 | 工作表查询（条件提取） | Worksheet Query - Quick Start | P2 | 未开始 | — | 与 Origin 结果比较 | — |
-| F048 | 冻结行列 | Freeze Rows Columns | P1 | 未开始 | — | 手动操作 | — |
+| F048 | 冻结行列 | Freeze Rows Columns | P1 | 已实现待验收 | 冻结前 K 列及行号，横向滚动时保持可见，纵向滚动同步；设置只保存在界面会话。冻结数据行尚未实现。 | 界面滚动、行对齐及选择测试；按人工清单检查冻结和取消。 | — |
 | F049 | 多工作表（一个工作簿多张表） | Workbooks | 不做 | 不做 | 用户 2026-10-18 决定：每个 Book 只有一张表，多表使用独立窗口；Excel 多工作表导入继续拆成独立 Book，不采用多 Sheet 容器或底部标签页 | 后续保持一表一窗口、独立命名/目录/保存/绘图引用；Excel 拆表导入沿用现有回归 | — |
-| F050 | 工作簿模板 | What is Saved with the Workbook Template (*.OTW or *.OTWU) File? | P1 | 未开始 | 保存列定义与格式 | 套模板后结构一致 | — |
+| F050 | 工作簿模板 | What is Saved with the Workbook Template (*.OTW or *.OTWU) File? | P1 | 已实现待验收 | 保存工作簿列定义、类型、格式和公式到 .scbt，不保存数据；从模板新建工作簿支持撤销。 | 模板文件读写、数据隔离、结构和撤销测试；按人工清单检查。 | — |
 | F051 | 选中数据的状态栏统计 | Scrolling and Simple Data Selection in the Worksheet | P0 | 已完成 | — | 与手算比较 | — |
 | F052 | 单元格内嵌图片 / 迷你图 | Inserting Graphs Images and Other Objects into Worksheet Cells | P2 | 未开始 | — | 目视检查 | — |
 | F053 | 大数据量（百万行流畅滚动） | Origin Limitations | P0 | 已实现待验收 | 类型化数值列、缺失位图和可见行表格；CSV 由文本流式建表（不生成整张字符串表）；折线按像素列保留首/末/最小/最大点抽稀，散点按半像素网格去重；图形场景按图形设置、视图和所引用数据的指纹缓存，数据不变时复用。本机 release 百万行十列：导入 0.81 秒，含完整界面的首帧 246 ms、次帧 12.6 ms，进程峰值内存 494 MB（字体约 56 MB、数值列约 80 MB，原 <150 MB 目标不现实）；设置/图形窗口移动复用矢量绘制指令和文字排版，数据/设置/视图/尺寸/DPI 改变时更新；Windows 使用 wgpu FIFO 呈现 | 流式导入与行表导入结果一致、抽稀保形的核心与界面测试；百万行首帧测量（忽略测试，外部采样峰值内存），数据见 docs/perf.md；拖动修复 4f74ec7 本地完整检查与 Windows CI 通过，用户已确认快速拖动正常；不扩大为整项大数据性能验收；2026-11：百万行可滚动到末尾且只绘制可见区域；滚动流畅度性能门禁待 S1-3。 | — |

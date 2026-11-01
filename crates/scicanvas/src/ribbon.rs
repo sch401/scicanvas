@@ -225,8 +225,12 @@ pub static TABS: &[Tab] = &[
                 label: "变换",
                 items: &[
                     Smalls(&["book.transpose", "sheet.stack", "sheet.split"]),
-                    Smalls(&["sheet.reduce"]),
+                    Smalls(&["sheet.reduce", "sheet.freeze", "sheet.unfreeze"]),
                 ],
+            },
+            Group {
+                label: "模板",
+                items: &[Smalls(&["book.template.save", "book.template.open"])],
             },
             Group {
                 label: "导出",

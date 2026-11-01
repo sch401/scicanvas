@@ -42,6 +42,86 @@ impl SciApp {
         })));
     }
 
+    pub(crate) fn freeze_selected_columns(&mut self) {
+        let Some(id) = self.active_book_id() else { return };
+        let Some(book) = self.project.book(id) else { return };
+        let selected = self.selected_keys(id);
+        let index = selected
+            .iter()
+            .filter_map(|key| book.column_index(key))
+            .max()
+            .or_else(|| self.sort_column(id))
+            .unwrap_or(0);
+        let count = (index + 1).min(book.columns.len());
+        let state = self.sheets.entry(id).or_default();
+        if state.viewport_width > 0.0 && 58.0 + 96.0 * count as f32 + 70.0 > state.viewport_width {
+            self.status = "窗口宽度不足，请选择更少的列或放大窗口".into();
+            return;
+        }
+        state.frozen_columns = count;
+        self.status = format!("已冻结前 {count} 列和行号");
+    }
+
+    pub(crate) fn unfreeze_columns(&mut self) {
+        let Some(id) = self.active_book_id() else { return };
+        self.sheets.entry(id).or_default().frozen_columns = 0;
+        self.status = "已取消冻结列".into();
+    }
+
+    pub(crate) fn save_workbook_template(&mut self) {
+        let Some(id) = self.active_book() else { return };
+        if !self.flush_sheet_edits() {
+            return;
+        }
+        let Some(book) = self.project.book(id) else { return };
+        let template = scicanvas_core::project_file::workbook_template_from_book(book);
+        let Some(path) = self
+            .file_dialog()
+            .set_title("保存工作簿模板")
+            .add_filter("SciCanvas 工作簿模板", &["scbt"])
+            .set_file_name(format!("{}.scbt", book.name))
+            .save_file()
+        else {
+            return;
+        };
+        self.status = match scicanvas_core::project_file::save_workbook_template(&path, &template) {
+            Ok(()) => format!("已保存工作簿模板 {}", path.display()),
+            Err(error) => format!("保存工作簿模板失败：{error}"),
+        };
+    }
+
+    pub(crate) fn open_workbook_template(&mut self) {
+        let Some(path) = self
+            .file_dialog()
+            .set_title("从工作簿模板新建")
+            .add_filter("SciCanvas 工作簿模板", &["scbt"])
+            .pick_file()
+        else {
+            return;
+        };
+        match scicanvas_core::project_file::load_workbook_template(&path) {
+            Ok(template) => {
+                self.create_book_from_template(template);
+            }
+            Err(error) => self.status = format!("无法打开工作簿模板：{error}"),
+        }
+    }
+
+    pub(crate) fn create_book_from_template(
+        &mut self,
+        template: scicanvas_core::project_file::WorkbookTemplate,
+    ) -> Option<u64> {
+        self.edit_with(
+            "从模板新建工作簿",
+            |project| scicanvas_core::project_file::create_book_from_template(project, &template).map(Some),
+            |app, id| {
+                app.show_item(id);
+                app.status = "已从模板新建工作簿".into();
+                id
+            },
+        )
+    }
+
     pub(crate) fn transpose_book(&mut self) {
         let Some(id) = self.active_book() else { return };
         if !self.flush_sheet_edits() {
@@ -541,6 +621,7 @@ impl SciApp {
         let dragging_cells = matches!(drag, Some(Drag::Cells | Drag::Rows)) && down;
         // 可见的表格区域（拖到上下边缘时自动滚动）
         let view = ui.clip_rect();
+        st.viewport_width = ui.available_width();
         let grid = egui::Stroke::new(1.0_f32, pal.meta_bg);
         let mut frame = SheetFrame {
             frozen,
@@ -558,6 +639,8 @@ impl SciApp {
             sel_flags,
             ncols,
             nrows,
+            frozen_columns: st.frozen_columns.min(ncols),
+            frozen_scroll_y: st.frozen_scroll_y,
             range,
             multi,
             drag,
@@ -580,6 +663,7 @@ impl SciApp {
             metadata_edits: Vec::new(),
         };
         frame.draw(ui, book, preview, &mut self.history_group);
+        st.frozen_scroll_y = frame.frozen_scroll_y;
         self.finish_sheet_frame(ui, id, st, frame, &keys);
     }
 
