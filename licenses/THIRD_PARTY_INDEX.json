@@ -1,7 +1,7 @@
 {
   "target": "x86_64-pc-windows-msvc",
   "scope": "normal,build; all workspace features",
-  "cargo_lock_sha256": "1c2d1433bbe0c8b66153ae1147c48c0c6526550cb5dd13b0b62741a5f40aa129",
+  "cargo_lock_sha256": "16f9fae499b051878d66a89d51de03d5c33e051a5544eb91a65ea1b5385705f8",
   "packages": [
     {
       "name": "ab_glyph",
@@ -4176,6 +4176,20 @@
         {
           "path": "licenses/third-party/winit-0.30.13/SOURCE_COPYRIGHT_HEADERS.txt",
           "sha256": "c0e3a41b7cdb8e9021ac86fe8947279d3f8f71e7fd764d9a94e3c62f231f23b7"
+        }
+      ]
+    },
+    {
+      "name": "winresource",
+      "version": "0.1.34",
+      "license": "MIT",
+      "repository": "https://github.com/BenjaminRi/winresource",
+      "crate_sha256": "a2bc6d36480b829272a5bdabf08e6dca8004761c1da7e35efef800540c66221b",
+      "revision": "fae34cec7864d743b751a165ac5969b28168bdf7",
+      "files": [
+        {
+          "path": "licenses/third-party/winresource-0.1.34/LICENSE",
+          "sha256": "3564da09711c475669c15346bb25a1530a7de683c13f4a51489c15a6d74438fa"
         }
       ]
     },

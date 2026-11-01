@@ -285,3 +285,33 @@ fn import_wizard_confirm_and_cancel_use_real_dialog_buttons() {
     assert_eq!(book.columns[0].data.f64_at(0), Some(1.0));
     std::fs::remove_dir_all(dir).unwrap();
 }
+
+#[test]
+fn startup_opens_a_project_file_from_association() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/file-tests")
+        .join(format!("startup-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("input.scv");
+    let mut project = Project::sample();
+    project.books[0].name = "关联打开".into();
+    scicanvas_core::project_file::save(&path, &project).unwrap();
+    let mut app = app();
+    app.open_startup_path(&path);
+    assert_eq!(app.project, project);
+    assert_eq!(app.project_path.as_deref(), Some(path.as_path()));
+    assert!(app.history.undo_label().is_none());
+    let template = scicanvas_core::project_file::graph_template_from_graph(&project.graphs[0], &project).unwrap();
+    let template_path = dir.join("graph.scgt");
+    scicanvas_core::project_file::save_graph_template(&template_path, &template).unwrap();
+    let graphs = app.project.graphs.len();
+    app.open_startup_path(&template_path);
+    assert_eq!(app.project.graphs.len(), graphs + 1);
+    let definition =
+        scicanvas_core::nlfit::CustomFitDefinition::from_text("Imported", "a*x+b", "a,b", "2,1", "").unwrap();
+    let function_path = dir.join("function.scfn");
+    scicanvas_core::project_file::save_fit_function(&function_path, &definition).unwrap();
+    app.open_startup_path(&function_path);
+    assert_eq!(app.project.fit_functions[0].definition.name, "Imported");
+    std::fs::remove_dir_all(dir).unwrap();
+}

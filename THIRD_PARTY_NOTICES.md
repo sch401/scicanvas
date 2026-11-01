@@ -230,6 +230,7 @@ Windows 系统字体通过用户电脑读取，本发行包不附加微软雅黑
 | windows_x86_64_msvc 0.52.6 | MIT OR Apache-2.0 | [license-apache-2.0](licenses/third-party/windows_x86_64_msvc-0.52.6/license-apache-2.0), [license-mit](licenses/third-party/windows_x86_64_msvc-0.52.6/license-mit) |
 | windows_x86_64_msvc 0.53.1 | MIT OR Apache-2.0 | [license-apache-2.0](licenses/third-party/windows_x86_64_msvc-0.53.1/license-apache-2.0), [license-mit](licenses/third-party/windows_x86_64_msvc-0.53.1/license-mit) |
 | winit 0.30.13 | Apache-2.0 | [LICENSE](licenses/third-party/winit-0.30.13/LICENSE), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/winit-0.30.13/SOURCE_COPYRIGHT_HEADERS.txt) |
+| winresource 0.1.34 | MIT | [LICENSE](licenses/third-party/winresource-0.1.34/LICENSE) |
 | write-fonts 0.48.1 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/write-fonts-0.48.1/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/write-fonts-0.48.1/LICENSE-MIT) |
 | writeable 0.6.4 | Unicode-3.0 | [LICENSE](licenses/third-party/writeable-0.6.4/LICENSE) |
 | xml-rs 0.8.29 | MIT | [LICENSE](licenses/third-party/xml-rs-0.8.29/LICENSE) |
