@@ -2731,17 +2731,17 @@
   "feature": "插值 / 外推（线性、三次样条、Akima）",
   "ref": "Interpolate/Extrapolate",
   "pri": "P0",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "分析 → 插值：线性、自然三次样条、Akima，等间距 X 网格、可自定义范围并按端点段外推；结果写成新 X/Y 列并加到图上，一步撤销",
-  "verify": "与 SciPy 1.17.1 interp1d / CubicSpline / Akima1DInterpolator 的区间内与外推值一致（1e-12）",
+  "verify": "与 SciPy 1.17.1 interp1d / CubicSpline / Akima1DInterpolator 的区间内与外推值一致（1e-12）；2026-11：生成 SciPy/NumPy 参考样例并通过对照。",
   "id": "F158",
   "milestone": "M1 日常够用",
   "sub_items": {
    "插值方法": {
     "total": 3,
-    "done": 0,
-    "review": 3,
-    "note": "线性、自然三次样条、Akima；均匀输出网格入口已接入"
+    "done": 3,
+    "review": 0,
+    "note": "线性、自然三次样条和 Akima 已通过参考数据及自动测试。"
    }
   },
   "needs": [
@@ -2751,7 +2751,11 @@
   "evidence": {
    "auto": [
     "crates/scicanvas-core/src/interpolate.rs::matches_scipy_inside_and_when_extrapolating",
-    "crates/scicanvas-core/src/ops.rs::interpolation_writes_xy_columns_and_adds_lines_to_the_graph"
+    "crates/scicanvas-core/src/ops.rs::interpolation_writes_xy_columns_and_adds_lines_to_the_graph",
+    "crates/scicanvas-core/tests/reference_scipy.rs::interpolation_matches_generated_scipy_reference"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/interpolation.json"
    ]
   }
  },
@@ -2849,9 +2853,9 @@
   "feature": "数值微分（含 Savitzky-Golay 平滑求导）",
   "ref": "Differentiate",
   "pri": "P0",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "有限差分微分和独立 Savitzky–Golay 平滑；“SG 平滑求导”对话框可选一阶/二阶导数、窗口点数和多项式阶数，按实际 X 在窗口内做最小二乘多项式并对其求导，两端平移窗口，结果写成新列（单位按 Y/X 或 Y/X² 推导），一步撤销",
-  "verify": "与 SciPy 1.17.1 savgol_filter(deriv, delta, mode=interp) 三组参数逐点一致（相对误差 < 1e-9，含两端）；二次函数二阶导为常数；对话框真实点击与撤销/重做回归",
+  "verify": "与 SciPy 1.17.1 savgol_filter(deriv, delta, mode=interp) 三组参数逐点一致（相对误差 < 1e-9，含两端）；二次函数二阶导为常数；对话框真实点击与撤销/重做回归；2026-11：生成 SciPy/NumPy 参考样例并通过对照。含缺失值时 SciPy 报错，程序对受影响的窗口返回非数值。",
   "id": "F166",
   "milestone": "M1 日常够用",
   "needs": [
@@ -2861,7 +2865,11 @@
   "evidence": {
    "auto": [
     "crates/scicanvas-core/src/analysis.rs::savitzky_golay_derivatives_match_scipy",
-    "crates/scicanvas/src/app/tests/dialog_tests.rs::sg_derivative_dialog_writes_second_derivative_column_and_undoes"
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::sg_derivative_dialog_writes_second_derivative_column_and_undoes",
+    "crates/scicanvas-core/tests/reference_scipy.rs::numerical_derivatives_match_generated_scipy_reference"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/derivatives.json"
    ]
   }
  },
@@ -3663,9 +3671,9 @@
   "feature": "峰积分（面积、半峰宽、质心）",
   "ref": "Peak Analyzer",
   "pri": "P1",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "峰表给出峰高、突出度、半峰宽（半突出度处，同 peak_widths）、线性基线以上的面积与质心；积分区间到相邻峰之间的最低点",
-  "verify": "单元测试与 SciPy peak_widths、numpy.trapezoid 一致；高斯峰面积与 A·s·√π 吻合",
+  "verify": "单元测试与 SciPy peak_widths、numpy.trapezoid 一致；高斯峰面积与 A·s·√π 吻合；2026-11：生成 SciPy/NumPy 参考样例并通过对照。",
   "id": "F219",
   "milestone": "M2 论文全流程",
   "needs": [
@@ -3675,7 +3683,11 @@
   "evidence": {
    "auto": [
     "crates/scicanvas-core/src/peaks.rs::peaks_prominences_and_widths_match_scipy",
-    "crates/scicanvas-core/src/peaks.rs::plateaus_and_edges_follow_scipy"
+    "crates/scicanvas-core/src/peaks.rs::plateaus_and_edges_follow_scipy",
+    "crates/scicanvas-core/tests/reference_scipy.rs::peaks_match_generated_scipy_and_numpy_reference"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/peaks.json"
    ]
   }
  },

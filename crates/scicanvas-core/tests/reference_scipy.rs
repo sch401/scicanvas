@@ -279,3 +279,82 @@ fn fft_filters_and_correlations_match_generated_numpy_reference() {
         }
     }
 }
+
+#[test]
+fn interpolation_matches_generated_scipy_reference() {
+    use scicanvas_core::interpolate::{self, InterpMethod};
+    for case in cases("interpolation") {
+        let name = case["name"].as_str().unwrap();
+        for (method, key) in [
+            (InterpMethod::Linear, "linear"),
+            (InterpMethod::Spline, "spline"),
+            (InterpMethod::Akima, "akima"),
+        ] {
+            let got = interpolate::interpolate(
+                &numbers(&case["x"]),
+                &numbers(&case["y"]),
+                method,
+                &numbers(&case["at"]),
+            );
+            if name == "duplicate" {
+                assert!(got.is_err());
+            } else {
+                array(&got.unwrap(), &case[key], 1e-10, name);
+            }
+        }
+    }
+}
+
+#[test]
+fn numerical_derivatives_match_generated_scipy_reference() {
+    for case in cases("derivatives") {
+        let name = case["name"].as_str().unwrap();
+        let gradient = analysis::derivative(&numbers(&case["x"]), &numbers(&case["y"]));
+        array(&gradient, &case["gradient"], 1e-10, name);
+        let got = analysis::sg_derivative(
+            &numbers(&case["x"]),
+            &numbers(&case["y"]),
+            case["window"].as_u64().unwrap() as usize,
+            case["order"].as_u64().unwrap() as usize,
+            case["derivative"].as_u64().unwrap() as usize,
+        );
+        if case.get("scipy_error").is_some() {
+            assert!(got.iter().any(|value| !value.is_finite()), "{name}");
+        } else {
+            let expected = numbers(&case["result"]);
+            assert_eq!(got.len(), expected.len());
+            for (actual, expected) in got.iter().zip(expected) {
+                assert!(
+                    (actual - expected).abs() <= 1e-10 * expected.abs().max(1.0),
+                    "{name}: {actual} vs {expected}"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn peaks_match_generated_scipy_and_numpy_reference() {
+    for case in cases("peaks") {
+        let name = case["name"].as_str().unwrap();
+        let got = scicanvas_core::peaks::find_peaks(&numbers(&case["x"]), &numbers(&case["y"]), 0.5);
+        let expected = case["peaks"].as_array().unwrap();
+        assert_eq!(got.len(), expected.len(), "{name}");
+        for (peak, reference) in got.iter().zip(expected) {
+            assert_eq!(peak.index as u64, reference["index"].as_u64().unwrap());
+            assert_eq!(peak.start as u64, reference["start"].as_u64().unwrap());
+            assert_eq!(peak.end as u64, reference["end"].as_u64().unwrap());
+            for (actual, key) in [
+                (peak.prominence, "prominence"),
+                (peak.width, "width"),
+                (peak.fwhm, "width"),
+                (peak.left_ip, "left"),
+                (peak.right_ip, "right"),
+                (peak.area, "area"),
+                (peak.centroid, "centroid"),
+            ] {
+                near(actual, &reference[key], 1e-10, name);
+            }
+        }
+    }
+}

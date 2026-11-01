@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 97 项，P1 146 项，P2 259 项，不做 12 项。
-状态：已完成 60 项，已实现待验收 64 项，部分实现 17 项，未开始 361 项，不做 12 项。
+状态：已完成 63 项，已实现待验收 61 项，部分实现 17 项，未开始 361 项，不做 12 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -222,7 +222,7 @@
 
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
 |---|---|---|---|---|---|---|---|
-| F158 | 插值 / 外推（线性、三次样条、Akima） | Interpolate/Extrapolate | P0 | 已实现待验收 | 分析 → 插值：线性、自然三次样条、Akima，等间距 X 网格、可自定义范围并按端点段外推；结果写成新 X/Y 列并加到图上，一步撤销 | 与 SciPy 1.17.1 interp1d / CubicSpline / Akima1DInterpolator 的区间内与外推值一致（1e-12） | 插值方法：已完成 0/3，待验收 3，部分实现 0；线性、自然三次样条、Akima；均匀输出网格入口已接入 |
+| F158 | 插值 / 外推（线性、三次样条、Akima） | Interpolate/Extrapolate | P0 | 已完成 | 分析 → 插值：线性、自然三次样条、Akima，等间距 X 网格、可自定义范围并按端点段外推；结果写成新 X/Y 列并加到图上，一步撤销 | 与 SciPy 1.17.1 interp1d / CubicSpline / Akima1DInterpolator 的区间内与外推值一致（1e-12）；2026-11：生成 SciPy/NumPy 参考样例并通过对照。 | 插值方法：已完成 3/3，待验收 0，部分实现 0；线性、自然三次样条和 Akima 已通过参考数据及自动测试。 |
 | F159 | 按 X 求 Y 插值 | Interpolate/Extrapolate Y from X | P1 | 部分实现 | interpolate.rs 已可在指定 X 数组计算 Y；桌面插值对话框提供均匀网格及范围。按用户指定 X 列或单点查询的独立入口待做 | 线性/样条/Akima 参考值和外推回归通过；用户 X 列查询入口待实现 | — |
 | F160 | 轨迹插值 | Trace Interpolation | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
 | F161 | XYZ 轨迹插值 | XYZ Trace Interpolation | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
@@ -230,7 +230,7 @@
 | F163 | 三维插值 | 3D Interpolation | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
 | F164 | 数值积分（梯形法、曲线下面积） | Integrate | P0 | 已完成 | analysis.rs/ops.rs 已实现梯形积分、累计积分结果与绝对面积选项 | 解析积分、行对齐与结果写回回归已通过；可复现 NumPy/SciPy 多组参考见 tests/reference 与 tools/reference/README.md（六阶容差原因单列），Windows 人工结果另记；2026-11 验收：自动测试 + 参考值 | — |
 | F165 | 二维体积积分 | 2D Volume Integrate (Pro Only) | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
-| F166 | 数值微分（含 Savitzky-Golay 平滑求导） | Differentiate | P0 | 已实现待验收 | 有限差分微分和独立 Savitzky–Golay 平滑；“SG 平滑求导”对话框可选一阶/二阶导数、窗口点数和多项式阶数，按实际 X 在窗口内做最小二乘多项式并对其求导，两端平移窗口，结果写成新列（单位按 Y/X 或 Y/X² 推导），一步撤销 | 与 SciPy 1.17.1 savgol_filter(deriv, delta, mode=interp) 三组参数逐点一致（相对误差 < 1e-9，含两端）；二次函数二阶导为常数；对话框真实点击与撤销/重做回归 | — |
+| F166 | 数值微分（含 Savitzky-Golay 平滑求导） | Differentiate | P0 | 已完成 | 有限差分微分和独立 Savitzky–Golay 平滑；“SG 平滑求导”对话框可选一阶/二阶导数、窗口点数和多项式阶数，按实际 X 在窗口内做最小二乘多项式并对其求导，两端平移窗口，结果写成新列（单位按 Y/X 或 Y/X² 推导），一步撤销 | 与 SciPy 1.17.1 savgol_filter(deriv, delta, mode=interp) 三组参数逐点一致（相对误差 < 1e-9，含两端）；二次函数二阶导为常数；对话框真实点击与撤销/重做回归；2026-11：生成 SciPy/NumPy 参考样例并通过对照。含缺失值时 SciPy 报错，程序对受影响的窗口返回非数值。 | — |
 | F167 | 多条曲线平均 / 合并 | Average/Merge Multiple Curves | P1 | 部分实现 | 已把多曲线线性插值到共同 X 范围求均值/标准差，输出结果表、Y 误差及线图；通用曲线合并工作流待做 | 平均结果、缺失值、结果输出和一步撤销回归通过；通用合并入口与参考软件验收待做 | — |
 | F168 | 简单列运算（加减乘除、两曲线相减） | Simple Column/Curve Math | P0 | 已完成 | 分析 → 列运算：两列或列与常数的加减乘除，结果新列与单位推导；不同 X 网格的曲线先线性插值后相减，范围外留空；一步撤销 | 逐行、常数、单位、除零与“原始减拟合”残差回归；可复现 NumPy/SciPy 多组参考见 tests/reference 与 tools/reference/README.md（六阶容差原因单列），Windows 人工结果另记；2026-11 验收：自动测试 + 数值参考 | — |
 | F169 | 归一化（最大值、Z 分数、区间缩放） | Normalize | P0 | 已完成 | 已接入除以最大值、Z 分数、区间缩放，结果写入派生列并支持撤销 | 算法参考值、写回及撤销回归已通过；可复现 NumPy/SciPy 多组参考见 tests/reference 与 tools/reference/README.md（六阶容差原因单列），Windows 人工结果另记；2026-11 验收：自动测试 + 参考值 | — |
@@ -303,7 +303,7 @@
 | F216 | 基线：锚点法、自动基线（ALS、多项式等） | Peak Analyzer | P1 | 部分实现 | 分析 → 信号处理 → 扣除基线：两端连线与 ALS 自动基线（非对称最小二乘，五对角 LDLᵀ 求解）；锚点法、多项式基线待做 | ALS 与 numpy 稠密求解结果一致（1e-9） | — |
 | F217 | 扣除基线 | Peak Analyzer | P1 | 已实现待验收 | 每条曲线在 Y 右边写入“基线”和“扣除基线”两列；来源是图形时基线画进图里，一步撤销 | 单元测试覆盖缺失行、列位置与图层曲线 | — |
 | F218 | 寻峰（局部极值、导数法、阈值） | Peak Analyzer | P1 | 部分实现 | 分析 → 信号处理 → 寻峰：局部极大值（平顶取中点）+ 最小突出度阈值（占 Y 范围百分比），算法同 scipy.signal.find_peaks；导数法待做 | 单元测试与 SciPy 1.17.1 find_peaks / peak_prominences 逐值一致（含平顶峰） | — |
-| F219 | 峰积分（面积、半峰宽、质心） | Peak Analyzer | P1 | 已实现待验收 | 峰表给出峰高、突出度、半峰宽（半突出度处，同 peak_widths）、线性基线以上的面积与质心；积分区间到相邻峰之间的最低点 | 单元测试与 SciPy peak_widths、numpy.trapezoid 一致；高斯峰面积与 A·s·√π 吻合 | — |
+| F219 | 峰积分（面积、半峰宽、质心） | Peak Analyzer | P1 | 已完成 | 峰表给出峰高、突出度、半峰宽（半突出度处，同 peak_widths）、线性基线以上的面积与质心；积分区间到相邻峰之间的最低点 | 单元测试与 SciPy peak_widths、numpy.trapezoid 一致；高斯峰面积与 A·s·√π 吻合；2026-11：生成 SciPy/NumPy 参考样例并通过对照。 | — |
 | F220 | 多峰拟合（重叠峰分峰） | Peak Analyzer | P1 | 未开始 | 复用拟合引擎 | 与 Origin Peak Analyzer 结果比较 | — |
 
 ## 图像处理

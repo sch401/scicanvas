@@ -11,7 +11,7 @@ import warnings
 
 import numpy as np
 import scipy
-from scipy import integrate, stats
+from scipy import integrate, interpolate, signal, stats
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "crates/scicanvas-core/tests/reference"
@@ -229,6 +229,81 @@ def signal_tests():
     write("signals", cases)
 
 
+def interpolation_cases():
+    cases = []
+    for name, x, y, at in [
+        ("normal", [2.5, 0, 4, .5, 1.5], [1, 1, 2, 2, 3], [-.3, .25, 1, 3, 4.4]),
+        ("missing", [0, 1, None, 2, 3], [1, 2, 9, None, 4], [-.2, .5, 2.5, 3.2]),
+        ("small", [0, 1, 2], [1, 4, 2], [-.5, .5, 1.5, 2.5]),
+        ("large", [1e6, 1e6+1, 1e6+2, 1e6+3], [1e5, 1e5+2, 1e5-1, 1e5+3],
+         [1e6-.5, 1e6+.5, 1e6+2.5, 1e6+3.5]),
+    ]:
+        xx, yy = np.asarray(x, float), np.asarray(y, float)
+        valid = np.isfinite(xx) & np.isfinite(yy)
+        order = np.argsort(xx[valid]); xx, yy = xx[valid][order], yy[valid][order]
+        case = dict(name=name, x=x, y=y, at=at,
+                    linear=interpolate.interp1d(xx, yy, fill_value="extrapolate")(at),
+                    spline=interpolate.CubicSpline(xx, yy, bc_type="natural", extrapolate=True)(at),
+                    akima=interpolate.Akima1DInterpolator(xx, yy, extrapolate=True)(at))
+        cases.append(case)
+    cases.append(dict(name="duplicate", x=[0, 1, 1, 2], y=[1, 2, 3, 4], at=[.5]))
+    write("interpolation", cases)
+
+
+def derivative_cases():
+    cases = []
+    for name, y, window, order, derivatives in [
+        ("normal", [1., 2., 4., 3., 8., 7., 6., 9., 8.], 5, 2, [1, 2]),
+        ("ties", [1., 1., 2., 2., 3., 3., 4., 4., 5.], 5, 2, [1]),
+        ("small", [1., 4., 2.], 3, 1, [1]),
+        ("missing", [1., 2., 4., None, 8., 7., 6., 9., 8.], 5, 2, [1]),
+        ("large", [1e6+1, 1e6+2, 1e6+4, 1e6+3, 1e6+8, 1e6+7, 1e6+6, 1e6+9, 1e6+8], 5, 2, [1]),
+    ]:
+        yy = np.asarray(y, float); x = np.arange(len(yy), dtype=float)*.5
+        for derivative in derivatives:
+            case = dict(name=name, x=x, y=y, window=window, order=order, derivative=derivative,
+                        gradient=np.gradient(yy, .5))
+            if not np.isfinite(yy).all():
+                try:
+                    signal.savgol_filter(yy, window, order, deriv=derivative, delta=.5, mode="interp")
+                except ValueError:
+                    case["scipy_error"] = "SciPy rejects NaN in the interpolation window"
+            else:
+                # Constant offsets have zero derivatives; centering avoids cancellation for large baselines.
+                source = yy - yy[0] if name == "large" else yy
+                if name == "large":
+                    case["input_shift"] = float(yy[0])
+                case["result"] = signal.savgol_filter(source, window, order, deriv=derivative, delta=.5, mode="interp")
+            cases.append(case)
+    write("derivatives", cases)
+
+
+def peak_cases():
+    cases = []
+    for name, y in [("normal", [0., 1., 4., 1., 0., 1., 3., 1., 0.]),
+                    ("ties", [0., 3., 3., 3., 0.]), ("small", [0., 1., 0.]),
+                    ("missing", [0., None, 0.]), ("large", [0., 1e5, 2e5, 1e5, 0.])]:
+        yy = np.asarray(y, float); x = np.arange(len(yy), dtype=float)
+        indices, props = signal.find_peaks(yy, prominence=.5)
+        widths, _, left, right = signal.peak_widths(yy, indices, rel_height=.5)
+        peaks = []
+        for j, idx in enumerate(indices):
+            lb, rb = props['left_bases'][j], props['right_bases'][j]
+            lower = max(indices[j-1], lb) if j else lb
+            upper = min(indices[j+1], rb) if j+1 < len(indices) else rb
+            start = int(lower + np.argmin(yy[lower:idx+1]))
+            end = int(idx + np.argmin(yy[idx:upper+1]))
+            xx = x[start:end+1]; segment = yy[start:end+1]
+            base = np.interp(xx, [x[start], x[end]], [yy[start], yy[end]])
+            area = np.trapezoid(segment-base, xx)
+            moment = np.trapezoid((segment-base)*xx, xx)
+            peaks.append(dict(index=int(idx), prominence=props['prominences'][j], width=widths[j],
+                              left=left[j], right=right[j], start=start, end=end,
+                              area=area, centroid=moment/area if area else x[idx]))
+        cases.append(dict(name=name, x=x, y=y, peaks=peaks))
+    write("peaks", cases)
+
+
 if __name__ == "__main__":
     integrals()
     normalization()
@@ -237,3 +312,6 @@ if __name__ == "__main__":
     polynomial()
     statistical_tests()
     signal_tests()
+    interpolation_cases()
+    derivative_cases()
+    peak_cases()
