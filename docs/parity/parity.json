@@ -2568,9 +2568,9 @@
   "feature": "内置拟合函数：峰函数（Gauss、Lorentz、Voigt、PsdVoigt、LogNormal 等）",
   "ref": "Curve Fitting Functions（共 239 个）",
   "pri": "P0",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "峰函数：Gauss、Lorentz、Voigt（Gauss wG 与 Lorentz wL 卷积，面积 A；Faddeeva 函数用 Weideman N=64 有理展开）、PsdVoigt1、LogNormal，公式与参数名同 Origin，均有数据驱动初值",
-  "verify": "从自动初值收敛到 SciPy 1.17.1 curve_fit（p0 取真值）的参数（1e-5）、标准误（1e-3）与 RSS；Voigt 线形与 scipy.special.voigt_profile 一致（< 1e-12）",
+  "verify": "从自动初值收敛到 SciPy 1.17.1 curve_fit（p0 取真值）的参数（1e-5）、标准误（1e-3）与 RSS；Voigt 线形与 scipy.special.voigt_profile 一致（< 1e-12）；2026-11：生成并通过 SciPy 参数、标准误和残差参考对照。",
   "id": "F148",
   "milestone": "M1 日常够用",
   "needs": [
@@ -2580,7 +2580,11 @@
   "evidence": {
    "auto": [
     "crates/scicanvas-core/src/nlfit.rs::auto_initial_values_converge_to_scipy_curve_fit",
-    "crates/scicanvas-core/src/nlfit.rs::voigt_profile_matches_scipy"
+    "crates/scicanvas-core/src/nlfit.rs::voigt_profile_matches_scipy",
+    "crates/scicanvas-core/tests/reference_scipy.rs::builtin_models_match_generated_scipy_reference"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/builtin_fits.json"
    ]
   }
  },
@@ -2589,9 +2593,9 @@
   "feature": "内置拟合函数：指数类（ExpDec1-3、ExpGrow、ExpAssoc 等）",
   "ref": "Curve Fitting Functions（共 239 个）",
   "pri": "P0",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "指数类：ExpDec1/2/3、ExpGro1、ExpAssoc，公式与参数名同 Origin，均有数据驱动初值（多指数由单指数估计拆分）",
-  "verify": "从自动初值收敛到 SciPy 1.17.1 curve_fit 的参数（1e-5）、标准误（1e-3）与 RSS",
+  "verify": "从自动初值收敛到 SciPy 1.17.1 curve_fit 的参数（1e-5）、标准误（1e-3）与 RSS；2026-11：生成并通过 SciPy 参数、标准误和残差参考对照。",
   "id": "F149",
   "milestone": "M1 日常够用",
   "needs": [
@@ -2600,7 +2604,11 @@
   ],
   "evidence": {
    "auto": [
-    "crates/scicanvas-core/src/nlfit.rs::auto_initial_values_converge_to_scipy_curve_fit"
+    "crates/scicanvas-core/src/nlfit.rs::auto_initial_values_converge_to_scipy_curve_fit",
+    "crates/scicanvas-core/tests/reference_scipy.rs::builtin_models_match_generated_scipy_reference"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/builtin_fits.json"
    ]
   }
  },
@@ -2609,9 +2617,9 @@
   "feature": "内置拟合函数：S 形与生长（Boltzmann、Logistic、DoseResp、Hill、Gompertz 等）",
   "ref": "Curve Fitting Functions（共 239 个）",
   "pri": "P0",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "S 形与生长：Boltzmann、Logistic、DoseResp、Hill、Gompertz，公式与参数名同 Origin，均有数据驱动初值",
-  "verify": "从自动初值收敛到 SciPy 1.17.1 curve_fit 的参数（1e-5）、标准误（1e-3）与 RSS",
+  "verify": "从自动初值收敛到 SciPy 1.17.1 curve_fit 的参数（1e-5）、标准误（1e-3）与 RSS；2026-11：生成并通过 SciPy 参数、标准误和残差参考对照。",
   "id": "F150",
   "milestone": "M1 日常够用",
   "needs": [
@@ -2620,7 +2628,11 @@
   ],
   "evidence": {
    "auto": [
-    "crates/scicanvas-core/src/nlfit.rs::auto_initial_values_converge_to_scipy_curve_fit"
+    "crates/scicanvas-core/src/nlfit.rs::auto_initial_values_converge_to_scipy_curve_fit",
+    "crates/scicanvas-core/tests/reference_scipy.rs::builtin_models_match_generated_scipy_reference"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/builtin_fits.json"
    ]
   }
  },
@@ -2629,9 +2641,9 @@
   "feature": "内置拟合函数：幂函数与对数（Power、Allometric、Log 等）",
   "ref": "Curve Fitting Functions（共 239 个）",
   "pri": "P0",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "幂函数与对数：Allometric1、Allometric2、Power1、Log3P1，公式与参数名同 Origin，均有数据驱动初值",
-  "verify": "从自动初值收敛到 SciPy 1.17.1 curve_fit 的参数（1e-5）、标准误（1e-3）与 RSS",
+  "verify": "从自动初值收敛到 SciPy 1.17.1 curve_fit 的参数（1e-5）、标准误（1e-3）与 RSS；2026-11：生成并通过 SciPy 参数、标准误和残差参考对照。",
   "id": "F151",
   "milestone": "M1 日常够用",
   "needs": [
@@ -2640,7 +2652,11 @@
   ],
   "evidence": {
    "auto": [
-    "crates/scicanvas-core/src/nlfit.rs::auto_initial_values_converge_to_scipy_curve_fit"
+    "crates/scicanvas-core/src/nlfit.rs::auto_initial_values_converge_to_scipy_curve_fit",
+    "crates/scicanvas-core/tests/reference_scipy.rs::builtin_models_match_generated_scipy_reference"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/builtin_fits.json"
    ]
   }
  },
