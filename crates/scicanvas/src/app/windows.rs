@@ -571,6 +571,19 @@ impl SciApp {
         }
     }
 
+    pub(super) fn about_window(&mut self, ctx: &egui::Context) {
+        egui::Window::new("关于 SciCanvas")
+            .id(egui::Id::new("scicanvas-about"))
+            .constrain_to(dialogs::floating_bounds(ctx))
+            .open(&mut self.show_about)
+            .collapsible(false)
+            .show(ctx, |ui| {
+                ui.label(format!("版本：{}", env!("CARGO_PKG_VERSION")));
+                ui.label(format!("提交：{}", env!("SCICANVAS_COMMIT")));
+                ui.label(format!("图形后端：{}", self.renderer_info));
+            });
+    }
+
     pub(super) fn help_window(&mut self, ctx: &egui::Context) {
         egui::Window::new("快速上手")
             .id(egui::Id::new("scicanvas-help"))

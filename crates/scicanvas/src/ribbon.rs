@@ -297,7 +297,7 @@ pub static TABS: &[Tab] = &[
             },
             Group {
                 label: "帮助",
-                items: &[Big("help.show"), Smalls(&["palette.open"])],
+                items: &[Big("help.show"), Smalls(&["palette.open", "help.about"])],
             },
         ],
     },
