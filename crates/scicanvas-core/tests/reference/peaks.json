@@ -1,0 +1,159 @@
+{
+  "generator": "tools/reference/gen_scipy.py",
+  "versions": {
+    "Python": "3.14.3",
+    "NumPy": "2.4.4",
+    "SciPy": "1.17.1"
+  },
+  "cases": [
+    {
+      "name": "normal",
+      "x": [
+        0.0,
+        1.0,
+        2.0,
+        3.0,
+        4.0,
+        5.0,
+        6.0,
+        7.0,
+        8.0
+      ],
+      "y": [
+        0.0,
+        1.0,
+        4.0,
+        1.0,
+        0.0,
+        1.0,
+        3.0,
+        1.0,
+        0.0
+      ],
+      "peaks": [
+        {
+          "index": 2,
+          "prominence": 4.0,
+          "width": 1.3333333333333333,
+          "left": 1.3333333333333333,
+          "right": 2.6666666666666665,
+          "start": 0,
+          "end": 4,
+          "area": 6.0,
+          "centroid": 2.0
+        },
+        {
+          "index": 6,
+          "prominence": 3.0,
+          "width": 1.5,
+          "left": 5.25,
+          "right": 6.75,
+          "start": 4,
+          "end": 8,
+          "area": 5.0,
+          "centroid": 6.0
+        }
+      ]
+    },
+    {
+      "name": "ties",
+      "x": [
+        0.0,
+        1.0,
+        2.0,
+        3.0,
+        4.0
+      ],
+      "y": [
+        0.0,
+        3.0,
+        3.0,
+        3.0,
+        0.0
+      ],
+      "peaks": [
+        {
+          "index": 2,
+          "prominence": 3.0,
+          "width": 3.0,
+          "left": 0.5,
+          "right": 3.5,
+          "start": 0,
+          "end": 4,
+          "area": 9.0,
+          "centroid": 2.0
+        }
+      ]
+    },
+    {
+      "name": "small",
+      "x": [
+        0.0,
+        1.0,
+        2.0
+      ],
+      "y": [
+        0.0,
+        1.0,
+        0.0
+      ],
+      "peaks": [
+        {
+          "index": 1,
+          "prominence": 1.0,
+          "width": 1.0,
+          "left": 0.5,
+          "right": 1.5,
+          "start": 0,
+          "end": 2,
+          "area": 1.0,
+          "centroid": 1.0
+        }
+      ]
+    },
+    {
+      "name": "missing",
+      "x": [
+        0.0,
+        1.0,
+        2.0
+      ],
+      "y": [
+        0.0,
+        null,
+        0.0
+      ],
+      "peaks": []
+    },
+    {
+      "name": "large",
+      "x": [
+        0.0,
+        1.0,
+        2.0,
+        3.0,
+        4.0
+      ],
+      "y": [
+        0.0,
+        100000.0,
+        200000.0,
+        100000.0,
+        0.0
+      ],
+      "peaks": [
+        {
+          "index": 2,
+          "prominence": 200000.0,
+          "width": 2.0,
+          "left": 1.0,
+          "right": 3.0,
+          "start": 0,
+          "end": 4,
+          "area": 400000.0,
+          "centroid": 2.0
+        }
+      ]
+    }
+  ]
+}
