@@ -1252,3 +1252,31 @@ fn nonlinear_recalc_uses_column_modes_and_one_undo_step() {
         assert_eq!(saved, app.project);
     }
 }
+
+#[test]
+fn selection_status_statistics_use_only_finite_selected_cells() {
+    let mut app = app();
+    app.active = Some(1);
+    let book = app.project.book_mut(1).unwrap();
+    book.columns[1].data = ["2", "", "-4", "6", "NaN"].map(str::to_owned).to_vec().into();
+    app.selection.insert(1, vec!["B".into()]);
+    assert_eq!(
+        app.stats_text(),
+        "平均值 = 1.3333333   总和 = 4   计数 = 3   最小 = -4   最大 = 6"
+    );
+    app.selection.clear();
+    app.sheets.insert(
+        1,
+        SheetState {
+            range: Some(Range {
+                a: Cell { c: 1, r: 0 },
+                b: Cell { c: 1, r: 2 },
+            }),
+            ..Default::default()
+        },
+    );
+    assert_eq!(
+        app.stats_text(),
+        "平均值 = -1   总和 = -2   计数 = 2   最小 = -4   最大 = 2"
+    );
+}

@@ -13,6 +13,7 @@ def main():
     subprocess.run([sys.executable, "tools/sync_docs.py", "--check"], cwd=root, check=True)
     subprocess.run([sys.executable, "-m", "unittest", "discover", "-s", "docs/parity", "-p", "test_*.py"], cwd=root, check=True)
     subprocess.run(["node", "--test", "docs/parity/parity.test.cjs"], cwd=root, check=True)
+    subprocess.run([sys.executable, "tools/acceptance.py", "--check"], cwd=root, check=True)
     checks = [
         ["fmt", "--all", "--", "--check"],
         ["test", "--profile", "ci", "--workspace", "--all-features", "--locked"],

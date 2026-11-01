@@ -49,6 +49,8 @@ jobs:
         run: |
           python tools/sync_docs.py --check
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          python tools/acceptance.py --check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           python -m unittest discover -s docs/parity -p "test_*.py"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           node --test docs/parity/parity.test.cjs
