@@ -672,7 +672,20 @@ fn covariance_ill_conditioned(cov: &[Vec<f64>], design: impl FnOnce() -> Vec<Vec
         let design = design();
         return crate::linalg::lstsq(&design, &vec![0.0; design.len()]).is_err();
     }
-    let matrix: Vec<Vec<f64>> = cov.iter().map(|row| row.iter().map(|v| v / scale).collect()).collect();
+    // 相关矩阵排除参数自身量级对条件数的影响。
+    let diag: Vec<f64> = (0..n).map(|i| cov[i][i]).collect();
+    if diag.iter().any(|d| !d.is_finite() || *d < 0.0) {
+        return true;
+    }
+    let keep: Vec<usize> = (0..n).filter(|&i| diag[i] > 0.0).collect();
+    if keep.is_empty() {
+        return false;
+    }
+    let matrix: Vec<Vec<f64>> = keep
+        .iter()
+        .map(|&i| keep.iter().map(|&j| cov[i][j] / (diag[i] * diag[j]).sqrt()).collect())
+        .collect();
+    let n = keep.len();
     let norm = matrix
         .iter()
         .map(|row| row.iter().map(|v| v.abs()).sum::<f64>())
@@ -1633,12 +1646,9 @@ impl<'a> FitSession<'a> {
             })
             .collect();
 
-        let uncertain = free
-            .iter()
-            .any(|&k| se[k].is_finite() && se[k] > 10.0 * params[k].abs());
-        let warnings = if converged
-            && (uncertain
-                || adj_r2 < 0.0
+        let mut warnings = Vec::new();
+        if converged {
+            let ill = adj_r2 < 0.0
                 || covariance_ill_conditioned(&reduced_cov, || {
                     j.iter()
                         .map(|row| {
@@ -1648,11 +1658,23 @@ impl<'a> FitSession<'a> {
                                 .collect()
                         })
                         .collect()
-                })) {
-            vec!["结果可能停在局部极小或参数不可辨识：请尝试其他初值，或固定部分参数。".to_owned()]
-        } else {
-            Vec::new()
-        };
+                });
+            if ill {
+                warnings.push("结果可能停在局部极小或参数不可辨识：请尝试其他初值，或固定部分参数。".to_owned());
+            }
+            let parameter_names = model.params();
+            let names: Vec<&str> = free
+                .iter()
+                .filter(|&&k| se[k].is_finite() && se[k] > 10.0 * params[k].abs())
+                .map(|&k| parameter_names[k])
+                .collect();
+            if !names.is_empty() {
+                warnings.push(format!(
+                    "参数 {} 的标准误超过其绝对值的 10 倍，与 0 无显著差异；如物理上应为 0，可考虑固定。",
+                    names.join("、")
+                ));
+            }
+        }
         Ok(NlFit {
             model,
             params,
@@ -2479,21 +2501,39 @@ mod tests {
         let fit = fit_custom(line(), &x, &y, &[1.08, 0.0], &[], &[]).unwrap();
         assert!(fit.converged);
         assert!(fit.se[1] > 10.0 * fit.params[1].abs());
-        assert!(!fit.warnings.is_empty());
+        assert_eq!(fit.warnings.len(), 1);
+        assert!(fit.warnings[0].contains("与 0 无显著差异"));
+        assert!(!fit.warnings[0].contains("局部极小"));
         let x = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0];
         let y = [-1.0, 0.0, 1.0, 0.0, -1.0, 1.0];
         let limits = [ParamLimits::fixed(10.0), ParamLimits::default()];
         let fit = fit_custom(line(), &x, &y, &[10.0, -2.0], &limits, &[]).unwrap();
         assert!(fit.converged);
         assert!(fit.adj_r2 < 0.0);
-        assert!(!fit.warnings.is_empty());
+        assert!(fit.warnings.iter().any(|warning| warning.contains("局部极小")));
+    }
+
+    #[test]
+    fn differently_scaled_line_parameters_do_not_warn_about_local_minima() {
+        let function = CustomFitFunction::new("line", "a+b*x", vec!["a".into(), "b".into()]).unwrap();
+        let x = [1000.0, 2000.0, 3000.0, 4000.0, 5000.0];
+        let y = [2.51, 4.48, 6.515, 8.49, 10.505];
+        let fit = fit_custom(function, &x, &y, &[0.5, 0.002], &[], &[]).unwrap();
+        assert!(fit.converged);
+        assert!(!fit.warnings.iter().any(|warning| warning.contains("局部极小")));
     }
 
     #[test]
     fn covariance_condition_respects_fixed_and_identifiable_directions() {
         let design = || vec![vec![1.0, 0.0], vec![0.0, 1.0], vec![1.0, 1.0]];
         assert!(!covariance_ill_conditioned(&[vec![1.0, 0.0], vec![0.0, 1e-10]], design));
-        assert!(covariance_ill_conditioned(&[vec![1.0, 0.0], vec![0.0, 1e-13]], design));
+        // 参数量级不同不代表病态。
+        assert!(!covariance_ill_conditioned(&[vec![1.0, 0.0], vec![0.0, 1e-13]], design));
+        assert!(covariance_ill_conditioned(
+            &[vec![1.0, 1.0 - 1e-14], vec![1.0 - 1e-14, 1.0]],
+            design
+        ));
+        assert!(!covariance_ill_conditioned(&[vec![1e10, 0.0], vec![0.0, 1e-10]], design));
         assert!(!covariance_ill_conditioned(&[vec![0.0, 0.0], vec![0.0, 0.0]], design));
         assert!(covariance_ill_conditioned(&[vec![0.0, 0.0], vec![0.0, 0.0]], || vec![
             vec![1.0, 1.0],
