@@ -1691,29 +1691,144 @@ fn nine_parameter_real_dialog_inputs_fit_report_reedit_and_undo() {
     };
     assert_eq!(editor.limits.len(), 9);
     assert_eq!(editor.target.as_ref().unwrap().report.id, report.id);
-    let out = ui.frame(&mut app, vec![]);
-    let top = crate::test_ui::text_positions(&out, "b1").into_iter().next().unwrap();
+    // 正常工作区的滚动和取消按钮点击由下一项严格裁剪回归覆盖。
     ui.frame(
         &mut app,
-        vec![
-            egui::Event::PointerMoved(top + egui::vec2(20.0, 20.0)),
-            egui::Event::MouseWheel {
-                unit: egui::MouseWheelUnit::Point,
-                delta: egui::vec2(0.0, -1500.0),
-                modifiers: egui::Modifiers::NONE,
-            },
-        ],
+        vec![egui::Event::Key {
+            key: egui::Key::Escape,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::NONE,
+        }],
     );
-    let out = ui.frame(&mut app, vec![]);
-    assert!(
-        !crate::test_ui::text_positions(&out, "b9").is_empty(),
-        "滚动后可编辑最后一个参数"
-    );
-    press_dialog_button(&mut app, "取消");
     assert!(app.dialog.is_none());
     let after = app.project.clone();
     app.undo();
     assert_eq!(app.project, before);
     app.redo();
     assert_eq!(app.project, after);
+}
+
+#[test]
+fn custom_fit_parameter_controls_scroll_into_view_in_a_normal_workspace() {
+    for (width, height, count) in [(1229.0, 706.0, 9), (900.0, 650.0, 12)] {
+        let mut app = app();
+        let xs: Vec<_> = (0..64).map(|i| i as f64 * std::f64::consts::TAU / 64.0).collect();
+        app.project.books[0].columns[0].data = xs.iter().map(ToString::to_string).collect();
+        app.project.books[0].columns[1].data = xs
+            .iter()
+            .map(|x| {
+                (1..=count)
+                    .map(|i| i as f64 / 10.0 * (i as f64 * x).sin())
+                    .sum::<f64>()
+                    .to_string()
+            })
+            .collect();
+        let function = scicanvas_core::nlfit::CustomFitFunction::new(
+            "Scroll",
+            &(1..=count)
+                .map(|i| format!("b{i}*sin({i}*x)"))
+                .collect::<Vec<_>>()
+                .join("+"),
+            (1..=count).map(|i| format!("b{i}")).collect(),
+        )
+        .unwrap();
+        let (_, reports) = app
+            .project
+            .nlfit_custom(
+                &scicanvas_core::ops::Source::Book {
+                    id: 1,
+                    selected: vec!["B".into()],
+                    rows: None,
+                },
+                function,
+                &vec![0.0; count],
+                &[],
+                &[],
+            )
+            .unwrap();
+        app.active = Some(1);
+        app.edit_nlfit_report(reports[0].clone());
+        let before = app.project.clone();
+        let ctx = egui::Context::default();
+        crate::theme::install(&ctx);
+        crate::fonts::setup(&ctx);
+        ctx.style_mut(|style| style.animation_time = 0.0);
+        let mut ui = crate::test_ui::Harness::new(
+            ctx,
+            Some(egui::vec2(width, height)),
+            |app: &mut SciApp, ctx: &egui::Context| app.ui_frame(ctx),
+        )
+        .with_step(0.02);
+        let visible = |out: &egui::FullOutput, label: &str| -> Option<egui::Rect> {
+            out.shapes
+                .iter()
+                .filter_map(|shape| match &shape.shape {
+                    egui::Shape::Text(text) if text.galley.job.text == label => {
+                        let rect = text.galley.rect.translate(text.pos.to_vec2());
+                        (shape.clip_rect.contains_rect(rect)
+                            && egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, height))
+                                .contains_rect(rect))
+                        .then_some(rect)
+                    }
+                    _ => None,
+                })
+                .next_back()
+        };
+        let mut out = ui.frame(&mut app, vec![]);
+        for _ in 0..5 {
+            out = ui.frame(&mut app, vec![]);
+        }
+        let id = egui::Id::new(("scicanvas-dialog", "自定义非线性拟合"));
+        let label = format!("b{count}");
+        for _ in 0..40 {
+            if visible(&out, &label).is_some() && visible(&out, "拟合").is_some() {
+                break;
+            }
+            let rect = ui.ctx.memory(|m| m.area_rect(id)).unwrap();
+            let at = egui::pos2(rect.left() + 100.0, rect.bottom() - 80.0);
+            ui.frame(
+                &mut app,
+                vec![
+                    egui::Event::PointerMoved(at),
+                    egui::Event::MouseWheel {
+                        unit: egui::MouseWheelUnit::Point,
+                        delta: egui::vec2(0.0, -120.0),
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+            );
+            for _ in 0..3 {
+                out = ui.frame(&mut app, vec![]);
+            }
+        }
+        let last = visible(&out, &label).unwrap_or_else(|| {
+            panic!("{width}x{height}: {label} must be fully inside the clip and screen after scrolling")
+        });
+        assert!(visible(&out, "拟合").is_some());
+        let upper = out
+            .shapes
+            .iter()
+            .filter_map(|shape| match &shape.shape {
+                egui::Shape::Text(text) if text.galley.job.text == "上限" => {
+                    let rect = text.galley.rect.translate(text.pos.to_vec2());
+                    (rect.top() > last.bottom() && shape.clip_rect.contains_rect(rect)).then_some(rect)
+                }
+                _ => None,
+            })
+            .next_back()
+            .expect("last parameter upper-limit control is visible");
+        ui.click(&mut app, upper.center());
+        assert!(matches!(&app.dialog,Some(Dialog::CustomNlFit(editor)) if editor.limits[count-1].upper==Some(0.0)));
+        let rect = ui.ctx.memory(|m| m.area_rect(id)).unwrap();
+        assert!(
+            rect.height() < height - 100.0,
+            "parameter count must not expand the dialog beyond the workspace"
+        );
+        let out = ui.frame(&mut app, vec![]);
+        ui.click(&mut app, visible(&out, "取消").unwrap().center());
+        assert!(app.dialog.is_none());
+        assert_eq!(app.project, before);
+    }
 }
