@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 97 项，P1 146 项，P2 259 项，不做 12 项。
-状态：已完成 57 项，已实现待验收 66 项，部分实现 17 项，未开始 362 项，不做 12 项。
+状态：已完成 60 项，已实现待验收 63 项，部分实现 17 项，未开始 362 项，不做 12 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -281,12 +281,12 @@
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
 |---|---|---|---|---|---|---|---|
 | F201 | 平滑（移动平均、Savitzky-Golay、FFT 平滑、LOWESS） | Smoothing | P0 | 已实现待验收 | 平滑对话框四种方法：移动平均、二阶 Savitzky–Golay、LOWESS（每点取最近的窗口点数个近邻，tricube 权重局部加权线性回归，X 可无序、不等间距）、FFT 滤波（去掉首尾连线趋势后低通，截止频率 1/(窗口点数·ΔX)，再加回趋势；X 不等间距时提示先插值）；结果写新列，来源是图形时加为曲线，一步撤销 | LOWESS 与 NumPy 逐点暴力实现（k=5/9，无序不等间距 X）一致、直线不变；FFT 平滑与 numpy rfft 掩模参考一致（误差 < 1e-9）；不等间距 X 拒绝 FFT 平滑；LOWESS 稳健迭代验收待做 | 平滑方法：已完成 0/4，待验收 2，部分实现 0；移动平均、Savitzky–Golay 已实现待验收；FFT、LOWESS 未开始 |
-| F202 | FFT 滤波（低通、高通、带通、带阻） | FFT Filters | P1 | 已实现待验收 | 分析 → 信号处理 → FFT 滤波：低通、高通、带通、带阻理想滤波（频域置零后逆变换），结果写成新列，来源是图形时画进图里 | 与 numpy rfft / irfft 掩模滤波逐点一致（1e-12）；带通 + 带阻 = 原信号 | 频域滤波类型：已完成 0/4，待验收 4，部分实现 0；低通、高通、带通、带阻理想滤波；不代表 IIR 或其他滤波器实现 |
+| F202 | FFT 滤波（低通、高通、带通、带阻） | FFT Filters | P1 | 已完成 | 分析 → 信号处理 → FFT 滤波：低通、高通、带通、带阻理想滤波（频域置零后逆变换），结果写成新列，来源是图形时画进图里 | 与 numpy rfft / irfft 掩模滤波逐点一致（1e-12）；带通 + 带阻 = 原信号；2026-11：生成 NumPy 参考数据并通过对照。 | 频域滤波类型：已完成 0/4，待验收 4，部分实现 0；低通、高通、带通、带阻理想滤波；不代表 IIR 或其他滤波器实现 |
 | F203 | IIR 滤波（巴特沃斯、切比雪夫等） | IIR Filters (Pro Only) | P2 | 未开始 | 自写或 biquad | 与 Origin 及 SciPy.signal 结果比较 | — |
-| F204 | 傅里叶变换 FFT / IFFT（幅值、相位、功率谱、窗函数） | Fast Fourier Transform (FFT) | P0 | 已实现待验收 | 任意点数 FFT（基 2/Bluestein）、矩形/Hann/Hamming 窗、单边幅值/相位/功率谱及幅值图；独立 IFFT 命令：选中实部/虚部列或在 FFT 结果表直接运行，单边谱按实数信号逆变换（可选偶/奇输出点数，同 numpy.fft.irfft），双边谱做复数逆变换（同 numpy.fft.ifft，输出实部和虚部），时间间隔按 1/(N·df) 换算，生成信号表与曲线图 | FFT 与 numpy.fft 一致；irfft（8/9/7 点）与 ifft 与 NumPy 2.4.4 参考值误差 < 1e-12；任意长度往返还原；FFT→IFFT 项目往返、对话框真实点击与撤销/重做回归 | — |
+| F204 | 傅里叶变换 FFT / IFFT（幅值、相位、功率谱、窗函数） | Fast Fourier Transform (FFT) | P0 | 已完成 | 任意点数 FFT（基 2/Bluestein）、矩形/Hann/Hamming 窗、单边幅值/相位/功率谱及幅值图；独立 IFFT 命令：选中实部/虚部列或在 FFT 结果表直接运行，单边谱按实数信号逆变换（可选偶/奇输出点数，同 numpy.fft.irfft），双边谱做复数逆变换（同 numpy.fft.ifft，输出实部和虚部），时间间隔按 1/(N·df) 换算，生成信号表与曲线图 | FFT 与 numpy.fft 一致；irfft（8/9/7 点）与 ifft 与 NumPy 2.4.4 参考值误差 < 1e-12；任意长度往返还原；FFT→IFFT 项目往返、对话框真实点击与撤销/重做回归；2026-11：生成 NumPy 参考数据并通过对照。 | — |
 | F205 | 短时傅里叶变换 STFT | Short-Time Fourier Transform (Pro Only) | P2 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 | — |
 | F206 | 卷积 / 反卷积 | Convolution | P1 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 | — |
-| F207 | 相关（自相关、互相关） | Correlation | P1 | 已实现待验收 | 分析 → 信号处理 → 相关函数：选一列求自相关、两列求互相关（归一化，滞后以点计），结果表与线图 | 与 numpy.correlate 归一化结果一致（1e-12） | — |
+| F207 | 相关（自相关、互相关） | Correlation | P1 | 已完成 | 分析 → 信号处理 → 相关函数：选一列求自相关、两列求互相关（归一化，滞后以点计），结果表与线图 | 与 numpy.correlate 归一化结果一致（1e-12）；2026-11：生成 NumPy 参考数据并通过对照。 | — |
 | F208 | 相干性 | Coherence (Pro Only) | P2 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 | — |
 | F209 | 希尔伯特变换、包络 | Hilbert Transform (Pro Only) | P2 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 | — |
 | F210 | 二维 FFT 与二维 FFT 滤波 | 2D Fourier Transform (Pro Only) | P2 | 未开始 | rustfft | 与 Origin 及 SciPy.signal 结果比较 | — |

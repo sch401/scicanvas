@@ -220,3 +220,54 @@ fn histogram_correlations_and_t_tests_match_generated_scipy_reference() {
         }
     }
 }
+
+#[test]
+fn fft_filters_and_correlations_match_generated_numpy_reference() {
+    use scicanvas_core::{
+        fft::{self, FilterKind, Window},
+        stats,
+    };
+    for case in cases("signals") {
+        let name = case["name"].as_str().unwrap();
+        match name {
+            "fft" => {
+                let y = numbers(&case["y"]);
+                let spectrum = fft::spectrum(&y, case["dt"].as_f64().unwrap(), Window::Rect).unwrap();
+                array(&spectrum.freq, &case["freq"], 1e-10, name);
+                array(&spectrum.re, &case["re"], 1e-10, name);
+                array(&spectrum.im, &case["im"], 1e-10, name);
+                array(
+                    &fft::inverse_real(&spectrum.re, &spectrum.im, y.len()),
+                    &case["y"],
+                    1e-10,
+                    name,
+                );
+            }
+            "low" | "high" | "band" | "stop" => {
+                let kind = match name {
+                    "low" => FilterKind::LowPass(1.5),
+                    "high" => FilterKind::HighPass(1.5),
+                    "band" => FilterKind::BandPass(1.0, 3.0),
+                    _ => FilterKind::BandStop(1.0, 3.0),
+                };
+                let out = fft::filter(&numbers(&case["y"]), case["dt"].as_f64().unwrap(), kind).unwrap();
+                array(&out, &case["result"], 1e-10, name);
+            }
+            "correlation" => {
+                let x = numbers(&case["x"]);
+                let (lags, corr) = stats::cross_correlation(&x, &numbers(&case["z"])).unwrap();
+                let want: Vec<_> = case["lags"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|n| n.as_i64().unwrap())
+                    .collect();
+                assert_eq!(lags, want);
+                array(&corr, &case["corr"], 1e-10, name);
+                let (_, auto) = stats::cross_correlation(&x, &x).unwrap();
+                array(&auto, &case["auto"], 1e-10, name);
+            }
+            _ => panic!("unexpected case {name}"),
+        }
+    }
+}

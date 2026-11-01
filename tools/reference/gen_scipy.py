@@ -171,6 +171,27 @@ def statistical_tests():
     write("statistics", cases)
 
 
+def signal_tests():
+    y = np.array([0.1, 0.7, -0.2, 1.4, 0.3, -0.6, 1.1, 0.8, -0.4,
+                  0.2, 0.9, -0.8, 0.5, 1.3, -0.1, 0.6, -0.3])
+    dt = 0.1
+    spectrum = np.fft.rfft(y)
+    freq = np.fft.rfftfreq(len(y), dt)
+    cases = [dict(name="fft", y=y, dt=dt, re=spectrum.real, im=spectrum.imag, freq=freq)]
+    for name, mask in [("low", freq <= 1.5), ("high", freq >= 1.5),
+                       ("band", (freq >= 1.0) & (freq <= 3.0)),
+                       ("stop", (freq < 1.0) | (freq > 3.0))]:
+        cases.append(dict(name=name, y=y, dt=dt,
+                          result=np.fft.irfft(np.where(mask, spectrum, 0), n=len(y))))
+    x = np.array([1.2, -0.7, 2.0, 3.4, 0.5, -1.0])
+    z = np.array([2.5, 1.1, -0.2, 1.7, 3.2, 0.3])
+    a, b = x - x.mean(), z - z.mean()
+    corr = np.correlate(b, a, "full") / np.sqrt(np.sum(a*a)*np.sum(b*b))
+    auto = np.correlate(a, a, "full") / np.sum(a*a)
+    cases.append(dict(name="correlation", x=x, z=z, lags=np.arange(-len(x)+1,len(x)), corr=corr, auto=auto))
+    write("signals", cases)
+
+
 if __name__ == "__main__":
     integrals()
     normalization()
@@ -178,3 +199,4 @@ if __name__ == "__main__":
     column_math()
     polynomial()
     statistical_tests()
+    signal_tests()
