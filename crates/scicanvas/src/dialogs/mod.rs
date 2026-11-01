@@ -64,7 +64,7 @@ pub(crate) use docking::{begin_docks, end_docks, has_docks, place_docks, reset_d
 pub(crate) use find_replace::FindReplace;
 pub(crate) use import_wizard::ImportWizard;
 pub use layer_contents::LayerContents;
-pub(crate) use modal::{backdrop, modal};
+pub(crate) use modal::modal;
 pub use nl_fit::{CustomFitAction, CustomFitEditor, FitEditTarget};
 pub(crate) use plot_object::PlotObjectEditor;
 pub(crate) use scientific_text::{scientific_text, scientific_text_multiline};

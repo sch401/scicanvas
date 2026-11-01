@@ -180,8 +180,7 @@ pub struct SciApp {
     modal_focus_restore: Option<egui::Id>,
     modal_was_active: bool,
     background_focus: Option<egui::Id>,
-    drawing_frozen: bool,
-    modal_input_backup: Option<egui::InputState>,
+    background_blocked: bool,
     recovery_file: Option<PathBuf>,
     recovery_lock: Option<std::fs::File>,
     last_recovery: std::time::Instant,
@@ -346,8 +345,7 @@ impl SciApp {
             modal_focus_restore: None,
             modal_was_active: false,
             background_focus: None,
-            drawing_frozen: false,
-            modal_input_backup: None,
+            background_blocked: false,
             recovery_file: None,
             recovery_lock: None,
             last_recovery: std::time::Instant::now(),
@@ -1082,7 +1080,7 @@ impl SciApp {
 
     /// 执行一条命令（功能区、快捷键、命令面板都走这里）。不能执行时在状态栏说明原因。
     pub(crate) fn run_command(&mut self, id: &str) {
-        if self.drawing_frozen {
+        if self.background_blocked {
             return;
         }
         let Some(c) = commands::find(id) else { return };
@@ -1139,7 +1137,7 @@ impl SciApp {
         f: impl FnOnce(&mut Self) -> Result<Option<T>, String>,
         show: impl FnOnce(&mut Self, T) -> R,
     ) -> Option<R> {
-        if self.drawing_frozen {
+        if self.background_blocked {
             return None;
         }
         let outer = self.edit_depth == 0;
@@ -1211,7 +1209,7 @@ impl SciApp {
         f: impl FnOnce(&mut Project) -> Result<T, String>,
         show: impl FnOnce(&mut Self, T),
     ) -> Result<(), String> {
-        if self.drawing_frozen {
+        if self.background_blocked {
             return Ok(());
         }
         if self.history.is_pending() && (group.is_none() || self.last_history_group != group) {
@@ -1718,14 +1716,17 @@ impl SciApp {
         if self.closing_frame(ctx) {
             return;
         }
-        self.freeze_modal_background(ctx);
+        let modal_was_open = self.modal_active();
+        self.prepare_modal_focus(ctx);
+        if modal_was_open {
+            self.background_blocked = false;
+            self.show_modal(ctx);
+            self.prepare_modal_focus(ctx);
+        }
         self.background_frame(ctx);
-        self.thaw_modal_input(ctx);
-        if self.cleanup_blocks_ui() {
-            self.cleanup_progress(ctx);
-        } else {
-            self.confirm_window(ctx);
-            self.session_dialogs(ctx);
+        self.background_blocked = false;
+        if !modal_was_open {
+            self.show_modal(ctx);
         }
         self.restore_modal_focus(ctx);
         if !self.modal_active() {
@@ -1741,12 +1742,20 @@ impl SciApp {
             ctx.request_repaint();
         }
     }
+    fn show_modal(&mut self, ctx: &egui::Context) {
+        if self.cleanup_blocks_ui() {
+            self.cleanup_progress(ctx);
+        } else {
+            self.confirm_window(ctx);
+            self.session_dialogs(ctx);
+        }
+    }
     fn background_frame(&mut self, ctx: &egui::Context) {
         let reset = egui::Modifiers {
             shift: true,
             ..egui::Modifiers::COMMAND
         };
-        if !self.drawing_frozen && ctx.input_mut(|input| input.consume_key(reset, egui::Key::R)) {
+        if !self.background_blocked && ctx.input_mut(|input| input.consume_key(reset, egui::Key::R)) {
             self.run_command("win.reset");
         }
         if std::mem::take(&mut self.pending_window_reset) {
@@ -1755,10 +1764,10 @@ impl SciApp {
         }
         dialogs::begin_docks(ctx);
         crate::chrome::edges(ctx, &self.pal);
-        if !self.drawing_frozen {
+        if !self.background_blocked {
             self.dropped_files(ctx);
         }
-        if !self.drawing_frozen
+        if !self.background_blocked
             && self.last_history_group.is_some()
             && ctx.input(|i| {
                 i.pointer.any_pressed()
@@ -1775,20 +1784,20 @@ impl SciApp {
         }
         self.pal = theme::palette(ctx.theme());
         // 命令面板打开时不处理全局快捷键，避免和输入框冲突
-        if !self.drawing_frozen && self.ui.palette.is_none() {
+        if !self.background_blocked && self.ui.palette.is_none() {
             self.shortcuts(ctx);
         }
 
-        self.freeze_modal_background(ctx);
+        self.prepare_modal_focus(ctx);
         // 功能区和命令面板只读地访问程序状态，被点击的命令在绘制完成后执行
         let mut clicked: Option<&'static str> = None;
         let mut ui_state = std::mem::take(&mut self.ui);
         let pal = self.pal;
         ribbon::show(ctx, self, &mut ui_state, &pal, &mut clicked);
-        if clicked == Some("app.quit") && !self.drawing_frozen {
+        if clicked == Some("app.quit") && !self.background_blocked {
             self.run_command("app.quit");
             clicked = None;
-            self.freeze_modal_background(ctx);
+            self.prepare_modal_focus(ctx);
         }
 
         let style = ctx.style();
@@ -1850,7 +1859,7 @@ impl SciApp {
                         dialogs::place_docks(ui, dialogs::DockSide::Right, ui.available_rect_before_wrap())
                     });
             }
-            self.freeze_modal_background(ctx);
+            self.prepare_modal_focus(ctx);
             // 子窗口放在面板之间剩下的区域里（Origin 的 MDI 工作区）
             self.refresh_book_preview();
             self.child_windows(ctx);
@@ -1861,12 +1870,12 @@ impl SciApp {
         ribbon::palette(ctx, self, &mut ui_state, &pal, &mut clicked);
         self.ui = ui_state;
 
-        if !self.drawing_frozen {
+        if !self.background_blocked {
             if let Some(id) = clicked {
                 self.run_command(id);
             }
         }
-        self.freeze_modal_background(ctx);
+        self.prepare_modal_focus(ctx);
         if let Some(t) = self.pending_copy.take() {
             ctx.copy_text(t);
         }
@@ -1875,18 +1884,18 @@ impl SciApp {
         self.object_window(ctx);
         self.help_window(ctx);
         self.about_window(ctx);
-        if self.drawing_frozen {
+        if self.background_blocked {
             if let Some(dialog) = self.dialog.as_mut() {
                 let _ = dialogs::show(ctx, dialog, &self.pal, &self.project);
             }
         } else {
             self.dialogs(ctx);
         }
-        if crate::builder::show(ctx, &self.project, &mut self.plot_draft) && !self.drawing_frozen {
+        if crate::builder::show(ctx, &self.project, &mut self.plot_draft) && !self.background_blocked {
             self.run_command("plot.apply_spec");
         }
         dialogs::end_docks(ctx);
-        if !self.drawing_frozen {
+        if !self.background_blocked {
             self.finish_frame_edit(self.history_group);
         }
         if std::mem::take(&mut self.pending_repaint) {
@@ -2390,38 +2399,15 @@ impl SciApp {
             || self.confirm_delete.is_some()
             || self.cleanup_blocks_ui()
     }
-    fn freeze_modal_background(&mut self, ctx: &egui::Context) {
-        if !self.modal_active() {
-            return;
-        }
-        if !self.modal_was_active {
+    fn prepare_modal_focus(&mut self, ctx: &egui::Context) {
+        self.background_blocked = self.modal_active();
+        if self.background_blocked && !self.modal_was_active {
             self.modal_focus_restore = ctx.memory(|m| m.focused()).or(self.background_focus);
             if let Some(id) = self.modal_focus_restore {
                 ctx.memory_mut(|m| m.surrender_focus(id));
             }
             self.modal_was_active = true;
         }
-        if self.modal_input_backup.is_none() {
-            self.modal_input_backup = Some(ctx.input(Clone::clone));
-            ctx.input_mut(|i| {
-                i.events.clear();
-                i.raw.events.clear();
-                i.keys_down.clear();
-                i.modifiers = egui::Modifiers::NONE;
-                i.pointer = Default::default();
-                i.raw_scroll_delta = egui::Vec2::ZERO;
-                i.smooth_scroll_delta = egui::Vec2::ZERO;
-                i.raw.dropped_files.clear();
-                i.raw.hovered_files.clear();
-            });
-        }
-        self.drawing_frozen = true;
-    }
-    fn thaw_modal_input(&mut self, ctx: &egui::Context) {
-        if let Some(input) = self.modal_input_backup.take() {
-            ctx.input_mut(|i| *i = input);
-        }
-        self.drawing_frozen = false;
     }
     fn restore_modal_focus(&mut self, ctx: &egui::Context) {
         if self.modal_was_active && !self.modal_active() {

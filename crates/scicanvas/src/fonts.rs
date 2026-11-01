@@ -66,12 +66,12 @@ pub fn setup(ctx: &egui::Context) -> bool {
     if let Some(bytes) = cjk {
         fonts
             .font_data
-            .insert("cjk".to_owned(), egui::FontData::from_owned(bytes));
+            .insert("cjk".to_owned(), egui::FontData::from_owned(bytes).into());
         // 界面中英文都用微软雅黑（放在最前）；指定了 SCICANVAS_FONT 时用指定的字体。
         // egui 自带字体留在后面，补齐雅黑里没有的符号。
         let ui = match (env.is_some(), ui_font()) {
             (false, Some(data)) => {
-                fonts.font_data.insert("ui".to_owned(), data);
+                fonts.font_data.insert("ui".to_owned(), data.into());
                 "ui"
             }
             _ => "cjk",
@@ -86,7 +86,7 @@ pub fn setup(ctx: &egui::Context) -> bool {
         let name = format!("plot-{i}");
         let mut data = egui::FontData::from_owned(face.data().to_vec());
         data.index = face.index;
-        fonts.font_data.insert(name.clone(), data);
+        fonts.font_data.insert(name.clone(), data.into());
         fonts.families.insert(FontFamily::Name(name.clone().into()), vec![name]);
     }
     ctx.set_fonts(fonts);

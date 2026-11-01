@@ -1,7 +1,7 @@
 {
   "target": "x86_64-pc-windows-msvc",
   "scope": "normal,build; all workspace features",
-  "cargo_lock_sha256": "2b353de2bbccebcb285f2557bb74b514c52177ec113d8f0b89fc73e3ca63d920",
+  "cargo_lock_sha256": "16f9fae499b051878d66a89d51de03d5c33e051a5544eb91a65ea1b5385705f8",
   "packages": [
     {
       "name": "ab_glyph",
@@ -37,88 +37,88 @@
     },
     {
       "name": "accesskit",
-      "version": "0.16.3",
+      "version": "0.17.1",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/AccessKit/accesskit",
-      "crate_sha256": "99b76d84ee70e30a4a7e39ab9018e2b17a6a09e31084176cc7c0b2dec036ba45",
-      "revision": "02cf1aa5dda9cb4d97ef7bbab486c039c35960a8",
+      "crate_sha256": "d3d3b8f9bae46a948369bc4a03e815d4ed6d616bd00de4051133a5019dc31c5a",
+      "revision": "405d578cdfd8496ee79020d24cfaac8c29a8a48f",
       "files": [
         {
-          "path": "licenses/third-party/accesskit-0.16.3/SOURCE_COPYRIGHT_HEADERS.txt",
-          "sha256": "a10b44a4a91a624b7b1481a5b8875d1a720fcf4e57abd10a19819cf3f0da6467"
+          "path": "licenses/third-party/accesskit-0.17.1/SOURCE_COPYRIGHT_HEADERS.txt",
+          "sha256": "38eff5a900853f1c52014d68ae402a304dbab735cf771da593dbfb2be0bdc3d5"
         },
         {
-          "path": "licenses/third-party/accesskit-0.16.3/upstream/LICENSE-APACHE",
+          "path": "licenses/third-party/accesskit-0.17.1/upstream/LICENSE-APACHE",
           "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
         },
         {
-          "path": "licenses/third-party/accesskit-0.16.3/upstream/LICENSE-MIT",
+          "path": "licenses/third-party/accesskit-0.17.1/upstream/LICENSE-MIT",
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ]
     },
     {
       "name": "accesskit_consumer",
-      "version": "0.24.3",
+      "version": "0.26.0",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/AccessKit/accesskit",
-      "crate_sha256": "7a12dc159d52233c43d9fe5415969433cbdd52c3d6e0df51bda7d447427b9986",
-      "revision": "02cf1aa5dda9cb4d97ef7bbab486c039c35960a8",
+      "crate_sha256": "f47983a1084940ba9a39c077a8c63e55c619388be5476ac04c804cfbd1e63459",
+      "revision": "405d578cdfd8496ee79020d24cfaac8c29a8a48f",
       "files": [
         {
-          "path": "licenses/third-party/accesskit_consumer-0.24.3/SOURCE_COPYRIGHT_HEADERS.txt",
-          "sha256": "b618f769605601956a3d79bc9adb18b30734ffe2de5de69a1cef047e8b7049d9"
+          "path": "licenses/third-party/accesskit_consumer-0.26.0/SOURCE_COPYRIGHT_HEADERS.txt",
+          "sha256": "1cd3b13bdfc3f95214192408ce3b4d135b5be9d898173b1eae22379f9fb55a20"
         },
         {
-          "path": "licenses/third-party/accesskit_consumer-0.24.3/upstream/LICENSE-APACHE",
+          "path": "licenses/third-party/accesskit_consumer-0.26.0/upstream/LICENSE-APACHE",
           "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
         },
         {
-          "path": "licenses/third-party/accesskit_consumer-0.24.3/upstream/LICENSE-MIT",
+          "path": "licenses/third-party/accesskit_consumer-0.26.0/upstream/LICENSE-MIT",
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ]
     },
     {
       "name": "accesskit_windows",
-      "version": "0.23.2",
+      "version": "0.24.1",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/AccessKit/accesskit",
-      "crate_sha256": "974e96c347384d9133427167fb8a58c340cb0496988dacceebdc1ed27071023b",
-      "revision": "02cf1aa5dda9cb4d97ef7bbab486c039c35960a8",
+      "crate_sha256": "24fcd5d23d70670992b823e735e859374d694a3d12bfd8dd32bd3bd8bedb5d81",
+      "revision": "405d578cdfd8496ee79020d24cfaac8c29a8a48f",
       "files": [
         {
-          "path": "licenses/third-party/accesskit_windows-0.23.2/SOURCE_COPYRIGHT_HEADERS.txt",
-          "sha256": "ecf36e1f5a251512e95301ef2a7da324944fa54c13cfc4168a665b30de1364ac"
+          "path": "licenses/third-party/accesskit_windows-0.24.1/SOURCE_COPYRIGHT_HEADERS.txt",
+          "sha256": "5a7a36cc2998e09685b4507ae52d6fd6628aa9b0f0dc11d0cb6e1d1bd70dc51b"
         },
         {
-          "path": "licenses/third-party/accesskit_windows-0.23.2/upstream/LICENSE-APACHE",
+          "path": "licenses/third-party/accesskit_windows-0.24.1/upstream/LICENSE-APACHE",
           "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
         },
         {
-          "path": "licenses/third-party/accesskit_windows-0.23.2/upstream/LICENSE-MIT",
+          "path": "licenses/third-party/accesskit_windows-0.24.1/upstream/LICENSE-MIT",
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ]
     },
     {
       "name": "accesskit_winit",
-      "version": "0.22.4",
+      "version": "0.23.1",
       "license": "Apache-2.0",
       "repository": "https://github.com/AccessKit/accesskit",
-      "crate_sha256": "aea3522719f1c44564d03e9469a8e2f3a98b3a8a880bd66d0789c6b9c4a669dd",
-      "revision": "c1bd2d610615a244fd9e8bba0a6c3aecbfe46821",
+      "crate_sha256": "6a6a48dad5530b6deb9fc7a52cc6c3bf72cdd9eb8157ac9d32d69f2427a5e879",
+      "revision": "405d578cdfd8496ee79020d24cfaac8c29a8a48f",
       "files": [
         {
-          "path": "licenses/third-party/accesskit_winit-0.22.4/SOURCE_COPYRIGHT_HEADERS.txt",
+          "path": "licenses/third-party/accesskit_winit-0.23.1/SOURCE_COPYRIGHT_HEADERS.txt",
           "sha256": "6a00d7466984b6e154f94859f4bde217b0b5f14270e00c2324093ba42223954e"
         },
         {
-          "path": "licenses/third-party/accesskit_winit-0.22.4/upstream/LICENSE-APACHE",
+          "path": "licenses/third-party/accesskit_winit-0.23.1/upstream/LICENSE-APACHE",
           "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a"
         },
         {
-          "path": "licenses/third-party/accesskit_winit-0.22.4/upstream/LICENSE-MIT",
+          "path": "licenses/third-party/accesskit_winit-0.23.1/upstream/LICENSE-MIT",
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
         }
       ]
@@ -295,44 +295,44 @@
     },
     {
       "name": "bit-set",
-      "version": "0.6.0",
-      "license": "MIT/Apache-2.0",
+      "version": "0.8.0",
+      "license": "Apache-2.0 OR MIT",
       "repository": "https://github.com/contain-rs/bit-set",
-      "crate_sha256": "f0481a0e032742109b1133a095184ee93d88f3dc9e0d28a5d033dc77a073f44f",
-      "revision": "0e87d77498a610e843713b8e43b98efb72931c72",
+      "crate_sha256": "08807e080ed7f9d5433fa9b275196cfc35414f66a0c79d864dc51a0d825231a3",
+      "revision": "2b8861d23b53d63d326d2694ddabde6e7b19fbd0",
       "files": [
         {
-          "path": "licenses/third-party/bit-set-0.6.0/LICENSE-APACHE",
+          "path": "licenses/third-party/bit-set-0.8.0/LICENSE-APACHE",
           "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
         },
         {
-          "path": "licenses/third-party/bit-set-0.6.0/LICENSE-MIT",
+          "path": "licenses/third-party/bit-set-0.8.0/LICENSE-MIT",
           "sha256": "f51ac2c59a222f7476ce507ca879960e2b64ea64bb2786eefdbeb7b0b538d1b7"
         },
         {
-          "path": "licenses/third-party/bit-set-0.6.0/SOURCE_COPYRIGHT_HEADERS.txt",
-          "sha256": "0c5b4ca12695c6d268c0bab6be79b5e472e5790bf29fca5fa93df6670dee231b"
+          "path": "licenses/third-party/bit-set-0.8.0/SOURCE_COPYRIGHT_HEADERS.txt",
+          "sha256": "309b50940595671f08c034536052a39423fbe64dcd0afb5e10970c6cc02c991b"
         }
       ]
     },
     {
       "name": "bit-vec",
-      "version": "0.7.0",
-      "license": "MIT/Apache-2.0",
+      "version": "0.8.0",
+      "license": "Apache-2.0 OR MIT",
       "repository": "https://github.com/contain-rs/bit-vec",
-      "crate_sha256": "d2c54ff287cfc0a34f38a6b832ea1bd8e448a330b3e40a50859e6488bee07f22",
-      "revision": "f808ab794780066f2e2bb6bf78be13aefb3b4dba",
+      "crate_sha256": "5e764a1d40d510daf35e07be9eb06e75770908c27d411ee6c92109c9840eaaf7",
+      "revision": "16d8d5ed27e9d379ae5d531ffcf7535cd02ef8f3",
       "files": [
         {
-          "path": "licenses/third-party/bit-vec-0.7.0/LICENSE-APACHE",
+          "path": "licenses/third-party/bit-vec-0.8.0/LICENSE-APACHE",
           "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
         },
         {
-          "path": "licenses/third-party/bit-vec-0.7.0/LICENSE-MIT",
+          "path": "licenses/third-party/bit-vec-0.8.0/LICENSE-MIT",
           "sha256": "f51ac2c59a222f7476ce507ca879960e2b64ea64bb2786eefdbeb7b0b538d1b7"
         },
         {
-          "path": "licenses/third-party/bit-vec-0.7.0/SOURCE_COPYRIGHT_HEADERS.txt",
+          "path": "licenses/third-party/bit-vec-0.8.0/SOURCE_COPYRIGHT_HEADERS.txt",
           "sha256": "56afdec38b18682198e0dd014d8e4d382e942d5565a03c49205cfcd8e2068dab"
         }
       ]
@@ -566,52 +566,6 @@
       ]
     },
     {
-      "name": "com",
-      "version": "0.6.0",
-      "license": "MIT",
-      "repository": "https://github.com/microsoft/com-rs",
-      "crate_sha256": "7e17887fd17353b65b1b2ef1c526c83e26cd72e74f598a8dc1bee13a48f3d9f6",
-      "revision": "5f6b2d444be909e45c1fc9fa1862777ce0bde0b5",
-      "files": [
-        {
-          "path": "licenses/third-party/com-0.6.0/LICENSE",
-          "sha256": "9906940f61b1f0b533fa7d99baf55178b2808fbe113ea51dfbfad8572ccd5f2b"
-        },
-        {
-          "path": "licenses/third-party/com-0.6.0/upstream/LICENSE",
-          "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
-        }
-      ]
-    },
-    {
-      "name": "com_macros",
-      "version": "0.6.0",
-      "license": "MIT",
-      "repository": "https://github.com/microsoft/com-rs",
-      "crate_sha256": "d375883580a668c7481ea6631fc1a8863e33cc335bf56bfad8d7e6d4b04b13a5",
-      "revision": "5f6b2d444be909e45c1fc9fa1862777ce0bde0b5",
-      "files": [
-        {
-          "path": "licenses/third-party/com_macros-0.6.0/upstream/LICENSE",
-          "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
-        }
-      ]
-    },
-    {
-      "name": "com_macros_support",
-      "version": "0.6.0",
-      "license": "MIT",
-      "repository": "https://github.com/microsoft/com-rs",
-      "crate_sha256": "ad899a1087a9296d5644792d7cb72b8e34c1bec8e7d4fbc002230169a6e8710c",
-      "revision": "5f6b2d444be909e45c1fc9fa1862777ce0bde0b5",
-      "files": [
-        {
-          "path": "licenses/third-party/com_macros_support-0.6.0/upstream/LICENSE",
-          "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
-        }
-      ]
-    },
-    {
       "name": "core_detect",
       "version": "1.0.0",
       "license": "MIT/Apache-2.0",
@@ -684,24 +638,6 @@
         {
           "path": "licenses/third-party/cursor-icon-1.2.0/SOURCE_COPYRIGHT_HEADERS.txt",
           "sha256": "078c802041e43e415ffac517b948de542bc24af03c541d7ed489f3dc32b3bdb8"
-        }
-      ]
-    },
-    {
-      "name": "d3d12",
-      "version": "22.0.0",
-      "license": "MIT OR Apache-2.0",
-      "repository": "https://github.com/gfx-rs/wgpu/tree/trunk/d3d12",
-      "crate_sha256": "bdbd1f579714e3c809ebd822c81ef148b1ceaeb3d535352afc73fd0c4c6a0017",
-      "revision": "278d278b28ff7b424dc7dde0c0d7519e8d839ec1",
-      "files": [
-        {
-          "path": "licenses/third-party/d3d12-22.0.0/upstream/LICENSE.APACHE",
-          "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
-        },
-        {
-          "path": "licenses/third-party/d3d12-22.0.0/upstream/LICENSE.MIT",
-          "sha256": "c7fea58d1cfe49634cd92e54fc10a9d871f4b275321a4cd8c09e449122caaeb4"
         }
       ]
     },
@@ -787,144 +723,144 @@
     },
     {
       "name": "ecolor",
-      "version": "0.29.1",
+      "version": "0.30.0",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/emilk/egui",
-      "crate_sha256": "775cfde491852059e386c4e1deb4aef381c617dc364184c6f6afee99b87c402b",
-      "revision": "fe368bacc4a15697e347607e73a56c0299b3d42d",
+      "crate_sha256": "7d72e9c39f6e11a2e922d04a34ec5e7ef522ea3f5a1acfca7a19d16ad5fe50f5",
+      "revision": "320377e3ca63a298e9485cf79559fb150cffa635",
       "files": [
         {
-          "path": "licenses/third-party/ecolor-0.29.1/upstream/LICENSE-APACHE",
+          "path": "licenses/third-party/ecolor-0.30.0/upstream/LICENSE-APACHE",
           "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
         },
         {
-          "path": "licenses/third-party/ecolor-0.29.1/upstream/LICENSE-MIT",
+          "path": "licenses/third-party/ecolor-0.30.0/upstream/LICENSE-MIT",
           "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
         }
       ]
     },
     {
       "name": "eframe",
-      "version": "0.29.1",
+      "version": "0.30.0",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/emilk/egui/tree/master/crates/eframe",
-      "crate_sha256": "8ac2645a9bf4826eb4e91488b1f17b8eaddeef09396706b2f14066461338e24f",
-      "revision": "fe368bacc4a15697e347607e73a56c0299b3d42d",
+      "crate_sha256": "b2f2d9e7ea2d11ec9e98a8683b6eb99f9d7d0448394ef6e0d6d91bd4eb817220",
+      "revision": "0a3edabd3544c6d339eacd9e606fccee302e4c35",
       "files": [
         {
-          "path": "licenses/third-party/eframe-0.29.1/upstream/LICENSE-APACHE",
+          "path": "licenses/third-party/eframe-0.30.0/upstream/LICENSE-APACHE",
           "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
         },
         {
-          "path": "licenses/third-party/eframe-0.29.1/upstream/LICENSE-MIT",
+          "path": "licenses/third-party/eframe-0.30.0/upstream/LICENSE-MIT",
           "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
         }
       ]
     },
     {
       "name": "egui",
-      "version": "0.29.1",
+      "version": "0.30.0",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/emilk/egui",
-      "crate_sha256": "53eafabcce0cb2325a59a98736efe0bf060585b437763f8c476957fb274bb974",
-      "revision": "fe368bacc4a15697e347607e73a56c0299b3d42d",
+      "crate_sha256": "252d52224d35be1535d7fd1d6139ce071fb42c9097773e79f7665604f5596b5e",
+      "revision": "0a3edabd3544c6d339eacd9e606fccee302e4c35",
       "files": [
         {
-          "path": "licenses/third-party/egui-0.29.1/upstream/LICENSE-APACHE",
+          "path": "licenses/third-party/egui-0.30.0/upstream/LICENSE-APACHE",
           "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
         },
         {
-          "path": "licenses/third-party/egui-0.29.1/upstream/LICENSE-MIT",
+          "path": "licenses/third-party/egui-0.30.0/upstream/LICENSE-MIT",
           "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
         }
       ]
     },
     {
       "name": "egui-wgpu",
-      "version": "0.29.1",
+      "version": "0.30.0",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/emilk/egui/tree/master/crates/egui-wgpu",
-      "crate_sha256": "d00fd5d06d8405397e64a928fa0ef3934b3c30273ea7603e3dc4627b1f7a1a82",
-      "revision": "fe368bacc4a15697e347607e73a56c0299b3d42d",
+      "crate_sha256": "26c1e821d2d8921ef6ce98b258c7e24d9d6aab2ca1f9cdf374eca997e7f67f59",
+      "revision": "0a3edabd3544c6d339eacd9e606fccee302e4c35",
       "files": [
         {
-          "path": "licenses/third-party/egui-wgpu-0.29.1/upstream/LICENSE-APACHE",
+          "path": "licenses/third-party/egui-wgpu-0.30.0/upstream/LICENSE-APACHE",
           "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
         },
         {
-          "path": "licenses/third-party/egui-wgpu-0.29.1/upstream/LICENSE-MIT",
+          "path": "licenses/third-party/egui-wgpu-0.30.0/upstream/LICENSE-MIT",
           "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
         }
       ]
     },
     {
       "name": "egui-winit",
-      "version": "0.29.1",
+      "version": "0.30.0",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/emilk/egui/tree/master/crates/egui-winit",
-      "crate_sha256": "0a9c430f4f816340e8e8c1b20eec274186b1be6bc4c7dfc467ed50d57abc36c6",
-      "revision": "fe368bacc4a15697e347607e73a56c0299b3d42d",
+      "crate_sha256": "1e84c2919cd9f3a38a91e8f84ac6a245c19251fd95226ed9fae61d5ea564fce3",
+      "revision": "0a3edabd3544c6d339eacd9e606fccee302e4c35",
       "files": [
         {
-          "path": "licenses/third-party/egui-winit-0.29.1/upstream/LICENSE-APACHE",
+          "path": "licenses/third-party/egui-winit-0.30.0/upstream/LICENSE-APACHE",
           "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
         },
         {
-          "path": "licenses/third-party/egui-winit-0.29.1/upstream/LICENSE-MIT",
+          "path": "licenses/third-party/egui-winit-0.30.0/upstream/LICENSE-MIT",
           "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
         }
       ]
     },
     {
       "name": "egui_extras",
-      "version": "0.29.1",
+      "version": "0.30.0",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/emilk/egui",
-      "crate_sha256": "bf3c1f5cd8dfe2ade470a218696c66cf556fcfd701e7830fa2e9f4428292a2a1",
-      "revision": "fe368bacc4a15697e347607e73a56c0299b3d42d",
+      "crate_sha256": "3d7a8198c088b1007108cb2d403bc99a5e370999b200db4f14559610d7330126",
+      "revision": "0a3edabd3544c6d339eacd9e606fccee302e4c35",
       "files": [
         {
-          "path": "licenses/third-party/egui_extras-0.29.1/upstream/LICENSE-APACHE",
+          "path": "licenses/third-party/egui_extras-0.30.0/upstream/LICENSE-APACHE",
           "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
         },
         {
-          "path": "licenses/third-party/egui_extras-0.29.1/upstream/LICENSE-MIT",
+          "path": "licenses/third-party/egui_extras-0.30.0/upstream/LICENSE-MIT",
           "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
         }
       ]
     },
     {
       "name": "egui_glow",
-      "version": "0.29.1",
+      "version": "0.30.0",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/emilk/egui/tree/master/crates/egui_glow",
-      "crate_sha256": "0e39bccc683cd43adab530d8f21a13eb91e80de10bcc38c3f1c16601b6f62b26",
-      "revision": "fe368bacc4a15697e347607e73a56c0299b3d42d",
+      "crate_sha256": "3eaf6264cc7608e3e69a7d57a6175f438275f1b3889c1a551b418277721c95e6",
+      "revision": "0a3edabd3544c6d339eacd9e606fccee302e4c35",
       "files": [
         {
-          "path": "licenses/third-party/egui_glow-0.29.1/upstream/LICENSE-APACHE",
+          "path": "licenses/third-party/egui_glow-0.30.0/upstream/LICENSE-APACHE",
           "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
         },
         {
-          "path": "licenses/third-party/egui_glow-0.29.1/upstream/LICENSE-MIT",
+          "path": "licenses/third-party/egui_glow-0.30.0/upstream/LICENSE-MIT",
           "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
         }
       ]
     },
     {
       "name": "emath",
-      "version": "0.29.1",
+      "version": "0.30.0",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/emilk/egui/tree/master/crates/emath",
-      "crate_sha256": "b1fe0049ce51d0fb414d029e668dd72eb30bc2b739bf34296ed97bd33df544f3",
-      "revision": "fe368bacc4a15697e347607e73a56c0299b3d42d",
+      "crate_sha256": "c4fe73c1207b864ee40aa0b0c038d6092af1030744678c60188a05c28553515d",
+      "revision": "320377e3ca63a298e9485cf79559fb150cffa635",
       "files": [
         {
-          "path": "licenses/third-party/emath-0.29.1/upstream/LICENSE-APACHE",
+          "path": "licenses/third-party/emath-0.30.0/upstream/LICENSE-APACHE",
           "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
         },
         {
-          "path": "licenses/third-party/emath-0.29.1/upstream/LICENSE-MIT",
+          "path": "licenses/third-party/emath-0.30.0/upstream/LICENSE-MIT",
           "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
         }
       ]
@@ -1005,52 +941,52 @@
     },
     {
       "name": "epaint",
-      "version": "0.29.1",
+      "version": "0.30.0",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/emilk/egui/tree/master/crates/epaint",
-      "crate_sha256": "a32af8da821bd4f43f2c137e295459ee2e1661d87ca8779dfa0eaf45d870e20f",
-      "revision": "fe368bacc4a15697e347607e73a56c0299b3d42d",
+      "crate_sha256": "5666f8d25236293c966fbb3635eac18b04ad1914e3bab55bc7d44b9980cafcac",
+      "revision": "320377e3ca63a298e9485cf79559fb150cffa635",
       "files": [
         {
-          "path": "licenses/third-party/epaint-0.29.1/upstream/LICENSE-APACHE",
+          "path": "licenses/third-party/epaint-0.30.0/upstream/LICENSE-APACHE",
           "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
         },
         {
-          "path": "licenses/third-party/epaint-0.29.1/upstream/LICENSE-MIT",
+          "path": "licenses/third-party/epaint-0.30.0/upstream/LICENSE-MIT",
           "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
         }
       ]
     },
     {
       "name": "epaint_default_fonts",
-      "version": "0.29.1",
+      "version": "0.30.0",
       "license": "(MIT OR Apache-2.0) AND OFL-1.1 AND LicenseRef-UFL-1.0",
       "repository": "https://github.com/emilk/egui/tree/master/crates/epaint_default_fonts",
-      "crate_sha256": "483440db0b7993cf77a20314f08311dbe95675092405518c0677aa08c151a3ea",
-      "revision": "fe368bacc4a15697e347607e73a56c0299b3d42d",
+      "crate_sha256": "66f6ddac3e6ac6fd4c3d48bb8b1943472f8da0f43a4303bcd8a18aa594401c80",
+      "revision": "320377e3ca63a298e9485cf79559fb150cffa635",
       "files": [
         {
-          "path": "licenses/third-party/epaint_default_fonts-0.29.1/fonts/Hack-Regular.txt",
+          "path": "licenses/third-party/epaint_default_fonts-0.30.0/fonts/Hack-Regular.txt",
           "sha256": "47c0cccbeec7e8614548cc485588b28149e7874188df5f41b36efebcee285c87"
         },
         {
-          "path": "licenses/third-party/epaint_default_fonts-0.29.1/fonts/OFL.txt",
+          "path": "licenses/third-party/epaint_default_fonts-0.30.0/fonts/OFL.txt",
           "sha256": "6a73f9541c2de74158c0e7cf6b0a58ef774f5a780bf191f2d7ec9cc53efe2bf2"
         },
         {
-          "path": "licenses/third-party/epaint_default_fonts-0.29.1/fonts/UFL.txt",
+          "path": "licenses/third-party/epaint_default_fonts-0.30.0/fonts/UFL.txt",
           "sha256": "2f0015108d68627bd788d313f529c21ff4da2c2c42a5e1f3883acc83480f9002"
         },
         {
-          "path": "licenses/third-party/epaint_default_fonts-0.29.1/fonts/emoji-icon-font-mit-license.txt",
+          "path": "licenses/third-party/epaint_default_fonts-0.30.0/fonts/emoji-icon-font-mit-license.txt",
           "sha256": "b9d2c1d909aa149996fd4c91dcb92b2362a04431640c1d200959da94caf8cde1"
         },
         {
-          "path": "licenses/third-party/epaint_default_fonts-0.29.1/upstream/LICENSE-APACHE",
+          "path": "licenses/third-party/epaint_default_fonts-0.30.0/upstream/LICENSE-APACHE",
           "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90"
         },
         {
-          "path": "licenses/third-party/epaint_default_fonts-0.29.1/upstream/LICENSE-MIT",
+          "path": "licenses/third-party/epaint_default_fonts-0.30.0/upstream/LICENSE-MIT",
           "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c"
         }
       ]
@@ -1241,28 +1177,6 @@
     },
     {
       "name": "glow",
-      "version": "0.13.1",
-      "license": "MIT OR Apache-2.0 OR Zlib",
-      "repository": "https://github.com/grovesNL/glow",
-      "crate_sha256": "bd348e04c43b32574f2de31c8bb397d96c9fcfa1371bd4ca6d8bdc464ab121b1",
-      "revision": "6746a3cdb6029abe4363faef77722642c55e1b44",
-      "files": [
-        {
-          "path": "licenses/third-party/glow-0.13.1/LICENSE-APACHE",
-          "sha256": "b8601fc79bdf8d8088f0938bea861ffc63ed0eebbedf25f44ab2cf2e85bd7edc"
-        },
-        {
-          "path": "licenses/third-party/glow-0.13.1/LICENSE-MIT",
-          "sha256": "cdbd06e25b8c9c5d6019949d2de8123f56d29cee4166396423d2ba8c81700845"
-        },
-        {
-          "path": "licenses/third-party/glow-0.13.1/LICENSE-ZLIB",
-          "sha256": "636f644f1e149eb62961657c0e34953681eff64435653912e7bd19992666faa5"
-        }
-      ]
-    },
-    {
-      "name": "glow",
       "version": "0.14.2",
       "license": "MIT OR Apache-2.0 OR Zlib",
       "repository": "https://github.com/grovesNL/glow",
@@ -1279,6 +1193,28 @@
         },
         {
           "path": "licenses/third-party/glow-0.14.2/LICENSE-ZLIB",
+          "sha256": "636f644f1e149eb62961657c0e34953681eff64435653912e7bd19992666faa5"
+        }
+      ]
+    },
+    {
+      "name": "glow",
+      "version": "0.16.0",
+      "license": "MIT OR Apache-2.0 OR Zlib",
+      "repository": "https://github.com/grovesNL/glow",
+      "crate_sha256": "c5e5ea60d70410161c8bf5da3fdfeaa1c72ed2c15f8bbb9d19fe3a4fad085f08",
+      "revision": "83c7b9b59ec4b26942801b3d0164db6d396a8c74",
+      "files": [
+        {
+          "path": "licenses/third-party/glow-0.16.0/LICENSE-APACHE",
+          "sha256": "b8601fc79bdf8d8088f0938bea861ffc63ed0eebbedf25f44ab2cf2e85bd7edc"
+        },
+        {
+          "path": "licenses/third-party/glow-0.16.0/LICENSE-MIT",
+          "sha256": "cdbd06e25b8c9c5d6019949d2de8123f56d29cee4166396423d2ba8c81700845"
+        },
+        {
+          "path": "licenses/third-party/glow-0.16.0/LICENSE-ZLIB",
           "sha256": "636f644f1e149eb62961657c0e34953681eff64435653912e7bd19992666faa5"
         }
       ]
@@ -1385,18 +1321,18 @@
     },
     {
       "name": "gpu-allocator",
-      "version": "0.26.0",
+      "version": "0.27.0",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/Traverse-Research/gpu-allocator",
-      "crate_sha256": "fdd4240fc91d3433d5e5b0fc5b67672d771850dc19bbee03c1381e19322803d7",
-      "revision": "cbf52992b972c6cba6b1ba0530197642614b4154",
+      "crate_sha256": "c151a2a5ef800297b4e79efa4f4bec035c5f51d5ae587287c9b952bdf734cacd",
+      "revision": "a1aee6d8b1b65ac4cb1189daa240e397b312dac9",
       "files": [
         {
-          "path": "licenses/third-party/gpu-allocator-0.26.0/LICENSE-APACHE",
+          "path": "licenses/third-party/gpu-allocator-0.27.0/LICENSE-APACHE",
           "sha256": "0178e21322b0e88aa3aeb3146f6a9611bc1f8df6d98bdfb34be28b9dd56a8107"
         },
         {
-          "path": "licenses/third-party/gpu-allocator-0.26.0/LICENSE-MIT",
+          "path": "licenses/third-party/gpu-allocator-0.27.0/LICENSE-MIT",
           "sha256": "ad41be6cc6538b29b9346648f41432b5e460bad6be073b5eeaa41320ea2921dc"
         }
       ]
@@ -1496,24 +1432,6 @@
         {
           "path": "licenses/third-party/hashbrown-0.17.1/LICENSE-MIT",
           "sha256": "ff8f68cb076caf8cefe7a6430d4ac086ce6af2ca8ce2c4e5a2004d4552ef52a2"
-        }
-      ]
-    },
-    {
-      "name": "hassle-rs",
-      "version": "0.11.0",
-      "license": "MIT",
-      "repository": "https://github.com/Traverse-Research/hassle-rs",
-      "crate_sha256": "af2a7e73e1f34c48da31fb668a907f250794837e08faa144fd24f0b8b741e890",
-      "revision": "902fbbdf0e9a93daa9608fcc2719331518879638",
-      "files": [
-        {
-          "path": "licenses/third-party/hassle-rs-0.11.0/LICENSE",
-          "sha256": "c208cc5e5d9ba07a288ca9d19c04777a7eadf14232b4d4682ec05d1a13b2d805"
-        },
-        {
-          "path": "licenses/third-party/hassle-rs-0.11.0/SOURCE_COPYRIGHT_HEADERS.txt",
-          "sha256": "3f2c1324a0859255df8b1041a3e49c4f29cfae37d782a7dac74605697bcd9010"
         }
       ]
     },
@@ -2137,18 +2055,18 @@
     },
     {
       "name": "naga",
-      "version": "22.1.0",
+      "version": "23.1.0",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/gfx-rs/wgpu/tree/trunk/naga",
-      "crate_sha256": "8bd5a652b6faf21496f2cfd88fc49989c8db0825d1f6746b1a71a6ede24a63ad",
-      "revision": "5c5c8b1d4d2d965fbd10b290ee26f4e7eb158d7c",
+      "crate_sha256": "364f94bc34f61332abebe8cad6f6cd82a5b65cff22c828d05d0968911462ca4f",
+      "revision": "9993f5c9eceb91f9bb6b9c5c6994f35f50e5f378",
       "files": [
         {
-          "path": "licenses/third-party/naga-22.1.0/upstream/LICENSE.APACHE",
+          "path": "licenses/third-party/naga-23.1.0/upstream/LICENSE.APACHE",
           "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
         },
         {
-          "path": "licenses/third-party/naga-22.1.0/upstream/LICENSE.MIT",
+          "path": "licenses/third-party/naga-23.1.0/upstream/LICENSE.MIT",
           "sha256": "c7fea58d1cfe49634cd92e54fc10a9d871f4b275321a4cd8c09e449122caaeb4"
         }
       ]
@@ -2401,18 +2319,18 @@
     },
     {
       "name": "pollster",
-      "version": "0.3.0",
+      "version": "0.4.0",
       "license": "Apache-2.0/MIT",
       "repository": "https://github.com/zesterer/pollster",
-      "crate_sha256": "22686f4785f02a4fcc856d3b3bb19bf6c8160d103f7a99cc258bddd0251dc7f2",
-      "revision": "6c641ccc569871b058e8a0ab9ceafc5a6844a119",
+      "crate_sha256": "2f3a9f18d041e6d0e102a0a46750538147e5e8992d3b4873aaafee2520b00ce3",
+      "revision": "2864daf5febd81eb33f66cb32b66ca78a9e21db7",
       "files": [
         {
-          "path": "licenses/third-party/pollster-0.3.0/LICENSE-APACHE",
+          "path": "licenses/third-party/pollster-0.4.0/LICENSE-APACHE",
           "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
         },
         {
-          "path": "licenses/third-party/pollster-0.3.0/LICENSE-MIT",
+          "path": "licenses/third-party/pollster-0.4.0/LICENSE-MIT",
           "sha256": "cc02a53316678ca2575cc69d12daa7b1833935d4b7742c31fbab7bd74a481077"
         }
       ]
@@ -3215,24 +3133,6 @@
     },
     {
       "name": "syn",
-      "version": "1.0.109",
-      "license": "MIT OR Apache-2.0",
-      "repository": "https://github.com/dtolnay/syn",
-      "crate_sha256": "72b64191b275b66ffe2469e8af2c1cfe3bafa67b529ead792a6d0160888b4237",
-      "revision": "bfa790b8e445dc67b7ab94d75adb1a92d6296c9a",
-      "files": [
-        {
-          "path": "licenses/third-party/syn-1.0.109/LICENSE-APACHE",
-          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
-        },
-        {
-          "path": "licenses/third-party/syn-1.0.109/LICENSE-MIT",
-          "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
-        }
-      ]
-    },
-    {
-      "name": "syn",
       "version": "2.0.119",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/dtolnay/syn",
@@ -3895,123 +3795,73 @@
     },
     {
       "name": "wgpu",
-      "version": "22.1.0",
+      "version": "23.0.1",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/gfx-rs/wgpu",
-      "crate_sha256": "e1d1c4ba43f80542cf63a0a6ed3134629ae73e8ab51e4b765a67f3aa062eb433",
-      "revision": "5c5c8b1d4d2d965fbd10b290ee26f4e7eb158d7c",
+      "crate_sha256": "80f70000db37c469ea9d67defdc13024ddf9a5f1b89cb2941b812ad7cde1735a",
+      "revision": "1755db74a4525e3f4c7b519f4782eaf8e9f90469",
       "files": [
         {
-          "path": "licenses/third-party/wgpu-22.1.0/LICENSE.APACHE",
+          "path": "licenses/third-party/wgpu-23.0.1/LICENSE.APACHE",
           "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
         },
         {
-          "path": "licenses/third-party/wgpu-22.1.0/LICENSE.MIT",
-          "sha256": "c7fea58d1cfe49634cd92e54fc10a9d871f4b275321a4cd8c09e449122caaeb4"
-        },
-        {
-          "path": "licenses/third-party/wgpu-22.1.0/upstream/LICENSE.APACHE",
-          "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
-        },
-        {
-          "path": "licenses/third-party/wgpu-22.1.0/upstream/LICENSE.MIT",
+          "path": "licenses/third-party/wgpu-23.0.1/LICENSE.MIT",
           "sha256": "c7fea58d1cfe49634cd92e54fc10a9d871f4b275321a4cd8c09e449122caaeb4"
         }
       ]
     },
     {
       "name": "wgpu-core",
-      "version": "22.1.0",
+      "version": "23.0.1",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/gfx-rs/wgpu",
-      "crate_sha256": "0348c840d1051b8e86c3bcd31206080c5e71e5933dabd79be1ce732b0b2f089a",
-      "revision": "5c5c8b1d4d2d965fbd10b290ee26f4e7eb158d7c",
+      "crate_sha256": "d63c3c478de8e7e01786479919c8769f62a22eec16788d8c2ac77ce2c132778a",
+      "revision": "1755db74a4525e3f4c7b519f4782eaf8e9f90469",
       "files": [
         {
-          "path": "licenses/third-party/wgpu-core-22.1.0/LICENSE.APACHE",
+          "path": "licenses/third-party/wgpu-core-23.0.1/LICENSE.APACHE",
           "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
         },
         {
-          "path": "licenses/third-party/wgpu-core-22.1.0/LICENSE.MIT",
-          "sha256": "c7fea58d1cfe49634cd92e54fc10a9d871f4b275321a4cd8c09e449122caaeb4"
-        },
-        {
-          "path": "licenses/third-party/wgpu-core-22.1.0/upstream/LICENSE.APACHE",
-          "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
-        },
-        {
-          "path": "licenses/third-party/wgpu-core-22.1.0/upstream/LICENSE.MIT",
+          "path": "licenses/third-party/wgpu-core-23.0.1/LICENSE.MIT",
           "sha256": "c7fea58d1cfe49634cd92e54fc10a9d871f4b275321a4cd8c09e449122caaeb4"
         }
       ]
     },
     {
       "name": "wgpu-hal",
-      "version": "22.0.0",
+      "version": "23.0.1",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/gfx-rs/wgpu",
-      "crate_sha256": "f6bbf4b4de8b2a83c0401d9e5ae0080a2792055f25859a02bf9be97952bbed4f",
-      "revision": "278d278b28ff7b424dc7dde0c0d7519e8d839ec1",
+      "crate_sha256": "89364b8a0b211adc7b16aeaf1bd5ad4a919c1154b44c9ce27838213ba05fd821",
+      "revision": "1755db74a4525e3f4c7b519f4782eaf8e9f90469",
       "files": [
         {
-          "path": "licenses/third-party/wgpu-hal-22.0.0/LICENSE.APACHE",
+          "path": "licenses/third-party/wgpu-hal-23.0.1/LICENSE.APACHE",
           "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
         },
         {
-          "path": "licenses/third-party/wgpu-hal-22.0.0/LICENSE.MIT",
-          "sha256": "c7fea58d1cfe49634cd92e54fc10a9d871f4b275321a4cd8c09e449122caaeb4"
-        },
-        {
-          "path": "licenses/third-party/wgpu-hal-22.0.0/upstream/LICENSE.APACHE",
-          "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
-        },
-        {
-          "path": "licenses/third-party/wgpu-hal-22.0.0/upstream/LICENSE.MIT",
+          "path": "licenses/third-party/wgpu-hal-23.0.1/LICENSE.MIT",
           "sha256": "c7fea58d1cfe49634cd92e54fc10a9d871f4b275321a4cd8c09e449122caaeb4"
         }
       ]
     },
     {
       "name": "wgpu-types",
-      "version": "22.0.0",
+      "version": "23.0.0",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/gfx-rs/wgpu",
-      "crate_sha256": "bc9d91f0e2c4b51434dfa6db77846f2793149d8e73f800fa2e41f52b8eac3c5d",
-      "revision": "278d278b28ff7b424dc7dde0c0d7519e8d839ec1",
+      "crate_sha256": "610f6ff27778148c31093f3b03abc4840f9636d58d597ca2f5977433acfe0068",
+      "revision": "08c9d8c397a4d3943c53d66c077c85236ff11f46",
       "files": [
         {
-          "path": "licenses/third-party/wgpu-types-22.0.0/LICENSE.APACHE",
+          "path": "licenses/third-party/wgpu-types-23.0.0/LICENSE.APACHE",
           "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
         },
         {
-          "path": "licenses/third-party/wgpu-types-22.0.0/LICENSE.MIT",
+          "path": "licenses/third-party/wgpu-types-23.0.0/LICENSE.MIT",
           "sha256": "c7fea58d1cfe49634cd92e54fc10a9d871f4b275321a4cd8c09e449122caaeb4"
-        },
-        {
-          "path": "licenses/third-party/wgpu-types-22.0.0/upstream/LICENSE.APACHE",
-          "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
-        },
-        {
-          "path": "licenses/third-party/wgpu-types-22.0.0/upstream/LICENSE.MIT",
-          "sha256": "c7fea58d1cfe49634cd92e54fc10a9d871f4b275321a4cd8c09e449122caaeb4"
-        }
-      ]
-    },
-    {
-      "name": "widestring",
-      "version": "1.2.1",
-      "license": "MIT OR Apache-2.0",
-      "repository": "https://github.com/VoidStarKat/widestring-rs",
-      "crate_sha256": "72069c3113ab32ab29e5584db3c6ec55d416895e60715417b5b883a357c3e471",
-      "revision": "66dcd7c05ed7de790a1ab0d340b7f4b8b550aed7",
-      "files": [
-        {
-          "path": "licenses/third-party/widestring-1.2.1/LICENSE-APACHE",
-          "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9"
-        },
-        {
-          "path": "licenses/third-party/widestring-1.2.1/LICENSE-MIT",
-          "sha256": "508a77d2e7b51d98adeed32648ad124b7b30241a8e70b2e72c99f92d8e5874d1"
         }
       ]
     },
@@ -4057,28 +3907,6 @@
     },
     {
       "name": "windows",
-      "version": "0.52.0",
-      "license": "MIT OR Apache-2.0",
-      "repository": "https://github.com/microsoft/windows-rs",
-      "crate_sha256": "e48a53791691ab099e5e2ad123536d0fff50652600abaf43bbf952894110d0be",
-      "revision": "3a605cba064b26f2a198ac58085f8c8836f47c38",
-      "files": [
-        {
-          "path": "licenses/third-party/windows-0.52.0/SOURCE_COPYRIGHT_HEADERS.txt",
-          "sha256": "3de78250f6c01efcdae294e12088547ca543f6b8198cc236fb4ad0ad641a7230"
-        },
-        {
-          "path": "licenses/third-party/windows-0.52.0/license-apache-2.0",
-          "sha256": "c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b"
-        },
-        {
-          "path": "licenses/third-party/windows-0.52.0/license-mit",
-          "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
-        }
-      ]
-    },
-    {
-      "name": "windows",
       "version": "0.58.0",
       "license": "MIT OR Apache-2.0",
       "repository": "https://github.com/microsoft/windows-rs",
@@ -4095,24 +3923,6 @@
         },
         {
           "path": "licenses/third-party/windows-0.58.0/license-mit",
-          "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
-        }
-      ]
-    },
-    {
-      "name": "windows-core",
-      "version": "0.52.0",
-      "license": "MIT OR Apache-2.0",
-      "repository": "https://github.com/microsoft/windows-rs",
-      "crate_sha256": "33ab640c8d7e35bf8ba19b884ba838ceb4fba93a4e8c65a9059d08afcfc683d9",
-      "revision": "3a605cba064b26f2a198ac58085f8c8836f47c38",
-      "files": [
-        {
-          "path": "licenses/third-party/windows-core-0.52.0/license-apache-2.0",
-          "sha256": "c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b"
-        },
-        {
-          "path": "licenses/third-party/windows-core-0.52.0/license-mit",
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ]
@@ -4275,24 +4085,6 @@
         },
         {
           "path": "licenses/third-party/windows-sys-0.60.2/license-mit",
-          "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
-        }
-      ]
-    },
-    {
-      "name": "windows-sys",
-      "version": "0.61.2",
-      "license": "MIT OR Apache-2.0",
-      "repository": "https://github.com/microsoft/windows-rs",
-      "crate_sha256": "ae137229bcbd6cdf0f7b80a31df61766145077ddf49416a728b02cb3921ff3fc",
-      "revision": "32c3144490c016fe496a0aed769bce60987a2e9d",
-      "files": [
-        {
-          "path": "licenses/third-party/windows-sys-0.61.2/license-apache-2.0",
-          "sha256": "c16f8dcf1a368b83be78d826ea23de4079fe1b4469a0ab9ee20563f37ff3d44b"
-        },
-        {
-          "path": "licenses/third-party/windows-sys-0.61.2/license-mit",
           "sha256": "c2cfccb812fe482101a8f04597dfc5a9991a6b2748266c47ac91b6a5aae15383"
         }
       ]
