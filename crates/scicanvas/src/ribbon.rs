@@ -618,7 +618,7 @@ fn group(
 
 fn text_width(ui: &egui::Ui, text: &str, font: FontId) -> f32 {
     ui.painter()
-        .layout_no_wrap(text.to_owned(), font, Color32::WHITE)
+        .layout_no_wrap(text.to_owned(), font, ui.visuals().text_color())
         .size()
         .x
 }
