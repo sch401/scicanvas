@@ -726,11 +726,20 @@
   "feature": "转置",
   "ref": "Transposing Worksheets",
   "pri": "P1",
-  "status": "未开始",
-  "how": "",
-  "verify": "单元测试",
+  "status": "已实现待验收",
+  "how": "将当前工作簿转置为同文件夹的新工作簿，第一列为原列显示名，后续各列对应原数据行；保留缺失位置和原数据，操作一步撤销。",
+  "verify": "数值、文本、缺失值、列名、文件夹、空表及命令撤销重做测试。",
   "id": "F041",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/src/ops/transpose.rs::transpose_preserves_values_names_missing_cells_and_folder",
+    "crates/scicanvas/src/app/tests/worksheet.rs::transpose_command_creates_a_workbook_in_one_undo_step"
+   ]
+  }
  },
  {
   "module": "工作表",

@@ -1594,3 +1594,23 @@ fn find_open_commits_valid_cell_draft_and_keeps_invalid_draft_for_confirmation()
     assert!(matches!(app.dialog, Some(Dialog::ConvertText { .. })));
     assert!(app.sheets[&1].edit.is_some());
 }
+
+#[test]
+fn transpose_command_creates_a_workbook_in_one_undo_step() {
+    let mut app = app();
+    app.active = Some(1);
+    let before = app.project.clone();
+    app.run_command("book.transpose");
+    assert_eq!(app.project.books.len(), before.books.len() + 1);
+    let result = app.project.books.last().unwrap();
+    assert_eq!(
+        result.columns[0].data.text_at(0),
+        before.books[0].columns[0].display_name()
+    );
+    assert_eq!(
+        result.columns[1].data.text_at(0),
+        before.books[0].columns[0].data.text_at(0)
+    );
+    assert_eq!(app.history.undo_label(), Some("转置"));
+    roundtrip(&mut app, &before);
+}

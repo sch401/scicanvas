@@ -110,6 +110,17 @@ pub(super) fn rows(commands: &mut Vec<Command>) {
 pub(super) fn columns(commands: &mut Vec<Command>) {
     commands.extend([
         c(
+            "book.transpose",
+            "转置",
+            "grid",
+            "",
+            "工作表",
+            "transpose 转置",
+            need_book,
+            |a| a.transpose_book(),
+        )
+        .modifies(),
+        c(
             "col.fill",
             "填充序列",
             "colins",

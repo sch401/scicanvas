@@ -6,6 +6,21 @@ use super::*;
 use table::SheetFrame;
 
 impl SciApp {
+    pub(crate) fn transpose_book(&mut self) {
+        let Some(id) = self.active_book() else { return };
+        if !self.flush_sheet_edits() {
+            return;
+        }
+        self.edit_with(
+            "转置工作表",
+            |project| project.transpose_book(id).map(Some),
+            |app, output| {
+                app.show_item(output);
+                app.status = "已创建转置工作簿".into();
+            },
+        );
+    }
+
     pub(crate) fn selected_keys(&self, book_id: u64) -> Vec<String> {
         self.selection.get(&book_id).cloned().unwrap_or_default()
     }

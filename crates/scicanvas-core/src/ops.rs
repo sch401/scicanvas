@@ -16,6 +16,7 @@ mod recalc;
 mod resolve;
 mod smooth;
 mod stats;
+mod transpose;
 
 pub use calculus::AreaReport;
 pub use columns::{ColumnOp, Operand};
