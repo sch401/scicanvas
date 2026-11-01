@@ -404,6 +404,76 @@ def builtin_fit_cases():
     write("builtin_fits",cases)
 
 
+def smoothing_cases():
+    cases=[]
+    for name, y, window in [
+        ("normal",[1.,2.,4.,3.,8.,7.,6.,9.,8.],5),
+        ("ties",[1.,1.,2.,2.,3.,3.,4.,4.,5.],5),
+        ("small",[1.,4.,2.],3),
+        ("missing",[1.,2.,4.,None,8.,7.,6.,9.,8.],5),
+        ("large",[1e6+1,1e6+2,1e6+4,1e6+3,1e6+8,1e6+7,1e6+6,1e6+9,1e6+8],5),
+    ]:
+        raw=np.asarray(y,float); raw_x=np.arange(len(raw),dtype=float); valid=np.isfinite(raw)
+        x,yy=raw_x[valid],raw[valid]; n=len(yy); h=window//2
+        moving=np.array([np.mean(yy[max(0,i-h):min(n,i+h+1)]) for i in range(n)])
+        lowess=[]
+        for x0 in x:
+            # On ties select the smaller x first, as specified by the nearest-neighbour ordering.
+            order=np.lexsort((x,np.abs(x-x0)))[:min(window,n)]
+            d=np.abs(x[order]-x0); scale=np.max(d)
+            weights=(1-(d/scale)**3)**3 if scale else np.ones(len(d))
+            matrix=np.column_stack([np.ones(len(order)),x[order]-x0])*np.sqrt(weights)[:,None]
+            values=yy[order]*np.sqrt(weights)
+            coef=np.linalg.lstsq(matrix,values,rcond=None)[0]
+            lowess.append(coef[0])
+        case=dict(name=name,x=x,y=yy,raw_y=y,window=window,moving=moving,lowess=lowess)
+        if np.allclose(np.diff(x),np.diff(x)[0]):
+            trend=np.linspace(yy[0],yy[-1],n); freq=np.fft.rfftfreq(n,x[1]-x[0])
+            case['fft']=np.fft.irfft(np.where(freq<=1/(window*(x[1]-x[0])),np.fft.rfft(yy-trend),0),n=n)+trend
+            case['sg']=signal.savgol_filter(yy,window,2,mode='interp')
+        else:
+            case['fft_error']='uneven sampling after missing rows are omitted'
+            sg=[]
+            for i in range(n):
+                start=max(0,min(i-h,n-window)); stop=start+window
+                dx=x[start:stop]-x[i]; matrix=np.column_stack([np.ones(len(dx)),dx,dx*dx])
+                sg.append(np.linalg.lstsq(matrix,yy[start:stop],rcond=None)[0][0])
+            case['sg']=sg
+        cases.append(case)
+    write("smoothing",cases)
+
+
+def percent_bar_cases():
+    cases=[]
+    for name,rows in [
+        ("normal",[[1.,-1.,0.],[3.,-3.,0.],[-2.,2.,0.]]),
+        ("missing",[[1.,None,0.],[3.,-3.,0.],[-2.,2.,0.]]),
+        ("small",[[1.,1.,1.],[1.,1.,1.],[1.,1.,1.]]),
+        ("extreme",[[1e-320,1e308,0.],[3e-320,1e308,0.],[0.,0.,0.]]),
+    ]:
+        y=np.asarray(rows,float); base=np.full_like(y,np.nan); top=np.full_like(y,np.nan)
+        for col in range(y.shape[1]):
+            valid=np.isfinite(y[:,col]); positive_vals=np.where(valid & (y[:,col]>0),y[:,col],0.)
+            negative_vals=np.where(valid & (y[:,col]<0),-y[:,col],0.)
+            pscale=np.max(positive_vals); nscale=np.max(negative_vals)
+            pden=np.sum(positive_vals/pscale) if pscale else 0.
+            nden=np.sum(negative_vals/nscale) if nscale else 0.
+            positive=0.; negative=0.
+            for row in range(y.shape[0]):
+                v=y[row,col]
+                if not np.isfinite(v):continue
+                if v>=0:
+                    base[row,col]=positive
+                    positive+=v/pscale/pden*100 if pden else 0.
+                    top[row,col]=positive
+                else:
+                    base[row,col]=negative
+                    negative+=v/nscale/nden*100 if nden else 0.
+                    top[row,col]=negative
+        cases.append(dict(name=name,values=rows,base=base,top=top))
+    write("percent_bars",cases)
+
+
 if __name__ == "__main__":
     integrals()
     normalization()
@@ -417,3 +487,5 @@ if __name__ == "__main__":
     peak_cases()
     constrained_fit_cases()
     builtin_fit_cases()
+    smoothing_cases()
+    percent_bar_cases()

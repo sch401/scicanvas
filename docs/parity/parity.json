@@ -3417,15 +3417,15 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "平滑对话框四种方法：移动平均、二阶 Savitzky–Golay、LOWESS（每点取最近的窗口点数个近邻，tricube 权重局部加权线性回归，X 可无序、不等间距）、FFT 滤波（去掉首尾连线趋势后低通，截止频率 1/(窗口点数·ΔX)，再加回趋势；X 不等间距时提示先插值）；结果写新列，来源是图形时加为曲线，一步撤销",
-  "verify": "LOWESS 与 NumPy 逐点暴力实现（k=5/9，无序不等间距 X）一致、直线不变；FFT 平滑与 numpy rfft 掩模参考一致（误差 < 1e-9）；不等间距 X 拒绝 FFT 平滑；LOWESS 稳健迭代验收待做",
+  "verify": "LOWESS 与 NumPy 逐点暴力实现（k=5/9，无序不等间距 X）一致、直线不变；FFT 平滑与 numpy rfft 掩模参考一致（误差 < 1e-9）；不等间距 X 拒绝 FFT 平滑；LOWESS 稳健迭代验收待做；2026-11：四种方法的 NumPy/SciPy 参考对照通过；LOWESS 稳健迭代尚未实现，保留待验收。",
   "id": "F201",
   "milestone": "M1 日常够用",
   "sub_items": {
    "平滑方法": {
     "total": 4,
     "done": 0,
-    "review": 2,
-    "note": "移动平均、Savitzky–Golay 已实现待验收；FFT、LOWESS 未开始"
+    "review": 4,
+    "note": "四种方法已实现并通过参考对照；LOWESS 稳健迭代待做。"
    }
   },
   "needs": [
@@ -3436,7 +3436,11 @@
    "auto": [
     "crates/scicanvas-core/src/analysis.rs::smoothing",
     "crates/scicanvas-core/src/analysis.rs::lowess_and_fft_smoothing_match_numpy_references",
-    "crates/scicanvas-core/src/ops.rs::fft_smoothing_needs_even_x_spacing"
+    "crates/scicanvas-core/src/ops.rs::fft_smoothing_needs_even_x_spacing",
+    "crates/scicanvas-core/tests/reference_scipy.rs::smoothing_matches_generated_numpy_scipy_reference"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/smoothing.json"
    ]
   }
  },
@@ -4258,9 +4262,9 @@
   "feature": "样条曲线图",
   "ref": "Spline Graph",
   "pri": "P1",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "自然三次样条、缺失/重复 X 分段、自动范围与共享折线图元",
-  "verify": "解析值和 SciPy 1.17.1 自然边界对照、分段及 SVG 回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
+  "verify": "解析值和 SciPy 1.17.1 自然边界对照、分段及 SVG 回归已通过；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）；已核对自然样条直接测试、参考数据和视觉对照。",
   "id": "F260",
   "milestone": "M2 论文全流程",
   "needs": [
@@ -4274,7 +4278,13 @@
    ],
    "auto": [
     "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
-    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes",
+    "crates/scicanvas-core/tests/spline_labels.rs::natural_spline_matches_analytic_and_scipy_reference",
+    "crates/scicanvas-core/tests/spline_labels.rs::spline_autoscale_symbols_gaps_duplicates_and_fit_are_independent",
+    "crates/scicanvas-core/tests/reference_scipy.rs::interpolation_matches_generated_scipy_reference"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/interpolation.json"
    ]
   }
  },
@@ -4537,9 +4547,9 @@
   "feature": "样条连接点线图",
   "ref": "Spline Connected Graph",
   "pri": "P1",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "自然三次样条连接，符号与误差保持原始点；派生线独立绘制",
-  "verify": "SciPy 数值、符号数、分段、自动范围及撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
+  "verify": "SciPy 数值、符号数、分段、自动范围及撤销回归已通过；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）；已核对自然样条直接测试、参考数据和视觉对照。",
   "id": "F278",
   "milestone": "M2 论文全流程",
   "needs": [
@@ -4553,7 +4563,13 @@
    ],
    "auto": [
     "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
-    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes",
+    "crates/scicanvas-core/tests/spline_labels.rs::natural_spline_matches_analytic_and_scipy_reference",
+    "crates/scicanvas-core/tests/spline_labels.rs::spline_autoscale_symbols_gaps_duplicates_and_fit_are_independent",
+    "crates/scicanvas-core/tests/reference_scipy.rs::interpolation_matches_generated_scipy_reference"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/interpolation.json"
    ]
   }
  },
@@ -4699,9 +4715,9 @@
   "feature": "百分比堆叠柱状图",
   "ref": "100% Stacked Column Graph",
   "pri": "P1",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "按行正负组分别归一至 ±100%，零总量与极端尺度处理，共享 SVG",
-  "verify": "归一化参考值、极端数值、误差缩放及撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
+  "verify": "归一化参考值、极端数值、误差缩放及撤销回归已通过；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）；已核对直接测试、NumPy 参考数据和视觉对照。",
   "id": "F287",
   "milestone": "M2 论文全流程",
   "needs": [
@@ -4715,7 +4731,13 @@
    ],
    "auto": [
     "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
-    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes",
+    "crates/scicanvas-core/tests/bar_variants.rs::percentages_normalize_each_sign_and_handle_zero_and_extreme_scales",
+    "crates/scicanvas-core/tests/bar_variants.rs::error_bars_follow_stack_endpoints_and_percentage_scaling",
+    "crates/scicanvas-core/tests/reference_scipy.rs::percent_stacked_bars_match_generated_numpy_reference"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/percent_bars.json"
    ]
   }
  },

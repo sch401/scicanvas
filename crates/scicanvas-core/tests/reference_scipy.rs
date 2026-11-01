@@ -423,3 +423,83 @@ fn builtin_models_match_generated_scipy_reference() {
         near(fit.rss, &case["rss"], 1e-7, name);
     }
 }
+
+#[test]
+fn smoothing_matches_generated_numpy_scipy_reference() {
+    use scicanvas_core::analysis::SmoothMethod;
+    for case in cases("smoothing") {
+        let name = case["name"].as_str().unwrap();
+        let x = numbers(&case["x"]);
+        let y = numbers(&case["y"]);
+        let window = case["window"].as_u64().unwrap() as usize;
+        for (method, key) in [
+            (SmoothMethod::MovingAverage, "moving"),
+            (SmoothMethod::SavitzkyGolay, "sg"),
+            (SmoothMethod::FftFilter, "fft"),
+            (SmoothMethod::Lowess, "lowess"),
+        ] {
+            if case.get(key).is_none() {
+                if key == "fft" {
+                    assert!(scicanvas_core::fft::sample_interval(&x).is_err());
+                }
+                continue;
+            }
+            let got = analysis::smooth(&x, &y, method, window);
+            let expected = numbers(&case[key]);
+            assert_eq!(got.len(), expected.len(), "{name}/{key}");
+            for (actual, expected) in got.iter().zip(expected) {
+                if expected.is_finite() {
+                    assert!(
+                        (actual - expected).abs() <= 1e-10 * expected.abs().max(1.0),
+                        "{name}/{key}: {actual} vs {expected}"
+                    );
+                } else {
+                    assert!(!actual.is_finite(), "{name}/{key}: {actual}");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn percent_stacked_bars_match_generated_numpy_reference() {
+    use scicanvas_core::PlotType;
+    for case in cases("percent_bars") {
+        let name = case["name"].as_str().unwrap();
+        let inputs = case["values"].as_array().unwrap();
+        let mut project = Project::default();
+        let id = project.new_book();
+        let book = project.book_mut(id).unwrap();
+        book.columns.clear();
+        let mut x = Column::new("A", Role::X);
+        x.data = (1..=inputs[0].as_array().unwrap().len())
+            .map(|i| i.to_string())
+            .collect();
+        book.columns.push(x);
+        for values in inputs {
+            let key = book.push_column(Role::Y);
+            let index = book.column_index(&key).unwrap();
+            book.columns[index].data = values
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_f64().map(|n| n.to_string()).unwrap_or_default())
+                .collect();
+        }
+        let (graph, _) = project
+            .plot_from_selection(id, &[], PlotType::PercentStackedBar)
+            .unwrap();
+        let series = project
+            .graph(graph)
+            .unwrap()
+            .first_layer()
+            .series(project.book(id).unwrap())
+            .1;
+        for (j, s) in series.iter().enumerate() {
+            for (i, &row) in s.rows.iter().enumerate() {
+                near(s.bases[i], &case["base"][j][row], 1e-10, name);
+                near(s.points[i][1], &case["top"][j][row], 1e-10, name);
+            }
+        }
+    }
+}
