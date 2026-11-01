@@ -189,7 +189,7 @@
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
 |---|---|---|---|---|---|---|---|
 | F130 | 线性回归（斜率、截距、标准误、R²、残差） | The Linear Regression Dialog Box | P0 | 已实现待验收 | 斜率/截距、标准误、R²、残差平方和及报告；拟合时为每条数据写入逐点残差列（Y − 拟合值，与原数据同行，未参与拟合的行留空），拟合结果对话框“残差图”生成残差对 X 的散点图，一步撤销 | 残差逐行等于 Y − 拟合值且和为 0、残差图曲线映射的核心测试；残差图按钮的真实界面点击与撤销/重做回归；SciPy/NIST 参考值对照待做 | — |
-| F131 | 多项式回归 | The Polynomial Regression Dialog Box | P0 | 已实现待验收 | X 标准化后的正规方程与高斯–约当求逆；2–6 阶拟合、参数标准误、R²、曲线及撤销已接入 | 解析/仿真回归已通过；完整 NIST 参考值对照待做 | 多项式阶次：已完成 0/5，待验收 5，部分实现 0；2–6 阶；认证数据与稳定性验收待完成 |
+| F131 | 多项式回归 | The Polynomial Regression Dialog Box | P0 | 已实现待验收 | X 标准化后的正规方程与高斯–约当求逆；2–6 阶拟合、参数标准误、R²、曲线及撤销已接入 | 解析/仿真回归已通过；完整 NIST 参考值对照待做；可复现 NumPy/SciPy 多组参考见 tests/reference 与 tools/reference/README.md（六阶容差原因单列），Windows 人工结果另记 | 多项式阶次：已完成 0/5，待验收 5，部分实现 0；2–6 阶；认证数据与稳定性验收待完成 |
 | F132 | 多元线性回归 | The Multiple Linear Regression Dialog Box | P1 | 已实现待验收 | 分析 → 多元线性回归：先点选自变量、最后点选因变量；参数表（值、标准误、t、p）与 R²、调整 R²、F 检验、残差标准差 | 与 numpy.linalg.lstsq 及 scipy.stats.t / f 计算的参数、标准误、p 值一致（1e-9），含缺失行与共线提示 | — |
 | F133 | 含 X 误差的线性拟合（York 法） | The Linear Fit with X Error Dialog (Pro Only) | P2 | 未开始 | — | 与 Origin 比较 | — |
 | F134 | 非线性拟合引擎（Levenberg–Marquardt） | Theory of Nonlinear Curve Fitting | P0 | 已实现待验收 | Levenberg–Marquardt（中心差分雅可比、自适应阻尼），参数固定、上下界与线性约束（活动集），标准误 (JᵀJ)⁻¹·RSS/(n−p)（有约束时在零空间计算），28 种内置函数与自动初值；用户自定义函数见 F142；自定义标量函数复用同一求解器，用户函数库范围见 F142；新结果保存完整重算定义，支持自动/手动/不重算，报告与曲线/带同次求解同步。 | 原 24 种函数的 SciPy 1.17.1 curve_fit 参数/标准误参考回归、上下界与线性约束回归通过；新增 Rational1 自动初值和自定义公式合成数据回归通过；完整 NIST 参考值对照待做 | — |
@@ -228,12 +228,12 @@
 | F161 | XYZ 轨迹插值 | XYZ Trace Interpolation | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
 | F162 | 二维插值 | 2D Interpolate/Extrapolate | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
 | F163 | 三维插值 | 3D Interpolation | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
-| F164 | 数值积分（梯形法、曲线下面积） | Integrate | P0 | 已实现待验收 | analysis.rs/ops.rs 已实现梯形积分、累计积分结果与绝对面积选项 | 解析积分、行对齐与结果写回回归已通过；SciPy/NIST 参考值对照待做 | — |
+| F164 | 数值积分（梯形法、曲线下面积） | Integrate | P0 | 已实现待验收 | analysis.rs/ops.rs 已实现梯形积分、累计积分结果与绝对面积选项 | 解析积分、行对齐与结果写回回归已通过；SciPy/NIST 参考值对照待做；可复现 NumPy/SciPy 多组参考见 tests/reference 与 tools/reference/README.md（六阶容差原因单列），Windows 人工结果另记 | — |
 | F165 | 二维体积积分 | 2D Volume Integrate (Pro Only) | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
 | F166 | 数值微分（含 Savitzky-Golay 平滑求导） | Differentiate | P0 | 已实现待验收 | 有限差分微分和独立 Savitzky–Golay 平滑；“SG 平滑求导”对话框可选一阶/二阶导数、窗口点数和多项式阶数，按实际 X 在窗口内做最小二乘多项式并对其求导，两端平移窗口，结果写成新列（单位按 Y/X 或 Y/X² 推导），一步撤销 | 与 SciPy 1.17.1 savgol_filter(deriv, delta, mode=interp) 三组参数逐点一致（相对误差 < 1e-9，含两端）；二次函数二阶导为常数；对话框真实点击与撤销/重做回归 | — |
 | F167 | 多条曲线平均 / 合并 | Average/Merge Multiple Curves | P1 | 部分实现 | 已把多曲线线性插值到共同 X 范围求均值/标准差，输出结果表、Y 误差及线图；通用曲线合并工作流待做 | 平均结果、缺失值、结果输出和一步撤销回归通过；通用合并入口与参考软件验收待做 | — |
-| F168 | 简单列运算（加减乘除、两曲线相减） | Simple Column/Curve Math | P0 | 已实现待验收 | 分析 → 列运算：两列或列与常数的加减乘除，结果新列与单位推导；不同 X 网格的曲线先线性插值后相减，范围外留空；一步撤销 | 逐行、常数、单位、除零与“原始减拟合”残差回归；SciPy/NIST 参考值对照待做 | — |
-| F169 | 归一化（最大值、Z 分数、区间缩放） | Normalize | P0 | 已实现待验收 | 已接入除以最大值、Z 分数、区间缩放，结果写入派生列并支持撤销 | 算法参考值、写回及撤销回归已通过；SciPy/NIST 参考值对照待做 | — |
+| F168 | 简单列运算（加减乘除、两曲线相减） | Simple Column/Curve Math | P0 | 已实现待验收 | 分析 → 列运算：两列或列与常数的加减乘除，结果新列与单位推导；不同 X 网格的曲线先线性插值后相减，范围外留空；一步撤销 | 逐行、常数、单位、除零与“原始减拟合”残差回归；SciPy/NIST 参考值对照待做；可复现 NumPy/SciPy 多组参考见 tests/reference 与 tools/reference/README.md（六阶容差原因单列），Windows 人工结果另记 | — |
+| F169 | 归一化（最大值、Z 分数、区间缩放） | Normalize | P0 | 已实现待验收 | 已接入除以最大值、Z 分数、区间缩放，结果写入派生列并支持撤销 | 算法参考值、写回及撤销回归已通过；SciPy/NIST 参考值对照待做；可复现 NumPy/SciPy 多组参考见 tests/reference 与 tools/reference/README.md（六阶容差原因单列），Windows 人工结果另记 | — |
 | F170 | 多边形面积 | Polygon Area | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
 | F171 | 反函数（交换 X、Y 求逆） | Inverse | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
 | F172 | 自定义滤波 / 中值滤波 | Median Filter | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
@@ -244,7 +244,7 @@
 
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
 |---|---|---|---|---|---|---|---|
-| F174 | 列统计（均值、标准差、中位数、分位数等） | Statistics on Columns | P0 | 已实现待验收 | 已接入 N、均值、样本标准差、标准误、中位数、线性插值分位数、极值与总和，生成结果工作簿 | 描述统计与结果表回归已通过；SciPy/NIST 参考值对照待做 | — |
+| F174 | 列统计（均值、标准差、中位数、分位数等） | Statistics on Columns | P0 | 已实现待验收 | 已接入 N、均值、样本标准差、标准误、中位数、线性插值分位数、极值与总和，生成结果工作簿 | 描述统计与结果表回归已通过；SciPy/NIST 参考值对照待做；可复现 NumPy/SciPy 多组参考见 tests/reference 与 tools/reference/README.md（六阶容差原因单列），Windows 人工结果另记 | — |
 | F175 | 行统计 | Statistics on Rows | P1 | 已实现待验收 | 统计 → 行统计：对点选的各列逐行求均值、标准差、标准误、N，写在最后一列右边；标准差设为 Y 误差列，可直接画误差棒 | 单元测试覆盖缺失值、单值行与列属性 | — |
 | F176 | 整表统计 | Statistics on Whole Sheet | P1 | 未开始 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
 | F177 | 频数统计 / 分箱 | Frequency Counts | P0 | 已实现待验收 | 统计 → 频数统计：等宽分箱（Sturges 或指定区间数、可选范围），每列生成区间、频数、累积与相对频率表，一步撤销 | 与 numpy.histogram 的边界与计数一致 | — |

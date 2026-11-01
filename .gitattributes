@@ -7,3 +7,6 @@ crates/scicanvas-core/tests/golden/*.svg text eol=lf
 
 # .scv samples are zip archives; keep their bytes untouched.
 *.scv binary
+
+# Reproducible reference JSON uses LF on Windows and in CI.
+crates/scicanvas-core/tests/reference/*.json text eol=lf
