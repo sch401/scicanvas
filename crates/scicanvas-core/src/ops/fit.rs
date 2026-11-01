@@ -632,6 +632,7 @@ impl NlFitReport {
             || (f.status == crate::nlfit::FitStatus::PrecisionLimit && !f.converged)
             || (f.status == crate::nlfit::FitStatus::Failed && f.converged)
             || (self.current && (!f.converged || self.error.is_some()))
+            || f.warnings.iter().map(String::len).sum::<usize>() > crate::formula::FILE_LIMITS.bytes
             || f.constraints.iter().map(String::len).sum::<usize>() > crate::formula::FILE_LIMITS.bytes
         {
             return Err("拟合报告的参数、统计量或状态无效".into());
@@ -661,6 +662,8 @@ impl NlFitReport {
             + f.at_bound.capacity()
             + f.cov.capacity() * size_of::<Vec<f64>>()
             + f.cov.iter().map(|r| r.capacity() * size_of::<f64>()).sum::<usize>()
+            + f.warnings.capacity() * size_of::<String>()
+            + f.warnings.iter().map(String::capacity).sum::<usize>()
             + f.constraints.capacity() * size_of::<String>()
             + f.constraints.iter().map(String::capacity).sum::<usize>()
     }

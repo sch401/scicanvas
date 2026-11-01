@@ -2,7 +2,7 @@
 
 ## v22 拟合精度状态
 
-非线性拟合报告增加 `status`。它为 `PrecisionLimit` 时表示达到浮点精度极限；缺省或为 `Converged` 时按 `converged` 区分收敛和失败。v0–v21 旧报告根据原有 `converged` 标记迁移为 `Converged` 或 `Failed`，其余字段保持不变。当前程序读取 v0–v22，旧程序会拒绝 v22 项目。SCV 容器版本保持 1。
+非线性拟合报告增加 `status`。它为 `PrecisionLimit` 时表示达到浮点精度极限；缺省或为 `Converged` 时按 `converged` 区分收敛和失败。v0–v21 旧报告根据原有 `converged` 标记迁移为 `Converged` 或 `Failed`，其余字段保持不变。当前程序读取 v0–v22，旧程序会拒绝 v22 项目。SCV 容器版本保持 1。 拟合报告可选 `warnings` 为提示字符串数组，缺省为空，空时不写入；旧报告按空数组读取。本次维持 v22。
 
 ## v21 稳定拟合指纹与结果行域
 

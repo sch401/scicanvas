@@ -1832,3 +1832,38 @@ fn custom_fit_parameter_controls_scroll_into_view_in_a_normal_workspace() {
         assert_eq!(app.project, before);
     }
 }
+
+#[test]
+fn nonlinear_fit_warning_is_visible_in_report() {
+    use scicanvas_core::{nlfit::CustomFitFunction, ops::Source};
+    let mut app = app();
+    app.project.books[0].columns[0].data = ["1", "2", "3", "5", "7", "10"].into_iter().map(String::from).collect();
+    app.project.books[0].columns[1].data = ["109", "149", "149", "191", "213", "224"]
+        .into_iter()
+        .map(String::from)
+        .collect();
+    let function = CustomFitFunction::new("BoxBOD", "b1*(1-exp(-b2*x))", vec!["b1".into(), "b2".into()]).unwrap();
+    let source = Source::Book {
+        id: 1,
+        selected: vec!["B".into()],
+        rows: None,
+    };
+    let (_, reports) = app
+        .project
+        .nlfit_custom(&source, function, &[1.0, 1.0], &[], &[])
+        .unwrap();
+    let warning = reports[0].fit.warnings[0].clone();
+    app.dialog = Some(Dialog::NlFitReport(reports));
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut harness = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1400.0, 1000.0)),
+        |app: &mut SciApp, ctx: &egui::Context| app.dialogs(ctx),
+    );
+    for _ in 0..3 {
+        harness.frame(&mut app, vec![]);
+    }
+    let output = harness.frame(&mut app, vec![]);
+    assert!(crate::test_ui::find_text(&output, &warning).is_some());
+}

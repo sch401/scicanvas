@@ -52,6 +52,9 @@ impl Dialog {
                                 ),
                             );
                         }
+                        for warning in &f.warnings {
+                            ui.colored_label(pal.warn, warning);
+                        }
                         table_grid(ui, ("nlfit-grid", ri), &nlfit_param_rows(f), pal);
                         ui.add_space(4.0);
                         let stats: Vec<Vec<String>> = [vec!["统计量".to_string(), "值".to_string()]]
@@ -155,12 +158,18 @@ fn nlfit_markdown(reports: &[NlFitReport]) -> String {
             let f = &r.fit;
             let stats: Vec<(String, String)> = nlfit_stats(f).into_iter().map(|(k, v)| (k.to_string(), v)).collect();
             let constraints: String = f.constraints.iter().map(|c| format!("约束：`{c}`\n\n")).collect();
+            let warnings: String = f
+                .warnings
+                .iter()
+                .map(|warning| format!("{}\n\n", md_cell(warning)))
+                .collect();
             format!(
-                "## {} — {}\n\n`{}`\n\n{}\n\n{}{}\n{}",
+                "## {} — {}\n\n`{}`\n\n{}\n\n{}{}{}\n{}",
                 md_cell(&r.name),
                 f.model.name(),
                 f.model.formula(),
                 report_status(r),
+                warnings,
                 constraints,
                 md_table(&nlfit_param_rows(f)),
                 md_pairs(["统计量", "值"], &stats)
@@ -178,6 +187,7 @@ fn nlfit_text(reports: &[NlFitReport]) -> String {
         let f = &r.fit;
         lines.push(format!("{}\t{}\t{}", r.name, f.model.name(), f.model.formula()));
         lines.push(report_status(r));
+        lines.extend(f.warnings.iter().cloned());
         lines.extend(f.constraints.iter().map(|c| format!("约束\t{c}")));
         lines.extend(nlfit_param_rows(f).iter().map(|row| row.join("\t")));
         for (k, v) in nlfit_stats(f) {
@@ -216,5 +226,31 @@ impl Dialog {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod warning_tests {
+    use super::*;
+    use scicanvas_core::{nlfit::CustomFitFunction, ops::Source, Project};
+
+    #[test]
+    fn warning_is_in_copied_and_saved_report() {
+        let mut project = Project::sample();
+        project.books[0].columns[0].data = ["1", "2", "3", "5", "7", "10"].into_iter().map(String::from).collect();
+        project.books[0].columns[1].data = ["109", "149", "149", "191", "213", "224"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let function = CustomFitFunction::new("BoxBOD", "b1*(1-exp(-b2*x))", vec!["b1".into(), "b2".into()]).unwrap();
+        let source = Source::Book {
+            id: 1,
+            selected: vec!["B".into()],
+            rows: None,
+        };
+        let (_, reports) = project.nlfit_custom(&source, function, &[1.0, 1.0], &[], &[]).unwrap();
+        let warning = &reports[0].fit.warnings[0];
+        assert!(nlfit_text(&reports).contains(warning));
+        assert!(nlfit_markdown(&reports).contains(warning));
     }
 }

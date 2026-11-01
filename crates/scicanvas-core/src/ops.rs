@@ -960,6 +960,49 @@ mod nonlinear_recalc_tests {
     }
 
     #[test]
+    fn fit_warning_roundtrips_and_updates_on_reedit() {
+        let mut p = project();
+        p.books[0].columns[0].data = ["1", "2", "3", "5", "7", "10"].into_iter().map(String::from).collect();
+        p.books[0].columns[1].data = ["109", "149", "149", "191", "213", "224"]
+            .into_iter()
+            .map(String::from)
+            .collect();
+        let f = CustomFitFunction::new("BoxBOD", "b1*(1-exp(-b2*x))", vec!["b1".into(), "b2".into()]).unwrap();
+        let (_, reports) = p.nlfit_custom(&source(), f, &[1.0, 1.0], &[], &[]).unwrap();
+        assert_eq!(reports[0].fit.warnings.len(), 1);
+        let json = project_file::to_json(&p).unwrap();
+        let scv = project_file::to_scv(&p).unwrap();
+        for restored in [
+            project_file::from_json(&json).unwrap(),
+            project_file::from_scv(&scv).unwrap(),
+        ] {
+            assert_eq!(restored.nlfit_reports()[0].fit.warnings, reports[0].fit.warnings);
+        }
+        let mut old: serde_json::Value = serde_json::from_str(&json).unwrap();
+        for col in old["books"][0]["columns"].as_array_mut().unwrap() {
+            if let Some(fit) = col
+                .pointer_mut("/fit_report/fit")
+                .and_then(serde_json::Value::as_object_mut)
+            {
+                fit.remove("warnings");
+            }
+        }
+        assert!(project_file::from_json(&old.to_string()).unwrap().nlfit_reports()[0]
+            .fit
+            .warnings
+            .is_empty());
+        let OpKind::Nonlinear(recipe) = &p.nlfit_operation(&reports[0]).unwrap().kind else {
+            unreachable!()
+        };
+        let mut recipe = *recipe.clone();
+        recipe.initial = Some(vec![100.0, 0.75]);
+        let updated = p.edit_nlfit(&reports[0], recipe).unwrap();
+        assert!(updated.fit.warnings.is_empty());
+        assert!(p.recalc_computed(true).is_empty());
+        assert!(p.nlfit_report(&updated).unwrap().fit.warnings.is_empty());
+    }
+
+    #[test]
     fn nonlinear_auto_recalc_preserves_keys_styles_bands_and_dependency_order() {
         let mut p = project();
         let (_, reports) = p.nlfit(&source(), Model::ExpDec1, &[], &[]).unwrap();
