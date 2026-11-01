@@ -458,7 +458,6 @@ fn assert_local_minimum_warning(name: &str) {
         )
         .unwrap();
         let fit = nlfit::fit_custom(function, &xs, &ys, initial, &[], &[]).unwrap();
-        println!("{name} start {}: {:?}", index + 1, fit.warnings);
         assert_eq!(
             !fit.warnings.is_empty(),
             index == 0,

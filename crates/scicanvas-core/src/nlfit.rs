@@ -661,6 +661,23 @@ fn null_space(rows: &[Vec<f64>], dim: usize) -> Vec<Vec<f64>> {
     out
 }
 
+fn reduced_covariance(cov: &[Vec<f64>], free: &[usize], basis: &[Vec<f64>]) -> Vec<Vec<f64>> {
+    let m = free.len();
+    basis
+        .iter()
+        .map(|left| {
+            basis
+                .iter()
+                .map(|right| {
+                    (0..m)
+                        .map(|u| (0..m).map(|v| left[u] * cov[free[u]][free[v]] * right[v]).sum::<f64>())
+                        .sum()
+                })
+                .collect()
+        })
+        .collect()
+}
+
 /// 用 QR 求逆估计协方差矩阵的无穷范数条件数。
 fn covariance_ill_conditioned(cov: &[Vec<f64>], design: impl FnOnce() -> Vec<Vec<f64>>) -> bool {
     let n = cov.len();
@@ -1632,19 +1649,7 @@ impl<'a> FitSession<'a> {
         let tss: f64 = self.ys.iter().map(|y| (y - mean).powi(2)).sum();
         let r2 = if tss > 0.0 { 1.0 - self.cost / tss } else { f64::NAN };
         let adj_r2 = 1.0 - (1.0 - r2) * (n as f64 - 1.0) / dof;
-        let reduced_cov: Vec<Vec<f64>> = basis
-            .iter()
-            .map(|left| {
-                basis
-                    .iter()
-                    .map(|right| {
-                        (0..m)
-                            .map(|u| (0..m).map(|v| left[u] * cov[free[u]][free[v]] * right[v]).sum::<f64>())
-                            .sum()
-                    })
-                    .collect()
-            })
-            .collect();
+        let reduced_cov = reduced_covariance(&cov, free, &basis);
 
         let mut warnings = Vec::new();
         if converged {
@@ -2497,11 +2502,13 @@ mod tests {
     fn fit_warning_covers_high_relative_error_and_negative_adjusted_r2() {
         let line = || CustomFitFunction::new("line", "a+b*x", vec!["a".into(), "b".into()]).unwrap();
         let x = [-2.0, -1.0, 0.0, 1.0, 2.0];
-        let y = [1.4, 0.9, 0.8, 0.9, 1.4];
-        let fit = fit_custom(line(), &x, &y, &[1.08, 0.0], &[], &[]).unwrap();
+        let y = [-3.8, -2.1, 0.0, 1.9, 4.0];
+        let fit = fit_custom(line(), &x, &y, &[0.0, 2.0], &[], &[]).unwrap();
         assert!(fit.converged);
-        assert!(fit.se[1] > 10.0 * fit.params[1].abs());
+        assert!(fit.adj_r2 > 0.0);
+        assert!(fit.se[0] > 10.0 * fit.params[0].abs());
         assert_eq!(fit.warnings.len(), 1);
+        assert!(fit.warnings[0].contains("参数 a"));
         assert!(fit.warnings[0].contains("与 0 无显著差异"));
         assert!(!fit.warnings[0].contains("局部极小"));
         let x = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0];
@@ -2533,7 +2540,10 @@ mod tests {
             &[vec![1.0, 1.0 - 1e-14], vec![1.0 - 1e-14, 1.0]],
             design
         ));
-        assert!(!covariance_ill_conditioned(&[vec![1e10, 0.0], vec![0.0, 1e-10]], design));
+        assert!(!covariance_ill_conditioned(
+            &[vec![1e10, 0.0], vec![0.0, 1e-10]],
+            design
+        ));
         assert!(!covariance_ill_conditioned(&[vec![0.0, 0.0], vec![0.0, 0.0]], design));
         assert!(covariance_ill_conditioned(&[vec![0.0, 0.0], vec![0.0, 0.0]], || vec![
             vec![1.0, 1.0],
