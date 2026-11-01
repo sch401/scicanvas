@@ -1426,7 +1426,7 @@ impl<'a> FitSession<'a> {
                     self.lambda = (self.lambda / 10.0).max(1e-12);
                     stepped = true;
                     // 被约束截短的一步不算收敛：下一步会把挡路的约束纳入活动集
-                    self.refine = small_gain && alpha >= 1.0;
+                    self.refine = small_gain && alpha >= 1.0 && low_damping;
                     self.converged = small_step && alpha >= 1.0 && low_damping;
                     break 'solve;
                 }
@@ -1469,7 +1469,7 @@ impl<'a> FitSession<'a> {
                 self.cost = new_cost;
                 self.lambda = (self.lambda / 10.0).max(1e-12);
                 stepped = true;
-                self.refine = small_gain;
+                self.refine = small_gain && low_damping;
                 self.converged = small_step && low_damping;
                 break;
             }
