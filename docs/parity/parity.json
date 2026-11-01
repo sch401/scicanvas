@@ -2309,9 +2309,9 @@
   "feature": "参数固定、上下界、线性约束",
   "ref": "Parameters,Bounds,Constraints and Weighting",
   "pri": "P0",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "非线性拟合对话框每个参数可设固定值、下限、上限，并可写参数间线性约束（每行一条，=、<=、>=，如 A1 + A2 = 1、t2 >= t1 + 3）：固定参数不计入自由度；上下界与约束用活动集方法——等式与贴边且下降方向朝外的不等式在零空间求步，其余不等式和上下界截断步长，挡路的约束加入活动集重新求步；初值先投影到可行域，约束互相矛盾时报错；标准误按停止点约束零空间计算，自由度扣除约束个数；报告列出约束并标出停在边界的参数；A5 第二批内置/自定义报告重新载入原初值、固定参数、上下界及线性约束，执行后原位更新结果组，一步撤销重做。",
-  "verify": "上下界与 SciPy curve_fit(bounds, trf) 一致；等式约束、生效与不生效的不等式与 SciPy 代入消元拟合的参数（1e-5）、标准误（1e-3）、RSS 一致；约束解析与矛盾约束报错测试；对话框约束生效与写错保留对话框的界面回归",
+  "verify": "上下界与 SciPy curve_fit(bounds, trf) 一致；等式约束、生效与不生效的不等式与 SciPy 代入消元拟合的参数（1e-5）、标准误（1e-3）、RSS 一致；约束解析与矛盾约束报错测试；对话框约束生效与写错保留对话框的界面回归；2026-11：固定参数、边界及活动/不活动线性约束与生成的 SciPy 参考数据一致，包含缺失、重复和大基线；约束停滞与边界状态测试通过。",
   "id": "F136",
   "milestone": "M1 日常够用",
   "needs": [
@@ -2323,7 +2323,13 @@
     "crates/scicanvas-core/src/nlfit.rs::linear_constraints_match_scipy_substitution",
     "crates/scicanvas-core/src/nlfit.rs::bounded_parameters_match_scipy_trf",
     "crates/scicanvas-core/src/nlfit.rs::fixed_parameters_match_scipy_with_the_parameter_held",
-    "crates/scicanvas/src/app/tests/dialog_tests.rs::nlfit_dialog_linear_constraint_holds_and_bad_text_keeps_the_dialog"
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::nlfit_dialog_linear_constraint_holds_and_bad_text_keeps_the_dialog",
+    "crates/scicanvas-core/tests/reference_scipy.rs::constrained_fits_match_generated_scipy_reference",
+    "crates/scicanvas-core/src/nlfit.rs::constraint_boundary_optimum_is_converged",
+    "crates/scicanvas-core/src/nlfit.rs::constrained_damping_exhaustion_is_not_convergence"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/constraints.json"
    ]
   }
  },
