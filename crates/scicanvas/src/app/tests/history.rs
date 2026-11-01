@@ -1177,3 +1177,18 @@ fn modal_keyboard_saves_or_cancels_without_committing_cancelled_drafts() {
         }
     }
 }
+
+#[cfg(windows)]
+#[test]
+fn software_renderer_notice_only_applies_to_cpu() {
+    use eframe::wgpu::DeviceType;
+    assert!(renderer_notice(DeviceType::Cpu).unwrap().contains("软件渲染"));
+    for kind in [
+        DeviceType::DiscreteGpu,
+        DeviceType::IntegratedGpu,
+        DeviceType::VirtualGpu,
+        DeviceType::Other,
+    ] {
+        assert_eq!(renderer_notice(kind), None);
+    }
+}

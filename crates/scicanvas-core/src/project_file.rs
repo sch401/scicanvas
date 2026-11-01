@@ -1156,6 +1156,16 @@ pub mod session {
             self.last_dir = self.last_dir.as_deref().map(normalize_path);
         }
     }
+    /// 只保留最近一次启动环境，不向异常日志追加正常启动记录。
+    pub fn write_startup_log(message: &str) {
+        if let Some(directory) = recovery_dir() {
+            write_startup_log_in(&directory, message);
+        }
+    }
+    fn write_startup_log_in(directory: &Path, message: &str) {
+        let _ = std::fs::create_dir_all(directory);
+        let _ = std::fs::write(directory.join("startup.log"), message);
+    }
     pub fn append_log(message: &str) {
         if let Some(directory) = recovery_dir() {
             let _ = std::fs::create_dir_all(&directory);
@@ -1178,6 +1188,27 @@ pub mod session {
             append_log(&info.to_string());
             previous(info);
         }));
+    }
+    #[cfg(test)]
+    mod startup_tests {
+        use super::*;
+        #[test]
+        fn startup_log_overwrites_and_survives_recovery_scanning() {
+            let dir = std::env::temp_dir().join(format!(
+                "scicanvas-startup-{}-{}",
+                std::process::id(),
+                std::time::SystemTime::now()
+                    .duration_since(std::time::UNIX_EPOCH)
+                    .unwrap()
+                    .as_nanos()
+            ));
+            write_startup_log_in(&dir, "first");
+            write_startup_log_in(&dir, "second");
+            assert!(recoveries(&dir).is_empty());
+            assert_eq!(std::fs::read_to_string(dir.join("startup.log")).unwrap(), "second");
+            std::fs::remove_file(dir.join("startup.log")).unwrap();
+            std::fs::remove_dir(dir).unwrap();
+        }
     }
 }
 

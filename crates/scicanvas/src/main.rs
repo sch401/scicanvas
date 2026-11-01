@@ -46,7 +46,8 @@ fn main() {
     let options = eframe::NativeOptions {
         renderer: eframe::Renderer::Wgpu,
         wgpu_options: eframe::egui_wgpu::WgpuConfiguration {
-            supported_backends: graphics_backends(),
+            // 只用 DX12，不初始化 GL；无显卡加速时由 wgpu 选择 WARP。
+            supported_backends: eframe::wgpu::Backends::DX12,
             present_mode: eframe::wgpu::PresentMode::Fifo,
             desired_maximum_frame_latency: Some(1),
             ..Default::default()
@@ -62,28 +63,6 @@ fn main() {
         show_error_box("SciCanvas", &message);
         std::process::exit(1);
     }
-}
-
-/// DX12 优先，无适配器时选 Vulkan；不初始化 GL。
-#[cfg(windows)]
-fn graphics_backends() -> eframe::wgpu::Backends {
-    use eframe::wgpu::{Backends, Instance, InstanceDescriptor};
-    let started = std::time::Instant::now();
-    for backends in [Backends::DX12, Backends::VULKAN] {
-        let instance = Instance::new(InstanceDescriptor {
-            backends,
-            ..Default::default()
-        });
-        if let Some(adapter) = instance.enumerate_adapters(backends).into_iter().next() {
-            scicanvas_core::project_file::session::append_log(&format!(
-                "图形后端：{backends:?}；适配器：{}；探测耗时：{:.3} ms",
-                adapter.get_info().name,
-                started.elapsed().as_secs_f64() * 1000.
-            ));
-            return backends;
-        }
-    }
-    Backends::DX12 | Backends::VULKAN
 }
 
 #[cfg(windows)]
