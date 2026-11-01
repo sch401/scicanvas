@@ -33,8 +33,8 @@ test('sub-item counts keep accepted, pending acceptance and remaining work disti
   const { api } = page();
   const row = api.BASE.find(r => r.id === 'F201');
   const html = api.subItems(row);
-  assert.match(html, /已完成 0 \/ 4，待验收 2，部分实现 0，未开始 2/);
-  assert.match(html, /class="r" style="width:50.0%"/);
+  assert.match(html, /已完成 0 \/ 4，待验收 4，部分实现 0，未开始 0/);
+  assert.match(html, /class="r" style="width:100.0%"/);
   assert.equal(api.subItems(api.BASE[0]), '');
 });
 

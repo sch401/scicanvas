@@ -358,3 +358,220 @@ fn peaks_match_generated_scipy_and_numpy_reference() {
         }
     }
 }
+
+#[test]
+fn constrained_fits_match_generated_scipy_reference() {
+    use scicanvas_core::nlfit::{self, Model, ParamLimits};
+    for case in cases("constraints") {
+        let name = case["name"].as_str().unwrap();
+        let x = numbers(&case["x"]);
+        let y = numbers(&case["y"]);
+        if name == "small" {
+            assert!(nlfit::fit(Model::ExpDec1, &x, &y, None, &[]).is_err());
+            continue;
+        }
+        let fit = if case["model"] == "ExpDec2" {
+            let constraints = nlfit::parse_constraints(Model::ExpDec2, case["constraint"].as_str().unwrap()).unwrap();
+            nlfit::fit_constrained(Model::ExpDec2, &x, &y, None, &[], &constraints).unwrap()
+        } else if name == "bound" {
+            let limits = [
+                ParamLimits::default(),
+                ParamLimits::default(),
+                ParamLimits {
+                    upper: Some(1.5),
+                    ..Default::default()
+                },
+            ];
+            nlfit::fit_with(Model::ExpDec1, &x, &y, Some(&numbers(&case["initial"])), &limits).unwrap()
+        } else {
+            nlfit::fit(
+                Model::ExpDec1,
+                &x,
+                &y,
+                Some(&numbers(&case["initial"])),
+                &[Some(case["fixed"].as_f64().unwrap())],
+            )
+            .unwrap()
+        };
+        assert!(fit.converged, "{name}");
+        array(&fit.params, &case["params"], 1e-5, name);
+        array(&fit.se, &case["se"], 1e-3, name);
+        near(fit.rss, &case["rss"], 1e-6, name);
+    }
+}
+
+#[test]
+fn builtin_models_match_generated_scipy_reference() {
+    use scicanvas_core::nlfit::{self, Model};
+    for case in cases("builtin_fits") {
+        let name = case["name"].as_str().unwrap();
+        let model_name = case["model"].as_str().unwrap();
+        let model = Model::ALL
+            .iter()
+            .copied()
+            .find(|model| model.name() == model_name)
+            .unwrap();
+        let result = nlfit::fit(model, &numbers(&case["x"]), &numbers(&case["y"]), None, &[]);
+        if name == "small" {
+            assert!(result.is_err());
+            continue;
+        }
+        let fit = result.unwrap_or_else(|error| panic!("{name}: {error}"));
+        assert!(fit.converged, "{name}");
+        array(&fit.params, &case["params"], 1e-5, name);
+        array(&fit.se, &case["se"], 1e-3, name);
+        near(fit.rss, &case["rss"], 1e-7, name);
+    }
+}
+
+#[test]
+fn smoothing_matches_generated_numpy_scipy_reference() {
+    use scicanvas_core::analysis::SmoothMethod;
+    for case in cases("smoothing") {
+        let name = case["name"].as_str().unwrap();
+        let x = numbers(&case["x"]);
+        let y = numbers(&case["y"]);
+        let window = case["window"].as_u64().unwrap() as usize;
+        for (method, key) in [
+            (SmoothMethod::MovingAverage, "moving"),
+            (SmoothMethod::SavitzkyGolay, "sg"),
+            (SmoothMethod::FftFilter, "fft"),
+            (SmoothMethod::Lowess, "lowess"),
+        ] {
+            if case.get(key).is_none() {
+                if key == "fft" {
+                    assert!(scicanvas_core::fft::sample_interval(&x).is_err());
+                }
+                continue;
+            }
+            let got = analysis::smooth(&x, &y, method, window);
+            let expected = numbers(&case[key]);
+            assert_eq!(got.len(), expected.len(), "{name}/{key}");
+            for (actual, expected) in got.iter().zip(expected) {
+                if expected.is_finite() {
+                    assert!(
+                        (actual - expected).abs() <= 1e-10 * expected.abs().max(1.0),
+                        "{name}/{key}: {actual} vs {expected}"
+                    );
+                } else {
+                    assert!(!actual.is_finite(), "{name}/{key}: {actual}");
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn percent_stacked_bars_match_generated_numpy_reference() {
+    use scicanvas_core::PlotType;
+    for case in cases("percent_bars") {
+        let name = case["name"].as_str().unwrap();
+        let inputs = case["values"].as_array().unwrap();
+        let mut project = Project::default();
+        let id = project.new_book();
+        let book = project.book_mut(id).unwrap();
+        book.columns.clear();
+        let mut x = Column::new("A", Role::X);
+        x.data = (1..=inputs[0].as_array().unwrap().len())
+            .map(|i| i.to_string())
+            .collect();
+        book.columns.push(x);
+        for values in inputs {
+            let key = book.push_column(Role::Y);
+            let index = book.column_index(&key).unwrap();
+            book.columns[index].data = values
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|v| v.as_f64().map(|n| n.to_string()).unwrap_or_default())
+                .collect();
+        }
+        let (graph, _) = project
+            .plot_from_selection(id, &[], PlotType::PercentStackedBar)
+            .unwrap();
+        let series = project
+            .graph(graph)
+            .unwrap()
+            .first_layer()
+            .series(project.book(id).unwrap())
+            .1;
+        for (j, s) in series.iter().enumerate() {
+            for (i, &row) in s.rows.iter().enumerate() {
+                near(s.bases[i], &case["base"][j][row], 1e-10, name);
+                near(s.points[i][1], &case["top"][j][row], 1e-10, name);
+            }
+        }
+    }
+}
+
+#[test]
+fn fit_reports_match_generated_numpy_scipy_reference() {
+    use scicanvas_core::nlfit::{self, Model};
+    for case in cases("fit_reports") {
+        let name = case["name"].as_str().unwrap();
+        let x = numbers(&case["x"]);
+        let y = numbers(&case["y"]);
+        let at = numbers(&case["at"]);
+        if case["kind"] == "poly" {
+            let (xs, ys): (Vec<_>, Vec<_>) = x
+                .iter()
+                .zip(&y)
+                .filter(|(a, b)| a.is_finite() && b.is_finite())
+                .map(|(&a, &b)| (a, b))
+                .unzip();
+            let f = analysis::polyfit(&xs, &ys, case["order"].as_u64().unwrap() as usize).unwrap();
+            let tolerance = case.get("tolerance").and_then(Value::as_f64).unwrap_or(1e-10);
+            array(&f.coef, &case["params"], tolerance, name);
+            array(&f.se, &case["se"], tolerance, name);
+            near(f.rss, &case["rss"], tolerance, name);
+            near(f.tss, &case["tss"], tolerance, name);
+            let a = f.anova();
+            near(a.f, &case["f"], tolerance, name);
+            near(a.p, &case["fp"], 1e-8, name);
+            let (t, p): (Vec<_>, Vec<_>) = f.t_tests().into_iter().unzip();
+            array(&t, &case["t"], tolerance, name);
+            array(&p, &case["p"], 1e-8, name);
+            let (conf, pred): (Vec<_>, Vec<_>) = at.iter().map(|&x| f.band(x, 0.95)).unzip();
+            array(&conf, &case["conf"], tolerance, name);
+            array(&pred, &case["pred"], tolerance, name);
+        } else {
+            let f = nlfit::fit(Model::ExpDec1, &x, &y, None, &[]).unwrap();
+            assert!(f.converged);
+            array(&f.params, &case["params"], 1e-5, name);
+            array(&f.se, &case["se"], 1e-3, name);
+            near(f.rss, &case["rss"], 1e-6, name);
+            let (t, p): (Vec<_>, Vec<_>) = f.t_tests().into_iter().unzip();
+            array(&t, &case["t"], 1e-3, name);
+            array(&p, &case["p"], case["p_tolerance"].as_f64().unwrap(), name);
+            let (conf, pred): (Vec<_>, Vec<_>) = at.iter().map(|&x| f.band(x, 0.95)).unzip();
+            array(&conf, &case["conf"], 1e-5, name);
+            array(&pred, &case["pred"], 1e-5, name);
+        }
+    }
+}
+
+#[test]
+fn formula_catalog_matches_generated_python_scipy_reference() {
+    use scicanvas_core::formula::{self, FUNCTIONS};
+    use std::collections::HashSet;
+    let mut covered = HashSet::new();
+    for case in cases("formulas") {
+        let source = case["expr"].as_str().unwrap();
+        covered.insert(source.split('(').next().unwrap().to_string());
+        let input = case.get("input").map(numbers).unwrap_or_default();
+        let column = |key: &str, row: usize| {
+            if key == "A" {
+                input.get(row).copied().unwrap_or(f64::NAN)
+            } else {
+                f64::NAN
+            }
+        };
+        let rows = if input.is_empty() { 1 } else { input.len() };
+        let expr = formula::parse(source).unwrap().prepare(rows, &column);
+        let actual: Vec<_> = (0..rows).map(|row| expr.eval(row, &column)).collect();
+        array(&actual, &case["expected"], 1e-9, source);
+    }
+    for function in FUNCTIONS {
+        assert!(covered.contains(function.name), "missing {}", function.name);
+    }
+}

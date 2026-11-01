@@ -11,6 +11,7 @@ name = "scicanvas"
 path = "src/main.rs"
 
 [dependencies]
+tiff = { version = "=0.11.3", default-features = false, features = ["lzw"] }
 scicanvas-core = { version = "0.1.0", path = "../scicanvas-core", features = ["serde", "encoding", "xlsx"] }
 # 界面：eframe/egui 及其表格、SVG 图标组件，版本必须一致
 eframe = "0.29"

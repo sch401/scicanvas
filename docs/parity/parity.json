@@ -429,14 +429,21 @@
   "feature": "列属性：X / Y / Z / X误差 / Y误差 / 标签 / 忽略",
   "ref": "Setting Column Designation",
   "pri": "P0",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "列角色 X/Y/Z/X误差/Y误差/标签/忽略：功能区、列标题右键和列属性对话框均可设置；误差列自动关联；Z 列和标签列不参与二维作图与分析取列；数据标签选“指定列文本”而未指定列时自动使用标签列；角色随项目保存",
-  "verify": "Z/标签列不作为曲线和分析数据、标签列作为数据标签来源、项目往返的核心测试；设为 Z/标签命令撤销/重做回归；Z 列用于等高线/三维图需随对应图型验收",
+  "verify": "Z/标签列不作为曲线和分析数据、标签列作为数据标签来源、项目往返的核心测试；设为 Z/标签命令撤销/重做回归；Z 列用于等高线/三维图需随对应图型验收；2026-11：七种列角色与撤销、错误和标签/Z 绘图测试通过。",
   "id": "F026",
   "milestone": "M1 日常够用",
   "needs": [
    "auto"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas/src/app/tests/worksheet.rs::all_column_roles_apply_and_undo_without_changing_values",
+    "crates/scicanvas/src/app/tests/graph.rs::error_role_commands_and_visibility_control_are_undoable",
+    "crates/scicanvas-core/tests/spline_labels.rs::label_and_z_columns_are_not_curves_and_label_column_feeds_data_labels"
+   ]
+  }
  },
  {
   "module": "工作表",
@@ -516,7 +523,7 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "Rust app.rs/sheet.rs 已接入拖动框选、Shift 扩展、复制/剪切/粘贴与清空选区",
-  "verify": "选区边界、键盘、剪贴板及撤销回归已通过；真实鼠标与长表人工验收待做",
+  "verify": "选区边界、键盘、剪贴板及撤销回归已通过；真实鼠标与长表人工验收待做；2026-11：真实鼠标拖选、Shift 扩展及复制测试通过，Windows 人工验收待做。",
   "id": "F030",
   "milestone": "M1 日常够用",
   "needs": [
@@ -529,7 +536,10 @@
     "result": "待做",
     "date": "",
     "build": ""
-   }
+   },
+   "auto": [
+    "crates/scicanvas/src/app/tests/worksheet.rs::mouse_drag_shift_extension_and_copy_select_the_visible_cells"
+   ]
   }
  },
  {
@@ -537,11 +547,29 @@
   "feature": "查找与替换",
   "ref": "Finding and Replacing Worksheet Data",
   "pri": "P1",
-  "status": "未开始",
-  "how": "",
-  "verify": "手动操作",
+  "status": "已实现待验收",
+  "how": "Ctrl+F 查找、Ctrl+H 替换，可选择工作表或原选区，支持区分大小写、整格匹配、循环定位和 Unicode；替换当前或全部替换均为一步撤销，数值列无法解析的结果保留原值并提示数量。",
+  "verify": "范围与循环、大小写和整格、数值失败保留、Unicode、撤销重做、快捷键及实际按钮测试；Windows 人工验收待做。",
   "id": "F031",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas/src/app/tests/worksheet.rs::find_replace_searches_selected_cells_wraps_and_matches_whole_cells",
+    "crates/scicanvas/src/app/tests/worksheet.rs::find_replace_is_atomic_preserves_invalid_numbers_and_handles_unicode",
+    "crates/scicanvas/src/app/tests/worksheet.rs::find_replace_buttons_and_shortcuts_open_and_apply",
+    "crates/scicanvas/src/app/tests/worksheet.rs::find_open_commits_valid_cell_draft_and_keeps_invalid_draft_for_confirmation"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/worksheet.md#F031",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "工作表",
@@ -698,22 +726,47 @@
   "feature": "转置",
   "ref": "Transposing Worksheets",
   "pri": "P1",
-  "status": "未开始",
-  "how": "",
-  "verify": "单元测试",
+  "status": "已实现待验收",
+  "how": "将当前工作簿转置为同文件夹的新工作簿，第一列为原列显示名，后续各列对应原数据行；保留缺失位置和原数据，操作一步撤销。",
+  "verify": "数值、文本、缺失值、列名、文件夹、空表及命令撤销重做测试。",
   "id": "F041",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/src/ops/transpose.rs::transpose_preserves_values_names_missing_cells_and_folder",
+    "crates/scicanvas/src/app/tests/worksheet.rs::transpose_command_creates_a_workbook_in_one_undo_step"
+   ]
+  }
  },
  {
   "module": "工作表",
   "feature": "堆叠 / 拆分列",
   "ref": "Stacking and Unstacking Worksheet Columns",
   "pri": "P1",
-  "status": "未开始",
-  "how": "",
-  "verify": "与 Origin 结果比较",
+  "status": "已实现待验收",
+  "how": "选择多列堆叠生成值列与分类来源列，或按分类列拆分值列；保持同类型、缺失值和原列，每次操作可撤销。",
+  "verify": "数据类型、缺失值和撤销测试；按人工清单与 Origin 比较。",
   "id": "F042",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/worksheet_transform.rs::stack_split_and_reduce_keep_values_types_and_missing_cells",
+    "crates/scicanvas/src/app/tests/worksheet.rs::sheet_transforms_each_create_one_undo_step"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/worksheet.md#F042",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "工作表",
@@ -731,11 +784,27 @@
   "feature": "数据精简（隔行抽取、平均合并）",
   "ref": "Data Reduction",
   "pri": "P1",
-  "status": "未开始",
-  "how": "",
-  "verify": "与 Origin 结果比较",
+  "status": "已实现待验收",
+  "how": "按指定 N 行取第一行，或对每组有限数值求平均，生成独立新列；每次操作可撤销。",
+  "verify": "缺失值、部分分组、非法间隔和撤销测试；按人工清单与 Origin 比较。",
   "id": "F044",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/worksheet_transform.rs::stack_split_and_reduce_keep_values_types_and_missing_cells",
+    "crates/scicanvas/src/app/tests/worksheet.rs::sheet_transforms_each_create_one_undo_step"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/worksheet.md#F044",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "工作表",
@@ -775,11 +844,26 @@
   "feature": "冻结行列",
   "ref": "Freeze Rows Columns",
   "pri": "P1",
-  "status": "未开始",
-  "how": "",
-  "verify": "手动操作",
+  "status": "已实现待验收",
+  "how": "冻结前 K 列及行号，横向滚动时保持可见，纵向滚动同步；设置只保存在界面会话。冻结数据行尚未实现。",
+  "verify": "界面滚动、行对齐及选择测试；按人工清单检查冻结和取消。",
   "id": "F048",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas/src/app/tests/worksheet.rs::frozen_columns_scroll_horizontally_and_keep_rows_aligned"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/worksheet.md#F048",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "工作表",
@@ -797,11 +881,27 @@
   "feature": "工作簿模板",
   "ref": "What is Saved with the Workbook Template (*.OTW or *.OTWU) File?",
   "pri": "P1",
-  "status": "未开始",
-  "how": "保存列定义与格式",
-  "verify": "套模板后结构一致",
+  "status": "已实现待验收",
+  "how": "保存工作簿列定义、类型、格式和公式到 .scbt，不保存数据；从模板新建工作簿支持撤销。",
+  "verify": "模板文件读写、数据隔离、结构和撤销测试；按人工清单检查。",
   "id": "F050",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/workbook_template.rs::workbook_template_roundtrips_column_definitions_without_data",
+    "crates/scicanvas/src/app/tests/worksheet.rs::create_workbook_from_template_is_one_undo_step"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/worksheet.md#F050",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "工作表",
@@ -840,12 +940,18 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "类型化数值列、缺失位图和可见行表格；CSV 由文本流式建表（不生成整张字符串表）；折线按像素列保留首/末/最小/最大点抽稀，散点按半像素网格去重；图形场景按图形设置、视图和所引用数据的指纹缓存，数据不变时复用。本机 release 百万行十列：导入 0.81 秒，含完整界面的首帧 246 ms、次帧 12.6 ms，进程峰值内存 494 MB（字体约 56 MB、数值列约 80 MB，原 <150 MB 目标不现实）；设置/图形窗口移动复用矢量绘制指令和文字排版，数据/设置/视图/尺寸/DPI 改变时更新；Windows 使用 wgpu FIFO 呈现",
-  "verify": "流式导入与行表导入结果一致、抽稀保形的核心与界面测试；百万行首帧测量（忽略测试，外部采样峰值内存），数据见 docs/perf.md；拖动修复 4f74ec7 本地完整检查与 Windows CI 通过，用户已确认快速拖动正常；不扩大为整项大数据性能验收",
+  "verify": "流式导入与行表导入结果一致、抽稀保形的核心与界面测试；百万行首帧测量（忽略测试，外部采样峰值内存），数据见 docs/perf.md；拖动修复 4f74ec7 本地完整检查与 Windows CI 通过，用户已确认快速拖动正常；不扩大为整项大数据性能验收；2026-11：百万行可滚动到末尾且只绘制可见区域；滚动流畅度性能门禁待 S1-3。",
   "id": "F053",
   "milestone": "M1 日常够用",
   "needs": [
    "auto"
-  ]
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas/src/app/tests/worksheet.rs::million_rows_scroll_to_the_last_value_without_rendering_every_row",
+    "crates/scicanvas-core/tests/typed_columns.rs::million_numeric_cells_use_compact_storage"
+   ]
+  }
  },
  {
   "module": "矩阵",
@@ -1045,11 +1151,28 @@
   "feature": "导出 Excel",
   "ref": "Exporting Worksheets and Matrices",
   "pri": "P1",
-  "status": "未开始",
-  "how": "rust_xlsxwriter",
-  "verify": "用 Excel 打开检查",
+  "status": "已实现待验收",
+  "how": "将每个工作簿导出为一个 Excel 工作表，数值和日期保留类型，可选三行表头；按列显示时区导出日期，非有限值写为文本。",
+  "verify": "多工作表、单元格类型、日期、表头、限制和文件保护测试；按人工清单在 Excel 中打开。",
   "id": "F067",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/xlsx_export.rs::export_xlsx_preserves_typed_cells_headers_dates_and_sheet_names",
+    "crates/scicanvas-core/tests/xlsx_export.rs::excel_limit_does_not_replace_existing_file",
+    "crates/scicanvas/src/app/tests/worksheet.rs::excel_export_dialog_lets_user_choose_headers"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/import_export.md#F067",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "导入导出",
@@ -1058,7 +1181,7 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "工作表 → 导出 CSV：UTF-8 BOM、CRLF，表头为“长名称 (单位)”，与 .scv 内的 CSV 同一实现",
-  "verify": "导出后重新导入的往返测试；Excel 打开待人工验收",
+  "verify": "导出后重新导入的往返测试；Excel 打开待人工验收；2026-11：CSV 名称、单位和单元格往返测试通过，Windows 人工验收待做。",
   "id": "F068",
   "milestone": "M1 日常够用",
   "needs": [
@@ -1071,7 +1194,10 @@
     "result": "待做",
     "date": "",
     "build": ""
-   }
+   },
+   "auto": [
+    "crates/scicanvas-core/tests/scv_files.rs::exported_csv_reimports_with_names_units_and_cells"
+   ]
   }
  },
  {
@@ -1412,11 +1538,28 @@
   "feature": "批量绘图（同一模板换数据）",
   "ref": "Batch Plotting",
   "pri": "P1",
-  "status": "未开始",
-  "how": "",
-  "verify": "手动操作",
+  "status": "已实现待验收",
+  "how": "选择现有图形作为模板和多个工作簿，按列长名匹配并保留图形样式；列无长名时按列标识匹配，整批操作一步撤销。",
+  "verify": "列顺序不同、样式保留、缺失列时整批回滚及撤销测试；按人工清单检查。",
   "id": "F088",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas/src/app/batch_plot.rs::batch_plot_matches_column_names_and_is_atomic_and_undoable",
+    "crates/scicanvas/src/app/batch_plot.rs::batch_plot_command_opens_target_selection",
+    "crates/scicanvas/src/app/tests/graph.rs::batch_plot_controls_return_selected_workbook"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/plotting.md#F088",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "绘图基础",
@@ -2309,9 +2452,9 @@
   "feature": "参数固定、上下界、线性约束",
   "ref": "Parameters,Bounds,Constraints and Weighting",
   "pri": "P0",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "非线性拟合对话框每个参数可设固定值、下限、上限，并可写参数间线性约束（每行一条，=、<=、>=，如 A1 + A2 = 1、t2 >= t1 + 3）：固定参数不计入自由度；上下界与约束用活动集方法——等式与贴边且下降方向朝外的不等式在零空间求步，其余不等式和上下界截断步长，挡路的约束加入活动集重新求步；初值先投影到可行域，约束互相矛盾时报错；标准误按停止点约束零空间计算，自由度扣除约束个数；报告列出约束并标出停在边界的参数；A5 第二批内置/自定义报告重新载入原初值、固定参数、上下界及线性约束，执行后原位更新结果组，一步撤销重做。",
-  "verify": "上下界与 SciPy curve_fit(bounds, trf) 一致；等式约束、生效与不生效的不等式与 SciPy 代入消元拟合的参数（1e-5）、标准误（1e-3）、RSS 一致；约束解析与矛盾约束报错测试；对话框约束生效与写错保留对话框的界面回归",
+  "verify": "上下界与 SciPy curve_fit(bounds, trf) 一致；等式约束、生效与不生效的不等式与 SciPy 代入消元拟合的参数（1e-5）、标准误（1e-3）、RSS 一致；约束解析与矛盾约束报错测试；对话框约束生效与写错保留对话框的界面回归；2026-11：固定参数、边界及活动/不活动线性约束与生成的 SciPy 参考数据一致，包含缺失、重复和大基线；约束停滞与边界状态测试通过。",
   "id": "F136",
   "milestone": "M1 日常够用",
   "needs": [
@@ -2323,7 +2466,13 @@
     "crates/scicanvas-core/src/nlfit.rs::linear_constraints_match_scipy_substitution",
     "crates/scicanvas-core/src/nlfit.rs::bounded_parameters_match_scipy_trf",
     "crates/scicanvas-core/src/nlfit.rs::fixed_parameters_match_scipy_with_the_parameter_held",
-    "crates/scicanvas/src/app/tests/dialog_tests.rs::nlfit_dialog_linear_constraint_holds_and_bad_text_keeps_the_dialog"
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::nlfit_dialog_linear_constraint_holds_and_bad_text_keeps_the_dialog",
+    "crates/scicanvas-core/tests/reference_scipy.rs::constrained_fits_match_generated_scipy_reference",
+    "crates/scicanvas-core/src/nlfit.rs::constraint_boundary_optimum_is_converged",
+    "crates/scicanvas-core/src/nlfit.rs::constrained_damping_exhaustion_is_not_convergence"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/constraints.json"
    ]
   }
  },
@@ -2345,7 +2494,7 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "线性/多项式报告：参数、标准误、t、双侧 p，R²/调整 R²/Pearson r/RSS/N，以及方差分析表（回归、残差、总计的自由度、平方和、均方、F、p）；非线性报告：参数、标准误、t、p 与统计量；两类报告的“置信/预测带”按钮按 95% 写出置信下/上限、预测下/上限四列并加到拟合曲线所在图层（多项式用参数协方差，非线性用 Δ 法），一步撤销；报告可复制或保存为 Markdown Note 持久保存；多元回归另有 t/p 与整体 F 检验。A5 第二批非线性数值报告随结果列持久保存，通过“分析 → 拟合报告…”重开，使用 Book/结果列/独立报告编号隔离多个拟合。报告与曲线同次重算，失败保留上次结果并标记失败，来源删除保留快照；原位重编辑完整设置，保留样式，报告跟随撤销重做。Note 为用户快照。统一报告表及线性/其他统计联动仍待推进。；重算保留用户备注及跨 Book 名称，草稿比较排除重算缓存，手动重算恢复改动过的输出；报告关联显示实际工作簿名，重编辑按钮集中在报告块末尾。拟合报告区分收敛、浮点精度极限和失败，状态随 v22 项目保存。线性和多项式回归使用列主元 QR，NIST Longley 及 Wampler1–5 达到原有精度阈值。非线性拟合支持自适应差分和停滞精修。拟合结果的高相对标准误、高协方差条件数或负调整 R² 会触发局部极小或不可辨识提示",
-  "verify": "多项式置信/预测带、方差分析、t/p 与 NumPy 范德蒙德最小二乘 + scipy.stats 一致（1e-9，p 值 1e-6，极小 p 值不下溢）；非线性置信/预测带与 scipy curve_fit pcov + 解析梯度 Δ 法一致；按钮真实点击与撤销/重做回归；报告同步/失败保留/重编辑/跨表隔离/删除与标识复用/v19 兼容/v20 往返/撤销重做/Note 保留回归，Windows 人工验收待做；NIST MGH17 和 BoxBOD 双起点提示检查，界面、复制、Note、重拟合和新旧项目往返回归",
+  "verify": "多项式置信/预测带、方差分析、t/p 与 NumPy 范德蒙德最小二乘 + scipy.stats 一致（1e-9，p 值 1e-6，极小 p 值不下溢）；非线性置信/预测带与 scipy curve_fit pcov + 解析梯度 Δ 法一致；按钮真实点击与撤销/重做回归；报告同步/失败保留/重编辑/跨表隔离/删除与标识复用/v19 兼容/v20 往返/撤销重做/Note 保留回归，Windows 人工验收待做；NIST MGH17 和 BoxBOD 双起点提示检查，界面、复制、Note、重拟合和新旧项目往返回归；2026-11：生成并通过拟合报告、方差分析及区间参考值；非线性极小 p 值最大实测相对差 1.50e-6，容差 1e-5，人工验收待做。",
   "id": "F138",
   "milestone": "M1 日常够用",
   "needs": [
@@ -2359,14 +2508,18 @@
     "crates/scicanvas-core/tests/nist.rs::mgh17_local_minimum_warning",
     "crates/scicanvas-core/tests/nist.rs::boxbod_local_minimum_warning",
     "crates/scicanvas-core/src/ops.rs::fit_warning_roundtrips_and_updates_on_reedit",
-    "crates/scicanvas/src/app/tests/dialog_tests.rs::nonlinear_fit_warning_is_visible_in_report"
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::nonlinear_fit_warning_is_visible_in_report",
+    "crates/scicanvas-core/tests/reference_scipy.rs::fit_reports_match_generated_numpy_scipy_reference"
    ],
    "manual": {
     "checklist": "docs/acceptance/fitting.md#F138",
     "result": "待做",
     "date": "",
     "build": ""
-   }
+   },
+   "reference": [
+    "crates/scicanvas-core/tests/reference/fit_reports.json"
+   ]
   }
  },
  {
@@ -2562,9 +2715,9 @@
   "feature": "内置拟合函数：峰函数（Gauss、Lorentz、Voigt、PsdVoigt、LogNormal 等）",
   "ref": "Curve Fitting Functions（共 239 个）",
   "pri": "P0",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "峰函数：Gauss、Lorentz、Voigt（Gauss wG 与 Lorentz wL 卷积，面积 A；Faddeeva 函数用 Weideman N=64 有理展开）、PsdVoigt1、LogNormal，公式与参数名同 Origin，均有数据驱动初值",
-  "verify": "从自动初值收敛到 SciPy 1.17.1 curve_fit（p0 取真值）的参数（1e-5）、标准误（1e-3）与 RSS；Voigt 线形与 scipy.special.voigt_profile 一致（< 1e-12）",
+  "verify": "从自动初值收敛到 SciPy 1.17.1 curve_fit（p0 取真值）的参数（1e-5）、标准误（1e-3）与 RSS；Voigt 线形与 scipy.special.voigt_profile 一致（< 1e-12）；2026-11：生成并通过 SciPy 参数、标准误和残差参考对照。",
   "id": "F148",
   "milestone": "M1 日常够用",
   "needs": [
@@ -2574,7 +2727,11 @@
   "evidence": {
    "auto": [
     "crates/scicanvas-core/src/nlfit.rs::auto_initial_values_converge_to_scipy_curve_fit",
-    "crates/scicanvas-core/src/nlfit.rs::voigt_profile_matches_scipy"
+    "crates/scicanvas-core/src/nlfit.rs::voigt_profile_matches_scipy",
+    "crates/scicanvas-core/tests/reference_scipy.rs::builtin_models_match_generated_scipy_reference"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/builtin_fits.json"
    ]
   }
  },
@@ -2583,9 +2740,9 @@
   "feature": "内置拟合函数：指数类（ExpDec1-3、ExpGrow、ExpAssoc 等）",
   "ref": "Curve Fitting Functions（共 239 个）",
   "pri": "P0",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "指数类：ExpDec1/2/3、ExpGro1、ExpAssoc，公式与参数名同 Origin，均有数据驱动初值（多指数由单指数估计拆分）",
-  "verify": "从自动初值收敛到 SciPy 1.17.1 curve_fit 的参数（1e-5）、标准误（1e-3）与 RSS",
+  "verify": "从自动初值收敛到 SciPy 1.17.1 curve_fit 的参数（1e-5）、标准误（1e-3）与 RSS；2026-11：生成并通过 SciPy 参数、标准误和残差参考对照。",
   "id": "F149",
   "milestone": "M1 日常够用",
   "needs": [
@@ -2594,7 +2751,11 @@
   ],
   "evidence": {
    "auto": [
-    "crates/scicanvas-core/src/nlfit.rs::auto_initial_values_converge_to_scipy_curve_fit"
+    "crates/scicanvas-core/src/nlfit.rs::auto_initial_values_converge_to_scipy_curve_fit",
+    "crates/scicanvas-core/tests/reference_scipy.rs::builtin_models_match_generated_scipy_reference"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/builtin_fits.json"
    ]
   }
  },
@@ -2603,9 +2764,9 @@
   "feature": "内置拟合函数：S 形与生长（Boltzmann、Logistic、DoseResp、Hill、Gompertz 等）",
   "ref": "Curve Fitting Functions（共 239 个）",
   "pri": "P0",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "S 形与生长：Boltzmann、Logistic、DoseResp、Hill、Gompertz，公式与参数名同 Origin，均有数据驱动初值",
-  "verify": "从自动初值收敛到 SciPy 1.17.1 curve_fit 的参数（1e-5）、标准误（1e-3）与 RSS",
+  "verify": "从自动初值收敛到 SciPy 1.17.1 curve_fit 的参数（1e-5）、标准误（1e-3）与 RSS；2026-11：生成并通过 SciPy 参数、标准误和残差参考对照。",
   "id": "F150",
   "milestone": "M1 日常够用",
   "needs": [
@@ -2614,7 +2775,11 @@
   ],
   "evidence": {
    "auto": [
-    "crates/scicanvas-core/src/nlfit.rs::auto_initial_values_converge_to_scipy_curve_fit"
+    "crates/scicanvas-core/src/nlfit.rs::auto_initial_values_converge_to_scipy_curve_fit",
+    "crates/scicanvas-core/tests/reference_scipy.rs::builtin_models_match_generated_scipy_reference"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/builtin_fits.json"
    ]
   }
  },
@@ -2623,9 +2788,9 @@
   "feature": "内置拟合函数：幂函数与对数（Power、Allometric、Log 等）",
   "ref": "Curve Fitting Functions（共 239 个）",
   "pri": "P0",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "幂函数与对数：Allometric1、Allometric2、Power1、Log3P1，公式与参数名同 Origin，均有数据驱动初值",
-  "verify": "从自动初值收敛到 SciPy 1.17.1 curve_fit 的参数（1e-5）、标准误（1e-3）与 RSS",
+  "verify": "从自动初值收敛到 SciPy 1.17.1 curve_fit 的参数（1e-5）、标准误（1e-3）与 RSS；2026-11：生成并通过 SciPy 参数、标准误和残差参考对照。",
   "id": "F151",
   "milestone": "M1 日常够用",
   "needs": [
@@ -2634,7 +2799,11 @@
   ],
   "evidence": {
    "auto": [
-    "crates/scicanvas-core/src/nlfit.rs::auto_initial_values_converge_to_scipy_curve_fit"
+    "crates/scicanvas-core/src/nlfit.rs::auto_initial_values_converge_to_scipy_curve_fit",
+    "crates/scicanvas-core/tests/reference_scipy.rs::builtin_models_match_generated_scipy_reference"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/builtin_fits.json"
    ]
   }
  },
@@ -3395,15 +3564,15 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "平滑对话框四种方法：移动平均、二阶 Savitzky–Golay、LOWESS（每点取最近的窗口点数个近邻，tricube 权重局部加权线性回归，X 可无序、不等间距）、FFT 滤波（去掉首尾连线趋势后低通，截止频率 1/(窗口点数·ΔX)，再加回趋势；X 不等间距时提示先插值）；结果写新列，来源是图形时加为曲线，一步撤销",
-  "verify": "LOWESS 与 NumPy 逐点暴力实现（k=5/9，无序不等间距 X）一致、直线不变；FFT 平滑与 numpy rfft 掩模参考一致（误差 < 1e-9）；不等间距 X 拒绝 FFT 平滑；LOWESS 稳健迭代验收待做",
+  "verify": "LOWESS 与 NumPy 逐点暴力实现（k=5/9，无序不等间距 X）一致、直线不变；FFT 平滑与 numpy rfft 掩模参考一致（误差 < 1e-9）；不等间距 X 拒绝 FFT 平滑；LOWESS 稳健迭代验收待做；2026-11：四种方法的 NumPy/SciPy 参考对照通过；LOWESS 稳健迭代尚未实现，保留待验收。",
   "id": "F201",
   "milestone": "M1 日常够用",
   "sub_items": {
    "平滑方法": {
     "total": 4,
     "done": 0,
-    "review": 2,
-    "note": "移动平均、Savitzky–Golay 已实现待验收；FFT、LOWESS 未开始"
+    "review": 4,
+    "note": "四种方法已实现并通过参考对照；LOWESS 稳健迭代待做。"
    }
   },
   "needs": [
@@ -3414,7 +3583,11 @@
    "auto": [
     "crates/scicanvas-core/src/analysis.rs::smoothing",
     "crates/scicanvas-core/src/analysis.rs::lowess_and_fft_smoothing_match_numpy_references",
-    "crates/scicanvas-core/src/ops.rs::fft_smoothing_needs_even_x_spacing"
+    "crates/scicanvas-core/src/ops.rs::fft_smoothing_needs_even_x_spacing",
+    "crates/scicanvas-core/tests/reference_scipy.rs::smoothing_matches_generated_numpy_scipy_reference"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/smoothing.json"
    ]
   }
  },
@@ -3854,11 +4027,27 @@
   "feature": "导出 TIFF（期刊要求）",
   "ref": "Which Export Format Should I Choose",
   "pri": "P1",
-  "status": "未开始",
-  "how": "image",
-  "verify": "尺寸与 DPI 检查",
+  "status": "已实现待验收",
+  "how": "使用与 PNG 相同的图形输出，导出 LZW 压缩 TIFF，保留透明度和 DPI；CMYK 不做。",
+  "verify": "像素、透明度、LZW、DPI 和命令测试；按人工清单查看图像。",
   "id": "F230",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas/src/export.rs::tiff_preserves_rgba_lzw_and_dpi",
+    "crates/scicanvas/src/app/tests/worksheet.rs::tiff_export_command_opens_resolution_settings"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/import_export.md#F230",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "导出与发布",
@@ -3899,11 +4088,28 @@
   "feature": "批量导出多张图",
   "ref": "The Export Graph Dialog Box",
   "pri": "P1",
-  "status": "未开始",
-  "how": "",
-  "verify": "手动操作",
+  "status": "已实现待验收",
+  "how": "选择多张图、SVG/PDF/PNG/TIFF 格式和分辨率，输出到指定目录；同名文件自动编号，不覆盖已有文件。",
+  "verify": "多图导出、同名保护和界面入口测试；按人工清单检查。",
   "id": "F233",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas/src/app/batch_export.rs::batch_export_writes_distinct_files_without_overwriting",
+    "crates/scicanvas/src/app/batch_export.rs::batch_export_command_opens_graph_selection",
+    "crates/scicanvas/src/app/tests/graph.rs::batch_export_controls_return_selected_graphs_and_format"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/import_export.md#F233",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "导出与发布",
@@ -4236,9 +4442,9 @@
   "feature": "样条曲线图",
   "ref": "Spline Graph",
   "pri": "P1",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "自然三次样条、缺失/重复 X 分段、自动范围与共享折线图元",
-  "verify": "解析值和 SciPy 1.17.1 自然边界对照、分段及 SVG 回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
+  "verify": "解析值和 SciPy 1.17.1 自然边界对照、分段及 SVG 回归已通过；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）；已核对自然样条直接测试、参考数据和视觉对照。",
   "id": "F260",
   "milestone": "M2 论文全流程",
   "needs": [
@@ -4252,7 +4458,13 @@
    ],
    "auto": [
     "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
-    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes",
+    "crates/scicanvas-core/tests/spline_labels.rs::natural_spline_matches_analytic_and_scipy_reference",
+    "crates/scicanvas-core/tests/spline_labels.rs::spline_autoscale_symbols_gaps_duplicates_and_fit_are_independent",
+    "crates/scicanvas-core/tests/reference_scipy.rs::interpolation_matches_generated_scipy_reference"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/interpolation.json"
    ]
   }
  },
@@ -4515,9 +4727,9 @@
   "feature": "样条连接点线图",
   "ref": "Spline Connected Graph",
   "pri": "P1",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "自然三次样条连接，符号与误差保持原始点；派生线独立绘制",
-  "verify": "SciPy 数值、符号数、分段、自动范围及撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
+  "verify": "SciPy 数值、符号数、分段、自动范围及撤销回归已通过；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）；已核对自然样条直接测试、参考数据和视觉对照。",
   "id": "F278",
   "milestone": "M2 论文全流程",
   "needs": [
@@ -4531,7 +4743,13 @@
    ],
    "auto": [
     "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
-    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes",
+    "crates/scicanvas-core/tests/spline_labels.rs::natural_spline_matches_analytic_and_scipy_reference",
+    "crates/scicanvas-core/tests/spline_labels.rs::spline_autoscale_symbols_gaps_duplicates_and_fit_are_independent",
+    "crates/scicanvas-core/tests/reference_scipy.rs::interpolation_matches_generated_scipy_reference"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/interpolation.json"
    ]
   }
  },
@@ -4677,9 +4895,9 @@
   "feature": "百分比堆叠柱状图",
   "ref": "100% Stacked Column Graph",
   "pri": "P1",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "按行正负组分别归一至 ±100%，零总量与极端尺度处理，共享 SVG",
-  "verify": "归一化参考值、极端数值、误差缩放及撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
+  "verify": "归一化参考值、极端数值、误差缩放及撤销回归已通过；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）；已核对直接测试、NumPy 参考数据和视觉对照。",
   "id": "F287",
   "milestone": "M2 论文全流程",
   "needs": [
@@ -4693,7 +4911,13 @@
    ],
    "auto": [
     "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
-    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes",
+    "crates/scicanvas-core/tests/bar_variants.rs::percentages_normalize_each_sign_and_handle_zero_and_extreme_scales",
+    "crates/scicanvas-core/tests/bar_variants.rs::error_bars_follow_stack_endpoints_and_percentage_scaling",
+    "crates/scicanvas-core/tests/reference_scipy.rs::percent_stacked_bars_match_generated_numpy_reference"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/percent_bars.json"
    ]
   }
  },
@@ -7408,14 +7632,14 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "表达式引擎 121 个函数，分 8 类：数学、三角与双曲、特殊函数（Γ、B、erf/erfinv、不完全 B/Γ 等）、逻辑与比较（if/and/or/not/xor/between，另有比较运算符 < > <= >= == !=）、概率分布（正态/t/F/χ²/二项/泊松/指数的密度、分布函数与分位数）、列统计（sum mean median std var sem count range rms percentile skewness kurtosis，min/max 单参数为整列）、按行序列（cumsum cumprod diff rank zscore lag lead）、日期时间（年月日时分秒、星期、日序、date/time）；设置列值对话框“函数”菜单按类别插入",
-  "verify": "全部标量函数与 Python math / SciPy 1.17.1 / NumPy 2.4.4 参考值一致（相对 1e-9）；偏度、峰度、百分位数、标准差、标准误与 scipy.stats 一致；列统计与按行序列的整列计算及缺失值处理测试；目录名称唯一、≥120 个",
+  "verify": "全部标量函数与 Python math / SciPy 1.17.1 / NumPy 2.4.4 参考值一致（相对 1e-9）；偏度、峰度、百分位数、标准差、标准误与 scipy.stats 一致；列统计与按行序列的整列计算及缺失值处理测试；目录名称唯一、≥120 个；2026-11：121 个函数名称均有生成的 Python/NumPy/SciPy 参考对照。",
   "milestone": "M1 日常够用",
   "sub_items": {
    "列公式函数": {
     "total": 120,
     "done": 0,
     "review": 120,
-    "note": "当前 121 个函数名，首批 120 个目标已达到，待人工与 Origin 对照"
+    "note": "121 个函数名已通过独立参考对照，待人工与 Origin 对照。"
    }
   },
   "needs": [
@@ -7426,7 +7650,11 @@
    "auto": [
     "crates/scicanvas-core/src/formula.rs::catalog_has_unique_names_and_at_least_120_functions",
     "crates/scicanvas-core/src/formula.rs::scalar_functions_match_python_references",
-    "crates/scicanvas-core/src/formula.rs::column_statistics_and_row_series"
+    "crates/scicanvas-core/src/formula.rs::column_statistics_and_row_series",
+    "crates/scicanvas-core/tests/reference_scipy.rs::formula_catalog_matches_generated_python_scipy_reference"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/formulas.json"
    ]
   }
  },

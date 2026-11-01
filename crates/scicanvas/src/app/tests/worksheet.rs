@@ -1280,3 +1280,486 @@ fn selection_status_statistics_use_only_finite_selected_cells() {
         "平均值 = -1   总和 = -2   计数 = 2   最小 = -4   最大 = 2"
     );
 }
+
+#[test]
+fn all_column_roles_apply_and_undo_without_changing_values() {
+    for role in [
+        Role::X,
+        Role::Y,
+        Role::Z,
+        Role::XError,
+        Role::YError,
+        Role::Label,
+        Role::Ignore,
+    ] {
+        let mut app = app();
+        app.active = Some(1);
+        app.project.book_mut(1).unwrap().columns[1].role = if role == Role::Y { Role::X } else { Role::Y };
+        app.selection.insert(1, vec!["B".into()]);
+        app.run_command("col.props");
+        let Some(Dialog::ColumnProps { edit, .. }) = &app.dialog else {
+            panic!("column properties should open")
+        };
+        let mut edit = edit.clone();
+        edit.role = role;
+        app.dialog = None;
+        let before = app.project.clone();
+        let values = before.book(1).unwrap().column("B").unwrap().data.clone();
+        app.apply_column_props(1, edit.clone()).unwrap();
+        let column = app.project.book(1).unwrap().column("B").unwrap();
+        assert_eq!(column.role, role);
+        assert_eq!(column.data, values);
+        roundtrip(&mut app, &before);
+        let current = app.project.clone();
+        edit.key = "missing".into();
+        assert!(app.apply_column_props(1, edit).is_err());
+        assert_eq!(app.project, current);
+    }
+}
+
+#[test]
+fn mouse_drag_shift_extension_and_copy_select_the_visible_cells() {
+    let mut app = app();
+    app.active = Some(1);
+    let book = app.project.book_mut(1).unwrap();
+    book.columns[0].data = ["10101", "10102", "10103", "10104"].map(str::to_string).to_vec().into();
+    book.columns[1].data = ["20201", "20202", "20203", "20204"].map(str::to_string).to_vec().into();
+    book.columns[2].data = ["30301", "30302", "30303", "30304"].map(str::to_string).to_vec().into();
+    let before = app.project.clone();
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut harness = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1200.0, 900.0)),
+        |app: &mut SciApp, ctx: &egui::Context| {
+            egui::CentralPanel::default().show(ctx, |ui| app.book_ui(ui, 1));
+        },
+    )
+    .with_step(0.05);
+    let mut output = harness.frame(&mut app, vec![]);
+    for _ in 0..3 {
+        output = harness.frame(&mut app, vec![]);
+    }
+    let pos = |label| crate::test_ui::find_text(&output, label).unwrap() + egui::vec2(4.0, 4.0);
+    let start = pos("10101");
+    let end = pos("20203");
+    let extend = pos("30304");
+    harness.frame(&mut app, vec![egui::Event::PointerMoved(start)]);
+    harness.frame(&mut app, vec![crate::test_ui::button(start, true)]);
+    harness.frame(&mut app, vec![egui::Event::PointerMoved(end)]);
+    harness.frame(&mut app, vec![crate::test_ui::button(end, false)]);
+    assert_eq!(
+        app.sheets[&1].range,
+        Some(Range {
+            a: Cell { c: 0, r: 0 },
+            b: Cell { c: 1, r: 2 }
+        })
+    );
+    harness.modifiers.shift = true;
+    harness.click(&mut app, extend);
+    harness.modifiers.shift = false;
+    assert_eq!(
+        app.sheets[&1].range,
+        Some(Range {
+            a: Cell { c: 0, r: 0 },
+            b: Cell { c: 2, r: 3 }
+        })
+    );
+    let copied = harness
+        .frame(&mut app, vec![egui::Event::Copy])
+        .platform_output
+        .copied_text;
+    assert_eq!(
+        copied,
+        "10101\t20201\t30301\n10102\t20202\t30302\n10103\t20203\t30303\n10104\t20204\t30304"
+    );
+    assert_eq!(app.project, before);
+}
+
+#[test]
+fn million_rows_scroll_to_the_last_value_without_rendering_every_row() {
+    let mut app = app();
+    app.active = Some(1);
+    let rows = 1_000_000usize;
+    let mut values = vec![0.0; rows];
+    values[rows - 1] = 98765.4321;
+    let book = app.project.book_mut(1).unwrap();
+    book.columns.truncate(1);
+    book.columns[0].data = scicanvas_core::ColumnData::Num {
+        values,
+        missing: vec![0; rows.div_ceil(64)],
+        lexemes: Default::default(),
+    }
+    .into();
+    app.sheets.insert(
+        1,
+        SheetState {
+            scroll_to: Some(rows - 1),
+            ..Default::default()
+        },
+    );
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut harness = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1200.0, 900.0)),
+        |app: &mut SciApp, ctx: &egui::Context| {
+            egui::CentralPanel::default().show(ctx, |ui| app.book_ui(ui, 1));
+        },
+    )
+    .with_step(1.0);
+    let mut output = harness.frame(&mut app, vec![]);
+    for _ in 0..3 {
+        output = harness.frame(&mut app, vec![]);
+    }
+    assert!(
+        crate::test_ui::find_text(&output, "98765.4321").is_some(),
+        "last row should be visible"
+    );
+    assert!(output.shapes.len() < 20_000, "only visible rows should be drawn");
+}
+
+#[test]
+fn find_replace_searches_selected_cells_wraps_and_matches_whole_cells() {
+    let mut app = app();
+    app.active = Some(1);
+    let book = app.project.book_mut(1).unwrap();
+    book.columns[1].data = ["Alpha", "ALPHA", "other"].map(str::to_string).to_vec().into();
+    book.columns[2].data = ["alpha", "alphabet", "other"].map(str::to_string).to_vec().into();
+    app.sheets.insert(
+        1,
+        SheetState {
+            range: Some(Range {
+                a: Cell { c: 1, r: 0 },
+                b: Cell { c: 2, r: 1 },
+            }),
+            ..Default::default()
+        },
+    );
+    app.run_command("edit.find");
+    let Some(Dialog::FindReplace(state)) = &mut app.dialog else {
+        panic!("find dialog")
+    };
+    state.needle = "alpha".into();
+    state.whole_cell = true;
+    let before = app.project.clone();
+    for cell in [
+        Cell { c: 1, r: 0 },
+        Cell { c: 2, r: 0 },
+        Cell { c: 1, r: 1 },
+        Cell { c: 1, r: 0 },
+    ] {
+        app.find_next();
+        assert_eq!(app.sheets[&1].range, Some(Range::single(cell.c, cell.r)));
+    }
+    let Some(Dialog::FindReplace(state)) = &mut app.dialog else {
+        panic!()
+    };
+    state.match_case = true;
+    state.cursor = None;
+    app.find_next();
+    assert_eq!(app.sheets[&1].range, Some(Range::single(2, 0)));
+    assert_eq!(app.project, before);
+    let Some(Dialog::FindReplace(state)) = &mut app.dialog else {
+        panic!()
+    };
+    state.match_case = false;
+    state.replacement = "done".into();
+    app.replace_matches(true);
+    let book = app.project.book(1).unwrap();
+    assert_eq!(book.columns[1].data.text_at(0), "done");
+    assert_eq!(book.columns[1].data.text_at(1), "done");
+    assert_eq!(book.columns[2].data.text_at(0), "done");
+    assert_eq!(book.columns[2].data.text_at(1), "alphabet");
+    roundtrip(&mut app, &before);
+}
+
+#[test]
+fn find_replace_is_atomic_preserves_invalid_numbers_and_handles_unicode() {
+    let mut app = app();
+    app.active = Some(1);
+    let book = app.project.book_mut(1).unwrap();
+    book.columns[0].data = ["12", "31", "44"].map(str::to_string).to_vec().into();
+    book.columns[1].data = ["a1b", "A1", "İSTANBUL"].map(str::to_string).to_vec().into();
+    book.columns[2].data.clear();
+    app.run_command("edit.replace");
+    let Some(Dialog::FindReplace(state)) = &mut app.dialog else {
+        panic!("replace dialog")
+    };
+    state.needle = "1".into();
+    state.replacement = "x".into();
+    let before = app.project.clone();
+    app.replace_matches(true);
+    let book = app.project.book(1).unwrap();
+    assert_eq!(book.columns[0].data.text_at(0), "12");
+    assert_eq!(book.columns[0].data.text_at(1), "31");
+    assert_eq!(book.columns[1].data.text_at(0), "axb");
+    assert_eq!(book.columns[1].data.text_at(1), "Ax");
+    assert!(matches!(&app.dialog, Some(Dialog::FindReplace(state)) if state.message.contains("2 个因类型不符")));
+    assert_eq!(app.history.undo_label(), Some("替换"));
+    roundtrip(&mut app, &before);
+    app.active = Some(1);
+    app.open_find_replace(true);
+    let Some(Dialog::FindReplace(state)) = &mut app.dialog else {
+        panic!()
+    };
+    state.needle = "i".into();
+    state.replacement = "X".into();
+    state.cursor = Some(Cell { c: 1, r: 2 });
+    app.replace_matches(false);
+    assert_eq!(app.project.book(1).unwrap().columns[1].data.text_at(2), "XSTANBUL");
+    app.undo();
+    let current = app.project.clone();
+    let redo = app.history.redo_label().unwrap().to_owned();
+    app.active = Some(1);
+    app.open_find_replace(true);
+    let Some(Dialog::FindReplace(state)) = &mut app.dialog else {
+        panic!()
+    };
+    state.needle = "no-match".into();
+    app.replace_matches(true);
+    assert_eq!(app.project, current);
+    assert_eq!(app.history.redo_label(), Some(redo.as_str()));
+}
+
+#[test]
+fn find_replace_buttons_and_shortcuts_open_and_apply() {
+    let ctx = egui::Context::default();
+    let mut app = app();
+    app.active = Some(1);
+    let input = egui::RawInput {
+        modifiers: egui::Modifiers::COMMAND,
+        events: vec![egui::Event::Key {
+            key: egui::Key::H,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::COMMAND,
+        }],
+        ..Default::default()
+    };
+    let _ = ctx.run(input, |ctx| app.shortcuts(ctx));
+    let Some(Dialog::FindReplace(state)) = &mut app.dialog else {
+        panic!("Ctrl+H should open replace")
+    };
+    assert!(state.replace_mode);
+    state.needle = "0".into();
+    press_dialog_button(&mut app, "查找下一个");
+    assert!(matches!(&app.dialog, Some(Dialog::FindReplace(state)) if state.cursor.is_some()));
+    press_dialog_button(&mut app, "关闭");
+    assert!(app.dialog.is_none());
+    let input = egui::RawInput {
+        modifiers: egui::Modifiers::COMMAND,
+        events: vec![egui::Event::Key {
+            key: egui::Key::F,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::COMMAND,
+        }],
+        ..Default::default()
+    };
+    let _ = ctx.run(input, |ctx| app.shortcuts(ctx));
+    assert!(matches!(&app.dialog, Some(Dialog::FindReplace(state)) if !state.replace_mode));
+}
+
+#[test]
+fn find_open_commits_valid_cell_draft_and_keeps_invalid_draft_for_confirmation() {
+    let mut app = app();
+    app.active = Some(1);
+    app.sheets.insert(
+        1,
+        SheetState {
+            range: Some(Range::single(0, 0)),
+            edit: Some(Edit {
+                cell: Cell { c: 0, r: 0 },
+                buf: "777".into(),
+                focused: false,
+            }),
+            ..Default::default()
+        },
+    );
+    app.open_find_replace(false);
+    assert_eq!(app.project.book(1).unwrap().columns[0].data.text_at(0), "777");
+    assert!(app.sheets[&1].edit.is_none());
+    assert!(matches!(app.dialog, Some(Dialog::FindReplace(_))));
+    app.dialog = None;
+    app.sheets.get_mut(&1).unwrap().edit = Some(Edit {
+        cell: Cell { c: 0, r: 0 },
+        buf: "not-a-number".into(),
+        focused: false,
+    });
+    app.open_find_replace(false);
+    assert_eq!(app.project.book(1).unwrap().columns[0].data.text_at(0), "777");
+    assert!(matches!(app.dialog, Some(Dialog::ConvertText { .. })));
+    assert!(app.sheets[&1].edit.is_some());
+}
+
+#[test]
+fn transpose_command_creates_a_workbook_in_one_undo_step() {
+    let mut app = app();
+    app.active = Some(1);
+    let before = app.project.clone();
+    app.run_command("book.transpose");
+    assert_eq!(app.project.books.len(), before.books.len() + 1);
+    let result = app.project.books.last().unwrap();
+    assert_eq!(
+        result.columns[0].data.text_at(0),
+        before.books[0].columns[0].display_name()
+    );
+    assert_eq!(
+        result.columns[1].data.text_at(0),
+        before.books[0].columns[0].data.text_at(0)
+    );
+    assert_eq!(app.history.undo_label(), Some("转置"));
+    roundtrip(&mut app, &before);
+}
+
+#[test]
+fn sheet_transforms_each_create_one_undo_step() {
+    use crate::dialogs::{Action, TransformAction};
+    let ctx = egui::Context::default();
+    for operation in 0..3 {
+        let mut app = app();
+        app.active = Some(1);
+        let book = app.project.book(1).unwrap();
+        let a = book.columns[0].key.clone();
+        let b = book.columns[1].key.clone();
+        let action = match operation {
+            0 => TransformAction::Stack(vec![a, b]),
+            1 => {
+                let keys = app.project.stack_columns(1, &[a, b]).unwrap();
+                TransformAction::Split(keys[0].clone(), keys[1].clone())
+            }
+            _ => TransformAction::Reduce(a, 2, true),
+        };
+        let before = app.project.clone();
+        assert!(app.apply_dialog_action(&ctx, Action::SheetTransform(1, action)));
+        assert_eq!(app.history.undo_label(), Some("工作表变换"));
+        roundtrip(&mut app, &before);
+    }
+}
+
+#[test]
+fn create_workbook_from_template_is_one_undo_step() {
+    let mut app = app();
+    let template = scicanvas_core::project_file::workbook_template_from_book(app.project.book(1).unwrap());
+    let before = app.project.clone();
+    let id = app.create_book_from_template(template).unwrap();
+    assert_eq!(app.project.book(id).unwrap().nrows(), 0);
+    assert_eq!(app.history.undo_label(), Some("从模板新建工作簿"));
+    roundtrip(&mut app, &before);
+}
+
+#[test]
+fn frozen_columns_scroll_horizontally_and_keep_rows_aligned() {
+    let mut app = app();
+    app.active = Some(1);
+    let book = app.project.book_mut(1).unwrap();
+    book.ensure_columns(8);
+    for (column, col) in book.columns.iter_mut().enumerate() {
+        col.data = (0..100)
+            .map(|row| (10101 + column * 1000 + row).to_string())
+            .collect::<Vec<_>>()
+            .into();
+    }
+    let before = app.project.clone();
+    app.selection.insert(1, vec!["A".into()]);
+    app.run_command("sheet.freeze");
+    assert_eq!(app.sheets[&1].frozen_columns, 1);
+    app.sheets.get_mut(&1).unwrap().scroll_to = Some(70);
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut harness = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(600.0, 450.0)),
+        |app: &mut SciApp, ctx: &egui::Context| {
+            egui::CentralPanel::default().show(ctx, |ui| app.book_ui(ui, 1));
+        },
+    )
+    .with_step(1.0);
+    let mut output = harness.frame(&mut app, vec![]);
+    for _ in 0..3 {
+        output = harness.frame(&mut app, vec![]);
+    }
+    let fixed = crate::test_ui::find_text(&output, "10171").expect("fixed row visible");
+    let right = crate::test_ui::find_text(&output, "11171").expect("scrolling row visible");
+    assert!((fixed.y - right.y).abs() < 1.0, "frozen and scrolling rows align");
+    let y_before = app.sheets[&1].frozen_scroll_y;
+    harness.frame(
+        &mut app,
+        vec![
+            egui::Event::PointerMoved(egui::pos2(70.0, 200.0)),
+            egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: egui::vec2(0.0, -66.0),
+                modifiers: egui::Modifiers::NONE,
+            },
+        ],
+    );
+    for _ in 0..3 {
+        output = harness.frame(&mut app, vec![]);
+    }
+    assert!(
+        app.sheets[&1].frozen_scroll_y > y_before,
+        "wheel over frozen region scrolls both sides"
+    );
+    let fixed = crate::test_ui::find_text(&output, "10174").expect("new fixed row visible");
+    let right = crate::test_ui::find_text(&output, "11174").expect("new scrolling row visible");
+    assert!((fixed.y - right.y).abs() < 1.0);
+    harness.frame(
+        &mut app,
+        vec![
+            egui::Event::PointerMoved(egui::pos2(450.0, 200.0)),
+            egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: egui::vec2(-300.0, 0.0),
+                modifiers: egui::Modifiers::NONE,
+            },
+        ],
+    );
+    for _ in 0..3 {
+        output = harness.frame(&mut app, vec![]);
+    }
+    let after = crate::test_ui::find_text(&output, "10174").expect("fixed column remains visible");
+    assert!((after.x - fixed.x).abs() < 1.0);
+    if let Some(after_right) = crate::test_ui::find_text(&output, "11174") {
+        assert!(after_right.x < right.x - 20.0, "scrolling columns move horizontally");
+    }
+    harness.click(&mut app, after + egui::vec2(4.0, 4.0));
+    assert_eq!(app.sheets[&1].range.unwrap().a.c, 0);
+    assert_eq!(app.project, before);
+    app.run_command("sheet.unfreeze");
+    assert_eq!(app.sheets[&1].frozen_columns, 0);
+}
+
+#[test]
+fn excel_export_dialog_lets_user_choose_headers() {
+    let mut app = app();
+    app.run_command("project.export_xlsx");
+    assert!(matches!(app.dialog, Some(Dialog::ExportXlsx { headers: true })));
+    let mut dialog = app.dialog.take().unwrap();
+    let project = app.project.clone();
+    let palette = app.pal;
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut harness = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(800.0, 600.0)),
+        |dialog: &mut Dialog, ctx: &egui::Context| dialogs::show(ctx, dialog, &palette, &project),
+    );
+    let mut output = harness.frame(&mut dialog, vec![]);
+    for _ in 0..2 {
+        output = harness.frame(&mut dialog, vec![]);
+    }
+    harness.click_text(&mut dialog, &output, "包含长名、单位和注释三行表头");
+    assert!(matches!(dialog, Dialog::ExportXlsx { headers: false }));
+}
+
+#[test]
+fn tiff_export_command_opens_resolution_settings() {
+    let mut app = app();
+    app.active = Some(2);
+    app.run_command("graph.export_tiff");
+    assert!(matches!(app.dialog, Some(Dialog::Tiff { dpi: 600, .. })));
+}

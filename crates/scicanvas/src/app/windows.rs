@@ -38,7 +38,7 @@ impl SciApp {
             }
         }
         // 命令面板打开时，方向键、回车由面板自己处理
-        let keys: [(Modifiers, Key, &str); 10] = [
+        let keys: [(Modifiers, Key, &str); 12] = [
             (
                 Modifiers {
                     shift: true,
@@ -54,6 +54,8 @@ impl SciApp {
             (Modifiers::COMMAND, Key::E, "graph.export"),
             (Modifiers::COMMAND, Key::J, "graph.copy"),
             (Modifiers::COMMAND, Key::K, "palette.open"),
+            (Modifiers::COMMAND, Key::F, "edit.find"),
+            (Modifiers::COMMAND, Key::H, "edit.replace"),
             (Modifiers::COMMAND, Key::F1, "ribbon.toggle"),
             (Modifiers::NONE, Key::F1, "help.show"),
         ];

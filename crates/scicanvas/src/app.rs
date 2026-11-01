@@ -2,9 +2,14 @@
 //! 项目管理与子窗口位于 workspace，工作表显示与编辑位于 worksheet。
 
 mod analysis_ops;
+mod batch_export;
+mod batch_plot;
 mod dialog_actions;
+mod excel_export;
+mod find_replace;
 mod notes;
 mod props;
+mod tiff_export;
 mod windows;
 mod worksheet;
 mod workspace;
@@ -2173,7 +2178,7 @@ impl SciApp {
                         value: edit.buf.clone(),
                     });
                     self.pending_discard = None;
-                    self.status = "请先确认当前单元格的类型转换，再保存或切换项目".into();
+                    self.status = "请先确认当前单元格的类型转换".into();
                     return false;
                 }
             }
