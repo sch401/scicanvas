@@ -37,8 +37,14 @@ pub(crate) enum ActionKind {
     Danger,
 }
 
-/// 统一的确认动作行，文字输入框持有焦点时不接管快捷键。
-pub(crate) fn actions(ui: &mut egui::Ui, items: &[(ActionKind, &str)]) -> Option<usize> {
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Keys {
+    None,
+    Modal,
+}
+
+/// 普通面板不接管键盘；模态确认框在文字输入框未持有焦点时响应快捷键。
+pub(crate) fn actions(ui: &mut egui::Ui, items: &[(ActionKind, &str)], keys: Keys) -> Option<usize> {
     let pal = crate::theme::palette_for(ui.ctx());
     let mut selected = None;
     let mut ids = Vec::new();
@@ -77,7 +83,7 @@ pub(crate) fn actions(ui: &mut egui::Ui, items: &[(ActionKind, &str)]) -> Option
         }
     });
     let focus = ui.memory(|m| m.focused());
-    if selected.is_none() && (focus.is_none() || focus.is_some_and(|id| ids.contains(&id))) {
+    if keys == Keys::Modal && selected.is_none() && (focus.is_none() || focus.is_some_and(|id| ids.contains(&id))) {
         if ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Enter)) {
             selected = items.iter().position(|(k, _)| !matches!(k, ActionKind::Plain));
         }
@@ -88,6 +94,10 @@ pub(crate) fn actions(ui: &mut egui::Ui, items: &[(ActionKind, &str)]) -> Option
     selected
 }
 pub(super) fn buttons(ui: &mut egui::Ui, ok: &str) -> (bool, bool) {
-    let selected = actions(ui, &[(ActionKind::Primary, ok), (ActionKind::Plain, "取消")]);
+    let selected = actions(
+        ui,
+        &[(ActionKind::Primary, ok), (ActionKind::Plain, "取消")],
+        Keys::None,
+    );
     (selected == Some(0), selected == Some(1))
 }

@@ -1882,7 +1882,7 @@ impl SciApp {
         if let Some(error) = self.save_error.clone() {
             let choice = modal(ctx, "保存失败", |ui| {
                 ui.colored_label(self.pal.error, error);
-                actions(ui, &[(Primary, "知道了")])
+                actions(ui, &[(Primary, "知道了")], dialogs::Keys::Modal)
             })
             .flatten();
             if choice.is_some() || ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
@@ -1898,7 +1898,11 @@ impl SciApp {
                 .map_or("未命名项目".into(), |n| n.to_string_lossy().into_owned());
             let choice = modal(ctx, "未保存的修改", |ui| {
                 ui.label(format!("“{name}”有未保存的修改，是否保存？"));
-                actions(ui, &[(Primary, "保存"), (Danger, "不保存"), (Plain, "取消")])
+                actions(
+                    ui,
+                    &[(Primary, "保存"), (Danger, "不保存"), (Plain, "取消")],
+                    dialogs::Keys::Modal,
+                )
             })
             .flatten();
             if choice == Some(2) {
@@ -1928,7 +1932,11 @@ impl SciApp {
                 if let Some(notice) = candidate.notice {
                     ui.colored_label(self.pal.warn, notice);
                 }
-                actions(ui, &[(Primary, "恢复"), (Danger, "放弃这份备份"), (Plain, "稍后")])
+                actions(
+                    ui,
+                    &[(Primary, "恢复"), (Danger, "放弃这份备份"), (Plain, "稍后")],
+                    dialogs::Keys::Modal,
+                )
             })
             .flatten();
             match choice {
@@ -2238,7 +2246,7 @@ impl SciApp {
         let choice = dialogs::modal(ctx, "正在完成", |ui| {
             ui.spinner();
             ui.label("正在完成自动备份和恢复文件清理…");
-            dialogs::actions(ui, &[(dialogs::ActionKind::Plain, "返回项目")])
+            dialogs::actions(ui, &[(dialogs::ActionKind::Plain, "返回项目")], dialogs::Keys::Modal)
         })
         .flatten();
         if choice.is_some() {

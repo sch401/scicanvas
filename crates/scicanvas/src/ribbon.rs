@@ -394,7 +394,11 @@ pub fn show(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palette, 
         .show(ctx, |ui| {
             ui.spacing_mut().item_spacing = vec2(4.0, 0.0);
             // 标题栏：快速访问 + 名称 + 搜索 + 窗口按钮；空白处拖动移窗、双击最大化
-            let title_rect = Rect::from_min_size(ui.cursor().min, vec2(ui.available_width(), 30.0));
+            let title_rect = Rect::from_min_size(
+                ui.cursor().min,
+                vec2(ui.available_width(), crate::chrome::CAPTION_HEIGHT),
+            );
+            crate::chrome::store_caption(ctx, title_rect);
             crate::chrome::drag_area(ui, title_rect);
             ui.allocate_ui_with_layout(title_rect.size(), Layout::left_to_right(Align::Center), |ui| {
                 ui.add_space(6.0);

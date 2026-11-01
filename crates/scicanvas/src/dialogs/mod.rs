@@ -61,7 +61,7 @@ pub(crate) use scientific_text::{scientific_text, scientific_text_multiline};
 pub(crate) use tables::md_table;
 use tables::{md_cell, md_pairs, table_grid};
 use widgets::buttons;
-pub(crate) use widgets::{actions, center_buttons, edit_group, plain, primary, ActionKind, BUTTON};
+pub(crate) use widgets::{actions, center_buttons, edit_group, plain, primary, ActionKind, Keys, BUTTON};
 pub(crate) use window::{floating_bounds, window};
 
 pub enum Dialog {
