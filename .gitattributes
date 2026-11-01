@@ -7,3 +7,7 @@ crates/scicanvas-core/tests/golden/*.svg text eol=lf
 
 # .scv samples are zip archives; keep their bytes untouched.
 *.scv binary
+
+# Reproducible visual references use LF on Windows and in CI.
+docs/parity/visual/**/*.json text eol=lf
+docs/parity/visual/**/*.svg text eol=lf
