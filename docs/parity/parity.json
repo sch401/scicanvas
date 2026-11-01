@@ -1183,7 +1183,7 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "工作表矩形选区经 picked/PlotSpec.rows 接入作图、图库与保存，按原始行截取",
-  "verify": "选区行范围、无效行、项目往返与 SVG 回归已通过；matplotlib 同数据视觉对照待做",
+  "verify": "选区行范围、无效行、项目往返与 SVG 回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F081",
   "milestone": "M1 日常够用",
   "needs": [
@@ -1197,7 +1197,14 @@
     "result": "待做",
     "date": "",
     "build": ""
-   }
+   },
+   "visual": [
+    "docs/parity/visual/scatter/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
   }
  },
  {
@@ -1207,7 +1214,7 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "图层以有序 Vec<Plot> 唯一保存曲线；绘图/分析/保存共用 Plot 描述与 DataRef/CurveMapping，场景以 PreparedPlot 和 AxisSet/YAxis 共用当前 X/左 Y/右 Y 标尺及定位。PlotSpec 仅作编辑草稿和旧格式边界转换；v15 保存右 Y 独立范围/格式，读取 v0–v14；三轴以上仍待推进",
-  "verify": "跨表同名列、行范围、混合图型、独立左右 Y 范围/格式、v14 默认外观迁移、v15 JSON/SVG 字节往返、排序/移除/撤销重做及来源解析回归；14 图型 SVG 黄金回归；matplotlib 同数据视觉对照待做",
+  "verify": "跨表同名列、行范围、混合图型、独立左右 Y 范围/格式、v14 默认外观迁移、v15 JSON/SVG 字节往返、排序/移除/撤销重做及来源解析回归；14 图型 SVG 黄金回归；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F082",
   "milestone": "M1 日常够用",
   "needs": [
@@ -1221,7 +1228,14 @@
     "result": "待做",
     "date": "",
     "build": ""
-   }
+   },
+   "visual": [
+    "docs/parity/visual/line/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
   }
  },
  {
@@ -1255,7 +1269,7 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "多图层增删、跨工作簿数据、独立属性/裁剪/视图、分析写回目标层已实现",
-  "verify": "跨工作簿、布局、裁剪、视图、保存与撤销回归已通过；matplotlib 同数据视觉对照待做",
+  "verify": "跨工作簿、布局、裁剪、视图、保存与撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F084",
   "milestone": "M1 日常够用",
   "needs": [
@@ -1269,7 +1283,16 @@
     "result": "待做",
     "date": "",
     "build": ""
-   }
+   },
+   "visual": [
+    "docs/parity/visual/two-panels/README.md",
+    "docs/parity/visual/two-panels-side/README.md",
+    "docs/parity/visual/four-panels/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
   }
  },
  {
@@ -1436,13 +1459,23 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "ticks.rs：普通数值、a×10ⁿ 科学计数、对数刻度；日期时间列做 X 时自动用日期刻度（秒、分、时、日按 UTC 整步长，月、年按日历取整）；属性窗口可为 X、左 Y、右 Y 分别设数字刻度格式（固定小数位、科学计数、工程单位、百分比），右 Y 缺省跟随左 Y；刻度标签按共享实际字宽排版",
-  "verify": "数值/对数刻度回归；日期轴步长与标签测试；左/右 Y 独立范围和刻度格式、v14 默认值迁移、不同缩放/DPI 字宽回归；matplotlib 同数据视觉对照待做",
+  "verify": "数值/对数刻度回归；日期轴步长与标签测试；左/右 Y 独立范围和刻度格式、v14 默认值迁移、不同缩放/DPI 字宽回归；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F096",
   "milestone": "M1 日常够用",
   "needs": [
    "auto",
    "visual"
-  ]
+  ],
+  "evidence": {
+   "visual": [
+    "docs/parity/visual/log-axes/README.md",
+    "docs/parity/visual/date-axis/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
+  }
  },
  {
   "module": "绘图基础",
@@ -1451,13 +1484,22 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "屏幕/SVG 共用主次刻度；默认 Nature 风格只画左轴和下轴、刻度朝外；属性窗口可开“四边框”（闭合坐标框，顶边和右边画无标签的镜像主次刻度）并选刻度方向朝外/朝内/内外，朝内时刻度标签贴近坐标轴、坐标框相应放大；未设置时项目文件与旧图不变",
-  "verify": "默认朝外两轴回归与 golden SVG 不变；四边框闭合折线、朝内刻度全部在框内、四边均有刻度、坐标框放大的单元测试；matplotlib 同数据视觉对照待做",
+  "verify": "默认朝外两轴回归与 golden SVG 不变；四边框闭合折线、朝内刻度全部在框内、四边均有刻度、坐标框放大的单元测试；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F097",
   "milestone": "M1 日常够用",
   "needs": [
    "auto",
    "visual"
-  ]
+  ],
+  "evidence": {
+   "visual": [
+    "docs/parity/visual/log-axes/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
+  }
  },
  {
   "module": "绘图基础",
@@ -1622,13 +1664,22 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "对称 X/Y 误差列、稳定自动关联、端帽/线宽、分组定位与屏幕/SVG 已实现；本条当前范围为对称误差",
-  "verify": "行对齐、对数裁剪、分组柱、往返与撤销回归已通过；matplotlib 同数据视觉对照待做",
+  "verify": "行对齐、对数裁剪、分组柱、往返与撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F106",
   "milestone": "M1 日常够用",
   "needs": [
    "auto",
    "visual"
-  ]
+  ],
+  "evidence": {
+   "visual": [
+    "docs/parity/visual/xy-errors/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
+  }
  },
  {
   "module": "绘图基础",
@@ -1659,13 +1710,24 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "上下/左右/四面板快捷创建、网格列数、自由矩形与透明叠放；网格面板按行列统一边距对齐坐标框；属性窗口可设网格横向/纵向间距（mm）；图层的 X、Y 轴可分别联动到另一图层（范围与刻度跟随目标图层，目标缩放时一起变化，删除目标图层时联动取消，联动到自身或不存在的图层被拒绝）；未设置时项目文件不变",
-  "verify": "间距平移面板与缩小宽度、联动范围与刻度相同、目标缩放跟随、无效联动拒绝、删除图层后联动清理的布局测试；matplotlib 同数据视觉对照待做",
+  "verify": "间距平移面板与缩小宽度、联动范围与刻度相同、目标缩放跟随、无效联动拒绝、删除图层后联动清理的布局测试；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F109",
   "milestone": "M1 日常够用",
   "needs": [
    "auto",
    "visual"
-  ]
+  ],
+  "evidence": {
+   "visual": [
+    "docs/parity/visual/two-panels/README.md",
+    "docs/parity/visual/two-panels-side/README.md",
+    "docs/parity/visual/four-panels/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
+  }
  },
  {
   "module": "绘图基础",
@@ -3784,15 +3846,21 @@
   "pri": "P0",
   "status": "已完成",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 Origin 同数据出图目视比较",
+  "verify": "与 Origin 同数据出图目视比较；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F254",
   "milestone": "M1 日常够用",
   "needs": [
-   "auto"
+   "auto",
+   "visual"
   ],
   "evidence": {
    "auto": [
-    "crates/scicanvas-core/tests/golden_svg.rs::svg_matches_reviewed_baselines"
+    "crates/scicanvas-core/tests/golden_svg.rs::svg_matches_reviewed_baselines",
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ],
+   "visual": [
+    "docs/parity/visual/line/README.md"
    ]
   }
  },
@@ -3803,13 +3871,22 @@
   "pri": "P1",
   "status": "已实现待验收",
   "how": "水平阶梯：先横后竖，共享折线图元与 SVG",
-  "verify": "拐点几何、拟合线、保存与撤销回归已通过；matplotlib 同数据视觉对照待做",
+  "verify": "拐点几何、拟合线、保存与撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F255",
   "milestone": "M2 论文全流程",
   "needs": [
    "auto",
    "visual"
-  ]
+  ],
+  "evidence": {
+   "visual": [
+    "docs/parity/visual/step-horizontal/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
+  }
  },
  {
   "module": "图类型 · 2D 线图",
@@ -3818,13 +3895,22 @@
   "pri": "P1",
   "status": "已实现待验收",
   "how": "垂直阶梯：先竖后横，共享折线图元与 SVG",
-  "verify": "拐点几何、拟合线、保存与撤销回归已通过；matplotlib 同数据视觉对照待做",
+  "verify": "拐点几何、拟合线、保存与撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F256",
   "milestone": "M2 论文全流程",
   "needs": [
    "auto",
    "visual"
-  ]
+  ],
+  "evidence": {
+   "visual": [
+    "docs/parity/visual/step-vertical/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
+  }
  },
  {
   "module": "图类型 · 2D 线图",
@@ -3866,14 +3952,23 @@
   "pri": "P1",
   "status": "已实现待验收",
   "how": "自然三次样条、缺失/重复 X 分段、自动范围与共享折线图元",
-  "verify": "解析值和 SciPy 1.17.1 自然边界对照、分段及 SVG 回归已通过；matplotlib 同数据视觉对照待做",
+  "verify": "解析值和 SciPy 1.17.1 自然边界对照、分段及 SVG 回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F260",
   "milestone": "M2 论文全流程",
   "needs": [
    "auto",
    "reference",
    "visual"
-  ]
+  ],
+  "evidence": {
+   "visual": [
+    "docs/parity/visual/spline/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
+  }
  },
  {
   "module": "图类型 · 2D 散点图",
@@ -3882,15 +3977,21 @@
   "pri": "P0",
   "status": "已完成",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 Origin 同数据出图目视比较",
+  "verify": "与 Origin 同数据出图目视比较；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F261",
   "milestone": "M1 日常够用",
   "needs": [
-   "auto"
+   "auto",
+   "visual"
   ],
   "evidence": {
    "auto": [
-    "crates/scicanvas-core/tests/golden_svg.rs::svg_matches_reviewed_baselines"
+    "crates/scicanvas-core/tests/golden_svg.rs::svg_matches_reviewed_baselines",
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ],
+   "visual": [
+    "docs/parity/visual/scatter/README.md"
    ]
   }
  },
@@ -3923,13 +4024,22 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "Y 对称误差列自动关联、端帽/线宽、裁剪与共享线段图元",
-  "verify": "端点几何、无效值、保存与撤销回归已通过；matplotlib 同数据视觉对照待做",
+  "verify": "端点几何、无效值、保存与撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F264",
   "milestone": "M1 日常够用",
   "needs": [
    "auto",
    "visual"
-  ]
+  ],
+  "evidence": {
+   "visual": [
+    "docs/parity/visual/xy-errors/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
+  }
  },
  {
   "module": "图类型 · 2D 散点图",
@@ -3938,13 +4048,22 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "对称 X/Y 误差列自动关联、方向转换、端帽/线宽与共享图元",
-  "verify": "关联、端点几何、裁剪及撤销回归已通过；matplotlib 同数据视觉对照待做",
+  "verify": "关联、端点几何、裁剪及撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F265",
   "milestone": "M1 日常够用",
   "needs": [
    "auto",
    "visual"
-  ]
+  ],
+  "evidence": {
+   "visual": [
+    "docs/parity/visual/xy-errors/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
+  }
  },
  {
   "module": "图类型 · 2D 散点图",
@@ -3964,13 +4083,22 @@
   "pri": "P1",
   "status": "已实现待验收",
   "how": "原始点到零基线的垂线，对数轴使用显示下界；符号/线宽与 SVG 共用",
-  "verify": "正负值、对数基线、SVG 线段和撤销回归已通过；matplotlib 同数据视觉对照待做",
+  "verify": "正负值、对数基线、SVG 线段和撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F267",
   "milestone": "M2 论文全流程",
   "needs": [
    "auto",
    "visual"
-  ]
+  ],
+  "evidence": {
+   "visual": [
+    "docs/parity/visual/vertical-drop/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
+  }
  },
  {
   "module": "图类型 · 2D 散点图",
@@ -4045,15 +4173,21 @@
   "pri": "P0",
   "status": "已完成",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 Origin 同数据出图目视比较",
+  "verify": "与 Origin 同数据出图目视比较；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F274",
   "milestone": "M1 日常够用",
   "needs": [
-   "auto"
+   "auto",
+   "visual"
   ],
   "evidence": {
    "auto": [
-    "crates/scicanvas-core/tests/golden_svg.rs::svg_matches_reviewed_baselines"
+    "crates/scicanvas-core/tests/golden_svg.rs::svg_matches_reviewed_baselines",
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ],
+   "visual": [
+    "docs/parity/visual/linesym/README.md"
    ]
   }
  },
@@ -4097,14 +4231,23 @@
   "pri": "P1",
   "status": "已实现待验收",
   "how": "自然三次样条连接，符号与误差保持原始点；派生线独立绘制",
-  "verify": "SciPy 数值、符号数、分段、自动范围及撤销回归已通过；matplotlib 同数据视觉对照待做",
+  "verify": "SciPy 数值、符号数、分段、自动范围及撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F278",
   "milestone": "M2 论文全流程",
   "needs": [
    "auto",
    "reference",
    "visual"
-  ]
+  ],
+  "evidence": {
+   "visual": [
+    "docs/parity/visual/spline-symbol/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
+  }
  },
  {
   "module": "图类型 · 2D 点线图",
@@ -4135,15 +4278,21 @@
   "pri": "P0",
   "status": "已完成",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 Origin 同数据出图目视比较",
+  "verify": "与 Origin 同数据出图目视比较；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F281",
   "milestone": "M1 日常够用",
   "needs": [
-   "auto"
+   "auto",
+   "visual"
   ],
   "evidence": {
    "auto": [
-    "crates/scicanvas-core/tests/golden_svg.rs::svg_matches_reviewed_baselines"
+    "crates/scicanvas-core/tests/golden_svg.rs::svg_matches_reviewed_baselines",
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ],
+   "visual": [
+    "docs/parity/visual/bar/README.md"
    ]
   }
  },
@@ -4169,13 +4318,22 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "数值型条形图、并排分组、误差换向、物理轴范围与共享矩形",
-  "verify": "轴方向、正负值、分组误差、SVG 与撤销回归已通过；matplotlib 同数据视觉对照待做",
+  "verify": "轴方向、正负值、分组误差、SVG 与撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F283",
   "milestone": "M1 日常够用",
   "needs": [
    "auto",
    "visual"
-  ]
+  ],
+  "evidence": {
+   "visual": [
+    "docs/parity/visual/horizontal-bar/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
+  }
  },
  {
   "module": "图类型 · 2D 柱状图与条形图",
@@ -4184,13 +4342,22 @@
   "pri": "P1",
   "status": "已实现待验收",
   "how": "按原始行与 X 对齐，正负柱段分别累加，共享矩形与 SVG",
-  "verify": "缺失行、正负值、段几何、误差与撤销回归已通过；matplotlib 同数据视觉对照待做",
+  "verify": "缺失行、正负值、段几何、误差与撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F284",
   "milestone": "M2 论文全流程",
   "needs": [
    "auto",
    "visual"
-  ]
+  ],
+  "evidence": {
+   "visual": [
+    "docs/parity/visual/stacked-bar/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
+  }
  },
  {
   "module": "图类型 · 2D 柱状图与条形图",
@@ -4221,14 +4388,23 @@
   "pri": "P1",
   "status": "已实现待验收",
   "how": "按行正负组分别归一至 ±100%，零总量与极端尺度处理，共享 SVG",
-  "verify": "归一化参考值、极端数值、误差缩放及撤销回归已通过；matplotlib 同数据视觉对照待做",
+  "verify": "归一化参考值、极端数值、误差缩放及撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F287",
   "milestone": "M2 论文全流程",
   "needs": [
    "auto",
    "reference",
    "visual"
-  ]
+  ],
+  "evidence": {
+   "visual": [
+    "docs/parity/visual/percent-stacked-bar/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
+  }
  },
  {
   "module": "图类型 · 2D 柱状图与条形图",
@@ -4248,13 +4424,22 @@
   "pri": "P2",
   "status": "已实现待验收",
   "how": "上下端列稳定配对、完整行过滤、反向区间、多组排列与共享 SVG",
-  "verify": "配对、删列/复用、矩形、对数裁剪与撤销回归已通过；matplotlib 同数据视觉对照待做",
+  "verify": "配对、删列/复用、矩形、对数裁剪与撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F289",
   "milestone": "M3 高级功能",
   "needs": [
    "auto",
    "visual"
-  ]
+  ],
+  "evidence": {
+   "visual": [
+    "docs/parity/visual/floating-bar/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
+  }
  },
  {
   "module": "图类型 · 2D 柱状图与条形图",
@@ -4428,13 +4613,22 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "曲线样式里勾选“右侧 Y 轴”：右轴曲线独立自动/手动定范围，可单独设刻度数字格式（缺省跟随左 Y）；存在右轴曲线时绘图属性显示右轴设置；右侧显示轴线、刻度、标签和标题，符号自动范围端点留 4%；对数开关仍左右共用；屏幕、SVG、PNG、PDF 和数据点吸附共用 AxisSet/YAxis，拟合/平滑结果线保留来源轴",
-  "verify": "左右轴范围互不影响、独立刻度格式、v14 默认外观迁移、右轴坐标框/标题/边距、数据拾取、保存重开和导出一致性回归；matplotlib 同数据视觉对照待做",
+  "verify": "左右轴范围互不影响、独立刻度格式、v14 默认外观迁移、右轴坐标框/标题/边距、数据拾取、保存重开和导出一致性回归；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F305",
   "milestone": "M1 日常够用",
   "needs": [
    "auto",
    "visual"
-  ]
+  ],
+  "evidence": {
+   "visual": [
+    "docs/parity/visual/dual-y/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
+  }
  },
  {
   "module": "图类型 · 多轴图",
@@ -4608,13 +4802,22 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "绘图 → 多面板 → 上下两面板：Y 列按顺序分到两个图层，单列网格，页面 210 × 280 mm（A4 纸宽）",
-  "verify": "核心库分配与网格排版回归；matplotlib 同数据视觉对照待做",
+  "verify": "核心库分配与网格排版回归；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F321",
   "milestone": "M1 日常够用",
   "needs": [
    "auto",
    "visual"
-  ]
+  ],
+  "evidence": {
+   "visual": [
+    "docs/parity/visual/two-panels/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
+  }
  },
  {
   "module": "图类型 · 多面板图",
@@ -4623,13 +4826,22 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "绘图 → 多面板 → 左右两面板：Y 列按顺序分到两个图层，两列网格，页面 210 × 105 mm（A4 纸宽）",
-  "verify": "核心库分配与网格排版回归；matplotlib 同数据视觉对照待做",
+  "verify": "核心库分配与网格排版回归；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F322",
   "milestone": "M1 日常够用",
   "needs": [
    "auto",
    "visual"
-  ]
+  ],
+  "evidence": {
+   "visual": [
+    "docs/parity/visual/two-panels-side/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
+  }
  },
  {
   "module": "图类型 · 多面板图",
@@ -4638,13 +4850,22 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "绘图 → 多面板 → 四面板：Y 列按顺序分到 2 × 2 网格的四个图层，页面 210 × 157.5 mm（A4 纸宽）",
-  "verify": "核心库分配与网格排版回归；matplotlib 同数据视觉对照待做",
+  "verify": "核心库分配与网格排版回归；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F323",
   "milestone": "M1 日常够用",
   "needs": [
    "auto",
    "visual"
-  ]
+  ],
+  "evidence": {
+   "visual": [
+    "docs/parity/visual/four-panels/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
+  }
  },
  {
   "module": "图类型 · 多面板图",
@@ -5478,13 +5699,22 @@
   "pri": "P1",
   "status": "已实现待验收",
   "how": "按连续有效行分段、跨零三角剖分、透明度、边界线与共享 SVG",
-  "verify": "面积积分、缺口、对数裁剪、网格缩放与撤销回归已通过；matplotlib 同数据视觉对照待做",
+  "verify": "面积积分、缺口、对数裁剪、网格缩放与撤销回归已通过；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F399",
   "milestone": "M2 论文全流程",
   "needs": [
    "auto",
    "visual"
-  ]
+  ],
+  "evidence": {
+   "visual": [
+    "docs/parity/visual/area/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
+  }
  },
  {
   "module": "图类型 · 面积图",
@@ -6532,7 +6762,7 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "绘图属性可添加/编辑/删除水平与垂直参考线，按 X、左 Y 或右 Y 轴值定位；支持颜色、线宽和实/虚线，参考线在当前图层数据之下绘制，并随轴范围和对数刻度重新映射；旧项目默认无参考线",
-  "verify": "线性/对数轴及右 Y 轴的位置映射、非正对数值、坐标范围变化、屏幕/SVG 共用图元、项目 v15 默认值/当前 v18 往返（参考线字段始于 v16）和添加/编辑/删除撤销重做；matplotlib 同数据视觉对照待做",
+  "verify": "线性/对数轴及右 Y 轴的位置映射、非正对数值、坐标范围变化、屏幕/SVG 共用图元、项目 v15 默认值/当前 v18 往返（参考线字段始于 v16）和添加/编辑/删除撤销重做；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "milestone": "M1 日常够用",
   "needs": [
    "auto",
@@ -6545,7 +6775,14 @@
     "result": "待做",
     "date": "",
     "build": ""
-   }
+   },
+   "visual": [
+    "docs/parity/visual/reference-lines/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
   }
  },
  {
@@ -6632,7 +6869,7 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "直线、自然样条（样条/样条点线图型）、水平/垂直阶梯（阶梯图型）；折线与点线图在属性窗口可选连接方式：B 样条（两端钳位均匀三次 B 样条，数据点为控制点，经过首尾点）、Bezier（每 4 点一段三次 Bezier，经过第 1、4、7… 点，余下点降阶）；拟合等结果曲线不受影响，未设置时项目文件不变",
-  "verify": "B 样条与 scipy.interpolate.BSpline 同节点向量逐点一致（< 1e-12）；Bezier 端点、分段与二次尾段的解析值一致；场景折线点数回归；matplotlib 同数据视觉对照待做",
+  "verify": "B 样条与 scipy.interpolate.BSpline 同节点向量逐点一致（< 1e-12）；Bezier 端点、分段与二次尾段的解析值一致；场景折线点数回归；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "milestone": "M1 日常够用",
   "sub_items": {
    "连接方式": {
@@ -6645,7 +6882,16 @@
   "needs": [
    "auto",
    "visual"
-  ]
+  ],
+  "evidence": {
+   "visual": [
+    "docs/parity/visual/bspline-bezier/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
+  }
  },
  {
   "id": "F499",
@@ -6655,7 +6901,7 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "按曲线所属工作簿的数值/日期/分类列映射颜色，复用图层色板，当前 14 种基础图型渲染路径均已接入。面积图填充和曲线轮廓使用同一颜色：按 X 排序后每个点覆盖到相邻边的投影中点，保留透明度和缺失行断开；缺失颜色回退曲线颜色。图例显示代表样例与透明度，支持实时编辑、撤销、保存和删列清理",
-  "verify": "面积图排序/跨零面积守恒、缺失颜色与断行、外部分类列/均值/对数轴、常值图例、实际属性控件和一步撤销/重做、当前 v18 SCV 往返（映射字段始于 v17）回归通过；屏幕图元与 SVG/96及192 DPI PNG 颜色和透明混合回归通过；matplotlib 同数据视觉对照待做，Windows 人工验收待做",
+  "verify": "面积图排序/跨零面积守恒、缺失颜色与断行、外部分类列/均值/对数轴、常值图例、实际属性控件和一步撤销/重做、当前 v18 SCV 往返（映射字段始于 v17）回归通过；屏幕图元与 SVG/96及192 DPI PNG 颜色和透明混合回归通过；matplotlib 同数据视觉对照待做，Windows 人工验收待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "milestone": "M1 日常够用",
   "sub_items": {
    "当前基础图型颜色映射": {
@@ -6676,7 +6922,14 @@
     "result": "待做",
     "date": "",
     "build": ""
-   }
+   },
+   "visual": [
+    "docs/parity/visual/color-size-shape-map/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
   }
  },
  {
@@ -6687,7 +6940,7 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "按曲线所属工作簿的数值列线性映射符号大小，可设置最小/最大尺寸（1–20 页面逻辑单位，默认 2–12）；缺失/无效值沿用原符号大小，极端范围稳定归一化。适用于带符号图型，保存/导出/撤销及删列清理已接入",
-  "verify": "缺失值、正负 1e308 极端范围、逐点尺寸共享场景、实际下拉控件与撤销重做、v17 往返回归通过；matplotlib 同数据视觉对照待做，Windows 人工验收待做",
+  "verify": "缺失值、正负 1e308 极端范围、逐点尺寸共享场景、实际下拉控件与撤销重做、v17 往返回归通过；matplotlib 同数据视觉对照待做，Windows 人工验收待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "milestone": "M1 日常够用",
   "sub_items": {
    "数值列大小映射": {
@@ -6708,7 +6961,14 @@
     "result": "待做",
     "date": "",
     "build": ""
-   }
+   },
+   "visual": [
+    "docs/parity/visual/color-size-shape-map/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
   }
  },
  {
@@ -6719,7 +6979,7 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "按曲线所属工作簿的分类列顺序映射圆、方、上/下/左/右三角、菱形、六边形；超过 8 类循环使用符号，缺失类别回退曲线符号。图例显示代表样例，屏幕/导出共享几何，支持保存、删列清理和撤销重做",
-  "verify": "分类顺序取值/符号映射、共享场景/SVG、真实属性控件和撤销重做及项目往返回归通过；matplotlib 同数据视觉对照待做，Windows 人工验收待做",
+  "verify": "分类顺序取值/符号映射、共享场景/SVG、真实属性控件和撤销重做及项目往返回归通过；matplotlib 同数据视觉对照待做，Windows 人工验收待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "milestone": "M1 日常够用",
   "sub_items": {
    "可映射符号": {
@@ -6740,7 +7000,14 @@
     "result": "待做",
     "date": "",
     "build": ""
-   }
+   },
+   "visual": [
+    "docs/parity/visual/color-size-shape-map/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
   }
  },
  {
@@ -6851,11 +7118,12 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "DateTime 列：UTC 毫秒存储、ISO8601/常见年月日写法/四位年份解析、位图/原文保留、转换/排序/v9 保存；列属性可选 4 种日期显示格式和时区（UTC−12…UTC+14 及 +5:30 等），不带时区的输入按列时区理解、带时区（Z/±hh:mm）的保持原时刻，改时区时墙上时间不变；显示、日期刻度（在当地零点取整）按列时区换算；日期列做 X 时自动日期刻度（F096）；时区随项目保存，UTC 时不写入",
-  "verify": "时区换算（不带/带时区输入、新输入、改回 UTC）、时区标签、当地零点刻度与项目往返测试；typed_columns 与界面命令回归；人工验收待做",
+  "verify": "时区换算（不带/带时区输入、新输入、改回 UTC）、时区标签、当地零点刻度与项目往返测试；typed_columns 与界面命令回归；人工验收待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "milestone": "M1 日常够用",
   "needs": [
    "auto",
-   "manual"
+   "manual",
+   "visual"
   ],
   "evidence": {
    "manual": {
@@ -6863,7 +7131,14 @@
     "result": "待做",
     "date": "",
     "build": ""
-   }
+   },
+   "visual": [
+    "docs/parity/visual/date-axis/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
   }
  },
  {
@@ -6874,11 +7149,21 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "Category 采用 u32 编码和类别字典，支持缺失、编辑、转换、保存与标签排序；分类列右键“类别顺序…”可上移/下移或按名称排序（重排编码并标为有序字典，一步撤销），之后排序与作图按此顺序；分类列做 X 时为分类轴（各类别依次在 1…k，刻度标签为类别名，水平条形图在 Y 轴，缩放保留类别刻度）；类别顺序有效修改即时写入表和图；标题栏最小化/还原和叉号，关闭保留修改，撤回用撤销",
-  "verify": "类别重排、行位置、非法顺序拒绝、分类轴范围与刻度标签顺序、项目往返的核心测试；类别顺序对话框真实点击与撤销/重做回归；类别预览、标签保持与撤销重做回归；实时设置无底部确认/取消/关闭按钮，标题栏最小化/还原/叉号、关闭保留和开窗撤销重做回归",
+  "verify": "类别重排、行位置、非法顺序拒绝、分类轴范围与刻度标签顺序、项目往返的核心测试；类别顺序对话框真实点击与撤销/重做回归；类别预览、标签保持与撤销重做回归；实时设置无底部确认/取消/关闭按钮，标题栏最小化/还原/叉号、关闭保留和开窗撤销重做回归；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "milestone": "M1 日常够用",
   "needs": [
-   "auto"
-  ]
+   "auto",
+   "visual"
+  ],
+  "evidence": {
+   "visual": [
+    "docs/parity/visual/category-axis/README.md"
+   ],
+   "auto": [
+    "crates/scicanvas-core/tests/visual_cases.rs::committed_scenes_match_current_layout",
+    "crates/scicanvas-core/tests/visual_compare.rs::matplotlib_relative_positions_match_committed_scenes"
+   ]
+  }
  },
  {
   "id": "F512",

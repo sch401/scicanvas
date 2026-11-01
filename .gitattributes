@@ -13,3 +13,7 @@ crates/scicanvas-core/tests/nist/**/*.dat -text -whitespace
 
 # Reproducible reference JSON uses LF on Windows and in CI.
 crates/scicanvas-core/tests/reference/*.json text eol=lf
+
+# Reproducible visual references use LF on Windows and in CI.
+docs/parity/visual/**/*.json text eol=lf
+docs/parity/visual/**/*.svg text eol=lf
