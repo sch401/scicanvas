@@ -1,5 +1,9 @@
 # SciCanvas 技术路线（第二阶段）
 
+## S0-4 FIX-2b
+
+非线性拟合使用尺度化梯度和低阻尼步长停止判据，小收益时进入最多五步 QR 精修。差分对高曲率参数自适应缩短步长。NIST 硬性检查通过，完整前后对照和高斯耗时见 `docs/parity/nist.md`；项目格式保持 v22。
+
 ## S0-4 FIX-1: Householder QR
 
 多元回归和多项式拟合使用列主元 Householder QR，多项式在标准化坐标上增加一次残差修正。项目格式保持 v22。NIST Longley、Wampler1–5、Filip、Norris 和 Pontius 通过原有阈值。

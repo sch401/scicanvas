@@ -402,13 +402,31 @@ fn jacobian(model: &FitFunction, xs: &[f64], p: &[f64], free: &[usize]) -> Vec<V
         }
     }
     let mut j = vec![vec![0.0; free.len()]; xs.len()];
+    let scale = p.iter().fold(0.0_f64, |max, x| max.max(x.abs()));
+    let baseline: Vec<f64> = xs.iter().map(|x| model.eval(*x, p)).collect();
     for (col, &k) in free.iter().enumerate() {
-        let h = 1e-6 * p[k].abs().max(1e-6);
+        let mut h = f64::EPSILON.cbrt() * p[k].abs().max(1e-3 * scale).max(1e-8);
         let (mut up, mut down) = (p.to_vec(), p.to_vec());
         up[k] += h;
         down[k] -= h;
+        let mut odd = 0.0_f64;
+        let mut even = 0.0_f64;
         for (i, x) in xs.iter().enumerate() {
-            j[i][col] = (model.eval(*x, &up) - model.eval(*x, &down)) / (2.0 * h);
+            let hi = model.eval(*x, &up);
+            let lo = model.eval(*x, &down);
+            odd += (hi - lo).powi(2);
+            even += ((hi - baseline[i]) + (lo - baseline[i])).powi(2);
+            j[i][col] = (hi - lo) / (2.0 * h);
+        }
+        // Limit central-difference truncation where the response changes sharply with a parameter.
+        let ratio = (even / odd).sqrt();
+        if ratio > 1e-5 {
+            h *= (1e-5 / ratio).max(1e-3);
+            up[k] = p[k] + h;
+            down[k] = p[k] - h;
+            for (i, x) in xs.iter().enumerate() {
+                j[i][col] = (model.eval(*x, &up) - model.eval(*x, &down)) / (2.0 * h);
+            }
         }
     }
     j
@@ -686,6 +704,7 @@ struct FitSession<'a> {
     lambda: f64,
     converged: bool,
     status: FitStatus,
+    refine: bool,
     iterations: usize,
     constraint_text: Vec<String>,
 }
@@ -847,6 +866,7 @@ impl<'a> FitSession<'a> {
             lambda: 1e-3,
             converged: false,
             status: FitStatus::Converged,
+            refine: false,
             iterations: 0,
             constraint_text: constraints.iter().map(|c| c.text.clone()).collect(),
         })
@@ -892,6 +912,17 @@ impl<'a> FitSession<'a> {
                     !(l.lower == Some(self.params[k]) && g[u] < 0.0 || l.upper == Some(self.params[k]) && g[u] > 0.0)
                 })
                 .collect();
+            if self.projected_gradient(&a, &g, &open) <= 1e-10 {
+                self.converged = self.identifiable(&a, &g, &open);
+                if !self.converged {
+                    self.status = FitStatus::Failed;
+                }
+                break;
+            }
+            if self.refine {
+                self.refine_solution();
+                break;
+            }
             let stepped = if self.rows.is_empty() {
                 self.unconstrained_step(&a, &g, &open)
             } else {
@@ -903,9 +934,318 @@ impl<'a> FitSession<'a> {
                 break;
             }
             if self.converged {
+                self.converged = self.identifiable(&a, &g, &open);
+                if !self.converged {
+                    self.status = FitStatus::Failed;
+                }
                 break;
             }
         }
+    }
+
+    fn tangent_basis(&self, g: &[f64], open: &[usize]) -> Option<Vec<Vec<f64>>> {
+        let mut active: Vec<(Vec<f64>, bool)> = self
+            .rows
+            .iter()
+            .filter(|r| r.1 == Rel::Eq || (self.lhs(&self.params, &r.0) - r.2).abs() <= self.active_tol(&self.params))
+            .map(|r| {
+                let sign = if r.1 == Rel::Ge { -1.0 } else { 1.0 };
+                (open.iter().map(|&u| sign * r.0[u]).collect(), r.1 == Rel::Eq)
+            })
+            .collect();
+        while !active.is_empty() {
+            let gram: Vec<Vec<f64>> = active
+                .iter()
+                .map(|(a, _)| {
+                    active
+                        .iter()
+                        .map(|(b, _)| a.iter().zip(b).map(|(a, b)| a * b).sum())
+                        .collect()
+                })
+                .collect();
+            let inv = mat_inv(&gram)?;
+            let rhs: Vec<f64> = active
+                .iter()
+                .map(|(row, _)| row.iter().zip(open).map(|(a, &u)| a * g[u]).sum())
+                .collect();
+            let multipliers: Vec<f64> = inv
+                .iter()
+                .map(|row| row.iter().zip(&rhs).map(|(a, b)| a * b).sum())
+                .collect();
+            let remove = active
+                .iter()
+                .enumerate()
+                .filter(|(i, (_, equality))| !equality && multipliers[*i] < -1e-12)
+                .min_by(|(i, _), (j, _)| multipliers[*i].total_cmp(&multipliers[*j]))
+                .map(|(i, _)| i);
+            match remove {
+                Some(i) => {
+                    active.remove(i);
+                }
+                None => break,
+            }
+        }
+        let active: Vec<Vec<f64>> = active.into_iter().map(|(row, _)| row).collect();
+        let basis = null_space(&active, open.len());
+        Some(basis)
+    }
+
+    fn identifiable(&self, a: &[Vec<f64>], g: &[f64], open: &[usize]) -> bool {
+        let Some(basis) = self.tangent_basis(g, open) else {
+            return false;
+        };
+        if basis.is_empty() {
+            return true;
+        }
+        let h: Vec<Vec<f64>> = basis
+            .iter()
+            .map(|z| {
+                basis
+                    .iter()
+                    .map(|w| {
+                        open.iter()
+                            .enumerate()
+                            .map(|(i, &u)| z[i] * open.iter().enumerate().map(|(j, &v)| a[u][v] * w[j]).sum::<f64>())
+                            .sum()
+                    })
+                    .collect()
+            })
+            .collect();
+        if (0..h.len()).any(|i| h[i][i] <= 0.0 || !h[i][i].is_finite()) {
+            return false;
+        }
+        let scaled: Vec<Vec<f64>> = (0..h.len())
+            .map(|i| (0..h.len()).map(|j| h[i][j] / (h[i][i] * h[j][j]).sqrt()).collect())
+            .collect();
+        mat_inv(&scaled).is_some()
+    }
+
+    fn projected_gradient(&self, a: &[Vec<f64>], g: &[f64], open: &[usize]) -> f64 {
+        let Some(basis) = self.tangent_basis(g, open) else {
+            return f64::INFINITY;
+        };
+        basis
+            .iter()
+            .map(|z| {
+                let grad: f64 = open.iter().enumerate().map(|(i, &u)| z[i] * g[u]).sum();
+                let norm: f64 = open
+                    .iter()
+                    .enumerate()
+                    .map(|(i, &u)| z[i] * open.iter().enumerate().map(|(j, &v)| a[u][v] * z[j]).sum::<f64>())
+                    .sum();
+                let scale = (norm.max(0.0) * self.cost).sqrt();
+                if scale == 0.0 {
+                    if grad == 0.0 {
+                        0.0
+                    } else {
+                        f64::INFINITY
+                    }
+                } else {
+                    grad.abs() / scale
+                }
+            })
+            .fold(0.0_f64, f64::max)
+    }
+
+    fn refinement_jacobian(&self, params: &[f64]) -> Vec<Vec<f64>> {
+        let m = self.free.len();
+        let scale = params.iter().fold(0.0_f64, |a, p| a.max(p.abs()));
+        let baseline: Vec<f64> = self.xs.iter().map(|&x| self.model.eval(x, params)).collect();
+        let mut jac = vec![vec![0.0; m]; self.xs.len()];
+        for (u, &k) in self.free.iter().enumerate() {
+            let mut h = f64::EPSILON.powf(0.2) * params[k].abs().max(1e-3 * scale).max(1e-8);
+            let mut p1 = params.to_vec();
+            let mut p2 = params.to_vec();
+            for _ in 0..4 {
+                p1[k] = params[k] + h;
+                p2[k] = params[k] - h;
+                let mut odd = 0.0_f64;
+                let mut even = 0.0_f64;
+                for (i, &x) in self.xs.iter().enumerate() {
+                    let hi = self.model.eval(x, &p1);
+                    let lo = self.model.eval(x, &p2);
+                    odd += (hi - lo).powi(2);
+                    even += ((hi - baseline[i]) + (lo - baseline[i])).powi(2);
+                }
+                let ratio = (even / odd).sqrt();
+                if ratio <= 1e-5 || !ratio.is_finite() {
+                    break;
+                }
+                h *= (1e-5 / ratio).max(1e-3);
+            }
+            p1[k] = params[k] + h;
+            p2[k] = params[k] - h;
+            let mut p3 = params.to_vec();
+            let mut p4 = params.to_vec();
+            p3[k] += 2.0 * h;
+            p4[k] -= 2.0 * h;
+            for (i, &x) in self.xs.iter().enumerate() {
+                jac[i][u] = (8.0 * (self.model.eval(x, &p1) - self.model.eval(x, &p2))
+                    - (self.model.eval(x, &p3) - self.model.eval(x, &p4)))
+                    / (12.0 * h);
+            }
+        }
+        jac
+    }
+
+    fn refinement_rss(&self, trial: &[f64]) -> f64 {
+        let mut total = 0.0_f64;
+        let mut correction = 0.0_f64;
+        for (&x, &y) in self.xs.iter().zip(&self.ys) {
+            let value = (y - self.model.eval(x, trial)).powi(2);
+            let next = total + value;
+            correction += if total.abs() >= value.abs() {
+                (total - next) + value
+            } else {
+                (value - next) + total
+            };
+            total = next;
+        }
+        total + correction
+    }
+
+    fn refine_solution(&mut self) {
+        for _ in 0..5 {
+            let m = self.free.len();
+            let jac = self.refinement_jacobian(&self.params);
+            let residual: Vec<f64> = self
+                .xs
+                .iter()
+                .zip(&self.ys)
+                .map(|(&x, &y)| y - self.model.eval(x, &self.params))
+                .collect();
+            let mut a = vec![vec![0.0; m]; m];
+            let mut g = vec![0.0; m];
+            for (row, r) in jac.iter().zip(&residual) {
+                for u in 0..m {
+                    g[u] += row[u] * r;
+                    for v in 0..m {
+                        a[u][v] += row[u] * row[v];
+                    }
+                }
+            }
+            let open: Vec<usize> = (0..m)
+                .filter(|&u| {
+                    let k = self.free[u];
+                    let l = self.limit(k);
+                    !(l.lower == Some(self.params[k]) && g[u] < 0.0 || l.upper == Some(self.params[k]) && g[u] > 0.0)
+                })
+                .collect();
+            let Some(basis) = self.tangent_basis(&g, &open) else {
+                break;
+            };
+            if basis.is_empty() {
+                self.converged = true;
+                return;
+            }
+            let reduced: Vec<Vec<f64>> = jac
+                .iter()
+                .map(|row| {
+                    basis
+                        .iter()
+                        .map(|z| open.iter().enumerate().map(|(i, &u)| z[i] * row[u]).sum())
+                        .collect()
+                })
+                .collect();
+            let Ok(solution) = crate::linalg::lstsq(&reduced, &residual) else {
+                break;
+            };
+            let mut delta = vec![0.0; m];
+            for (i, &u) in open.iter().enumerate() {
+                delta[u] = basis.iter().zip(&solution.coef).map(|(z, c)| z[i] * c).sum();
+            }
+            let mut alpha = 1.0_f64;
+            for (u, &k) in self.free.iter().enumerate() {
+                let l = self.limit(k);
+                if delta[u] > 0.0 {
+                    if let Some(hi) = l.upper {
+                        alpha = alpha.min((hi - self.params[k]).max(0.0) / delta[u]);
+                    }
+                }
+                if delta[u] < 0.0 {
+                    if let Some(lo) = l.lower {
+                        alpha = alpha.min((lo - self.params[k]).min(0.0) / delta[u]);
+                    }
+                }
+            }
+            for (row, rel, rhs) in &self.rows {
+                let change: f64 = row.iter().zip(&delta).map(|(a, d)| a * d).sum();
+                let slack = rhs - self.lhs(&self.params, row);
+                if *rel == Rel::Le && change > 0.0 {
+                    alpha = alpha.min(slack.max(0.0) / change);
+                }
+                if *rel == Rel::Ge && change < 0.0 {
+                    alpha = alpha.min(slack.min(0.0) / change);
+                }
+            }
+            if alpha <= 0.0 {
+                break;
+            }
+            let before = self.projected_gradient(&a, &g, &open);
+            let mut trial = self.params.clone();
+            for (u, &k) in self.free.iter().enumerate() {
+                trial[k] += alpha * delta[u];
+            }
+            let new_cost = self.refinement_rss(&trial);
+            if !new_cost.is_finite() || new_cost > self.cost * (1.0 + 4.0 * self.xs.len() as f64 * f64::EPSILON) {
+                break;
+            }
+            let new_j = self.refinement_jacobian(&trial);
+            let mut na = vec![vec![0.0; m]; m];
+            let mut ng = vec![0.0; m];
+            for (i, row) in new_j.iter().enumerate() {
+                let r = self.ys[i] - self.model.eval(self.xs[i], &trial);
+                for u in 0..m {
+                    ng[u] += row[u] * r;
+                    for v in 0..m {
+                        na[u][v] += row[u] * row[v];
+                    }
+                }
+            }
+            let old_params = std::mem::replace(&mut self.params, trial);
+            let old_cost = std::mem::replace(&mut self.cost, new_cost);
+            let after = self.projected_gradient(&na, &ng, &open);
+            if after >= before {
+                self.params = old_params;
+                self.cost = old_cost;
+                break;
+            }
+            let relative = self
+                .free
+                .iter()
+                .enumerate()
+                .map(|(u, &k)| (alpha * delta[u]).abs() / old_params[k].abs().max(1.0))
+                .fold(0.0_f64, f64::max);
+            if after <= 1e-10 || relative <= 1e-13 {
+                self.converged = self.identifiable(&na, &ng, &open);
+                if !self.converged {
+                    self.status = FitStatus::Failed;
+                }
+                return;
+            }
+        }
+        let jac = jacobian(&self.model, &self.xs, &self.params, &self.free);
+        let m = self.free.len();
+        let mut a = vec![vec![0.0; m]; m];
+        let mut g = vec![0.0; m];
+        for (i, row) in jac.iter().enumerate() {
+            let r = self.ys[i] - self.model.eval(self.xs[i], &self.params);
+            for u in 0..m {
+                g[u] += row[u] * r;
+                for v in 0..m {
+                    a[u][v] += row[u] * row[v];
+                }
+            }
+        }
+        let open: Vec<usize> = (0..m)
+            .filter(|&u| {
+                let k = self.free[u];
+                let l = self.limit(k);
+                !(l.lower == Some(self.params[k]) && g[u] < 0.0 || l.upper == Some(self.params[k]) && g[u] > 0.0)
+            })
+            .collect();
+        self.status = self.classify_stall(&a, &g, &open);
+        self.converged = self.status != FitStatus::Failed;
     }
 
     fn constrained_step(&mut self, a: &[Vec<f64>], g: &[f64], open: &[usize]) -> bool {
@@ -1013,17 +1353,19 @@ impl<'a> FitSession<'a> {
                 }
                 let new_cost = rss(&self.model, &self.xs, &self.ys, &trial);
                 if new_cost < self.cost {
+                    let low_damping = self.lambda <= 1e-6;
                     let small_step = self
                         .free
                         .iter()
-                        .all(|&k| (trial[k] - self.params[k]).abs() <= 1e-10 * self.params[k].abs().max(1e-10));
+                        .all(|&k| (trial[k] - self.params[k]).abs() <= 1e-12 * self.params[k].abs().max(1e-12));
                     let small_gain = self.cost - new_cost <= 1e-14 * self.cost.max(1e-300);
                     self.params = trial;
                     self.cost = new_cost;
                     self.lambda = (self.lambda / 10.0).max(1e-12);
                     stepped = true;
                     // 被约束截短的一步不算收敛：下一步会把挡路的约束纳入活动集
-                    self.converged = small_gain || (small_step && alpha >= 1.0);
+                    self.refine = small_gain && alpha >= 1.0;
+                    self.converged = small_step && alpha >= 1.0 && low_damping;
                     break 'solve;
                 }
                 self.lambda *= 10.0;
@@ -1055,16 +1397,18 @@ impl<'a> FitSession<'a> {
             }
             let new_cost = rss(&self.model, &self.xs, &self.ys, &trial);
             if new_cost < self.cost {
+                let low_damping = self.lambda <= 1e-6;
                 let small_step = self
                     .free
                     .iter()
-                    .all(|&k| (trial[k] - self.params[k]).abs() <= 1e-10 * self.params[k].abs().max(1e-10));
+                    .all(|&k| (trial[k] - self.params[k]).abs() <= 1e-12 * self.params[k].abs().max(1e-12));
                 let small_gain = self.cost - new_cost <= 1e-14 * self.cost.max(1e-300);
                 self.params = trial;
                 self.cost = new_cost;
                 self.lambda = (self.lambda / 10.0).max(1e-12);
                 stepped = true;
-                self.converged = small_step || small_gain;
+                self.refine = small_gain;
+                self.converged = small_step && low_damping;
                 break;
             }
             self.lambda *= 10.0;
@@ -1079,51 +1423,9 @@ impl<'a> FitSession<'a> {
         if open.is_empty() {
             return FitStatus::Converged;
         }
-        let mut active: Vec<(Vec<f64>, bool)> = self
-            .rows
-            .iter()
-            .filter(|r| r.1 == Rel::Eq || (self.lhs(&self.params, &r.0) - r.2).abs() <= self.active_tol(&self.params))
-            .map(|r| {
-                let sign = if r.1 == Rel::Ge { -1.0 } else { 1.0 };
-                (open.iter().map(|&u| sign * r.0[u]).collect(), r.1 == Rel::Eq)
-            })
-            .collect();
-        while !active.is_empty() {
-            let gram: Vec<Vec<f64>> = active
-                .iter()
-                .map(|(a, _)| {
-                    active
-                        .iter()
-                        .map(|(b, _)| a.iter().zip(b).map(|(a, b)| a * b).sum())
-                        .collect()
-                })
-                .collect();
-            let Some(inv) = mat_inv(&gram) else {
-                return FitStatus::Failed;
-            };
-            let rhs: Vec<f64> = active
-                .iter()
-                .map(|(row, _)| row.iter().zip(open).map(|(a, &u)| a * g[u]).sum())
-                .collect();
-            let multipliers: Vec<f64> = inv
-                .iter()
-                .map(|row| row.iter().zip(&rhs).map(|(a, b)| a * b).sum())
-                .collect();
-            let remove = active
-                .iter()
-                .enumerate()
-                .filter(|(i, (_, equality))| !equality && multipliers[*i] < -1e-12)
-                .min_by(|(i, _), (j, _)| multipliers[*i].total_cmp(&multipliers[*j]))
-                .map(|(i, _)| i);
-            match remove {
-                Some(i) => {
-                    active.remove(i);
-                }
-                None => break,
-            }
-        }
-        let active: Vec<Vec<f64>> = active.into_iter().map(|(row, _)| row).collect();
-        let basis = null_space(&active, open.len());
+        let Some(basis) = self.tangent_basis(g, open) else {
+            return FitStatus::Failed;
+        };
         if basis.is_empty() {
             return FitStatus::Converged;
         }
@@ -1989,6 +2291,132 @@ mod tests {
         assert!(result.converged);
         assert_eq!(result.status, FitStatus::Converged);
         assert!(result.params[0].abs() < 1e-8);
+    }
+
+    #[test]
+    fn enso_certified_start_difference_step_diagnostic() {
+        let data = include_str!("../tests/nist/nls/ENSO.dat");
+        let mut params = Vec::new();
+        let mut rows = Vec::new();
+        let mut in_data = false;
+        for line in data.lines() {
+            let words: Vec<_> = line.split_whitespace().collect();
+            if line.trim_start().starts_with("Data:") && words.get(1) == Some(&"y") {
+                in_data = true;
+                continue;
+            }
+            if in_data {
+                if !words.is_empty() {
+                    rows.push((words[1].parse::<f64>().unwrap(), words[0].parse::<f64>().unwrap()));
+                }
+            } else if words
+                .first()
+                .is_some_and(|w| w.starts_with('b') && w[1..].parse::<usize>().is_ok())
+            {
+                let numbers: Vec<_> = words[1..]
+                    .iter()
+                    .filter(|w| **w != "=")
+                    .map(|w| w.parse::<f64>().unwrap())
+                    .collect();
+                params.push(numbers[2]);
+            }
+        }
+        let function = CustomFitFunction::new("ENSO", "b1+b2*cos(2*pi*x/12)+b3*sin(2*pi*x/12)+b5*cos(2*pi*x/b4)+b6*sin(2*pi*x/b4)+b8*cos(2*pi*x/b7)+b9*sin(2*pi*x/b7)", (1..=9).map(|i| format!("b{i}")).collect()).unwrap();
+        let model = FitFunction::Custom(function);
+        let residual: Vec<_> = rows.iter().map(|&(x, y)| y - model.eval(x, &params)).collect();
+        let scale = params.iter().fold(0.0_f64, |v, p| v.max(p.abs()));
+        for factor in [2.0, 4.0, 8.0, 0.0] {
+            let mut j = vec![vec![0.0; params.len()]; rows.len()];
+            for k in 0..params.len() {
+                let h = if factor == 0.0 {
+                    f64::EPSILON.cbrt() * params[k].abs().max(1e-3 * scale).max(1e-8)
+                } else {
+                    factor * 1e-6 * params[k].abs().max(1e-6)
+                };
+                let mut up = params.clone();
+                let mut down = params.clone();
+                up[k] += h;
+                down[k] -= h;
+                for (i, &(x, _)) in rows.iter().enumerate() {
+                    j[i][k] = (model.eval(x, &up) - model.eval(x, &down)) / (2.0 * h);
+                }
+            }
+            let step = crate::linalg::lstsq(&j, &residual).unwrap().coef[7] / params[7];
+            println!(
+                "{}: b8 relative step {step:.12e}",
+                if factor == 0.0 {
+                    "new".into()
+                } else {
+                    format!("{factor}h")
+                }
+            );
+            if factor == 0.0 {
+                assert!(step.abs() <= 1e-8);
+            }
+        }
+    }
+
+    #[test]
+    fn adaptive_jacobians_match_hahn_rational_derivatives() {
+        let p = [
+            1.0776351733,
+            -0.12269296921,
+            0.0040863750610,
+            -0.0000014262662514,
+            -0.0057609940901,
+            0.00024053735503,
+            -0.00000012314450199,
+        ];
+        let xs = [24.41, 100.0, 200.0, 350.0, 500.0, 600.0, 749.27, 851.37];
+        let function = CustomFitFunction::new(
+            "Hahn",
+            "(b1+b2*x+b3*x^2+b4*x^3)/(1+b5*x+b6*x^2+b7*x^3)",
+            (1..=7).map(|i| format!("b{i}")).collect(),
+        )
+        .unwrap();
+        let model = FitFunction::Custom(function);
+        let ys: Vec<_> = xs.iter().map(|&x| model.eval(x, &p)).collect();
+        let session = FitSession::new(model, &xs, &ys, Some(&p), &[], &[]).unwrap();
+        let derivatives = jacobian(&session.model, &xs, &p, &session.free);
+        let refined = session.refinement_jacobian(&p);
+        for (i, &x) in xs.iter().enumerate() {
+            let d = 1.0 + p[4] * x + p[5] * x * x + p[6] * x * x * x;
+            let f = session.model.eval(x, &p);
+            let exact = [
+                1.0 / d,
+                x / d,
+                x * x / d,
+                x * x * x / d,
+                -f * x / d,
+                -f * x * x / d,
+                -f * x * x * x / d,
+            ];
+            for k in 0..7 {
+                for value in [derivatives[i][k], refined[i][k]] {
+                    assert!(
+                        (value - exact[k]).abs() <= 3e-6 * exact[k].abs().max(1e-12),
+                        "x={x} parameter={k}: {value} vs {}",
+                        exact[k]
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn unidentifiable_parameters_are_not_reported_as_converged() {
+        let function = CustomFitFunction::new("sum", "a+b", vec!["a".into(), "b".into()]).unwrap();
+        let result = fit_custom(
+            function,
+            &[0.0, 1.0, 2.0, 3.0],
+            &[3.0, 3.0, 3.0, 3.0],
+            &[1.0, 1.0],
+            &[],
+            &[],
+        )
+        .unwrap();
+        assert!(!result.converged);
+        assert_eq!(result.status, FitStatus::Failed);
     }
 
     #[test]
