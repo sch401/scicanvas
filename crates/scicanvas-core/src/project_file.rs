@@ -195,6 +195,19 @@ pub fn from_json(text: &str) -> Result<Project, String> {
     if old_version < 21 {
         migrate_fit_state(&mut project);
     }
+    // v21 -> v22: old reports only stored the convergence boolean.
+    if old_version < 22 {
+        for report in project
+            .books
+            .iter_mut()
+            .flat_map(|b| &mut b.columns)
+            .filter_map(|c| c.fit_report.as_deref_mut())
+        {
+            if !report.fit.converged {
+                report.fit.status = crate::nlfit::FitStatus::Failed;
+            }
+        }
+    }
     let max_id = project
         .books
         .iter()
@@ -1258,8 +1271,8 @@ mod review_session_tests {
 mod review_legacy_versions {
     use super::*;
     #[test]
-    fn all_versions_zero_through_twenty_load_into_twenty_one() {
-        for version in 0..=20 {
+    fn all_versions_zero_through_twenty_one_load_into_current() {
+        for version in 0..=21 {
             let mut p = Project::default();
             p.new_book();
             p.books[0].columns[0].data = vec!["0".into(), "1".into()].into();
@@ -1284,7 +1297,7 @@ mod review_legacy_versions {
                 }
             }
             let loaded = from_json(&value.to_string()).unwrap();
-            assert_eq!(loaded.version, 21);
+            assert_eq!(loaded.version, CURRENT_VERSION);
             assert_eq!(loaded.books, p.books, "v{version}");
             assert_eq!(from_json(&to_json(&loaded).unwrap()).unwrap(), loaded);
         }
@@ -1424,6 +1437,45 @@ mod round_two_tests {
             reopened.nlfit_operation(r).unwrap().kind,
             OpKind::Nonlinear(_)
         ));
+        let mut v22 = reopened.clone();
+        let report = v22
+            .books
+            .iter_mut()
+            .flat_map(|b| &mut b.columns)
+            .find_map(|c| c.fit_report.as_deref_mut())
+            .unwrap();
+        report.fit.status = crate::nlfit::FitStatus::PrecisionLimit;
+        assert!(report.fit.converged);
+        for restored in [
+            from_json(&to_json(&v22).unwrap()).unwrap(),
+            from_scv(&to_scv(&v22).unwrap()).unwrap(),
+        ] {
+            assert_eq!(
+                restored.nlfit_reports()[0].fit.status,
+                crate::nlfit::FitStatus::PrecisionLimit
+            );
+        }
+        let mut wire = serde_json::to_value(&reopened).unwrap();
+        wire["version"] = 21.into();
+        let report = wire["books"]
+            .as_array_mut()
+            .unwrap()
+            .iter_mut()
+            .flat_map(|b| b["columns"].as_array_mut().unwrap().iter_mut())
+            .filter_map(|c| c.get_mut("fit_report"))
+            .find(|r| r.is_object())
+            .unwrap();
+        report["current"] = false.into();
+        report["fit"]["converged"] = false.into();
+        report["fit"].as_object_mut().unwrap().remove("status");
+        let migrated = from_json(&wire.to_string()).unwrap();
+        assert_eq!(migrated.nlfit_reports()[0].fit.status, crate::nlfit::FitStatus::Failed);
+        assert_eq!(
+            from_json(&to_json(&migrated).unwrap()).unwrap().nlfit_reports()[0]
+                .fit
+                .status,
+            crate::nlfit::FitStatus::Failed
+        );
     }
 }
 

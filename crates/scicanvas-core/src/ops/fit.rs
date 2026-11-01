@@ -629,6 +629,8 @@ impl NlFitReport {
             || [f.r2, f.adj_r2, f.reduced_chi2].iter().any(|v| v.is_infinite())
             || f.n == 0
             || f.dof > f.n
+            || (f.status == crate::nlfit::FitStatus::PrecisionLimit && !f.converged)
+            || (f.status == crate::nlfit::FitStatus::Failed && f.converged)
             || (self.current && (!f.converged || self.error.is_some()))
             || f.constraints.iter().map(String::len).sum::<usize>() > crate::formula::FILE_LIMITS.bytes
         {

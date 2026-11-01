@@ -36,7 +36,7 @@ fn eight_to_twelve_parameters_roundtrip_project_and_function_files() {
         project_file::from_scv(&project_file::to_scv(&project).unwrap()).unwrap(),
         project
     );
-    assert_eq!(project.version, 21);
+    assert_eq!(project.version, scicanvas_core::model::PROJECT_VERSION);
     let bad = definition(13);
     assert_eq!(bad.resolve().unwrap_err(), "参数数量必须在 1 到 12 之间");
     let function = serde_json::json!({"version":1,"function":bad});

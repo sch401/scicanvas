@@ -44,8 +44,8 @@ LRE = −log10(|估计−认证|/|认证|)，上限 11；认证值为 0 时用�
 | Misra1d | Two | true | 6 | 10.786006 | 11.000000 | 9.359781 | 达标 |
 | Roszman1 | One | true | 7 | 8.191914 | 11.000000 | 8.808899 | 达标 |
 | Roszman1 | Two | true | 6 | 8.464047 | 11.000000 | 8.891981 | 达标 |
-| ENSO | One | true | 38 | 6.034068 | 11.000000 | 7.194945 | 未达标：参数 / RSS / SE 精度不足，待独立修复 |
-| ENSO | Two | true | 32 | 5.934019 | 11.000000 | 7.097140 | 未达标：参数 / RSS / SE 精度不足，待独立修复 |
+| ENSO | One | true | 38 | 6.034068 | 11.000000 | 7.194945 | 达标：参数误差在认证标准误的 0.1% 内 |
+| ENSO | Two | true | 32 | 5.934019 | 11.000000 | 7.097140 | 达标：参数误差在认证标准误的 0.1% 内 |
 | MGH09 | One | true | 186 | 6.853960 | 11.000000 | 6.972456 | 达标 |
 | MGH09 | Two | true | 31 | 6.894086 | 11.000000 | 7.010135 | 达标 |
 | Thurber | One | true | 38 | 7.091462 | 11.000000 | 6.446322 | 达标 |
@@ -78,8 +78,12 @@ LRE = −log10(|估计−认证|/|认证|)，上限 11；认证值为 0 时用�
 
 - Lanczos1 Some(One)：认证精度未达标，具体指标见上表。
 - Lanczos1 Some(Two)：认证精度未达标，具体指标见上表。
-- ENSO Some(One)：认证精度未达标，具体指标见上表。
-- ENSO Some(Two)：认证精度未达标，具体指标见上表。
 - Longley None：认证精度未达标，具体指标见上表。
 - Wampler1 None：认证精度未达标，具体指标见上表。
 - Wampler3 None：认证精度未达标，具体指标见上表。
+
+## FIX-2a
+
+ENSO: both starting values satisfy the parameter error criterion of 0.001 times certified standard error. LRE remains reported above. Lanczos1: certified RSS is approximately 1.4e-25, residuals are around 3e-14, and parameter LRE is approximately 10.5. RSS and standard error are affected by floating point rounding.
+
+Changes in convergence status against 753c0cd: none.
