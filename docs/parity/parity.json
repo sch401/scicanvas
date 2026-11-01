@@ -4071,11 +4071,27 @@
   "feature": "批量导出多张图",
   "ref": "The Export Graph Dialog Box",
   "pri": "P1",
-  "status": "未开始",
-  "how": "",
-  "verify": "手动操作",
+  "status": "已实现待验收",
+  "how": "选择多张图、SVG/PDF/PNG/TIFF 格式和分辨率，输出到指定目录；同名文件自动编号，不覆盖已有文件。",
+  "verify": "多图导出、同名保护和界面入口测试；按人工清单检查。",
   "id": "F233",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas/src/app/batch_export.rs::batch_export_writes_distinct_files_without_overwriting",
+    "crates/scicanvas/src/app/batch_export.rs::batch_export_command_opens_graph_selection"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/import_export.md#F233",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "导出与发布",

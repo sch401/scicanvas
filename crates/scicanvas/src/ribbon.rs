@@ -288,6 +288,7 @@ pub static TABS: &[Tab] = &[
                         "graph.export_pdf",
                         "graph.export_png",
                         "graph.export_tiff",
+                        "graph.export_batch",
                         "graph.copy",
                     ]),
                 ],

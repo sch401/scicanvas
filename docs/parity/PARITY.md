@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 97 项，P1 146 项，P2 259 项，不做 12 项。
-状态：已完成 72 项，已实现待验收 60 项，部分实现 17 项，未开始 353 项，不做 12 项。
+状态：已完成 72 项，已实现待验收 61 项，部分实现 17 项，未开始 352 项，不做 12 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -327,7 +327,7 @@
 | F230 | 导出 TIFF（期刊要求） | Which Export Format Should I Choose | P1 | 已实现待验收 | 使用与 PNG 相同的图形输出，导出 LZW 压缩 TIFF，保留透明度和 DPI；CMYK 不做。 | 像素、透明度、LZW、DPI 和命令测试；按人工清单查看图像。 | — |
 | F231 | 复制图形到剪贴板（粘贴到 Word / PPT） | Pasting or Embedding Graphs in Other Applications | P0 | 已实现待验收 | 复制图形（Ctrl+J）：按 300 dpi 栅格化后经 arboard 写入剪贴板位图；矢量 EMF 待评估 | 与 PNG 共用栅格化回归；粘贴到 Word / PPT 待人工验收 | — |
 | F232 | 导出 EMF（Office 可编辑矢量） | Which Export Format Should I Choose | P1 | 未开始 | 自写 EMF 写出器 | 插入 Word 检查 | — |
-| F233 | 批量导出多张图 | The Export Graph Dialog Box | P1 | 未开始 | — | 手动操作 | — |
+| F233 | 批量导出多张图 | The Export Graph Dialog Box | P1 | 已实现待验收 | 选择多张图、SVG/PDF/PNG/TIFF 格式和分辨率，输出到指定目录；同名文件自动编号，不覆盖已有文件。 | 多图导出、同名保护和界面入口测试；按人工清单检查。 | — |
 | F234 | 打印 | Printing Graphs, Layout Pages, and Analytical Results | P2 | 未开始 | 导出 PDF 后交给系统打印 | 手动操作 | — |
 | F235 | 图形动画（导出视频 / GIF） | Creating Graph Animation | P2 | 未开始 | gif / ffmpeg | 手动操作 | — |
 

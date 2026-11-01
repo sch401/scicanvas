@@ -2,6 +2,7 @@
 //! 项目管理与子窗口位于 workspace，工作表显示与编辑位于 worksheet。
 
 mod analysis_ops;
+mod batch_export;
 mod dialog_actions;
 mod excel_export;
 mod find_replace;

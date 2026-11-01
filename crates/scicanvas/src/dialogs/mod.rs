@@ -17,6 +17,7 @@ mod analysis_curves;
 mod anova;
 mod areas;
 mod baseline;
+mod batch_export;
 mod category_order;
 mod column_math;
 mod column_props;
@@ -55,6 +56,7 @@ mod tables;
 mod widgets;
 mod window;
 
+pub use batch_export::{BatchExport, BatchFormat};
 pub use column_props::ColumnEdit;
 pub(crate) use docking::{begin_docks, end_docks, has_docks, place_docks, reset_docks, DockSide};
 pub(crate) use find_replace::FindReplace;
@@ -74,6 +76,7 @@ pub(crate) use sheet_transform::TransformKind;
 pub use sheet_transform::{SheetTransform, TransformAction};
 
 pub enum Dialog {
+    BatchExport(Box<BatchExport>),
     ExportXlsx {
         headers: bool,
     },
@@ -260,6 +263,7 @@ pub enum Dialog {
 
 /// 对话框里用户做出的选择，由 app.rs 执行。
 pub enum Action {
+    BatchExport(Vec<u64>, BatchFormat, u32),
     ExportXlsx(bool),
     SheetTransform(u64, TransformAction),
     FindNext,
@@ -323,6 +327,7 @@ impl Dialog {
             Self::LayerContents(contents) => contents.show(ctx, project, pal),
             Self::FindReplace(state) => state.show(ctx, &mut open),
             Self::ExportXlsx { .. } => self.show_export_xlsx(ctx, &mut open),
+            Self::BatchExport(state) => state.show(ctx, &mut open),
             Self::ImportWizard(wizard) => wizard.show(ctx, pal, &mut open),
             Self::AnalysisCurves { .. } => self.show_analysis_curves(ctx, pal, &mut open, esc),
             Self::ColumnProps { .. } => self.show_column_props(ctx, pal, &mut open, esc),

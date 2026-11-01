@@ -121,6 +121,16 @@ pub(super) fn graphics(commands: &mut Vec<Command>) {
             |a| a.export_pdf(),
         ),
         c(
+            "graph.export_batch",
+            "批量导出图形…",
+            "export",
+            "",
+            "文件",
+            "batch export 多图 批量导出",
+            always,
+            |a| a.open_batch_export(),
+        ),
+        c(
             "graph.export_tiff",
             "导出 TIFF",
             "export",
