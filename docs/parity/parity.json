@@ -746,11 +746,27 @@
   "feature": "堆叠 / 拆分列",
   "ref": "Stacking and Unstacking Worksheet Columns",
   "pri": "P1",
-  "status": "未开始",
-  "how": "",
-  "verify": "与 Origin 结果比较",
+  "status": "已实现待验收",
+  "how": "选择多列堆叠生成值列与分类来源列，或按分类列拆分值列；保持同类型、缺失值和原列，每次操作可撤销。",
+  "verify": "数据类型、缺失值和撤销测试；按人工清单与 Origin 比较。",
   "id": "F042",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/worksheet_transform.rs::stack_split_and_reduce_keep_values_types_and_missing_cells",
+    "crates/scicanvas/src/app/tests/worksheet.rs::sheet_transforms_each_create_one_undo_step"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/worksheet.md#F042",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "工作表",
@@ -768,11 +784,27 @@
   "feature": "数据精简（隔行抽取、平均合并）",
   "ref": "Data Reduction",
   "pri": "P1",
-  "status": "未开始",
-  "how": "",
-  "verify": "与 Origin 结果比较",
+  "status": "已实现待验收",
+  "how": "按指定 N 行取第一行，或对每组有限数值求平均，生成独立新列；每次操作可撤销。",
+  "verify": "缺失值、部分分组、非法间隔和撤销测试；按人工清单与 Origin 比较。",
   "id": "F044",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/worksheet_transform.rs::stack_split_and_reduce_keep_values_types_and_missing_cells",
+    "crates/scicanvas/src/app/tests/worksheet.rs::sheet_transforms_each_create_one_undo_step"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/worksheet.md#F044",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "工作表",

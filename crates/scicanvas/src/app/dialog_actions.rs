@@ -132,6 +132,30 @@ impl SciApp {
             }
             dialogs::Action::Ifft(book, re, im, input) => self.apply_ifft_action(book, re, im, input),
             dialogs::Action::Sort(book, keys, within) => self.apply_sort_action(book, keys, within),
+            dialogs::Action::SheetTransform(book, action) => {
+                if !self.flush_sheet_edits() {
+                    return false;
+                }
+                self.edit_with(
+                    "工作表变换",
+                    |project| {
+                        match action {
+                            dialogs::TransformAction::Stack(keys) => project.stack_columns(book, &keys),
+                            dialogs::TransformAction::Split(value, category) => {
+                                project.split_column(book, &value, &category)
+                            }
+                            dialogs::TransformAction::Reduce(value, step, average) => {
+                                project.reduce_column(book, &value, step, average).map(|key| vec![key])
+                            }
+                        }
+                        .map(Some)
+                    },
+                    |app, keys| {
+                        app.status = format!("已生成列 {}", keys.join("、"));
+                        app.dialog = None;
+                    },
+                );
+            }
             dialogs::Action::CategoryOrder(book, key, levels) => self.apply_category_order_action(book, key, levels),
             dialogs::Action::SgDiff(w, order, deriv) => self.apply_sg_diff_action(w, order, deriv),
             dialogs::Action::Smooth(m, w) => {

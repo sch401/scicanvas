@@ -44,6 +44,7 @@ mod poly;
 mod scientific_text;
 mod set_values;
 mod sg_diff;
+mod sheet_transform;
 mod smooth;
 mod sort;
 mod t_test;
@@ -68,7 +69,11 @@ use widgets::buttons;
 pub(crate) use widgets::{actions, center_buttons, edit_group, plain, primary, ActionKind, Keys, BUTTON};
 pub(crate) use window::{floating_bounds, window};
 
+pub(crate) use sheet_transform::TransformKind;
+pub use sheet_transform::{SheetTransform, TransformAction};
+
 pub enum Dialog {
+    SheetTransform(Box<SheetTransform>),
     FindReplace(Box<FindReplace>),
     ImportWizard(Box<ImportWizard>),
     LayerContents(Box<LayerContents>),
@@ -247,6 +252,7 @@ pub enum Dialog {
 
 /// 对话框里用户做出的选择，由 app.rs 执行。
 pub enum Action {
+    SheetTransform(u64, TransformAction),
     FindNext,
     ReplaceCurrent,
     ReplaceAll,
@@ -314,6 +320,7 @@ impl Dialog {
             Self::Smooth { .. } => self.show_smooth(ctx, pal, &mut open, esc),
             Self::CategoryOrder { .. } => self.show_category_order(ctx, pal, &mut open, esc),
             Self::Sort { .. } => self.show_sort(ctx, pal, &mut open, esc),
+            Self::SheetTransform(state) => state.show(ctx, &mut open),
             Self::Ifft { .. } => self.show_ifft(ctx, pal, &mut open, esc),
             Self::SgDiff { .. } => self.show_sg_diff(ctx, pal, &mut open, esc),
             Self::Normalize { .. } => self.show_normalize(ctx, pal, &mut open, esc),
