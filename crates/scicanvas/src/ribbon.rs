@@ -284,12 +284,8 @@ pub static TABS: &[Tab] = &[
                 label: "导出",
                 items: &[
                     Big("graph.export"),
-                    Smalls(&[
-                        "graph.export_pdf",
-                        "graph.export_png",
-                        "graph.export_tiff",
-                        "graph.copy",
-                    ]),
+                    Smalls(&["graph.export_pdf", "graph.export_png", "graph.export_tiff"]),
+                    Smalls(&["graph.copy"]),
                 ],
             },
         ],
