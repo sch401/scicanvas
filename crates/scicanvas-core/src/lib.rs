@@ -12,6 +12,7 @@ pub mod csv;
 pub mod data;
 pub mod fft;
 pub mod format;
+pub mod filter;
 pub mod formula;
 pub mod history;
 pub mod interpolate;

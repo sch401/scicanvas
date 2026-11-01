@@ -1575,6 +1575,7 @@ mod nonlinear_recalc_tests {
             y: "B".into(),
             x: Some("A".into()),
             rows: None,
+            visible_only: false,
             mode: RecalcMode::Auto,
         };
         assert_eq!(recipe.fingerprint(&op, p.book(1).unwrap()), 16_689_633_563_837_365_958);

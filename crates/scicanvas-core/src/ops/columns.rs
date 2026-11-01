@@ -263,6 +263,7 @@ impl Project {
                 y: item.y.clone(),
                 x: item.x.clone(),
                 rows: item.rows,
+                visible_only: item.visible_only,
                 mode: RecalcMode::Auto,
             });
             let key = self
@@ -329,6 +330,7 @@ impl Project {
                         y: k.clone(),
                         x: xb.clone(),
                         rows: None,
+                        visible_only: false,
                     };
                     let (xs, ys, _) = get_xy(book, &item);
                     let lo = xs.iter().copied().fold(f64::INFINITY, f64::min);
@@ -386,6 +388,7 @@ impl Project {
             y: a.to_string(),
             x: None,
             rows: None,
+            visible_only: false,
         };
         Ok(self
             .write_result(&item, vec![col], ResultLink::None)?

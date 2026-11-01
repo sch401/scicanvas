@@ -79,6 +79,7 @@ impl Project {
                     y: item.y.clone(),
                     x: item.x.clone(),
                     rows: item.rows,
+                    visible_only: item.visible_only,
                     mode: RecalcMode::Auto,
                 })
             };
@@ -197,6 +198,7 @@ impl Project {
             y: y_key.into(),
             x: None,
             rows: None,
+            visible_only: false,
         };
         let keys = self.write_result(&source, columns, ResultLink::None)?.columns;
         let item = Item {
@@ -204,6 +206,7 @@ impl Project {
             y: curve.1.clone(),
             x: Some(curve.0.clone()),
             rows: None,
+            visible_only: false,
         };
         self.bind_results(&item, &keys, ResultLink::Matching)?;
         Ok(keys)
@@ -389,6 +392,7 @@ impl Project {
                 y: item.y.clone(),
                 x: item.x.clone(),
                 rows: item.rows,
+                visible_only: item.visible_only,
                 mode: RecalcMode::Auto,
             };
             if let OpKind::Nonlinear(recipe) = &operation.kind {
@@ -483,6 +487,7 @@ impl Project {
             y: sample.into(),
             x: None,
             rows: None,
+            visible_only: false,
         };
         let result = self.write_result(&item, vec![c0, c1], ResultLink::None)?;
         let [k0, k1]: [String; 2] = result.columns.try_into().unwrap();

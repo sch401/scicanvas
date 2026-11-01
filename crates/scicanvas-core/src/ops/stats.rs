@@ -63,6 +63,7 @@ impl Project {
             y: keys.last().unwrap().clone(),
             x: None,
             rows: None,
+            visible_only: false,
         };
         Ok(self.write_result(&item, columns, ResultLink::None)?.columns)
     }

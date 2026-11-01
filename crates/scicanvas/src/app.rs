@@ -7,6 +7,7 @@ mod batch_plot;
 mod dialog_actions;
 mod excel_export;
 mod find_replace;
+mod filter;
 mod notes;
 mod props;
 mod tiff_export;
@@ -54,6 +55,8 @@ struct BookPreview {
 #[derive(Clone, Copy)]
 enum ColAction {
     Props,
+    Filter,
+    ClearFilter,
     SetRole(Role),
     SetDataKind(scicanvas_core::DataKind),
     InsertRight,
@@ -86,6 +89,7 @@ struct RecalcInputs(Vec<RecalcBook>);
 #[derive(Clone, Debug, PartialEq)]
 struct RecalcBook {
     id: u64,
+    filter: Option<scicanvas_core::filter::Filter>,
     columns: Vec<RecalcColumn>,
 }
 #[derive(Clone, Debug, PartialEq)]
@@ -105,6 +109,7 @@ impl RecalcInputs {
                 .iter()
                 .map(|b| RecalcBook {
                     id: b.id,
+                    filter: b.filter.clone(),
                     columns: b
                         .columns
                         .iter()
@@ -490,10 +495,12 @@ impl SciApp {
         }
         let Some(bid) = self.active_book() else { return };
         let (sel, rows) = self.picked(bid);
+        let visible_only = self.sheets.get(&bid).is_some_and(|state| state.visible_only);
         match self.project.plot_from_selection(bid, &sel, t) {
             Ok((gid, msg)) => {
                 if let Some(g) = self.project.graph_mut(gid) {
                     g.first_layer_mut().rows = rows;
+                    g.first_layer_mut().visible_only = visible_only;
                 }
                 self.show_item(gid);
                 self.status = match rows {
@@ -509,11 +516,13 @@ impl SciApp {
     pub(crate) fn plot_panels(&mut self, panels: scicanvas_core::Panels) {
         let Some(bid) = self.active_book() else { return };
         let (sel, rows) = self.picked(bid);
+        let visible_only = self.sheets.get(&bid).is_some_and(|state| state.visible_only);
         match self.project.plot_panels(bid, &sel, PlotType::Line, panels) {
             Ok((gid, msg)) => {
                 if let Some(g) = self.project.graph_mut(gid) {
                     for layer in g.page.layers_mut() {
                         layer.rows = rows;
+                        layer.visible_only = visible_only;
                     }
                 }
                 self.show_item(gid);
@@ -1492,24 +1501,18 @@ impl SciApp {
     pub(crate) fn analysis_source(&self) -> Option<Source> {
         if let Some(g) = self.active_graph_id() {
             let index = self.layer_index(g);
-            if let Some(curves) = self.analysis_curves.get(&(g, index)) {
-                return Some(Source::Curves {
-                    graph_id: g,
-                    index,
-                    curves: curves.clone(),
-                });
-            }
-            return self
-                .active_layer()
-                .and_then(|layer| layer.book_id)
-                .map(|_| Source::Layer {
-                    graph_id: g,
-                    index: self.layer_index(g),
-                });
+            let visible_only = self.active_layer().is_some_and(|layer| layer.visible_only);
+            let source = if let Some(curves) = self.analysis_curves.get(&(g, index)) {
+                Some(Source::Curves { graph_id: g, index, curves: curves.clone() })
+            } else {
+                self.active_layer().and_then(|layer| layer.book_id).map(|_| Source::Layer { graph_id: g, index })
+            };
+            return source.map(|source| if visible_only { Source::Visible(Box::new(source)) } else { source });
         }
         self.active_book_id().map(|id| {
             let (selected, rows) = self.picked(id);
-            Source::Book { id, selected, rows }
+            let source = Source::Book { id, selected, rows };
+            if self.sheets.get(&id).is_some_and(|state| state.visible_only) { Source::Visible(Box::new(source)) } else { source }
         })
     }
 
@@ -1600,6 +1603,7 @@ impl SciApp {
             ) {
                 Ok(mut spec) => {
                     spec.rows = rows;
+                    spec.visible_only = self.sheets.get(&id).is_some_and(|state| state.visible_only);
                     self.plot_draft = Some(spec);
                 }
                 Err(e) => self.status = e,
