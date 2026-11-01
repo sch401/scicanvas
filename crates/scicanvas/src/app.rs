@@ -223,6 +223,8 @@ pub struct SciApp {
     pub(crate) status: String,
     pub(crate) show_explorer: bool,
     pub(crate) show_help: bool,
+    pub(crate) show_about: bool,
+    renderer_info: String,
     pub(crate) confirm_delete: Option<u64>,
     /// 每个工作簿的单元格选区和编辑状态。
     pub(crate) sheets: HashMap<u64, SheetState>,
@@ -308,10 +310,11 @@ impl SciApp {
         #[cfg(windows)]
         if let Some(render) = cc.wgpu_render_state.as_ref() {
             let info = render.adapter.get_info();
-            scicanvas_core::project_file::session::write_startup_log(&format!(
-                "图形后端：{:?}；适配器：{}；类型：{:?}；驱动：{} {}",
+            app.renderer_info = format!(
+                "{:?}；{}；{:?}；{} {}",
                 info.backend, info.name, info.device_type, info.driver, info.driver_info
-            ));
+            );
+            scicanvas_core::project_file::session::write_startup_log(&format!("图形后端：{}", app.renderer_info));
             if let Some(notice) = renderer_notice(info.device_type) {
                 app.status = if app.status.is_empty() {
                     notice.into()
@@ -319,6 +322,9 @@ impl SciApp {
                     format!("{}；{notice}", app.status)
                 };
             }
+        }
+        if let Some(path) = std::env::args_os().nth(1) {
+            app.open_startup_path(std::path::Path::new(&path));
         }
         app
     }
@@ -377,6 +383,8 @@ impl SciApp {
             status: String::new(),
             show_explorer: true,
             show_help: false,
+            show_about: false,
+            renderer_info: "未检测到图形后端".into(),
             confirm_delete: None,
             sheets: HashMap::new(),
             pending_copy: None,
@@ -796,6 +804,24 @@ impl SciApp {
                 id
             },
         )
+    }
+
+    fn open_startup_path(&mut self, path: &std::path::Path) {
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        if Self::is_project_file(path) {
+            self.open_path_now(path);
+        } else if ext.eq_ignore_ascii_case("scgt") {
+            match scicanvas_core::project_file::load_graph_template(path) {
+                Ok(template) => {
+                    if let Some(id) = self.project.books.first().map(|book| book.id) {
+                        self.apply_graph_template_to_book(template, id);
+                    }
+                }
+                Err(error) => self.status = format!("无法应用图形模板：{error}"),
+            }
+        } else if ext.eq_ignore_ascii_case("scfn") {
+            self.import_custom_fit_function(path);
+        }
     }
 
     fn open_path(&mut self, path: &std::path::Path) {
@@ -1848,6 +1874,7 @@ impl SciApp {
         self.props_window(ctx);
         self.object_window(ctx);
         self.help_window(ctx);
+        self.about_window(ctx);
         if self.drawing_frozen {
             if let Some(dialog) = self.dialog.as_mut() {
                 let _ = dialogs::show(ctx, dialog, &self.pal, &self.project);
