@@ -549,3 +549,29 @@ fn fit_reports_match_generated_numpy_scipy_reference() {
         }
     }
 }
+
+#[test]
+fn formula_catalog_matches_generated_python_scipy_reference() {
+    use scicanvas_core::formula::{self, FUNCTIONS};
+    use std::collections::HashSet;
+    let mut covered = HashSet::new();
+    for case in cases("formulas") {
+        let source = case["expr"].as_str().unwrap();
+        covered.insert(source.split('(').next().unwrap().to_string());
+        let input = case.get("input").map(numbers).unwrap_or_default();
+        let column = |key: &str, row: usize| {
+            if key == "A" {
+                input.get(row).copied().unwrap_or(f64::NAN)
+            } else {
+                f64::NAN
+            }
+        };
+        let rows = if input.is_empty() { 1 } else { input.len() };
+        let expr = formula::parse(source).unwrap().prepare(rows, &column);
+        let actual: Vec<_> = (0..rows).map(|row| expr.eval(row, &column)).collect();
+        array(&actual, &case["expected"], 1e-9, source);
+    }
+    for function in FUNCTIONS {
+        assert!(covered.contains(function.name), "missing {}", function.name);
+    }
+}

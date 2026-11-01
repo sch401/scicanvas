@@ -7456,14 +7456,14 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "表达式引擎 121 个函数，分 8 类：数学、三角与双曲、特殊函数（Γ、B、erf/erfinv、不完全 B/Γ 等）、逻辑与比较（if/and/or/not/xor/between，另有比较运算符 < > <= >= == !=）、概率分布（正态/t/F/χ²/二项/泊松/指数的密度、分布函数与分位数）、列统计（sum mean median std var sem count range rms percentile skewness kurtosis，min/max 单参数为整列）、按行序列（cumsum cumprod diff rank zscore lag lead）、日期时间（年月日时分秒、星期、日序、date/time）；设置列值对话框“函数”菜单按类别插入",
-  "verify": "全部标量函数与 Python math / SciPy 1.17.1 / NumPy 2.4.4 参考值一致（相对 1e-9）；偏度、峰度、百分位数、标准差、标准误与 scipy.stats 一致；列统计与按行序列的整列计算及缺失值处理测试；目录名称唯一、≥120 个",
+  "verify": "全部标量函数与 Python math / SciPy 1.17.1 / NumPy 2.4.4 参考值一致（相对 1e-9）；偏度、峰度、百分位数、标准差、标准误与 scipy.stats 一致；列统计与按行序列的整列计算及缺失值处理测试；目录名称唯一、≥120 个；2026-11：121 个函数名称均有生成的 Python/NumPy/SciPy 参考对照。",
   "milestone": "M1 日常够用",
   "sub_items": {
    "列公式函数": {
     "total": 120,
     "done": 0,
     "review": 120,
-    "note": "当前 121 个函数名，首批 120 个目标已达到，待人工与 Origin 对照"
+    "note": "121 个函数名已通过独立参考对照，待人工与 Origin 对照。"
    }
   },
   "needs": [
@@ -7474,7 +7474,11 @@
    "auto": [
     "crates/scicanvas-core/src/formula.rs::catalog_has_unique_names_and_at_least_120_functions",
     "crates/scicanvas-core/src/formula.rs::scalar_functions_match_python_references",
-    "crates/scicanvas-core/src/formula.rs::column_statistics_and_row_series"
+    "crates/scicanvas-core/src/formula.rs::column_statistics_and_row_series",
+    "crates/scicanvas-core/tests/reference_scipy.rs::formula_catalog_matches_generated_python_scipy_reference"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/formulas.json"
    ]
   }
  },

@@ -5,6 +5,8 @@
 CI 只读取提交的 JSON。输入使用固定种子并完整写入文件。Z 分数使用样本标准差 ddof=1。
 """
 import json
+import math
+from datetime import datetime, timezone
 from pathlib import Path
 import platform
 import warnings
@@ -511,6 +513,66 @@ def fit_report_cases():
     write("fit_reports",cases)
 
 
+def formula_cases():
+    m=math; dt=datetime.fromtimestamp(1792333815,timezone.utc)
+    scalar=[
+        ("abs(-2.5)",abs(-2.5)),("sign(-3)",np.sign(-3)),("sqrt(2)",m.sqrt(2)),("cbrt(-27)",np.cbrt(-27)),
+        ("sqr(1.5)",1.5**2),("exp(1.3)",m.exp(1.3)),("exp2(3.5)",2**3.5),("exp10(-1.5)",10**-1.5),
+        ("ln(7)",m.log(7)),("log(250)",m.log10(250)),("log10(0.02)",m.log10(.02)),("log2(10)",m.log2(10)),
+        ("logb(81,3)",m.log(81,3)),("pow(2,0.5)",2**.5),("floor(-2.5)",m.floor(-2.5)),("ceil(-2.5)",m.ceil(-2.5)),
+        ("trunc(-2.7)",m.trunc(-2.7)),("frac(-2.75)",-2.75-m.trunc(-2.75)),("round(2.5)",m.floor(2.5+.5)),
+        ("recip(8)",1/8),("mod(-7,3)",-7%3),("rem(-7,3)",m.fmod(-7,3)),("hypot(3,4)",m.hypot(3,4)),
+        ("fact(10)",m.factorial(10)),("ncr(10,3)",m.comb(10,3)),("npr(10,3)",m.perm(10,3)),
+        ("gcd(84,36)",m.gcd(84,36)),("lcm(4,6)",m.lcm(4,6)),("clamp(5,0,3)",min(max(5,0),3)),
+        ("isnan(0/0)",int(np.isnan(np.nan))),("isinf(1/0)",int(np.isinf(np.inf))),
+        ("sin(0.7)",m.sin(.7)),("cos(0.7)",m.cos(.7)),("tan(0.7)",m.tan(.7)),
+        ("sec(0.7)",1/m.cos(.7)),("csc(0.7)",1/m.sin(.7)),("cot(0.7)",1/m.tan(.7)),
+        ("asin(0.3)",m.asin(.3)),("acos(0.3)",m.acos(.3)),("atan(2)",m.atan(2)),("acot(2)",m.atan2(1,2)),
+        ("atan2(1,-1)",m.atan2(1,-1)),("sinh(1.2)",m.sinh(1.2)),("cosh(1.2)",m.cosh(1.2)),("tanh(1.2)",m.tanh(1.2)),
+        ("sech(1.2)",1/m.cosh(1.2)),("csch(1.2)",1/m.sinh(1.2)),("coth(1.2)",1/m.tanh(1.2)),
+        ("asinh(2)",m.asinh(2)),("acosh(2)",m.acosh(2)),("atanh(0.5)",m.atanh(.5)),
+        ("deg(pi/3)",m.degrees(m.pi/3)),("rad(45)",m.radians(45)),("sinc(0.3)",np.sinc(.3)),
+        ("gamma(4.5)",special.gamma(4.5)),("lngamma(30.5)",special.gammaln(30.5)),
+        ("beta(2.5,3.5)",special.beta(2.5,3.5)),("lnbeta(20,30)",special.betaln(20,30)),
+        ("erf(0.6)",special.erf(.6)),("erfc(1.7)",special.erfc(1.7)),("erfinv(0.4)",special.erfinv(.4)),
+        ("betainc(0.3,2,5)",special.betainc(2,5,.3)),("gammainc(1.5,2.5)",special.gammainc(2.5,1.5)),
+        ("gammaincc(4,2.5)",special.gammaincc(2.5,4)),("step(0)",1.),("logistic(0.8)",special.expit(.8)),
+        ("if(1>2,5,6)",6.),("and(1,0)",0.),("or(1,0)",1.),("not(0)",1.),("xor(1,1)",0.),
+        ("between(2,1,3)",1.),("min(2,3)",min(2,3)),("max(2,3)",max(2,3)),
+        ("normpdf(0.5)",stats.norm.pdf(.5)),("normcdf(1.96)",stats.norm.cdf(1.96)),("norminv(0.975)",stats.norm.ppf(.975)),
+        ("tpdf(1.2,7)",stats.t.pdf(1.2,7)),("tcdf(-2.1,12)",stats.t.cdf(-2.1,12)),("tinv(0.95,9)",stats.t.ppf(.95,9)),
+        ("fpdf(1.7,4,11)",stats.f.pdf(1.7,4,11)),("fcdf(2.5,3,20)",stats.f.cdf(2.5,3,20)),("finv(0.95,3,20)",stats.f.ppf(.95,3,20)),
+        ("chi2pdf(3.3,5)",stats.chi2.pdf(3.3,5)),("chi2cdf(7.1,4)",stats.chi2.cdf(7.1,4)),("chi2inv(0.99,6)",stats.chi2.ppf(.99,6)),
+        ("binopdf(3,10,0.25)",stats.binom.pmf(3,10,.25)),("binocdf(3,10,0.25)",stats.binom.cdf(3,10,.25)),
+        ("poisspdf(4,2.5)",stats.poisson.pmf(4,2.5)),("poisscdf(4,2.5)",stats.poisson.cdf(4,2.5)),
+        ("exppdf(1.5,2)",stats.expon.pdf(1.5,scale=2)),("expcdf(1.5,2)",stats.expon.cdf(1.5,scale=2)),
+        ("year(1792333815000)",dt.year),("month(1792333815000)",dt.month),("day(1792333815000)",dt.day),
+        ("hour(1792333815000)",dt.hour),("minute(1792333815000)",dt.minute),("second(1792333815000)",dt.second),
+        ("weekday(1792333815000)",dt.isoweekday()),("dayofyear(1792333815000)",dt.timetuple().tm_yday),
+        ("date(2026,10,18)",datetime(2026,10,18,tzinfo=timezone.utc).timestamp()*1000),
+        ("time(1,2,3.5)",(3600+120+3.5)*1000),
+    ]
+    cases=[dict(name=src,kind="scalar",expr=src,expected=[value]) for src,value in scalar]
+    for name,raw in [("missing-ties",[3.,None,1.,4.,1.,5.,9.,2.,6.]),("small",[1.,1.,3.]),
+                     ("large",[1e9,1e9+4,1e9-3,1e9+9])]:
+        a=np.asarray(raw,float); valid=a[np.isfinite(a)]; n=len(valid)
+        values={"sum":np.sum(valid),"mean":np.mean(valid),"median":np.median(valid),
+                "std":np.std(valid,ddof=1),"var":np.var(valid,ddof=1),"sem":stats.sem(valid,ddof=1),
+                "count":n,"range":np.max(valid)-np.min(valid),"rms":np.sqrt(np.mean(valid*valid)),
+                "percentile":np.percentile(valid,30),"skewness":stats.skew(valid,bias=False),
+                "kurtosis":stats.kurtosis(valid,fisher=True,bias=False) if n>=4 else np.nan,
+                "min":np.min(valid),"max":np.max(valid)}
+        for fn,val in values.items():
+            expr=f"{fn}(A,30)" if fn=="percentile" else f"{fn}(A)"
+            cases.append(dict(name=name+"-"+fn,kind="column",expr=expr,input=raw,expected=[val]*len(a)))
+        finite=np.isfinite(a); sums=np.nancumsum(a); prods=np.nancumprod(a); sums[~finite]=np.nan; prods[~finite]=np.nan
+        seq={"cumsum":sums,"cumprod":prods,"diff":np.r_[np.nan,np.diff(a)],
+             "rank":stats.rankdata(a,method="average",nan_policy="omit"),
+             "zscore":(a-np.mean(valid))/np.std(valid,ddof=1),"lag":np.r_[np.nan,a[:-1]],"lead":np.r_[a[1:],np.nan]}
+        for fn,val in seq.items():cases.append(dict(name=name+"-"+fn,kind="column",expr=f"{fn}(A)",input=raw,expected=val))
+    write("formulas",cases)
+
+
 if __name__ == "__main__":
     integrals()
     normalization()
@@ -527,3 +589,4 @@ if __name__ == "__main__":
     smoothing_cases()
     percent_bar_cases()
     fit_report_cases()
+    formula_cases()

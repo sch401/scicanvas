@@ -238,7 +238,7 @@
 | F171 | 反函数（交换 X、Y 求逆） | Inverse | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
 | F172 | 自定义滤波 / 中值滤波 | Median Filter | P2 | 未开始 | 自写，数值算法参照 Numerical Recipes / SciPy | 与 Origin 及 SciPy 结果比较 | — |
 | F173 | 扣除直线基线 | Subtract Straight Line | P1 | 已实现待验收 | 扣除基线对话框选“两端连线”：首末两点连线作为基线 | 单元测试；SciPy/NIST 参考值对照待做 | — |
-| F509 | 列公式函数库 | Set Column Values / Functions | P0 | 已实现待验收 | 表达式引擎 121 个函数，分 8 类：数学、三角与双曲、特殊函数（Γ、B、erf/erfinv、不完全 B/Γ 等）、逻辑与比较（if/and/or/not/xor/between，另有比较运算符 < > <= >= == !=）、概率分布（正态/t/F/χ²/二项/泊松/指数的密度、分布函数与分位数）、列统计（sum mean median std var sem count range rms percentile skewness kurtosis，min/max 单参数为整列）、按行序列（cumsum cumprod diff rank zscore lag lead）、日期时间（年月日时分秒、星期、日序、date/time）；设置列值对话框“函数”菜单按类别插入 | 全部标量函数与 Python math / SciPy 1.17.1 / NumPy 2.4.4 参考值一致（相对 1e-9）；偏度、峰度、百分位数、标准差、标准误与 scipy.stats 一致；列统计与按行序列的整列计算及缺失值处理测试；目录名称唯一、≥120 个 | 列公式函数：已完成 0/120，待验收 120，部分实现 0；当前 121 个函数名，首批 120 个目标已达到，待人工与 Origin 对照 |
+| F509 | 列公式函数库 | Set Column Values / Functions | P0 | 已实现待验收 | 表达式引擎 121 个函数，分 8 类：数学、三角与双曲、特殊函数（Γ、B、erf/erfinv、不完全 B/Γ 等）、逻辑与比较（if/and/or/not/xor/between，另有比较运算符 < > <= >= == !=）、概率分布（正态/t/F/χ²/二项/泊松/指数的密度、分布函数与分位数）、列统计（sum mean median std var sem count range rms percentile skewness kurtosis，min/max 单参数为整列）、按行序列（cumsum cumprod diff rank zscore lag lead）、日期时间（年月日时分秒、星期、日序、date/time）；设置列值对话框“函数”菜单按类别插入 | 全部标量函数与 Python math / SciPy 1.17.1 / NumPy 2.4.4 参考值一致（相对 1e-9）；偏度、峰度、百分位数、标准差、标准误与 scipy.stats 一致；列统计与按行序列的整列计算及缺失值处理测试；目录名称唯一、≥120 个；2026-11：121 个函数名称均有生成的 Python/NumPy/SciPy 参考对照。 | 列公式函数：已完成 0/120，待验收 120，部分实现 0；121 个函数名已通过独立参考对照，待人工与 Origin 对照。 |
 
 ## 统计
 
