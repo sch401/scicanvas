@@ -7,6 +7,9 @@ const NLS: &[&str] = &[
     "Nelson", "MGH17", "Lanczos1", "Lanczos2", "Gauss3", "Misra1c", "Misra1d", "Roszman1", "ENSO", "MGH09", "Thurber",
     "BoxBOD", "Rat42", "MGH10", "Eckerle4", "Rat43", "Bennett5",
 ];
+const HIGHER: &[&str] = &[
+    "MGH09", "Thurber", "BoxBOD", "Rat42", "MGH10", "Eckerle4", "Rat43", "Bennett5",
+];
 const LLS: &[&str] = &[
     "Norris", "Pontius", "NoInt1", "NoInt2", "Filip", "Longley", "Wampler1", "Wampler2", "Wampler3", "Wampler4",
     "Wampler5",
@@ -187,11 +190,7 @@ fn nonlinear(name: &'static str, start: Start) -> Observation {
             let p = minimum(&fit.params, &d.coef);
             let rss = lre(fit.rss, d.rss);
             let se = minimum(&fit.se, &d.se);
-            let threshold = if NLS.iter().position(|n| *n == name).unwrap() >= 19 {
-                6.0
-            } else {
-                7.0
-            };
+            let threshold = if HIGHER.contains(&name) { 6.0 } else { 7.0 };
             let original = p >= threshold && rss >= 6.0 && (start == Start::One || se >= 4.0);
             let within_uncertainty = fit
                 .params
@@ -322,6 +321,13 @@ fn assert_results(start: Option<Start>) {
             None => KNOWN_LINEAR_FAILURES.contains(&o.name),
         };
         assert!(!known, "{} 已达标，请移除已知失败记录", o.name);
+    }
+}
+
+#[test]
+fn higher_difficulty_names_are_nist_datasets() {
+    for name in HIGHER {
+        assert!(NLS.contains(name), "{name} is absent from NLS");
     }
 }
 
