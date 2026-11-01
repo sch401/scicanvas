@@ -32,7 +32,7 @@ impl SciApp {
             model: scicanvas_core::nlfit::Model::Gauss,
             initial: String::new(),
             target: None,
-            limits: [(false, 0.0, false, 0.0, false, 1.0); scicanvas_core::nlfit::MAX_PARAMS],
+            limits: vec![(false, 0.0, false, 0.0, false, 1.0); scicanvas_core::nlfit::Model::Gauss.params().len()],
             constraints: String::new(),
         });
     }
@@ -892,7 +892,7 @@ impl SciApp {
         }));
         match &recipe.function {
             scicanvas_core::ops::FitMethod::Builtin(model) => {
-                let mut limits = [(false, 0.0, false, 0.0, false, 1.0); scicanvas_core::nlfit::MAX_PARAMS];
+                let mut limits = vec![(false, 0.0, false, 0.0, false, 1.0); model.params().len()];
                 for (ui, limit) in limits.iter_mut().zip(&recipe.limits) {
                     *ui = (
                         limit.fixed.is_some(),
