@@ -529,7 +529,63 @@ impl SciApp {
         else {
             return;
         };
-        self.import_path(&path);
+        let excel = path
+            .extension()
+            .and_then(|e| e.to_str())
+            .is_some_and(|e| ["xlsx", "xlsm", "xls"].iter().any(|x| e.eq_ignore_ascii_case(x)));
+        if excel {
+            self.import_path(&path);
+        } else {
+            match std::fs::read(&path) {
+                Ok(bytes) => {
+                    self.dialog = Some(Dialog::ImportWizard(Box::new(dialogs::ImportWizard::new(path, bytes))))
+                }
+                Err(e) => self.status = format!("无法读取文件：{e}"),
+            }
+        }
+    }
+
+    pub(super) fn import_with_options(&mut self, path: std::path::PathBuf, options: csv::ImportOptions) -> bool {
+        let result = std::fs::read(&path)
+            .map_err(|e| e.to_string())
+            .and_then(|bytes| csv::decode_import(&bytes, &options))
+            .and_then(|text| csv::book_from_import(0, "", &text, &options));
+        let mut book = match result {
+            Ok(book) => book,
+            Err(e) => {
+                if let Some(Dialog::ImportWizard(wizard)) = &mut self.dialog {
+                    wizard.error = Some(e);
+                }
+                return false;
+            }
+        };
+        self.settings.last_dir = path.parent().map(std::path::Path::to_path_buf);
+        let parent = self.current_folder();
+        let base = path
+            .file_stem()
+            .map(|s| s.to_string_lossy().to_string())
+            .unwrap_or_else(|| "Book".into());
+        self.edit_with(
+            "导入数据",
+            |project| {
+                book.name = if project.books.iter().any(|b| b.name == base) {
+                    project.unique_name(&format!("{base}_"))
+                } else {
+                    base.clone()
+                };
+                book.id = project.alloc_id();
+                let id = book.id;
+                project.books.push(book);
+                project.move_project_item(id, parent)?;
+                Ok(Some(id))
+            },
+            |app, id| {
+                app.show_item(id);
+                app.status = format!("已导入 {}", path.display());
+            },
+        );
+        self.dialog = None;
+        true
     }
 
     /// 把一个数据文件导入成新工作簿，放在当前文件夹里。Excel 工作簿的每张非空工作表各成一个工作簿。

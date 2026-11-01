@@ -207,6 +207,139 @@ fn finish_columns(book: &mut Book) {
     }
 }
 
+/// Text import settings that can be stored as a reusable template.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+#[cfg_attr(feature = "serde", serde(default))]
+pub struct ImportOptions {
+    /// 0 auto, 1 comma, 2 tab, 3 semicolon, 4 whitespace.
+    pub delimiter: u8,
+    /// 0 auto, 1 UTF-8, 2 GBK, 3 UTF-16 LE, 4 UTF-16 BE.
+    pub encoding: u8,
+    pub skip_rows: usize,
+    /// Header rows are long name, units, and comment, in that order.
+    pub header_rows: usize,
+    /// 0 auto, 1 number, 2 text, 3 date/time, 4 category.
+    pub column_types: Vec<u8>,
+}
+
+impl Default for ImportOptions {
+    fn default() -> Self {
+        Self {
+            delimiter: 0,
+            encoding: 0,
+            skip_rows: 0,
+            header_rows: 1,
+            column_types: Vec::new(),
+        }
+    }
+}
+
+/// Decode according to the selected encoding; auto preserves the existing import behavior.
+#[cfg(feature = "encoding")]
+pub fn decode_import(bytes: &[u8], options: &ImportOptions) -> Result<String, String> {
+    if options.encoding == 0 {
+        return Ok(decode(bytes));
+    }
+    let encoding = match options.encoding {
+        1 => encoding_rs::UTF_8,
+        2 => encoding_rs::GBK,
+        3 => encoding_rs::UTF_16LE,
+        4 => encoding_rs::UTF_16BE,
+        _ => return Err("未知编码".into()),
+    };
+    let (text, _, errors) = encoding.decode(bytes);
+    if errors {
+        return Err("文件不能按选定编码解码".into());
+    }
+    Ok(text.into_owned())
+}
+
+/// Preview at most `limit` rows, including selected header rows.
+pub fn preview_import(text: &str, options: &ImportOptions, limit: usize) -> Vec<Vec<String>> {
+    let lines: Vec<_> = text.lines().skip(options.skip_rows).take(limit).collect();
+    let delim = import_delimiter(&lines, options.delimiter);
+    lines.iter().map(|line| split_line(line, delim)).collect()
+}
+
+fn import_delimiter(lines: &[&str], delimiter: u8) -> Delim {
+    match delimiter {
+        1 => Delim::Char(','),
+        2 => Delim::Char('\t'),
+        3 => Delim::Char(';'),
+        4 => Delim::Whitespace,
+        _ => detect_delim(lines),
+    }
+}
+
+/// Build a book directly from lines so large imports do not allocate a full row table.
+pub fn book_from_import(id: u64, name: &str, text: &str, options: &ImportOptions) -> Result<Book, String> {
+    let normalized = text.replace("\r\n", "\n").replace('\r', "\n");
+    let lines = table_lines(&normalized);
+    let lines = lines.get(options.skip_rows..).unwrap_or_default();
+    let delim = import_delimiter(&lines[..lines.len().min(50)], options.delimiter);
+    let headers: Vec<_> = lines
+        .iter()
+        .take(options.header_rows)
+        .map(|line| split_line(line, delim))
+        .collect();
+    let mut book = Book::new(id, name);
+    for (count, row) in lines.iter().skip(options.header_rows).enumerate() {
+        let cells = split_line(row, delim);
+        while book.columns.len() < cells.len().max(headers.iter().map(Vec::len).max().unwrap_or(0)) {
+            let j = book.columns.len();
+            book.push_column(if j == 0 { Role::X } else { Role::Y });
+            let col = &mut book.columns[j];
+            if let Some(h) = headers.first().and_then(|h| h.get(j)) {
+                (col.long_name, col.units) = split_name_units(h);
+            }
+            if let Some(units) = headers.get(1).and_then(|h| h.get(j)) {
+                col.units.clone_from(units);
+            }
+            if let Some(comment) = headers.get(2).and_then(|h| h.get(j)) {
+                col.comment.clone_from(comment);
+            }
+            for _ in 0..count {
+                col.data.push(String::new());
+            }
+        }
+        let mut cells = cells.into_iter();
+        for col in &mut book.columns {
+            col.data.push(cells.next().unwrap_or_default());
+        }
+    }
+    if book.columns.is_empty() {
+        return Err("文件里没有数据".into());
+    }
+    finish_columns(&mut book);
+    for (col, kind) in book.columns.iter_mut().zip(&options.column_types) {
+        let kind = match kind {
+            0 => continue,
+            1 => crate::DataKind::Num,
+            2 => crate::DataKind::Text,
+            3 => crate::DataKind::DateTime,
+            4 => crate::DataKind::Category,
+            _ => return Err("未知列类型".into()),
+        };
+        col.data = col
+            .data
+            .converted(kind)
+            .map_err(|e| format!("列 {}：{e}", col.key))?
+            .into();
+    }
+    Ok(book)
+}
+
+#[cfg(feature = "serde")]
+pub fn import_template_json(options: &ImportOptions) -> Result<String, String> {
+    serde_json::to_string_pretty(options).map_err(|e| e.to_string())
+}
+
+#[cfg(feature = "serde")]
+pub fn import_template_from_json(text: &str) -> Result<ImportOptions, String> {
+    serde_json::from_str(text).map_err(|e| e.to_string())
+}
+
 /// 文本里有制表符或换行时视为多单元格粘贴（从 Excel 复制的一块区域）。
 pub fn is_block_paste(text: &str) -> bool {
     text.contains('\t') || text.trim_end().contains('\n')
@@ -411,5 +544,48 @@ mod tests {
                 assert_eq!(b.columns[0].data.text_at(i), *value);
             }
         }
+    }
+}
+
+#[cfg(all(test, feature = "encoding", feature = "serde"))]
+mod import_wizard_tests {
+    use super::*;
+
+    #[test]
+    fn options_preview_import_and_template_round_trip() {
+        let text = "ignored\nTime;Group\ns;\nnote;label\n0;one\n1;two\n";
+        let options = ImportOptions {
+            delimiter: 3,
+            encoding: 1,
+            skip_rows: 1,
+            header_rows: 3,
+            column_types: vec![1, 4],
+        };
+        assert_eq!(preview_import(text, &options, 2), [["Time", "Group"], ["s", ""]]);
+        let book = book_from_import(4, "Demo", text, &options).unwrap();
+        assert_eq!(
+            (
+                book.columns[0].long_name.as_str(),
+                book.columns[0].units.as_str(),
+                book.columns[0].comment.as_str()
+            ),
+            ("Time", "s", "note")
+        );
+        assert_eq!(book.nrows(), 2);
+        assert_eq!(book.columns[0].data.f64_at(1), Some(1.0));
+        assert_eq!(book.columns[1].data.kind(), crate::DataKind::Category);
+        assert_eq!(book.columns[1].data.text_at(1), "two");
+        assert_eq!(
+            import_template_from_json(&import_template_json(&options).unwrap()).unwrap(),
+            options
+        );
+        assert!(book_from_import(1, "Empty", "ignored", &options).is_err());
+        let mut invalid = options.clone();
+        invalid.column_types[1] = 1;
+        assert!(book_from_import(1, "Bad", text, &invalid).is_err());
+        assert!(decode_import(&[0xff], &options).is_err());
+        let mut utf16 = options.clone();
+        utf16.encoding = 3;
+        assert_eq!(decode_import(&[0xff, 0xfe, b'A', 0], &utf16).unwrap(), "A");
     }
 }

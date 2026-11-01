@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 97 项，P1 146 项，P2 259 项，不做 12 项。
-状态：已完成 60 项，已实现待验收 63 项，部分实现 17 项，未开始 362 项，不做 12 项。
+状态：已完成 60 项，已实现待验收 64 项，部分实现 17 项，未开始 361 项，不做 12 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -105,7 +105,7 @@
 | F062 | CSV / TXT 导入（自动识别分隔符） | Importing Simple ASCII Data Files | P0 | 已完成 | csv.rs | 单元测试 | — |
 | F063 | GBK / UTF-8 编码识别 | Customizing the ASCII Import Options | P0 | 已完成 | encoding_rs | 单元测试 | — |
 | F064 | 表头自动拆分长名称与单位 | Customizing the ASCII Import Options | P0 | 已完成 | — | 单元测试 | — |
-| F065 | 导入向导（跳过表头行、指定分隔符、预览） | The Import Wizard | P0 | 未开始 | 导入预览、跳过行与分隔符/表头设置向导未实现；按用户要求暂缓，现有直接导入继续可用 | 手动操作 | — |
+| F065 | 导入向导（跳过表头行、指定分隔符、预览） | The Import Wizard | P0 | 已实现待验收 | 文本文件导入向导支持自动或指定分隔符、编码、跳过行、0–3 行表头、列类型、前 50 行预览及导入模板保存和加载；导入是一步撤销。Excel 继续按各工作表导入。 | 预览和解析、指定类型、编码、模板往返、无效值、实际按钮和导入撤销测试；Windows 人工验收待做。 | — |
 | F066 | 导入 Excel（.xlsx / .xls） | Importing from Excel | P0 | 已实现待验收 | 导入 .xlsx/.xlsm（zip + roxmltree）与旧版 .xls（自写 OLE2 复合文档 + BIFF8 读取：FAT/DIFAT/迷你流，共享字符串跨 CONTINUE 记录，NUMBER/RK/MULRK/LABELSST/LABEL/BOOLERR/FORMULA 缓存值）；按单元格数字格式（内置 14–22、27–36、45–47、50–58 含中文日期及自定义格式）把日期序列号写成日期，支持 1904 日期制；合并单元格用左上角的值填满；数值按 15 位有效数字保留；全部为日期写法的列导入为日期时间列；每张非空工作表一个工作簿；加密或 Excel 95 文件给出提示 | Excel 16 另存的同一内容 .xls 与 .xlsx 读取结果逐格一致（含中文日期、日期时间、合并单元格、公式数值与字符串结果、布尔、1200 个跨记录共享字符串、301 字长文本、大数值精度）；原有 openpyxl/手写 xlsx 回归通过；RK 解码单元测试 | — |
 | F067 | 导出 Excel | Exporting Worksheets and Matrices | P1 | 未开始 | rust_xlsxwriter | 用 Excel 打开检查 | — |
 | F068 | 导出 CSV | Exporting Worksheets and Matrices | P0 | 已实现待验收 | 工作表 → 导出 CSV：UTF-8 BOM、CRLF，表头为“长名称 (单位)”，与 .scv 内的 CSV 同一实现 | 导出后重新导入的往返测试；Excel 打开待人工验收 | — |
