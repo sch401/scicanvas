@@ -477,3 +477,27 @@ fn mgh17_local_minimum_warning() {
 fn boxbod_local_minimum_warning() {
     assert_local_minimum_warning("BoxBOD");
 }
+
+#[test]
+fn certified_solutions_have_no_reliability_warning() {
+    let mut failures = Vec::new();
+    for &name in NLS.iter().filter(|name| **name != "Nelson") {
+        let d = read("nls", name);
+        if d.coef.len() > nlfit::MAX_PARAMS {
+            continue;
+        }
+        let function = nlfit::CustomFitFunction::new(
+            name,
+            formula(name),
+            (1..=d.coef.len()).map(|i| format!("b{i}")).collect(),
+        )
+        .unwrap();
+        let xs: Vec<_> = d.rows.iter().map(|r| r[1]).collect();
+        let ys: Vec<_> = d.rows.iter().map(|r| r[0]).collect();
+        let fit = nlfit::fit_custom(function, &xs, &ys, &d.coef, &[], &[]).unwrap();
+        if !fit.warnings.is_empty() {
+            failures.push(format!("{name}: {:?}", fit.warnings));
+        }
+    }
+    assert!(failures.is_empty(), "{}", failures.join("\n"));
+}
