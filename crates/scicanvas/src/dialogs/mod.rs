@@ -23,6 +23,7 @@ mod column_props;
 mod convert_text;
 mod correlations;
 mod docking;
+mod excel_export;
 mod fft;
 mod fft_filter;
 mod fill;
@@ -73,6 +74,9 @@ pub(crate) use sheet_transform::TransformKind;
 pub use sheet_transform::{SheetTransform, TransformAction};
 
 pub enum Dialog {
+    ExportXlsx {
+        headers: bool,
+    },
     SheetTransform(Box<SheetTransform>),
     FindReplace(Box<FindReplace>),
     ImportWizard(Box<ImportWizard>),
@@ -248,10 +252,15 @@ pub enum Dialog {
         dpi: u32,
         page_mm: (f64, f64),
     },
+    Tiff {
+        dpi: u32,
+        page_mm: (f64, f64),
+    },
 }
 
 /// 对话框里用户做出的选择，由 app.rs 执行。
 pub enum Action {
+    ExportXlsx(bool),
     SheetTransform(u64, TransformAction),
     FindNext,
     ReplaceCurrent,
@@ -277,6 +286,7 @@ pub enum Action {
     Ifft(u64, String, Option<String>, scicanvas_core::fft::InverseInput),
     Normalize(NormalizeMethod),
     ExportPng(u32),
+    ExportTiff(u32),
     Interpolate(InterpMethod, usize, Option<(f64, f64)>),
     TTest(TTestKind, f64),
     Frequency(Option<usize>, Option<(f64, f64)>),
@@ -312,6 +322,7 @@ impl Dialog {
         let mut action = match self {
             Self::LayerContents(contents) => contents.show(ctx, project, pal),
             Self::FindReplace(state) => state.show(ctx, &mut open),
+            Self::ExportXlsx { .. } => self.show_export_xlsx(ctx, &mut open),
             Self::ImportWizard(wizard) => wizard.show(ctx, pal, &mut open),
             Self::AnalysisCurves { .. } => self.show_analysis_curves(ctx, pal, &mut open, esc),
             Self::ColumnProps { .. } => self.show_column_props(ctx, pal, &mut open, esc),
@@ -343,7 +354,7 @@ impl Dialog {
             Self::Frequency { .. } => self.show_frequency(ctx, pal, &mut open, esc),
             Self::TTest { .. } => self.show_t_test(ctx, pal, &mut open, esc),
             Self::TTestReport { .. } => self.show_t_test_report(ctx, pal, &mut open, esc),
-            Self::Png { .. } => self.show_png(ctx, pal, &mut open, esc),
+            Self::Png { .. } | Self::Tiff { .. } => self.show_png(ctx, pal, &mut open, esc),
         };
         if !open || (esc && matches!(action, Action::None)) {
             action = Action::Close;

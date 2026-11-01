@@ -1732,3 +1732,34 @@ fn frozen_columns_scroll_horizontally_and_keep_rows_aligned() {
     app.run_command("sheet.unfreeze");
     assert_eq!(app.sheets[&1].frozen_columns, 0);
 }
+
+#[test]
+fn excel_export_dialog_lets_user_choose_headers() {
+    let mut app = app();
+    app.run_command("project.export_xlsx");
+    assert!(matches!(app.dialog, Some(Dialog::ExportXlsx { headers: true })));
+    let mut dialog = app.dialog.take().unwrap();
+    let project = app.project.clone();
+    let palette = app.pal;
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut harness = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(800.0, 600.0)),
+        |dialog: &mut Dialog, ctx: &egui::Context| dialogs::show(ctx, dialog, &palette, &project),
+    );
+    let mut output = harness.frame(&mut dialog, vec![]);
+    for _ in 0..2 {
+        output = harness.frame(&mut dialog, vec![]);
+    }
+    harness.click_text(&mut dialog, &output, "包含长名、单位和注释三行表头");
+    assert!(matches!(dialog, Dialog::ExportXlsx { headers: false }));
+}
+
+#[test]
+fn tiff_export_command_opens_resolution_settings() {
+    let mut app = app();
+    app.active = Some(2);
+    app.run_command("graph.export_tiff");
+    assert!(matches!(app.dialog, Some(Dialog::Tiff { dpi: 600, .. })));
+}
