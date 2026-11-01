@@ -222,6 +222,10 @@ pub static TABS: &[Tab] = &[
                 items: &[Smalls(&["sort.asc", "sort.desc", "sort.custom"])],
             },
             Group {
+                label: "变换",
+                items: &[Smalls(&["book.transpose"])],
+            },
+            Group {
                 label: "导出",
                 items: &[Smalls(&["book.export_csv"])],
             },
