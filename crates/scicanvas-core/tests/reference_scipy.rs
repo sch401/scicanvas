@@ -172,3 +172,110 @@ fn polynomial_degrees_two_to_six_match_numpy_with_large_x_offset() {
         );
     }
 }
+
+#[test]
+fn histogram_correlations_and_t_tests_match_generated_scipy_reference() {
+    use scicanvas_core::stats::{self, CorrMethod, TTestKind};
+    for case in cases("statistics") {
+        let name = case["name"].as_str().unwrap();
+        let kind = name.split('-').next().unwrap();
+        match kind {
+            "histogram" => {
+                let limits = case.get("limits").map(numbers).unwrap_or_else(|| vec![-1.0, 3.0]);
+                let bins = stats::histogram(&numbers(&case["values"]), 4, Some((limits[0], limits[1]))).unwrap();
+                let counts: Vec<_> = bins.iter().map(|bin| bin.count as u64).collect();
+                let expected: Vec<_> = case["counts"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|x| x.as_u64().unwrap())
+                    .collect();
+                assert_eq!(counts, expected);
+                let mut edges: Vec<_> = bins.iter().map(|bin| bin.lo).collect();
+                edges.push(bins.last().unwrap().hi);
+                array(&edges, &case["edges"], 1e-12, name);
+            }
+            "pearson" | "spearman" | "kendall" => {
+                let method = match kind {
+                    "pearson" => CorrMethod::Pearson,
+                    "spearman" => CorrMethod::Spearman,
+                    _ => CorrMethod::Kendall,
+                };
+                let r = stats::correlation(&numbers(&case["x"]), &numbers(&case["y"]), method).unwrap();
+                near(r.r, &case["r"], 1e-9, name);
+                near(r.p, &case["p"], 1e-9, name);
+            }
+            _ => {
+                let kind = match kind {
+                    "one" => TTestKind::OneSample {
+                        mu: case.get("mu").and_then(Value::as_f64).unwrap_or(5.0),
+                    },
+                    "student" => TTestKind::TwoSample { equal_var: true },
+                    "welch" => TTestKind::TwoSample { equal_var: false },
+                    "paired" => TTestKind::Paired,
+                    _ => panic!("unexpected case {name}"),
+                };
+                let r = stats::t_test(kind, &numbers(&case["a"]), &numbers(&case["b"]), 0.95).unwrap();
+                near(r.t, &case["t"], 1e-9, name);
+                near(r.df, &case["df"], 1e-9, name);
+                near(r.p, &case["p"], 1e-9, name);
+                array(&[r.ci.0, r.ci.1], &case["ci"], 1e-9, name);
+            }
+        }
+    }
+}
+
+#[test]
+fn fft_filters_and_correlations_match_generated_numpy_reference() {
+    use scicanvas_core::{
+        fft::{self, FilterKind, Window},
+        stats,
+    };
+    for case in cases("signals") {
+        let name = case["name"].as_str().unwrap();
+        match name {
+            "fft" => {
+                let y = numbers(&case["y"]);
+                let spectrum = fft::spectrum(&y, case["dt"].as_f64().unwrap(), Window::Rect).unwrap();
+                let tolerance = case.get("tolerance").and_then(Value::as_f64).unwrap_or(1e-10);
+                array(&spectrum.freq, &case["freq"], tolerance, name);
+                array(&spectrum.re, &case["re"], tolerance, name);
+                array(&spectrum.im, &case["im"], tolerance, name);
+                array(
+                    &fft::inverse_real(&spectrum.re, &spectrum.im, y.len()),
+                    &case["y"],
+                    tolerance,
+                    name,
+                );
+            }
+            "low" | "high" | "band" | "stop" => {
+                let kind = match name {
+                    "low" => FilterKind::LowPass(1.5),
+                    "high" => FilterKind::HighPass(1.5),
+                    "band" => FilterKind::BandPass(1.0, 3.0),
+                    _ => FilterKind::BandStop(1.0, 3.0),
+                };
+                let out = fft::filter(&numbers(&case["y"]), case["dt"].as_f64().unwrap(), kind).unwrap();
+                array(&out, &case["result"], 1e-10, name);
+            }
+            "fft-missing" => {
+                assert!(fft::spectrum(&numbers(&case["y"]), case["dt"].as_f64().unwrap(), Window::Rect).is_err());
+            }
+            "correlation" => {
+                let x = numbers(&case["x"]);
+                let (lags, corr) = stats::cross_correlation(&x, &numbers(&case["z"])).unwrap();
+                let want: Vec<_> = case["lags"]
+                    .as_array()
+                    .unwrap()
+                    .iter()
+                    .map(|n| n.as_i64().unwrap())
+                    .collect();
+                assert_eq!(lags, want);
+                array(&corr, &case["corr"], 1e-10, name);
+                let (_, auto) = stats::cross_correlation(&x, &x).unwrap();
+                array(&auto, &case["auto"], 1e-10, name);
+            }
+            _ => panic!("unexpected case {name}"),
+        }
+    }
+}
