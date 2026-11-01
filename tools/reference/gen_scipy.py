@@ -11,7 +11,7 @@ import warnings
 
 import numpy as np
 import scipy
-from scipy import integrate, interpolate, optimize, signal, stats
+from scipy import integrate, interpolate, optimize, signal, special, stats
 
 ROOT = Path(__file__).resolve().parents[2]
 OUT = ROOT / "crates/scicanvas-core/tests/reference"
@@ -349,6 +349,61 @@ def constrained_fit_cases():
     write("constraints", cases)
 
 
+def builtin_fit_cases():
+    pi = np.pi
+    ln2 = np.log(2)
+    models = {
+        "Gauss": lambda x,y0,xc,w,a: y0+a/(w*np.sqrt(pi/2))*np.exp(-2*((x-xc)/w)**2),
+        "Lorentz": lambda x,y0,xc,w,a: y0+2*a/pi*w/(4*(x-xc)**2+w*w),
+        "Voigt": lambda x,y0,xc,a,wg,wl: y0+a*special.voigt_profile(x-xc,wg/(2*np.sqrt(2*ln2)),wl/2),
+        "PsdVoigt1": lambda x,y0,xc,a,w,mu: y0+a*(mu*(2/pi*w/(4*(x-xc)**2+w*w))+(1-mu)*(np.sqrt(4*ln2)/(np.sqrt(pi)*w)*np.exp(-4*ln2*(x-xc)**2/w**2))),
+        "LogNormal": lambda x,y0,xc,w,a: y0+a/(np.sqrt(2*pi)*w*x)*np.exp(-(np.log(x/xc)**2)/(2*w*w)),
+        "ExpDec1": lambda x,y0,a,t: y0+a*np.exp(-x/t),
+        "ExpDec2": lambda x,y0,a1,t1,a2,t2: y0+a1*np.exp(-x/t1)+a2*np.exp(-x/t2),
+        "ExpDec3": lambda x,y0,a1,t1,a2,t2,a3,t3: y0+a1*np.exp(-x/t1)+a2*np.exp(-x/t2)+a3*np.exp(-x/t3),
+        "ExpGro1": lambda x,y0,a,t: y0+a*np.exp(x/t),
+        "ExpAssoc": lambda x,y0,a1,t1,a2,t2: y0+a1*(1-np.exp(-x/t1))+a2*(1-np.exp(-x/t2)),
+        "Boltzmann": lambda x,a1,a2,x0,dx: a2+(a1-a2)/(1+np.exp((x-x0)/dx)),
+        "Logistic": lambda x,a1,a2,x0,p: a2+(a1-a2)/(1+(x/x0)**p),
+        "DoseResp": lambda x,a1,a2,x0,p: a1+(a2-a1)/(1+10**((x0-x)*p)),
+        "Hill": lambda x,a1,a2,k,n: a1+(a2-a1)*x**n/(k**n+x**n),
+        "Gompertz": lambda x,a,xc,k: a*np.exp(-np.exp(-k*(x-xc))),
+        "Allometric1": lambda x,a,b: a*x**b,
+        "Allometric2": lambda x,y0,a,b: y0+a*x**b,
+        "Power1": lambda x,a,b,c: a*(x-b)**c,
+        "Log3P1": lambda x,a,b,c: a-b*np.log(x+c),
+    }
+    specs = [
+        ("Gauss",0,10,[1,4.2,1.5,6],.05), ("Lorentz",0,10,[.5,5.5,1.2,4],.05),
+        ("Voigt",0,10,[.5,5,8,1.2,.8],.03), ("PsdVoigt1",0,10,[.3,4.5,6,1.5,.4],.03),
+        ("LogNormal",.2,10,[.2,3,.4,10],.03), ("ExpDec1",0,8,[.3,5,1.7],.05),
+        ("ExpDec2",0,10,[.5,4,.8,2,4],.02), ("ExpDec3",0,20,[.2,3,.5,2,2.5,1.5,9],.01),
+        ("ExpGro1",0,5,[1,.5,1.5],.05), ("ExpAssoc",0,10,[.5,3,.7,2,4],.02),
+        ("Boltzmann",-5,5,[1,9,.7,.8],.1), ("Logistic",.1,10,[.5,8,3,2.5],.1),
+        ("DoseResp",-3,3,[1,9,.3,1.2],.05), ("Hill",.1,10,[1,8,2.5,2.2],.05),
+        ("Gompertz",0,10,[6,3,.9],.05), ("Allometric1",.5,10,[2,.75],.05),
+        ("Allometric2",.5,10,[1,.8,1.6],.05), ("Power1",1,10,[2,.5,.7],.02),
+        ("Log3P1",.5,10,[3,1.2,.5],.02),
+    ]
+    i=np.arange(41,dtype=float); noise=np.sin(1.7*i)*.6+np.cos(.37*i*i)*.4
+    cases=[]
+    for model,lo,hi,truth,amp in specs:
+        x=np.linspace(lo,hi,41); fn=models[model]; y=fn(x,*truth)+amp*noise
+        p,cov=optimize.curve_fit(fn,x,y,p0=truth,maxfev=100000,ftol=1e-12,xtol=1e-12,gtol=1e-12)
+        cases.append(dict(name=model,model=model,x=x,y=y,params=p,se=np.sqrt(np.diag(cov)),rss=np.sum((y-fn(x,*p))**2)))
+    base=next(c for c in cases if c['model']=='ExpDec1'); x,y=base['x'],base['y']
+    for name,xx,yy,shift in [("missing",np.r_[x,np.nan],np.r_[y,2.],0.),
+                             ("ties",np.r_[x,x[10]],np.r_[y,y[10]],0.),
+                             ("large",x,y+1e6,1e6)]:
+        valid=np.isfinite(xx)&np.isfinite(yy); p,cov=optimize.curve_fit(models['ExpDec1'],xx[valid],yy[valid]-shift,
+                                  p0=[.3,5,1.7],maxfev=100000,ftol=1e-12,xtol=1e-12,gtol=1e-12)
+        p[0]+=shift
+        cases.append(dict(name=name,model="ExpDec1",x=xx,y=yy,input_shift=shift,params=p,se=np.sqrt(np.diag(cov)),
+                          rss=np.sum((yy[valid]-models['ExpDec1'](xx[valid],*p))**2)))
+    cases.append(dict(name="small",model="ExpDec1",x=[0.,1.,2.],y=[5.,3.,2.]))
+    write("builtin_fits",cases)
+
+
 if __name__ == "__main__":
     integrals()
     normalization()
@@ -361,3 +416,4 @@ if __name__ == "__main__":
     derivative_cases()
     peak_cases()
     constrained_fit_cases()
+    builtin_fit_cases()

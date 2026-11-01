@@ -399,3 +399,27 @@ fn constrained_fits_match_generated_scipy_reference() {
         near(fit.rss, &case["rss"], 1e-6, name);
     }
 }
+
+#[test]
+fn builtin_models_match_generated_scipy_reference() {
+    use scicanvas_core::nlfit::{self, Model};
+    for case in cases("builtin_fits") {
+        let name = case["name"].as_str().unwrap();
+        let model_name = case["model"].as_str().unwrap();
+        let model = Model::ALL
+            .iter()
+            .copied()
+            .find(|model| model.name() == model_name)
+            .unwrap();
+        let result = nlfit::fit(model, &numbers(&case["x"]), &numbers(&case["y"]), None, &[]);
+        if name == "small" {
+            assert!(result.is_err());
+            continue;
+        }
+        let fit = result.unwrap_or_else(|error| panic!("{name}: {error}"));
+        assert!(fit.converged, "{name}");
+        array(&fit.params, &case["params"], 1e-5, name);
+        array(&fit.se, &case["se"], 1e-3, name);
+        near(fit.rss, &case["rss"], 1e-7, name);
+    }
+}
