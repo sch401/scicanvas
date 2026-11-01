@@ -22,6 +22,8 @@ enum Start {
 const KNOWN_FAILURES: &[(&str, Start)] = &[
     ("Lanczos1", Start::One), // RSS 认证值约 1.43e-25；舍入残差的 LRE 约 3.06，要求 6。
     ("Lanczos1", Start::Two), // RSS LRE 约 2.52，SE LRE 约 2.83，分别要求 6 / 4。
+    ("ENSO", Start::One),     // 9 参数正式测试：参数 LRE 6.03 < 7；RSS / SE 达标。
+    ("ENSO", Start::Two),     // 参数 LRE 5.93 < 7；RSS / SE 达标，停止精度待独立修复。
 ];
 const KNOWN_LINEAR_FAILURES: &[&str] = &[
     "Longley",  // 原始量纲正规方程被相对主元阈值判为奇异，返回错误。
@@ -331,6 +333,9 @@ fn parser_preserves_certified_values_and_y_first_data() {
     assert_eq!(read("nls", "Nelson").rows[0].len(), 3);
     assert_eq!(read("lls", "Longley").coef.len(), 7);
     assert_eq!(read("lls", "Filip").coef.len(), 11);
+    for name in ["Gauss1", "Gauss2", "Gauss3", "ENSO"] {
+        assert!(read("nls", name).coef.len() <= nlfit::MAX_PARAMS);
+    }
     for (group, names) in [("nls", NLS), ("lls", LLS)] {
         for name in names {
             let _ = read(group, name);

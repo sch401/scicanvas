@@ -36,8 +36,8 @@ pub enum Model {
     Rational33,
 }
 
-/// 内置函数的最多参数个数（ExpDec3）。
-pub const MAX_PARAMS: usize = 7;
+/// 内置 / 自定义拟合共用的参数个数上限。
+pub const MAX_PARAMS: usize = 12;
 
 impl Model {
     pub const ALL: [Model; 28] = [

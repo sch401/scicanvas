@@ -1601,3 +1601,119 @@ fn nonlinear_report_uses_the_book_name() {
     assert!(text.contains("实验数据 · 结果列"));
     assert!(!text.contains("Book 1"));
 }
+
+#[test]
+fn nine_parameter_real_dialog_inputs_fit_report_reedit_and_undo() {
+    let mut app = app();
+    let xs: Vec<_> = (0..96).map(|i| i as f64 * std::f64::consts::TAU / 96.0).collect();
+    app.project.books[0].columns[0].data = xs.iter().map(ToString::to_string).collect();
+    app.project.books[0].columns[1].data = xs
+        .iter()
+        .map(|x| {
+            (1..=9)
+                .map(|i| i as f64 / 10.0 * (i as f64 * x).sin())
+                .sum::<f64>()
+                .to_string()
+        })
+        .collect();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["B".into()]);
+    app.open_custom_nlfit_dialog();
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    ctx.style_mut(|style| style.animation_time = 0.0);
+    let mut ui = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1400.0, 1300.0)),
+        |app: &mut SciApp, ctx: &egui::Context| app.dialogs(ctx),
+    )
+    .with_step(0.02);
+    for _ in 0..3 {
+        ui.frame(&mut app, vec![]);
+    }
+    let formula = (1..=9)
+        .map(|i| format!("b{i}*sin({i}*x)"))
+        .collect::<Vec<_>>()
+        .join("+");
+    let names = (1..=9).map(|i| format!("b{i}")).collect::<Vec<_>>().join(", ");
+    for (old, new) in [
+        ("自定义函数", "NineSine".to_string()),
+        ("y = a*exp(-b*x)+c", formula),
+        ("a, b, c", names),
+        ("2, 0.3, 0", ["0"; 9].join(", ")),
+    ] {
+        let out = ui.frame(&mut app, vec![]);
+        let at = crate::test_ui::text_positions(&out, old)
+            .into_iter()
+            .max_by(|a, b| a.y.total_cmp(&b.y))
+            .unwrap();
+        ui.click(&mut app, at + egui::vec2(5.0, 5.0));
+        ui.modifiers = egui::Modifiers::COMMAND;
+        ui.frame(
+            &mut app,
+            vec![egui::Event::Key {
+                key: egui::Key::A,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::COMMAND,
+            }],
+        );
+        ui.modifiers = egui::Modifiers::NONE;
+        ui.frame(&mut app, vec![egui::Event::Text(new)]);
+    }
+    let Some(Dialog::CustomNlFit(editor)) = &app.dialog else {
+        panic!()
+    };
+    assert_eq!(editor.definition().unwrap().parameters.len(), 9);
+    let before = app.project.clone();
+    press_dialog_button(&mut app, "拟合");
+    let Some(Dialog::NlFitReport(reports)) = &app.dialog else {
+        panic!("{}", app.status)
+    };
+    let report = reports[0].clone();
+    assert!(report.fit.converged);
+    assert_eq!(report.fit.params.len(), 9);
+    for (i, actual) in report.fit.params.iter().enumerate() {
+        assert!((actual - (i + 1) as f64 / 10.0).abs() < 1e-7);
+    }
+    if let Ok(path) = std::env::var("SCICANVAS_9PARAM_UI_PROJECT") {
+        scicanvas_core::project_file::save(std::path::Path::new(&path), &app.project).unwrap();
+    }
+    roundtrip(&mut app, &before);
+    app.dialog = Some(Dialog::NlFitReport(vec![report.clone()]));
+    press_dialog_button(&mut app, "重新编辑拟合设置");
+    for _ in 0..3 {
+        ui.frame(&mut app, vec![]);
+    }
+    let Some(Dialog::CustomNlFit(editor)) = &app.dialog else {
+        panic!()
+    };
+    assert_eq!(editor.limits.len(), 9);
+    assert_eq!(editor.target.as_ref().unwrap().report.id, report.id);
+    let out = ui.frame(&mut app, vec![]);
+    let top = crate::test_ui::text_positions(&out, "b1").into_iter().next().unwrap();
+    ui.frame(
+        &mut app,
+        vec![
+            egui::Event::PointerMoved(top + egui::vec2(20.0, 20.0)),
+            egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: egui::vec2(0.0, -1500.0),
+                modifiers: egui::Modifiers::NONE,
+            },
+        ],
+    );
+    let out = ui.frame(&mut app, vec![]);
+    assert!(
+        !crate::test_ui::text_positions(&out, "b9").is_empty(),
+        "滚动后可编辑最后一个参数"
+    );
+    press_dialog_button(&mut app, "取消");
+    assert!(app.dialog.is_none());
+    let after = app.project.clone();
+    app.undo();
+    assert_eq!(app.project, before);
+    app.redo();
+    assert_eq!(app.project, after);
+}

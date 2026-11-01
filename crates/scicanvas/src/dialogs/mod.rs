@@ -146,13 +146,13 @@ pub enum Dialog {
     },
     /// 相关系数：每一对列（名称 A、名称 B）的三种相关系数。
     Correlations(Vec<(String, String, Vec<Correlation>)>),
-    /// 非线性拟合：选择内置函数；每个参数可固定为指定值（最多 4 个参数）。
+    /// 非线性拟合：选择内置函数；参数设置长度跟随当前函数。
     NlFit {
         model: Model,
         initial: String,
         target: Option<Box<FitEditTarget>>,
         /// 每个参数：(固定?, 固定值, 有下限?, 下限, 有上限?, 上限)。
-        limits: [(bool, f64, bool, f64, bool, f64); scicanvas_core::nlfit::MAX_PARAMS],
+        limits: Vec<(bool, f64, bool, f64, bool, f64)>,
         /// 参数间线性约束，一行一条。
         constraints: String,
     },

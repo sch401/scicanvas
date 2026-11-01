@@ -78,30 +78,35 @@ impl CustomFitEditor {
         self.limits
             .resize(names.len().min(scicanvas_core::nlfit::MAX_PARAMS), Default::default());
         self.limit_values.resize(self.limits.len(), [0.0; 3]);
-        for ((name, limit), remembered) in names.iter().zip(&mut self.limits).zip(&mut self.limit_values) {
-            ui.strong(*name);
-            for ((label, value), remembered) in [
-                ("固定", &mut limit.fixed),
-                ("下限", &mut limit.lower),
-                ("上限", &mut limit.upper),
-            ]
-            .into_iter()
-            .zip(remembered.iter_mut())
-            {
-                ui.horizontal(|ui| {
-                    if let Some(value) = value {
-                        *remembered = *value;
+        egui::ScrollArea::vertical()
+            .id_salt("custom-fit-parameter-limits")
+            .max_height(240.0)
+            .show(ui, |ui| {
+                for ((name, limit), remembered) in names.iter().zip(&mut self.limits).zip(&mut self.limit_values) {
+                    ui.strong(*name);
+                    for ((label, value), remembered) in [
+                        ("固定", &mut limit.fixed),
+                        ("下限", &mut limit.lower),
+                        ("上限", &mut limit.upper),
+                    ]
+                    .into_iter()
+                    .zip(remembered.iter_mut())
+                    {
+                        ui.horizontal(|ui| {
+                            if let Some(value) = value {
+                                *remembered = *value;
+                            }
+                            let mut on = value.is_some();
+                            if ui.checkbox(&mut on, label).changed() {
+                                *value = on.then_some(*remembered);
+                            }
+                            if let Some(value) = value {
+                                ui.add(egui::DragValue::new(value).speed(0.01));
+                            }
+                        });
                     }
-                    let mut on = value.is_some();
-                    if ui.checkbox(&mut on, label).changed() {
-                        *value = on.then_some(*remembered);
-                    }
-                    if let Some(value) = value {
-                        ui.add(egui::DragValue::new(value).speed(0.01));
-                    }
-                });
-            }
-        }
+                }
+            });
     }
     pub fn from_definition(definition: &CustomFitDefinition) -> Self {
         Self {
@@ -225,6 +230,7 @@ impl Dialog {
                 ui.text_edit_singleline(initial);
             }
             ui.add_space(4.0);
+            limits.resize(model.params().len(), (false, 0.0, false, 0.0, false, 1.0));
             for (name, (fix, fv, has_lo, lo, has_hi, hi)) in model.params().iter().zip(limits.iter_mut()) {
                 ui.strong(*name);
                 let free = !*fix;
@@ -317,7 +323,11 @@ impl Dialog {
                 });
             }
             ui.label(
-                RichText::new("使用 x 和参数名组成标量表达式，参数初值以逗号分隔。最多 7 个参数。").color(pal.weak),
+                RichText::new(format!(
+                    "使用 x 和参数名组成标量表达式，参数初值以逗号分隔。最多 {} 个参数。",
+                    scicanvas_core::nlfit::MAX_PARAMS
+                ))
+                .color(pal.weak),
             );
             if let Some(target) = &edit.target {
                 ui.label(format!(
