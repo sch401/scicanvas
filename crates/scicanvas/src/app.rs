@@ -269,6 +269,12 @@ fn header_field(column: &mut scicanvas_core::Column, row: usize) -> &mut String 
     }
 }
 
+#[cfg(windows)]
+fn renderer_notice(kind: eframe::wgpu::DeviceType) -> Option<&'static str> {
+    (kind == eframe::wgpu::DeviceType::Cpu)
+        .then_some("未检测到显卡加速，正在使用软件渲染，界面可能较慢；请更新显卡驱动")
+}
+
 impl SciApp {
     pub fn new(cc: &eframe::CreationContext<'_>) -> Self {
         let has_cjk = crate::fonts::setup(&cc.egui_ctx);
@@ -293,6 +299,21 @@ impl SciApp {
         }
         if !has_cjk {
             app.status = "系统缺少中文字体，可通过 SCICANVAS_FONT 指定字体文件".into();
+        }
+        #[cfg(windows)]
+        if let Some(render) = cc.wgpu_render_state.as_ref() {
+            let info = render.adapter.get_info();
+            scicanvas_core::project_file::session::write_startup_log(&format!(
+                "图形后端：{:?}；适配器：{}；类型：{:?}；驱动：{} {}",
+                info.backend, info.name, info.device_type, info.driver, info.driver_info
+            ));
+            if let Some(notice) = renderer_notice(info.device_type) {
+                app.status = if app.status.is_empty() {
+                    notice.into()
+                } else {
+                    format!("{}；{notice}", app.status)
+                };
+            }
         }
         app
     }

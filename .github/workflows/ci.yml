@@ -69,5 +69,5 @@ jobs:
             $process.Kill()
             throw 'SciCanvas 未在首帧后退出'
           }
-          Get-Content "$env:LOCALAPPDATA/SciCanvas/recovery/crash.log" -ErrorAction SilentlyContinue
+          Get-Content "$env:LOCALAPPDATA/SciCanvas/recovery/startup.log" -Encoding utf8 -ErrorAction SilentlyContinue
           if ($process.ExitCode -ne 0) { throw "SciCanvas 启动失败：$($process.ExitCode)" }
