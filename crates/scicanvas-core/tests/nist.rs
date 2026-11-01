@@ -23,11 +23,7 @@ const KNOWN_FAILURES: &[(&str, Start)] = &[
     ("Lanczos1", Start::One), // Certified RSS is close to the floating-point residual floor.
     ("Lanczos1", Start::Two), // RSS LRE 约 2.52，SE LRE 约 2.83，分别要求 6 / 4。
 ];
-const KNOWN_LINEAR_FAILURES: &[&str] = &[
-    "Longley",  // 原始量纲正规方程被相对主元阈值判为奇异，返回错误。
-    "Wampler1", // 参数 LRE 约 7.64，零残差的数值噪声限制 SE/s 精度，要求 9。
-    "Wampler3", // 参数 LRE 约 7.45，要求 9；SE/s 达标。
-];
+const KNOWN_LINEAR_FAILURES: &[&str] = &[];
 
 #[derive(Debug)]
 struct Data {
