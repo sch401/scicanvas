@@ -13,9 +13,10 @@ serde = ["dep:serde", "dep:serde_json", "dep:zip", "dep:flate2", "dep:base64"]
 # 导入 GBK 编码的 CSV（中文版 Excel 常见）
 encoding = ["dep:encoding_rs"]
 # 导入 Excel .xlsx：复用 .scv 的 zip，XML 用依赖树里已有的 roxmltree
-xlsx = ["dep:zip", "dep:flate2", "dep:roxmltree"]
+xlsx = ["dep:zip", "dep:flate2", "dep:roxmltree", "dep:rust_xlsxwriter"]
 
 [dependencies]
+rust_xlsxwriter = { version = "=0.102.0", default-features = false, optional = true }
 ab_glyph = "0.2.32"
 ttf-parser = "0.25.1"
 epaint_default_fonts = "0.30.0"

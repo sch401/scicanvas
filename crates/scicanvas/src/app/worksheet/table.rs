@@ -19,6 +19,8 @@ pub(super) struct SheetFrame {
     pub(super) sel_flags: Vec<bool>,
     pub(super) ncols: usize,
     pub(super) nrows: usize,
+    pub(super) frozen_columns: usize,
+    pub(super) frozen_scroll_y: f32,
     pub(super) range: Option<Range>,
     pub(super) multi: Option<Range>,
     pub(super) drag: Option<Drag>,
@@ -50,6 +52,10 @@ impl SheetFrame {
         history_group: &mut Option<egui::Id>,
     ) {
         ui.push_id(("sheet", self.id), |ui| {
+            if self.frozen_columns > 0 {
+                self.draw_frozen(ui, book, preview, history_group);
+                return;
+            }
             egui::ScrollArea::horizontal()
                 .auto_shrink([false, false])
                 .drag_to_scroll(false)
@@ -68,21 +74,119 @@ impl SheetFrame {
                         table = table.scroll_to_row(r + META_ROWS.len(), None);
                     }
                     table
-                        .header(24.0, |header| self.header(header, book, preview))
-                        .body(|body| self.body(body, book, preview, history_group));
+                        .header(24.0, |header| self.header(header, book, preview, 0, self.ncols, true))
+                        .body(|body| self.body(body, book, preview, history_group, (0, self.ncols), true));
                 });
         });
     }
+    fn draw_frozen(
+        &mut self,
+        ui: &mut egui::Ui,
+        book: &mut scicanvas_core::Book,
+        preview: Option<&scicanvas_core::Book>,
+        history_group: &mut Option<egui::Id>,
+    ) {
+        let bounds = ui.available_rect_before_wrap();
+        let width = (58.0 + self.frozen_columns as f32 * 96.0).min((bounds.width() - 70.0).max(58.0));
+        let split = bounds.left() + width;
+        let left = egui::Rect::from_min_max(bounds.min, egui::pos2(split, bounds.bottom()));
+        let right = egui::Rect::from_min_max(egui::pos2(split, bounds.top()), bounds.max);
+        let wheel = if ui
+            .ctx()
+            .input(|i| i.pointer.hover_pos().is_some_and(|p| left.contains(p)))
+        {
+            ui.ctx().input(|i| i.smooth_scroll_delta.y)
+        } else {
+            0.0
+        };
+        let forced = (wheel != 0.0).then_some((self.frozen_scroll_y - wheel).max(0.0));
+        let start = self.frozen_columns;
+        let end = self.ncols;
+        let output = ui.allocate_new_ui(
+            egui::UiBuilder::new().id_salt("scrolling-region").max_rect(right),
+            |ui| {
+                egui::ScrollArea::horizontal()
+                    .auto_shrink([false, false])
+                    .drag_to_scroll(false)
+                    .show(ui, |ui| {
+                        self.draw_slice(ui, book, preview, history_group, start, end, false, forced)
+                    })
+            },
+        );
+        self.frozen_scroll_y = output.inner.inner.state.offset.y;
+        ui.allocate_new_ui(egui::UiBuilder::new().id_salt("frozen-region").max_rect(left), |ui| {
+            ui.set_clip_rect(left.intersect(ui.clip_rect()));
+            self.draw_slice(
+                ui,
+                book,
+                preview,
+                history_group,
+                0,
+                start,
+                true,
+                Some(self.frozen_scroll_y),
+            );
+        });
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn draw_slice(
+        &mut self,
+        ui: &mut egui::Ui,
+        book: &mut scicanvas_core::Book,
+        preview: Option<&scicanvas_core::Book>,
+        history_group: &mut Option<egui::Id>,
+        start: usize,
+        end: usize,
+        row_header: bool,
+        offset: Option<f32>,
+    ) -> egui::scroll_area::ScrollAreaOutput<()> {
+        ui.spacing_mut().item_spacing = egui::vec2(0.0, 0.0);
+        let mut table = TableBuilder::new(ui)
+            .id_salt(if row_header { "frozen" } else { "scrolling" })
+            .striped(true)
+            .resizable(!row_header)
+            .auto_shrink([false, false])
+            .min_scrolled_height(0.0)
+            .drag_to_scroll(false);
+        if row_header {
+            table = table.column(TCol::exact(58.0));
+        }
+        if start == end && !row_header {
+            table = table.column(TCol::exact(1.0));
+        }
+        table = table.columns(TCol::initial(96.0).at_least(40.0).clip(true), end - start);
+        if let Some(y) = offset {
+            table = table.vertical_scroll_offset(y);
+        }
+        if row_header {
+            table = table.scroll_bar_visibility(egui::scroll_area::ScrollBarVisibility::AlwaysHidden);
+        }
+        if let Some(row) = self.scroll_to {
+            table = table.scroll_to_row(row + META_ROWS.len(), None);
+        }
+        table
+            .header(24.0, |header| {
+                self.header(header, book, preview, start, end, row_header)
+            })
+            .body(|body| self.body(body, book, preview, history_group, (start, end), row_header))
+    }
+
     fn header(
         &mut self,
         mut header: egui_extras::TableRow<'_, '_>,
         book: &scicanvas_core::Book,
         preview: Option<&scicanvas_core::Book>,
+        start: usize,
+        end: usize,
+        row_header: bool,
     ) {
-        header.col(|ui| {
-            ui.label("");
-        });
-        for (ci, col) in book.columns.iter().enumerate() {
+        if row_header || start == end {
+            header.col(|ui| {
+                ui.label("");
+            });
+        }
+        for (ci, col) in book.columns.iter().enumerate().skip(start).take(end - start) {
             let col = preview.and_then(|b| b.column(&col.key)).unwrap_or(col);
             header.col(|ui| {
                 let rect = ui.max_rect();
@@ -178,16 +282,23 @@ impl SheetFrame {
         book: &mut scicanvas_core::Book,
         preview: Option<&scicanvas_core::Book>,
         history_group: &mut Option<egui::Id>,
+        columns: (usize, usize),
+        row_header: bool,
     ) {
+        let (start, end) = columns;
         body.rows(22.0, META_ROWS.len() + self.nrows, |mut row| {
             let ri = row.index();
             if ri < META_ROWS.len() {
-                self.metadata_row(row, book, preview, history_group);
+                self.metadata_row(row, book, preview, history_group, (start, end), row_header);
                 return;
             }
             let r = ri - META_ROWS.len();
-            row.col(|ui| self.row_header(ui, r));
-            for (ci, col) in book.columns.iter_mut().enumerate() {
+            if row_header {
+                row.col(|ui| self.row_header(ui, r));
+            } else if start == end {
+                row.col(|_| {});
+            }
+            for (ci, col) in book.columns.iter_mut().enumerate().skip(start).take(end - start) {
                 row.col(|ui| self.cell(ui, col, ci, r, preview, history_group));
             }
         });
@@ -198,15 +309,22 @@ impl SheetFrame {
         book: &mut scicanvas_core::Book,
         preview: Option<&scicanvas_core::Book>,
         history_group: &mut Option<egui::Id>,
+        columns: (usize, usize),
+        row_header: bool,
     ) {
+        let (start, end) = columns;
         let ri = row.index();
-        row.col(|ui| {
-            ui.painter().rect_filled(ui.max_rect(), 0.0, self.pal.meta_bg);
-            ui.centered_and_justified(|ui| {
-                ui.label(META_ROWS[ri]);
+        if row_header {
+            row.col(|ui| {
+                ui.painter().rect_filled(ui.max_rect(), 0.0, self.pal.meta_bg);
+                ui.centered_and_justified(|ui| {
+                    ui.label(META_ROWS[ri]);
+                });
             });
-        });
-        for (ci, col) in book.columns.iter_mut().enumerate() {
+        } else if start == end {
+            row.col(|_| {});
+        }
+        for (ci, col) in book.columns.iter_mut().enumerate().skip(start).take(end - start) {
             row.col(|ui| {
                 let bg = if self.sel_flags[ci] {
                     self.pal.meta_sel_bg

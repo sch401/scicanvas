@@ -107,7 +107,7 @@ pub(super) fn rows(commands: &mut Vec<Command>) {
     ]);
 }
 
-pub(super) fn columns(commands: &mut Vec<Command>) {
+fn workbook_commands(commands: &mut Vec<Command>) {
     commands.extend([
         c(
             "book.transpose",
@@ -120,6 +120,82 @@ pub(super) fn columns(commands: &mut Vec<Command>) {
             |a| a.transpose_book(),
         )
         .modifies(),
+        c(
+            "sheet.stack",
+            "堆叠列…",
+            "grid",
+            "",
+            "工作表",
+            "stack 堆叠",
+            need_book,
+            |a| a.open_sheet_transform(crate::dialogs::TransformKind::Stack),
+        ),
+        c(
+            "sheet.split",
+            "拆分列…",
+            "grid",
+            "",
+            "工作表",
+            "split 拆分",
+            need_book,
+            |a| a.open_sheet_transform(crate::dialogs::TransformKind::Split),
+        ),
+        c(
+            "sheet.reduce",
+            "数据精简…",
+            "grid",
+            "",
+            "工作表",
+            "reduce decimate 精简",
+            need_book,
+            |a| a.open_sheet_transform(crate::dialogs::TransformKind::Reduce),
+        ),
+        c(
+            "sheet.freeze",
+            "冻结至选中列",
+            "grid",
+            "",
+            "工作表",
+            "freeze columns 冻结列",
+            need_book,
+            |a| a.freeze_selected_columns(),
+        ),
+        c(
+            "sheet.unfreeze",
+            "取消冻结",
+            "grid",
+            "",
+            "工作表",
+            "unfreeze columns 取消冻结",
+            need_book,
+            |a| a.unfreeze_columns(),
+        ),
+        c(
+            "book.template.save",
+            "保存工作簿模板…",
+            "grid",
+            "",
+            "工作表",
+            "workbook template save 模板 保存",
+            need_book,
+            |a| a.save_workbook_template(),
+        ),
+        c(
+            "book.template.open",
+            "从模板新建工作簿…",
+            "grid",
+            "",
+            "工作表",
+            "workbook template new 模板 新建",
+            always,
+            |a| a.open_workbook_template(),
+        ),
+    ]);
+}
+
+pub(super) fn columns(commands: &mut Vec<Command>) {
+    workbook_commands(commands);
+    commands.extend([
         c(
             "col.fill",
             "填充序列",

@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 97 项，P1 146 项，P2 259 项，不做 12 项。
-状态：已完成 72 项，已实现待验收 54 项，部分实现 17 项，未开始 359 项，不做 12 项。
+状态：已完成 72 项，已实现待验收 62 项，部分实现 17 项，未开始 351 项，不做 12 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -70,15 +70,15 @@
 | F039 | 数据筛选 | Data Filter | P1 | 未开始 | — | 手动操作 | — |
 | F040 | 条件格式（按值着色） | Conditional Formatting | P2 | 未开始 | — | 目视检查 | — |
 | F041 | 转置 | Transposing Worksheets | P1 | 已实现待验收 | 将当前工作簿转置为同文件夹的新工作簿，第一列为原列显示名，后续各列对应原数据行；保留缺失位置和原数据，操作一步撤销。 | 数值、文本、缺失值、列名、文件夹、空表及命令撤销重做测试。 | — |
-| F042 | 堆叠 / 拆分列 | Stacking and Unstacking Worksheet Columns | P1 | 未开始 | — | 与 Origin 结果比较 | — |
+| F042 | 堆叠 / 拆分列 | Stacking and Unstacking Worksheet Columns | P1 | 已实现待验收 | 选择多列堆叠生成值列与分类来源列，或按分类列拆分值列；保持同类型、缺失值和原列，每次操作可撤销。 | 数据类型、缺失值和撤销测试；按人工清单与 Origin 比较。 | — |
 | F043 | 合并工作表（按列、按标签） | Join Multiple Sheets by Column | P2 | 未开始 | polars join | 与 Origin 结果比较 | — |
-| F044 | 数据精简（隔行抽取、平均合并） | Data Reduction | P1 | 未开始 | — | 与 Origin 结果比较 | — |
+| F044 | 数据精简（隔行抽取、平均合并） | Data Reduction | P1 | 已实现待验收 | 按指定 N 行取第一行，或对每组有限数值求平均，生成独立新列；每次操作可撤销。 | 缺失值、部分分组、非法间隔和撤销测试；按人工清单与 Origin 比较。 | — |
 | F045 | 删除重复行 | Reduce Duplicated Rows | P2 | 未开始 | — | 单元测试 | — |
 | F046 | 数据透视表 | Pivot Table | P2 | 未开始 | polars pivot | 与 Origin 结果比较 | — |
 | F047 | 工作表查询（条件提取） | Worksheet Query - Quick Start | P2 | 未开始 | — | 与 Origin 结果比较 | — |
-| F048 | 冻结行列 | Freeze Rows Columns | P1 | 未开始 | — | 手动操作 | — |
+| F048 | 冻结行列 | Freeze Rows Columns | P1 | 已实现待验收 | 冻结前 K 列及行号，横向滚动时保持可见，纵向滚动同步；设置只保存在界面会话。冻结数据行尚未实现。 | 界面滚动、行对齐及选择测试；按人工清单检查冻结和取消。 | — |
 | F049 | 多工作表（一个工作簿多张表） | Workbooks | 不做 | 不做 | 用户 2026-10-18 决定：每个 Book 只有一张表，多表使用独立窗口；Excel 多工作表导入继续拆成独立 Book，不采用多 Sheet 容器或底部标签页 | 后续保持一表一窗口、独立命名/目录/保存/绘图引用；Excel 拆表导入沿用现有回归 | — |
-| F050 | 工作簿模板 | What is Saved with the Workbook Template (*.OTW or *.OTWU) File? | P1 | 未开始 | 保存列定义与格式 | 套模板后结构一致 | — |
+| F050 | 工作簿模板 | What is Saved with the Workbook Template (*.OTW or *.OTWU) File? | P1 | 已实现待验收 | 保存工作簿列定义、类型、格式和公式到 .scbt，不保存数据；从模板新建工作簿支持撤销。 | 模板文件读写、数据隔离、结构和撤销测试；按人工清单检查。 | — |
 | F051 | 选中数据的状态栏统计 | Scrolling and Simple Data Selection in the Worksheet | P0 | 已完成 | — | 与手算比较 | — |
 | F052 | 单元格内嵌图片 / 迷你图 | Inserting Graphs Images and Other Objects into Worksheet Cells | P2 | 未开始 | — | 目视检查 | — |
 | F053 | 大数据量（百万行流畅滚动） | Origin Limitations | P0 | 已实现待验收 | 类型化数值列、缺失位图和可见行表格；CSV 由文本流式建表（不生成整张字符串表）；折线按像素列保留首/末/最小/最大点抽稀，散点按半像素网格去重；图形场景按图形设置、视图和所引用数据的指纹缓存，数据不变时复用。本机 release 百万行十列：导入 0.81 秒，含完整界面的首帧 246 ms、次帧 12.6 ms，进程峰值内存 494 MB（字体约 56 MB、数值列约 80 MB，原 <150 MB 目标不现实）；设置/图形窗口移动复用矢量绘制指令和文字排版，数据/设置/视图/尺寸/DPI 改变时更新；Windows 使用 wgpu FIFO 呈现 | 流式导入与行表导入结果一致、抽稀保形的核心与界面测试；百万行首帧测量（忽略测试，外部采样峰值内存），数据见 docs/perf.md；拖动修复 4f74ec7 本地完整检查与 Windows CI 通过，用户已确认快速拖动正常；不扩大为整项大数据性能验收；2026-11：百万行可滚动到末尾且只绘制可见区域；滚动流畅度性能门禁待 S1-3。 | — |
@@ -107,7 +107,7 @@
 | F064 | 表头自动拆分长名称与单位 | Customizing the ASCII Import Options | P0 | 已完成 | — | 单元测试 | — |
 | F065 | 导入向导（跳过表头行、指定分隔符、预览） | The Import Wizard | P0 | 已实现待验收 | 文本文件导入向导支持自动或指定分隔符、编码、跳过行、0–3 行表头、列类型、前 50 行预览及导入模板保存和加载；导入是一步撤销。Excel 继续按各工作表导入。 | 预览和解析、指定类型、编码、模板往返、无效值、实际按钮和导入撤销测试；Windows 人工验收待做。 | — |
 | F066 | 导入 Excel（.xlsx / .xls） | Importing from Excel | P0 | 已实现待验收 | 导入 .xlsx/.xlsm（zip + roxmltree）与旧版 .xls（自写 OLE2 复合文档 + BIFF8 读取：FAT/DIFAT/迷你流，共享字符串跨 CONTINUE 记录，NUMBER/RK/MULRK/LABELSST/LABEL/BOOLERR/FORMULA 缓存值）；按单元格数字格式（内置 14–22、27–36、45–47、50–58 含中文日期及自定义格式）把日期序列号写成日期，支持 1904 日期制；合并单元格用左上角的值填满；数值按 15 位有效数字保留；全部为日期写法的列导入为日期时间列；每张非空工作表一个工作簿；加密或 Excel 95 文件给出提示 | Excel 16 另存的同一内容 .xls 与 .xlsx 读取结果逐格一致（含中文日期、日期时间、合并单元格、公式数值与字符串结果、布尔、1200 个跨记录共享字符串、301 字长文本、大数值精度）；原有 openpyxl/手写 xlsx 回归通过；RK 解码单元测试 | — |
-| F067 | 导出 Excel | Exporting Worksheets and Matrices | P1 | 未开始 | rust_xlsxwriter | 用 Excel 打开检查 | — |
+| F067 | 导出 Excel | Exporting Worksheets and Matrices | P1 | 已实现待验收 | 将每个工作簿导出为一个 Excel 工作表，数值和日期保留类型，可选三行表头；按列显示时区导出日期，非有限值写为文本。 | 多工作表、单元格类型、日期、表头、限制和文件保护测试；按人工清单在 Excel 中打开。 | — |
 | F068 | 导出 CSV | Exporting Worksheets and Matrices | P0 | 已实现待验收 | 工作表 → 导出 CSV：UTF-8 BOM、CRLF，表头为“长名称 (单位)”，与 .scv 内的 CSV 同一实现 | 导出后重新导入的往返测试；Excel 打开待人工验收；2026-11：CSV 名称、单位和单元格往返测试通过，Windows 人工验收待做。 | — |
 | F069 | 拖放文件导入 | Importing Data by Drag-and-Drop | P0 | 已实现待验收 | 把文件拖进窗口：数据文件逐个导入为工作簿并合为一步撤销，项目文件（.scv / .scproj）直接打开；拖动时显示提示层 | 拖放事件回归（导入、撤销、打开项目）；资源管理器实际拖放待人工验收 | — |
 | F070 | 批量导入多个文件 | Importing Simple ASCII Data Files | P1 | 已实现待验收 | 已有多文件拖入入口：数据文件逐个创建工作簿并合为一步撤销；混入项目时只打开第一个项目，其余忽略。当前文件对话框为单选，批量入口使用拖放 | 多文件拖入、结果写回、项目混入规则及一步撤销回归通过；Windows 多种格式、大批量文件与部分失败手工验收待做 | — |
@@ -133,7 +133,7 @@
 | F085 | 函数绘图（y = f(x)） | Plotting Mathematical Functions | P1 | 未开始 | 复用公式解析器 | 与解析值比较 | — |
 | F086 | 分组绘图（按分类列分组） | Plotting Data by Groups | P1 | 未开始 | — | 与 Origin 比较 | — |
 | F087 | 图形缩放、平移 | Zooming on the Graph Page and inside Layer | P0 | 已完成 | 自绘 plot.rs/coord.rs：图层独立缩放、平移和视图复位；固定页面画布整体缩放 | 手动操作 | — |
-| F088 | 批量绘图（同一模板换数据） | Batch Plotting | P1 | 未开始 | — | 手动操作 | — |
+| F088 | 批量绘图（同一模板换数据） | Batch Plotting | P1 | 已实现待验收 | 选择现有图形作为模板和多个工作簿，按列长名匹配并保留图形样式；列无长名时按列标识匹配，整批操作一步撤销。 | 列顺序不同、样式保留、缺失列时整批回滚及撤销测试；按人工清单检查。 | — |
 | F089 | 图形模板（保存样式，换数据一键出图） | Creating Graphs from Graph Templates | P0 | 已实现待验收 | 在“绘图 → 模板”中将当前页面/图层/轴设置/曲线样式保存为独立 `.scgt` 模板；不保存源工作簿编号或数据，曲线按列短名重绑定到选中的目标 Book，缺少所需列时拒绝应用；模板可跨项目复用并生成新图 | 模板文件保存/加载；套用到列标识匹配的不同工作簿后核对图型、图层、曲线样式、轴设置和数据来源；缺列/损坏模板不改项目；单步撤销重做；Windows 人工验收待做 | — |
 | F090 | 格式复制粘贴 | Copying and Pasting Formats | P1 | 未开始 | — | 手动操作 | — |
 | F091 | 主题（图形样式主题） | Graph Formats and Themes | P1 | 未开始 | 已有 Nature 默认配色与版式；图形主题的保存、切换和应用入口待做，默认样式单独计入现有绘图能力 | 目视检查 | — |
@@ -324,10 +324,10 @@
 | F227 | 导出 PNG（指定 DPI） | The Export Graph as Image Dialog Box | P0 | 已实现待验收 | 图形 → 导出 PNG：SVG 版面经 resvg 栅格化，可选 150/300/600/1200 dpi 或自定义；写入 pHYs 物理分辨率，像素尺寸按页面毫米换算；中文回退到系统字体；字体集与屏幕/核心度量共用同一字节，SVG 使用自然字宽和明确基线，支持科学文字分段字号/上下标偏移/粗斜体 | 自动化回归核对像素尺寸、pHYs、可解码和绘制内容；插入 Word 的实际尺寸待人工验收；字体实际字节匹配及 96/300/600 DPI 标题栅格边界回归；科学文字真实字形、屏幕/SVG 基线对照与 96/300/600 DPI 边界回归 | — |
 | F228 | 导出 PDF（矢量，嵌入字体） | Which Export Format Should I Choose | P0 | 已实现待验收 | 文件页、功能区、图形右键和命令搜索导出 PDF；复用页面 SVG 为矢量，保持毫米尺寸、裁剪、透明面积、双轴、多图层与科学文字；嵌入实际字体子集并保留 Unicode 文本。按实际使用字体的 fsType 拒绝受限/仅位图/禁止子集等权限，导出不改项目；自由文字和手动图例沿用相同页面比例位置 | 14 图型+科学文字/中文/误差棒/双轴+多面板/插图共 16 样例回归；独立 pypdf 检查字体流、Unicode、页面尺寸和无页面位图，Poppler 渲染与 PNG 对照并逐图查看；实际打印与 Windows 文件对话框人工验收待做；新增自由文字和手动图例的 PDF/PNG 独立渲染对照 | PDF 导出：已完成 0/4，待验收 4，部分实现 0；矢量/裁剪/透明度、毫米页面尺寸、字体子集/Unicode、科学文字排版均已接入并通过专项核对；最终人工验收待做 |
 | F229 | 导出 EPS | Which Export Format Should I Choose | P1 | 未开始 | 自写 PostScript 输出 | LaTeX 编译检查 | — |
-| F230 | 导出 TIFF（期刊要求） | Which Export Format Should I Choose | P1 | 未开始 | image | 尺寸与 DPI 检查 | — |
+| F230 | 导出 TIFF（期刊要求） | Which Export Format Should I Choose | P1 | 已实现待验收 | 使用与 PNG 相同的图形输出，导出 LZW 压缩 TIFF，保留透明度和 DPI；CMYK 不做。 | 像素、透明度、LZW、DPI 和命令测试；按人工清单查看图像。 | — |
 | F231 | 复制图形到剪贴板（粘贴到 Word / PPT） | Pasting or Embedding Graphs in Other Applications | P0 | 已实现待验收 | 复制图形（Ctrl+J）：按 300 dpi 栅格化后经 arboard 写入剪贴板位图；矢量 EMF 待评估 | 与 PNG 共用栅格化回归；粘贴到 Word / PPT 待人工验收 | — |
 | F232 | 导出 EMF（Office 可编辑矢量） | Which Export Format Should I Choose | P1 | 未开始 | 自写 EMF 写出器 | 插入 Word 检查 | — |
-| F233 | 批量导出多张图 | The Export Graph Dialog Box | P1 | 未开始 | — | 手动操作 | — |
+| F233 | 批量导出多张图 | The Export Graph Dialog Box | P1 | 已实现待验收 | 选择多张图、SVG/PDF/PNG/TIFF 格式和分辨率，输出到指定目录；同名文件自动编号，不覆盖已有文件。 | 多图导出、同名保护和界面入口测试；按人工清单检查。 | — |
 | F234 | 打印 | Printing Graphs, Layout Pages, and Analytical Results | P2 | 未开始 | 导出 PDF 后交给系统打印 | 手动操作 | — |
 | F235 | 图形动画（导出视频 / GIF） | Creating Graph Animation | P2 | 未开始 | gif / ffmpeg | 手动操作 | — |
 

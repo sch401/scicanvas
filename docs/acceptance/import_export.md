@@ -96,3 +96,39 @@
 | 4 | 导入，检查列名、单位、数据及分类列，再撤销和重做 | 得到两行数据，撤销和重做各为一步 | |
 
 结果：待做；日期：；提交号：。
+
+### F067 Excel 导出
+
+使用 [Excel 导出分支的 Windows 检查](https://github.com/sch401/scicanvas/actions/workflows/ci.yml?query=branch%3Afeat%2Fexport-xlsx)生成的 `SciCanvas-Windows-x64`。准备两个工作簿，包含数值、日期、文本、分类和缺失格，并填写长名、单位和注释。
+
+| 步骤 | 操作 | 预期结果 | 结果 |
+|---|---|---|---|
+| 1 | 选择“导出 Excel”，勾选三行表头，保存临时 `.xlsx` | 导出成功，每个工作簿对应一个工作表 | |
+| 2 | 在 Excel 打开导出文件 | 数值可计算，日期可按日期格式显示，文本、分类、缺失格和三行表头与原表一致 | |
+| 3 | 取消表头重新导出并打开 | 数据从第一行开始，工作表和数据保持一致 | |
+
+结果：待做；日期：；提交号：。
+
+### F230 TIFF 导出
+
+使用 [Excel 与 TIFF 导出分支的 Windows 检查](https://github.com/sch401/scicanvas/actions/workflows/ci.yml?query=branch%3Afeat%2Fexport-xlsx)生成的 `SciCanvas-Windows-x64`，打开示例图。
+
+| 步骤 | 操作 | 预期结果 | 结果 |
+|---|---|---|---|
+| 1 | 选择图形，执行“导出 TIFF”，选择 300 dpi | `.tif` 文件生成成功 | |
+| 2 | 用图像查看器打开并查看文件属性 | 图形完整，像素尺寸和 300 dpi 与页面尺寸一致 | |
+| 3 | 使用透明页面背景再导出 | 图像透明区域保持透明 | |
+
+结果：待做；日期：；提交号：。
+
+### F233 批量导出图形
+
+使用 [批量导出分支的 Windows 检查](https://github.com/sch401/scicanvas/actions/workflows/ci.yml?query=branch%3Afeat%2Fbatch-export)生成的 `SciCanvas-Windows-x64`。准备至少两张图和一个临时目录。
+
+| 步骤 | 操作 | 预期结果 | 结果 |
+|---|---|---|---|
+| 1 | 执行“批量导出图形”，选择两张图、PNG、300 dpi 和临时目录 | 每张图生成一个 PNG，名称对应图名 | |
+| 2 | 再次导出同一批图 | 生成带序号的新文件，原文件保留 | |
+| 3 | 分别选择 SVG、PDF 和 TIFF 导出并打开 | 图形内容与屏幕一致，TIFF 保留所选 DPI | |
+
+结果：待做；日期：；提交号：。

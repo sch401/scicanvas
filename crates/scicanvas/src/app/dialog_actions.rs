@@ -107,6 +107,17 @@ impl SciApp {
     pub(super) fn apply_dialog_action(&mut self, ctx: &egui::Context, action: dialogs::Action) -> bool {
         match action {
             dialogs::Action::FindNext => self.find_next(),
+            dialogs::Action::BatchPlot(graph, books) => {
+                self.create_batch_plots(graph, books);
+            }
+            dialogs::Action::BatchExport(graphs, format, dpi) => {
+                self.finish_dialog_input();
+                self.export_graphs(graphs, format, dpi);
+            }
+            dialogs::Action::ExportXlsx(headers) => {
+                self.finish_dialog_input();
+                self.export_xlsx(headers);
+            }
             dialogs::Action::ReplaceCurrent => self.replace_matches(false),
             dialogs::Action::ReplaceAll => self.replace_matches(true),
             dialogs::Action::Import(path, options) => return self.import_with_options(path, options),
@@ -132,6 +143,30 @@ impl SciApp {
             }
             dialogs::Action::Ifft(book, re, im, input) => self.apply_ifft_action(book, re, im, input),
             dialogs::Action::Sort(book, keys, within) => self.apply_sort_action(book, keys, within),
+            dialogs::Action::SheetTransform(book, action) => {
+                if !self.flush_sheet_edits() {
+                    return false;
+                }
+                self.edit_with(
+                    "工作表变换",
+                    |project| {
+                        match action {
+                            dialogs::TransformAction::Stack(keys) => project.stack_columns(book, &keys),
+                            dialogs::TransformAction::Split(value, category) => {
+                                project.split_column(book, &value, &category)
+                            }
+                            dialogs::TransformAction::Reduce(value, step, average) => {
+                                project.reduce_column(book, &value, step, average).map(|key| vec![key])
+                            }
+                        }
+                        .map(Some)
+                    },
+                    |app, keys| {
+                        app.status = format!("已生成列 {}", keys.join("、"));
+                        app.dialog = None;
+                    },
+                );
+            }
             dialogs::Action::CategoryOrder(book, key, levels) => self.apply_category_order_action(book, key, levels),
             dialogs::Action::SgDiff(w, order, deriv) => self.apply_sg_diff_action(w, order, deriv),
             dialogs::Action::Smooth(m, w) => {
@@ -183,6 +218,10 @@ impl SciApp {
             dialogs::Action::Frequency(bins, range) => {
                 self.finish_dialog_input();
                 self.frequency_counts(bins, range);
+            }
+            dialogs::Action::ExportTiff(dpi) => {
+                self.dialog = None;
+                self.export_tiff(dpi);
             }
             dialogs::Action::ExportPng(dpi) => {
                 self.dialog = None;

@@ -17,12 +17,15 @@ mod analysis_curves;
 mod anova;
 mod areas;
 mod baseline;
+mod batch_export;
+mod batch_plot;
 mod category_order;
 mod column_math;
 mod column_props;
 mod convert_text;
 mod correlations;
 mod docking;
+mod excel_export;
 mod fft;
 mod fft_filter;
 mod fill;
@@ -44,6 +47,7 @@ mod poly;
 mod scientific_text;
 mod set_values;
 mod sg_diff;
+mod sheet_transform;
 mod smooth;
 mod sort;
 mod t_test;
@@ -53,6 +57,8 @@ mod tables;
 mod widgets;
 mod window;
 
+pub use batch_export::{BatchExport, BatchFormat};
+pub use batch_plot::BatchPlot;
 pub use column_props::ColumnEdit;
 pub(crate) use docking::{begin_docks, end_docks, has_docks, place_docks, reset_docks, DockSide};
 pub(crate) use find_replace::FindReplace;
@@ -68,7 +74,16 @@ use widgets::buttons;
 pub(crate) use widgets::{actions, center_buttons, edit_group, plain, primary, ActionKind, Keys, BUTTON};
 pub(crate) use window::{floating_bounds, window};
 
+pub(crate) use sheet_transform::TransformKind;
+pub use sheet_transform::{SheetTransform, TransformAction};
+
 pub enum Dialog {
+    BatchExport(Box<BatchExport>),
+    BatchPlot(Box<BatchPlot>),
+    ExportXlsx {
+        headers: bool,
+    },
+    SheetTransform(Box<SheetTransform>),
     FindReplace(Box<FindReplace>),
     ImportWizard(Box<ImportWizard>),
     LayerContents(Box<LayerContents>),
@@ -243,10 +258,18 @@ pub enum Dialog {
         dpi: u32,
         page_mm: (f64, f64),
     },
+    Tiff {
+        dpi: u32,
+        page_mm: (f64, f64),
+    },
 }
 
 /// 对话框里用户做出的选择，由 app.rs 执行。
 pub enum Action {
+    BatchExport(Vec<u64>, BatchFormat, u32),
+    BatchPlot(u64, Vec<u64>),
+    ExportXlsx(bool),
+    SheetTransform(u64, TransformAction),
     FindNext,
     ReplaceCurrent,
     ReplaceAll,
@@ -271,6 +294,7 @@ pub enum Action {
     Ifft(u64, String, Option<String>, scicanvas_core::fft::InverseInput),
     Normalize(NormalizeMethod),
     ExportPng(u32),
+    ExportTiff(u32),
     Interpolate(InterpMethod, usize, Option<(f64, f64)>),
     TTest(TTestKind, f64),
     Frequency(Option<usize>, Option<(f64, f64)>),
@@ -306,6 +330,9 @@ impl Dialog {
         let mut action = match self {
             Self::LayerContents(contents) => contents.show(ctx, project, pal),
             Self::FindReplace(state) => state.show(ctx, &mut open),
+            Self::ExportXlsx { .. } => self.show_export_xlsx(ctx, &mut open),
+            Self::BatchExport(state) => state.show(ctx, &mut open),
+            Self::BatchPlot(state) => state.show(ctx, &mut open),
             Self::ImportWizard(wizard) => wizard.show(ctx, pal, &mut open),
             Self::AnalysisCurves { .. } => self.show_analysis_curves(ctx, pal, &mut open, esc),
             Self::ColumnProps { .. } => self.show_column_props(ctx, pal, &mut open, esc),
@@ -314,6 +341,7 @@ impl Dialog {
             Self::Smooth { .. } => self.show_smooth(ctx, pal, &mut open, esc),
             Self::CategoryOrder { .. } => self.show_category_order(ctx, pal, &mut open, esc),
             Self::Sort { .. } => self.show_sort(ctx, pal, &mut open, esc),
+            Self::SheetTransform(state) => state.show(ctx, &mut open),
             Self::Ifft { .. } => self.show_ifft(ctx, pal, &mut open, esc),
             Self::SgDiff { .. } => self.show_sg_diff(ctx, pal, &mut open, esc),
             Self::Normalize { .. } => self.show_normalize(ctx, pal, &mut open, esc),
@@ -336,7 +364,7 @@ impl Dialog {
             Self::Frequency { .. } => self.show_frequency(ctx, pal, &mut open, esc),
             Self::TTest { .. } => self.show_t_test(ctx, pal, &mut open, esc),
             Self::TTestReport { .. } => self.show_t_test_report(ctx, pal, &mut open, esc),
-            Self::Png { .. } => self.show_png(ctx, pal, &mut open, esc),
+            Self::Png { .. } | Self::Tiff { .. } => self.show_png(ctx, pal, &mut open, esc),
         };
         if !open || (esc && matches!(action, Action::None)) {
             action = Action::Close;

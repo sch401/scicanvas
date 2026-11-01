@@ -120,7 +120,11 @@ pub static TABS: &[Tab] = &[
             },
             Group {
                 label: "模板",
-                items: &[Smalls(&["graph.template.save", "graph.template.apply"])],
+                items: &[Smalls(&[
+                    "graph.template.save",
+                    "graph.template.apply",
+                    "graph.template.batch",
+                ])],
             },
         ],
     },
@@ -223,11 +227,18 @@ pub static TABS: &[Tab] = &[
             },
             Group {
                 label: "变换",
-                items: &[Smalls(&["book.transpose"])],
+                items: &[
+                    Smalls(&["book.transpose", "sheet.stack", "sheet.split"]),
+                    Smalls(&["sheet.reduce", "sheet.freeze", "sheet.unfreeze"]),
+                ],
+            },
+            Group {
+                label: "模板",
+                items: &[Smalls(&["book.template.save", "book.template.open"])],
             },
             Group {
                 label: "导出",
-                items: &[Smalls(&["book.export_csv"])],
+                items: &[Smalls(&["book.export_csv", "project.export_xlsx"])],
             },
             Group {
                 label: "绘图",
@@ -277,7 +288,8 @@ pub static TABS: &[Tab] = &[
                 label: "导出",
                 items: &[
                     Big("graph.export"),
-                    Smalls(&["graph.export_pdf", "graph.export_png", "graph.copy"]),
+                    Smalls(&["graph.export_pdf", "graph.export_png", "graph.export_tiff"]),
+                    Smalls(&["graph.export_batch", "graph.copy"]),
                 ],
             },
         ],

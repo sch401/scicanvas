@@ -102,6 +102,10 @@ pub struct SheetState {
     pub edit: Option<Edit>,
     /// 下一帧要滚动到的行（键盘移动时保持活动单元格可见）。
     pub scroll_to: Option<usize>,
+    /// Frozen data columns are session-only and do not enter the project file.
+    pub frozen_columns: usize,
+    pub frozen_scroll_y: f32,
+    pub viewport_width: f32,
 }
 
 #[cfg(test)]

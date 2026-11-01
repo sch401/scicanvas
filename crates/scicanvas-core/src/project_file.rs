@@ -14,6 +14,9 @@ use zip::CompressionMethod;
 
 use crate::{Book, Graph, GraphTemplate, Project};
 
+mod workbook_template;
+pub use workbook_template::*;
+
 pub const CURRENT_VERSION: u32 = crate::model::PROJECT_VERSION;
 
 /// `.scv` 容器版本，与 `project.json` 的项目版本分开演进。
@@ -687,6 +690,12 @@ pub fn graph_template_from_json(text: &str) -> Result<GraphTemplate, String> {
         serde_json::from_str(text.trim_start_matches('\u{feff}')).map_err(|e| format!("图形模板格式错误：{e}"))?;
     validate_graph_template(&template)?;
     Ok(template)
+}
+
+#[cfg(feature = "xlsx")]
+pub fn save_xlsx_export(path: &Path, project: &Project, headers: bool) -> Result<(), String> {
+    let data = crate::xlsx_export::write_project(project, headers)?;
+    write_atomic(path, &data, "文件名为空", "导出 Excel 失败：")
 }
 
 pub fn save_graph_template(path: &Path, template: &GraphTemplate) -> Result<(), String> {
