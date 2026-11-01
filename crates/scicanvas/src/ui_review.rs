@@ -79,7 +79,7 @@ fn every_tab_keeps_three_rows_and_aligned_group_captions() {
                         height = ctx.available_rect().top();
                     },
                 );
-                let ys: Vec<_> = output
+                let captions: Vec<_> = output
                     .shapes
                     .iter()
                     .filter_map(|s| match &s.shape {
@@ -89,15 +89,50 @@ fn every_tab_keeps_three_rows_and_aligned_group_captions() {
                                 .sections
                                 .first()
                                 .is_some_and(|s| s.format.font_id.size == 11.0)
-                                && tab.groups.iter().any(|g| g.label == t.galley.job.text) =>
+                                && (tab.groups.iter().any(|g| g.label == t.galley.job.text)
+                                    || t.galley.job.text == "更多") =>
                         {
-                            Some(t.pos.y)
+                            Some((t.galley.job.text.clone(), t.galley.rect.translate(t.pos.to_vec2())))
                         }
                         _ => None,
                     })
                     .collect();
-                assert_eq!(ys.len(), tab.groups.len(), "{} captions", tab.id);
-                assert!(ys.iter().all(|y| (y - ys[0]).abs() <= 0.5), "{}: {ys:?}", tab.id);
+                assert!(!captions.is_empty(), "{} captions", tab.id);
+                assert!(
+                    captions
+                        .iter()
+                        .all(|(_, rect)| (rect.top() - captions[0].1.top()).abs() <= 0.5),
+                    "{}: {captions:?}",
+                    tab.id
+                );
+                assert!(
+                    captions
+                        .iter()
+                        .all(|(_, rect)| rect.left() >= 0.0 && rect.right() <= width),
+                    "{}: {captions:?}",
+                    tab.id
+                );
+                let body_top = captions[0].1.top() - 74.0;
+                for shape in &output.shapes {
+                    if let egui::Shape::Text(text) = &shape.shape {
+                        let rect = text.galley.rect.translate(text.pos.to_vec2());
+                        if rect.top() >= body_top && rect.bottom() <= captions[0].1.top() {
+                            assert!(
+                                rect.left() >= 0.0 && rect.right() <= width,
+                                "{}: {} outside viewport",
+                                tab.id,
+                                text.galley.job.text
+                            );
+                        }
+                    }
+                }
+                if captions.len() < tab.groups.len() {
+                    assert!(
+                        captions.iter().any(|(label, _)| label == "更多"),
+                        "{} missing overflow menu",
+                        tab.id
+                    );
+                }
                 assert!(height <= 180.0, "{} ribbon is too tall", tab.id);
             }
         }
@@ -421,4 +456,92 @@ fn title_buttons_share_native_geometry_at_each_dpi() {
             }
         }
     }
+}
+
+#[test]
+fn chart_type_menus_open_and_dispatch_in_both_tabs() {
+    for (tab, active, label) in [("plot", 1, "选择图形 ▾"), ("graph", 2, "更换图类型 ▾")] {
+        let ctx = egui::Context::default();
+        crate::theme::install(&ctx);
+        crate::fonts::setup(&ctx);
+        let pal = theme::palette(egui::Theme::Light);
+        let mut app = SciApp::initial(pal);
+        app.active = Some(active);
+        let mut state = UiState::default();
+        state.tab = tab;
+        let mut harness = crate::test_ui::Harness::new(
+            ctx,
+            Some(vec2(800.0, 820.0)),
+            |state: &mut UiState, ctx: &egui::Context| {
+                let mut clicked = None;
+                show(ctx, &app, state, &pal, &mut clicked);
+                clicked
+            },
+        );
+        let mut output = harness.frame(&mut state, vec![]);
+        for _ in 0..3 {
+            output = harness.frame(&mut state, vec![]);
+        }
+        harness.click_text(&mut state, &output, label);
+        output = harness.frame(&mut state, vec![]);
+        let position =
+            crate::test_ui::find_text(&output, "柱状图").expect("chart menu should show bar chart") + vec2(5.0, 5.0);
+        harness.frame_value(&mut state, vec![egui::Event::PointerMoved(position)]);
+        harness.frame_value(&mut state, vec![crate::test_ui::button(position, true)]);
+        let clicked = harness.frame_value(&mut state, vec![crate::test_ui::button(position, false)]);
+        assert_eq!(clicked, Some("plot.bar"), "{tab}");
+    }
+}
+
+#[test]
+fn narrow_ribbon_exposes_overflow_without_horizontal_scrolling() {
+    let ctx = egui::Context::default();
+    crate::theme::install(&ctx);
+    crate::fonts::setup(&ctx);
+    let pal = theme::palette(egui::Theme::Light);
+    let mut app = SciApp::initial(pal);
+    app.active = Some(1);
+    let mut state = UiState::default();
+    state.tab = "analysis";
+    let mut harness = crate::test_ui::Harness::new(
+        ctx,
+        Some(vec2(800.0, 820.0)),
+        |state: &mut UiState, ctx: &egui::Context| {
+            let mut clicked = None;
+            show(ctx, &app, state, &pal, &mut clicked);
+            clicked
+        },
+    );
+    let mut output = harness.frame(&mut state, vec![]);
+    for _ in 0..3 {
+        output = harness.frame(&mut state, vec![]);
+    }
+    let before = crate::test_ui::find_text(&output, "更多功能 ▾").expect("overflow menu");
+    output = harness.frame(
+        &mut state,
+        vec![
+            egui::Event::PointerMoved(egui::pos2(400.0, 140.0)),
+            egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: vec2(-300.0, 0.0),
+                modifiers: egui::Modifiers::NONE,
+            },
+        ],
+    );
+    let after = crate::test_ui::find_text(&output, "更多功能 ▾").expect("overflow remains visible");
+    assert!((before.x - after.x).abs() < 0.5);
+    harness.click_text(&mut state, &output, "更多功能 ▾");
+    output = harness.frame(&mut state, vec![]);
+    assert!(
+        crate::test_ui::find_text(&output, "信号处理").is_some(),
+        "overflow contains hidden groups"
+    );
+    harness.click_text(&mut state, &output, "信号处理");
+    output = harness.frame(&mut state, vec![]);
+    let position =
+        crate::test_ui::find_text(&output, "FFT").expect("overflow submenu contains commands") + vec2(4.0, 4.0);
+    harness.frame_value(&mut state, vec![egui::Event::PointerMoved(position)]);
+    harness.frame_value(&mut state, vec![crate::test_ui::button(position, true)]);
+    let clicked = harness.frame_value(&mut state, vec![crate::test_ui::button(position, false)]);
+    assert_eq!(clicked, Some("signal.fft"));
 }
