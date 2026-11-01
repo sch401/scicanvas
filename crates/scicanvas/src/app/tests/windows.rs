@@ -164,3 +164,27 @@ fn cards_fit_the_zone_and_center_a_short_last_row() {
     let three = crate::assist::card_rects(zone, 3);
     assert!((three[2].center().x - zone.center().x).abs() < 0.5 || three[0].top() != three[2].top());
 }
+
+#[test]
+fn cascade_and_tile_arrange_open_windows_without_changing_project() {
+    let (_, mut app) = setup();
+    app.ws = egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1000.0, 650.0));
+    let before = app.project.clone();
+    app.run_command("win.tile");
+    let a = app.geoms[&1].rect;
+    let b = app.geoms[&2].rect;
+    assert!(app.ws.contains_rect(a) && app.ws.contains_rect(b));
+    assert!(a.right() <= b.left() || b.right() <= a.left() || a.bottom() <= b.top() || b.bottom() <= a.top());
+    assert_eq!(app.project, before);
+    app.run_command("win.cascade");
+    let a = app.geoms[&1].rect;
+    let b = app.geoms[&2].rect;
+    assert!(a.intersects(b));
+    assert!(b.left() > a.left() && b.top() > a.top());
+    assert_eq!(app.project, before);
+    app.open.insert(1, false);
+    app.open.insert(2, false);
+    let geometries = [app.geoms[&1].rect, app.geoms[&2].rect];
+    app.run_command("win.tile");
+    assert_eq!([app.geoms[&1].rect, app.geoms[&2].rect], geometries);
+}
