@@ -997,11 +997,28 @@
   "feature": "导入向导（跳过表头行、指定分隔符、预览）",
   "ref": "The Import Wizard",
   "pri": "P0",
-  "status": "未开始",
-  "how": "导入预览、跳过行与分隔符/表头设置向导未实现；按用户要求暂缓，现有直接导入继续可用",
-  "verify": "手动操作",
+  "status": "已实现待验收",
+  "how": "文本文件导入向导支持自动或指定分隔符、编码、跳过行、0–3 行表头、列类型、前 50 行预览及导入模板保存和加载；导入是一步撤销。Excel 继续按各工作表导入。",
+  "verify": "预览和解析、指定类型、编码、模板往返、无效值、实际按钮和导入撤销测试；Windows 人工验收待做。",
   "id": "F065",
-  "milestone": "M1 日常够用"
+  "milestone": "M1 日常够用",
+  "needs": [
+   "auto",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/src/csv.rs::options_preview_import_and_template_round_trip",
+    "crates/scicanvas/src/app/tests/import_export.rs::configured_text_import_is_one_undo_step_and_invalid_input_preserves_project",
+    "crates/scicanvas/src/app/tests/import_export.rs::import_wizard_confirm_and_cancel_use_real_dialog_buttons"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/import_export.md#F065",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "导入导出",

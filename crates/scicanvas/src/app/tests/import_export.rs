@@ -216,3 +216,72 @@ fn failed_imports_preserve_redo_selection_and_existing_project() {
     std::fs::remove_file(empty).unwrap();
     std::fs::remove_dir(dir).unwrap();
 }
+
+#[test]
+fn configured_text_import_is_one_undo_step_and_invalid_input_preserves_project() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/file-tests")
+        .join(format!("wizard-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("example.txt");
+    std::fs::write(&path, "skip\nX;Label\n0;red\n1;blue\n").unwrap();
+    let mut app = app();
+    let before = app.project.clone();
+    let mut options = scicanvas_core::csv::ImportOptions {
+        delimiter: 3,
+        skip_rows: 1,
+        header_rows: 1,
+        column_types: vec![1, 4],
+        ..Default::default()
+    };
+    assert!(app.import_with_options(path.clone(), options.clone()));
+    let book = app.project.books.last().unwrap();
+    assert_eq!(book.name, "example");
+    assert_eq!(book.columns[1].data.kind(), scicanvas_core::DataKind::Category);
+    assert_eq!(book.columns[1].data.text_at(1), "blue");
+    assert_eq!(app.history.undo_label(), Some("导入数据"));
+    roundtrip(&mut app, &before);
+    let current = app.project.clone();
+    options.column_types[1] = 1;
+    assert!(!app.import_with_options(path, options));
+    assert_eq!(app.project, current);
+    std::fs::remove_dir_all(dir).unwrap();
+}
+
+#[test]
+fn import_wizard_confirm_and_cancel_use_real_dialog_buttons() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../target/file-tests")
+        .join(format!("wizard-ui-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let path = dir.join("test.csv");
+    let bytes = b"X,Y\n1,2\n3,4\n".to_vec();
+    std::fs::write(&path, &bytes).unwrap();
+    let mut app = app();
+    let before = app.project.clone();
+    app.dialog = Some(Dialog::ImportWizard(Box::new(dialogs::ImportWizard::new(
+        path.clone(),
+        bytes.clone(),
+    ))));
+    press_dialog_button(&mut app, "取消");
+    assert!(app.dialog.is_none());
+    assert_eq!(app.project, before);
+    app.dialog = Some(Dialog::ImportWizard(Box::new(dialogs::ImportWizard::new(path, bytes))));
+    press_dialog_button(&mut app, "导入");
+    assert!(app.dialog.is_none());
+    let book = app.project.books.last().unwrap();
+    assert_eq!(book.columns[1].data.f64_at(1), Some(4.0));
+    roundtrip(&mut app, &before);
+    let numeric = dir.join("numbers.csv");
+    let numeric_bytes = b"1,2\n3,4\n".to_vec();
+    std::fs::write(&numeric, &numeric_bytes).unwrap();
+    app.dialog = Some(Dialog::ImportWizard(Box::new(dialogs::ImportWizard::new(
+        numeric,
+        numeric_bytes,
+    ))));
+    press_dialog_button(&mut app, "导入");
+    let book = app.project.books.last().unwrap();
+    assert_eq!(book.nrows(), 2);
+    assert_eq!(book.columns[0].data.f64_at(0), Some(1.0));
+    std::fs::remove_dir_all(dir).unwrap();
+}

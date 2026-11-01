@@ -106,6 +106,7 @@ impl SciApp {
     /// false 表示输入校验提前返回，保留原对话框并跳过本帧收尾。
     pub(super) fn apply_dialog_action(&mut self, ctx: &egui::Context, action: dialogs::Action) -> bool {
         match action {
+            dialogs::Action::Import(path, options) => return self.import_with_options(path, options),
             dialogs::Action::LayerContents(edit) => self.apply_layer_contents_action(*edit),
             dialogs::Action::AnalysisCurves(graph, layer, curves) => {
                 self.analysis_curves.insert((graph, layer), curves);
