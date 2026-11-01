@@ -168,6 +168,34 @@ def statistical_tests():
         ci = result.confidence_interval(confidence_level=.95)
         cases.append(dict(name=name, a=a, b=b[:len(a)] if name == "paired" else b,
                           t=result.statistic, df=result.df, p=result.pvalue, ci=[ci.low, ci.high]))
+    for suffix, va, vb, mu in [
+        ("small", [1., 2., 4.], [1.2, 2.2, 3.7], 2.),
+        ("missing", [1., 2., 4., np.nan], [1.2, 2.2, 3.7, np.nan], 2.),
+        ("large", [1e6+1, 1e6+4, 1e6+3], [1e6-2, 1e6+2, 1e6+.5], 1e6),
+    ]:
+        va, vb = np.asarray(va), np.asarray(vb)
+        for kind, result in [("one", stats.ttest_1samp(va, mu, nan_policy="omit")),
+                             ("student", stats.ttest_ind(va, vb, equal_var=True, nan_policy="omit")),
+                             ("welch", stats.ttest_ind(va, vb, equal_var=False, nan_policy="omit")),
+                             ("paired", stats.ttest_rel(va, vb, nan_policy="omit"))]:
+            ci = result.confidence_interval(confidence_level=.95)
+            cases.append(dict(name=kind+"-"+suffix, a=va, b=vb, mu=mu,
+                              t=result.statistic, df=result.df, p=result.pvalue, ci=[ci.low, ci.high]))
+    for suffix, xx, yy in [
+        ("small", [1., 2., 4.], [4., 1., 3.]),
+        ("missing", [1., 2., 4., np.nan], [4., 1., 3., 8.]),
+        ("large", [1e6+1, 1e6+2, 1e6+4], [-1e6+4, -1e6+1, -1e6+3]),
+    ]:
+        for kind, fn in [("pearson", stats.pearsonr), ("spearman", stats.spearmanr),
+                         ("kendall", lambda a, b: stats.kendalltau(a, b, method="asymptotic"))]:
+            xx, yy = np.asarray(xx), np.asarray(yy)
+            valid = np.isfinite(xx) & np.isfinite(yy)
+            r = fn(xx[valid], yy[valid])
+            cases.append(dict(name=kind+"-"+suffix, x=xx, y=yy, r=r.statistic, p=r.pvalue))
+    for suffix, raw, limits in [("small", [-1., 1., 3.], (-1., 3.)),
+                                ("extreme", [-1e9, -1e9, 0., 1e9], (-1e9, 1e9))]:
+        counts, edges = np.histogram(raw, bins=4, range=limits)
+        cases.append(dict(name="histogram-"+suffix, values=raw, limits=limits, counts=counts, edges=edges))
     write("statistics", cases)
 
 
@@ -189,6 +217,15 @@ def signal_tests():
     corr = np.correlate(b, a, "full") / np.sqrt(np.sum(a*a)*np.sum(b*b))
     auto = np.correlate(a, a, "full") / np.sum(a*a)
     cases.append(dict(name="correlation", x=x, z=z, lags=np.arange(-len(x)+1,len(x)), corr=corr, auto=auto))
+    for yy in ([1.2, -0.3, 2.5], [1., 1., 2.], [1e6+1, -1e6-2, 2e6+3]):
+        yy = np.asarray(yy)
+        f = np.fft.rfft(yy)
+        case = dict(name="fft", y=yy, dt=dt, re=f.real, im=f.imag,
+                    freq=np.fft.rfftfreq(len(yy), dt))
+        if np.max(np.abs(yy)) > 1e5:
+            case.update(tolerance=1e-9, tolerance_reason="输入量级约 2e6，理论零虚部实测绝对舍入 1.75e-10，约为输入量级的 1e-16。")
+        cases.append(case)
+    cases.append(dict(name="fft-missing", y=[1., np.nan, 3.], dt=dt))
     write("signals", cases)
 
 

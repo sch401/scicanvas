@@ -178,9 +178,11 @@ fn histogram_correlations_and_t_tests_match_generated_scipy_reference() {
     use scicanvas_core::stats::{self, CorrMethod, TTestKind};
     for case in cases("statistics") {
         let name = case["name"].as_str().unwrap();
-        match name {
+        let kind = name.split('-').next().unwrap();
+        match kind {
             "histogram" => {
-                let bins = stats::histogram(&numbers(&case["values"]), 4, Some((-1.0, 3.0))).unwrap();
+                let limits = case.get("limits").map(numbers).unwrap_or_else(|| vec![-1.0, 3.0]);
+                let bins = stats::histogram(&numbers(&case["values"]), 4, Some((limits[0], limits[1]))).unwrap();
                 let counts: Vec<_> = bins.iter().map(|bin| bin.count as u64).collect();
                 let expected: Vec<_> = case["counts"]
                     .as_array()
@@ -194,7 +196,7 @@ fn histogram_correlations_and_t_tests_match_generated_scipy_reference() {
                 array(&edges, &case["edges"], 1e-12, name);
             }
             "pearson" | "spearman" | "kendall" => {
-                let method = match name {
+                let method = match kind {
                     "pearson" => CorrMethod::Pearson,
                     "spearman" => CorrMethod::Spearman,
                     _ => CorrMethod::Kendall,
@@ -204,8 +206,10 @@ fn histogram_correlations_and_t_tests_match_generated_scipy_reference() {
                 near(r.p, &case["p"], 1e-9, name);
             }
             _ => {
-                let kind = match name {
-                    "one" => TTestKind::OneSample { mu: 5.0 },
+                let kind = match kind {
+                    "one" => TTestKind::OneSample {
+                        mu: case.get("mu").and_then(Value::as_f64).unwrap_or(5.0),
+                    },
                     "student" => TTestKind::TwoSample { equal_var: true },
                     "welch" => TTestKind::TwoSample { equal_var: false },
                     "paired" => TTestKind::Paired,
@@ -233,13 +237,14 @@ fn fft_filters_and_correlations_match_generated_numpy_reference() {
             "fft" => {
                 let y = numbers(&case["y"]);
                 let spectrum = fft::spectrum(&y, case["dt"].as_f64().unwrap(), Window::Rect).unwrap();
-                array(&spectrum.freq, &case["freq"], 1e-10, name);
-                array(&spectrum.re, &case["re"], 1e-10, name);
-                array(&spectrum.im, &case["im"], 1e-10, name);
+                let tolerance = case.get("tolerance").and_then(Value::as_f64).unwrap_or(1e-10);
+                array(&spectrum.freq, &case["freq"], tolerance, name);
+                array(&spectrum.re, &case["re"], tolerance, name);
+                array(&spectrum.im, &case["im"], tolerance, name);
                 array(
                     &fft::inverse_real(&spectrum.re, &spectrum.im, y.len()),
                     &case["y"],
-                    1e-10,
+                    tolerance,
                     name,
                 );
             }
@@ -252,6 +257,9 @@ fn fft_filters_and_correlations_match_generated_numpy_reference() {
                 };
                 let out = fft::filter(&numbers(&case["y"]), case["dt"].as_f64().unwrap(), kind).unwrap();
                 array(&out, &case["result"], 1e-10, name);
+            }
+            "fft-missing" => {
+                assert!(fft::spectrum(&numbers(&case["y"]), case["dt"].as_f64().unwrap(), Window::Rect).is_err());
             }
             "correlation" => {
                 let x = numbers(&case["x"]);
