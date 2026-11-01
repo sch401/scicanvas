@@ -692,6 +692,12 @@ pub fn graph_template_from_json(text: &str) -> Result<GraphTemplate, String> {
     Ok(template)
 }
 
+#[cfg(feature = "xlsx")]
+pub fn save_xlsx_export(path: &Path, project: &Project, headers: bool) -> Result<(), String> {
+    let data = crate::xlsx_export::write_project(project, headers)?;
+    write_atomic(path, &data, "文件名为空", "导出 Excel 失败：")
+}
+
 pub fn save_graph_template(path: &Path, template: &GraphTemplate) -> Result<(), String> {
     let content = graph_template_to_json(template)?.into_bytes();
     write_atomic(path, &content, "模板文件名为空", "保存图形模板失败：")

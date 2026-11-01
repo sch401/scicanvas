@@ -3,6 +3,7 @@
 
 mod analysis_ops;
 mod dialog_actions;
+mod excel_export;
 mod find_replace;
 mod notes;
 mod props;

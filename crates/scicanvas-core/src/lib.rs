@@ -39,6 +39,8 @@ pub mod ticks;
 pub mod xls;
 #[cfg(feature = "xlsx")]
 pub mod xlsx;
+#[cfg(feature = "xlsx")]
+pub mod xlsx_export;
 
 pub use data::{ColumnData, ColumnView, DataKind, SharedData};
 pub use model::*;

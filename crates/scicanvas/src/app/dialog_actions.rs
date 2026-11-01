@@ -107,6 +107,10 @@ impl SciApp {
     pub(super) fn apply_dialog_action(&mut self, ctx: &egui::Context, action: dialogs::Action) -> bool {
         match action {
             dialogs::Action::FindNext => self.find_next(),
+            dialogs::Action::ExportXlsx(headers) => {
+                self.finish_dialog_input();
+                self.export_xlsx(headers);
+            }
             dialogs::Action::ReplaceCurrent => self.replace_matches(false),
             dialogs::Action::ReplaceAll => self.replace_matches(true),
             dialogs::Action::Import(path, options) => return self.import_with_options(path, options),

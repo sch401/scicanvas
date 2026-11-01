@@ -31,6 +31,7 @@ Windows 系统字体通过用户电脑读取，本发行包不附加微软雅黑
 | bit-vec 0.7.0 | MIT/Apache-2.0 | [LICENSE-APACHE](licenses/third-party/bit-vec-0.7.0/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/bit-vec-0.7.0/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/bit-vec-0.7.0/SOURCE_COPYRIGHT_HEADERS.txt) |
 | bitflags 1.3.2 | MIT/Apache-2.0 | [LICENSE-APACHE](licenses/third-party/bitflags-1.3.2/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/bitflags-1.3.2/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/bitflags-1.3.2/SOURCE_COPYRIGHT_HEADERS.txt) |
 | bitflags 2.13.2 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/bitflags-2.13.2/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/bitflags-2.13.2/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/bitflags-2.13.2/SOURCE_COPYRIGHT_HEADERS.txt) |
+| bumpalo 3.20.3 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/bumpalo-3.20.3/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/bumpalo-3.20.3/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/bumpalo-3.20.3/SOURCE_COPYRIGHT_HEADERS.txt) |
 | bytemuck 1.25.2 | Zlib OR Apache-2.0 OR MIT | [LICENSE-APACHE](licenses/third-party/bytemuck-1.25.2/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/bytemuck-1.25.2/LICENSE-MIT), [LICENSE-ZLIB](licenses/third-party/bytemuck-1.25.2/LICENSE-ZLIB) |
 | bytemuck_derive 1.12.1 | Zlib OR Apache-2.0 OR MIT | [LICENSE-APACHE](licenses/third-party/bytemuck_derive-1.12.1/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/bytemuck_derive-1.12.1/LICENSE-MIT), [LICENSE-ZLIB](licenses/third-party/bytemuck_derive-1.12.1/LICENSE-ZLIB) |
 | byteorder-lite 0.1.0 | Unlicense OR MIT | [LICENSE-MIT](licenses/third-party/byteorder-lite-0.1.0/LICENSE-MIT), [UNLICENSE](licenses/third-party/byteorder-lite-0.1.0/UNLICENSE) |
@@ -152,6 +153,7 @@ Windows 系统字体通过用户电脑读取，本发行包不附加微软雅黑
 | rfd 0.15.4 | MIT | [LICENSE](licenses/third-party/rfd-0.15.4/LICENSE) |
 | rgb 0.8.53 | MIT | [LICENSE](licenses/third-party/rgb-0.8.53/LICENSE) |
 | roxmltree 0.20.0 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/roxmltree-0.20.0/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/roxmltree-0.20.0/LICENSE-MIT) |
+| rust_xlsxwriter 0.102.0 | MIT OR Apache-2.0 | [LICENSE_Apache2.0](licenses/third-party/rust_xlsxwriter-0.102.0/LICENSE_Apache2.0), [LICENSE_MIT](licenses/third-party/rust_xlsxwriter-0.102.0/LICENSE_MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/rust_xlsxwriter-0.102.0/SOURCE_COPYRIGHT_HEADERS.txt) |
 | rustc-hash 1.1.0 | Apache-2.0/MIT | [LICENSE-APACHE](licenses/third-party/rustc-hash-1.1.0/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/rustc-hash-1.1.0/LICENSE-MIT), [SOURCE_COPYRIGHT_HEADERS.txt](licenses/third-party/rustc-hash-1.1.0/SOURCE_COPYRIGHT_HEADERS.txt) |
 | rustc-hash 2.1.3 | Apache-2.0 OR MIT | [LICENSE-APACHE](licenses/third-party/rustc-hash-2.1.3/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/rustc-hash-2.1.3/LICENSE-MIT) |
 | rustversion 1.0.23 | MIT OR Apache-2.0 | [LICENSE-APACHE](licenses/third-party/rustversion-1.0.23/LICENSE-APACHE), [LICENSE-MIT](licenses/third-party/rustversion-1.0.23/LICENSE-MIT) |
@@ -247,7 +249,9 @@ Windows 系统字体通过用户电脑读取，本发行包不附加微软雅黑
 | zerovec 0.11.8 | Unicode-3.0 | [LICENSE](licenses/third-party/zerovec-0.11.8/LICENSE) |
 | zerovec-derive 0.11.6 | Unicode-3.0 | [LICENSE](licenses/third-party/zerovec-derive-0.11.6/LICENSE) |
 | zip 9.0.5 | MIT | [LICENSE](licenses/third-party/zip-9.0.5/LICENSE) |
+| zlib-rs 0.6.8 | Zlib | [LICENSE](licenses/third-party/zlib-rs-0.6.8/LICENSE) |
 | zmij 1.0.23 | MIT | [LICENSE-MIT](licenses/third-party/zmij-1.0.23/LICENSE-MIT) |
+| zopfli 0.8.4 | Apache-2.0 | [COPYING](licenses/third-party/zopfli-0.8.4/COPYING) |
 
 ## 算法参考与代码来源复核
 

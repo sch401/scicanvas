@@ -1,7 +1,7 @@
 {
   "target": "x86_64-pc-windows-msvc",
   "scope": "normal,build; all workspace features",
-  "cargo_lock_sha256": "eacd5bf7ba68d7eab402caa6a4ffa1b5706824004a0760aaa4fb36898be50852",
+  "cargo_lock_sha256": "477f4f59d173c3e434fc372381edae450dd7e9c33c63a023bc8dd359ba67959d",
   "packages": [
     {
       "name": "ab_glyph",
@@ -378,6 +378,28 @@
         {
           "path": "licenses/third-party/bitflags-2.13.2/SOURCE_COPYRIGHT_HEADERS.txt",
           "sha256": "120cb966648d6b83294adf324c1c37c0b26334e4adc384e7d1f59a4867d2a2ab"
+        }
+      ]
+    },
+    {
+      "name": "bumpalo",
+      "version": "3.20.3",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/fitzgen/bumpalo",
+      "crate_sha256": "72f5acc6cb2ba439de613abc23857ec3d78374d8ed5ac84e9d11336e87da8649",
+      "revision": "84654ace6be4444da3ff102a0a0af3b38c4df4fb",
+      "files": [
+        {
+          "path": "licenses/third-party/bumpalo-3.20.3/LICENSE-APACHE",
+          "sha256": "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+        },
+        {
+          "path": "licenses/third-party/bumpalo-3.20.3/LICENSE-MIT",
+          "sha256": "65f94e99ddaf4f5d1782a6dae23f35d4293a9a01444a13135a6887017d353cee"
+        },
+        {
+          "path": "licenses/third-party/bumpalo-3.20.3/SOURCE_COPYRIGHT_HEADERS.txt",
+          "sha256": "77628857cc100bb9ef59a8fc36535cce65e4474291cdbcdca87a517e2ecfd781"
         }
       ]
     },
@@ -2656,6 +2678,28 @@
       ]
     },
     {
+      "name": "rust_xlsxwriter",
+      "version": "0.102.0",
+      "license": "MIT OR Apache-2.0",
+      "repository": "https://github.com/jmcnamara/rust_xlsxwriter",
+      "crate_sha256": "6ca3d0e879a578c1313c2800ab0c6c029d38eed18098675e50341a30d32372ed",
+      "revision": "d850973d3836905db3a04022b093b3d5575ee85e",
+      "files": [
+        {
+          "path": "licenses/third-party/rust_xlsxwriter-0.102.0/LICENSE_Apache2.0",
+          "sha256": "ee48b3189afd8d84e225382c82097ddd9e99aae1de1edf4df79994a2dd4842ce"
+        },
+        {
+          "path": "licenses/third-party/rust_xlsxwriter-0.102.0/LICENSE_MIT",
+          "sha256": "6719e95f813f9f93e1ae52f9c13b89b3766655d65620399638b3753fc24f4c56"
+        },
+        {
+          "path": "licenses/third-party/rust_xlsxwriter-0.102.0/SOURCE_COPYRIGHT_HEADERS.txt",
+          "sha256": "986e08f73efff5f827820b8982b3bd90c9276a8467b546ae1d26adde05e66364"
+        }
+      ]
+    },
+    {
       "name": "rustc-hash",
       "version": "1.1.0",
       "license": "Apache-2.0/MIT",
@@ -4470,6 +4514,20 @@
       ]
     },
     {
+      "name": "zlib-rs",
+      "version": "0.6.8",
+      "license": "Zlib",
+      "repository": "https://github.com/trifectatechfoundation/zlib-rs",
+      "crate_sha256": "b268e58e7c693d7c271f93ffc4ba3b380412554231c85bf61ca7af91042a4112",
+      "revision": "0254e07204884bfc902d6ebb68c8b703d0ea49cf",
+      "files": [
+        {
+          "path": "licenses/third-party/zlib-rs-0.6.8/LICENSE",
+          "sha256": "e72111c52b7d96ebe25348dee19f0744f444d3c95ae6b1ecb6ccaecc5bce05ba"
+        }
+      ]
+    },
+    {
       "name": "zmij",
       "version": "1.0.23",
       "license": "MIT",
@@ -4480,6 +4538,20 @@
         {
           "path": "licenses/third-party/zmij-1.0.23/LICENSE-MIT",
           "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3"
+        }
+      ]
+    },
+    {
+      "name": "zopfli",
+      "version": "0.8.4",
+      "license": "Apache-2.0",
+      "repository": "https://github.com/zopfli-rs/zopfli",
+      "crate_sha256": "aaf7fc5d30c28483d93805c4a5e12b05bbb52407fa67c5f8bd552374cd01fb11",
+      "revision": "62df3aebea9f458558984b106f87e980d4077c2f",
+      "files": [
+        {
+          "path": "licenses/third-party/zopfli-0.8.4/COPYING",
+          "sha256": "018b1cb87efdf7a04c2fcc13d57ed63f62149113fb207b27ea13430d64f13513"
         }
       ]
     }

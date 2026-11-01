@@ -88,7 +88,7 @@ class ParityTests(unittest.TestCase):
         rows = json.loads((Path(__file__).parent / "parity.json").read_text(encoding="utf-8"))
         build_parity.validate(rows)
         self.assertEqual(sum(r["status"] == "已完成" for r in rows), 72)
-        self.assertEqual(sum(r["status"] == "已实现待验收" for r in rows), 58)
+        self.assertEqual(sum(r["status"] == "已实现待验收" for r in rows), 59)
         for row in rows:
             if row["status"] in ("已完成", "已实现待验收"):
                 self.assertTrue(row.get("needs"), row["id"])

@@ -86,6 +86,16 @@ pub(super) fn project(commands: &mut Vec<Command>) {
             |a| a.export_svg(),
         ),
         c(
+            "project.export_xlsx",
+            "导出 Excel…",
+            "export",
+            "",
+            "文件",
+            "export excel xlsx 工作簿",
+            always,
+            |a| a.open_export_xlsx(),
+        ),
+        c(
             "book.export_csv",
             "导出 CSV",
             "export",

@@ -23,6 +23,7 @@ mod column_props;
 mod convert_text;
 mod correlations;
 mod docking;
+mod excel_export;
 mod fft;
 mod fft_filter;
 mod fill;
@@ -73,6 +74,9 @@ pub(crate) use sheet_transform::TransformKind;
 pub use sheet_transform::{SheetTransform, TransformAction};
 
 pub enum Dialog {
+    ExportXlsx {
+        headers: bool,
+    },
     SheetTransform(Box<SheetTransform>),
     FindReplace(Box<FindReplace>),
     ImportWizard(Box<ImportWizard>),
@@ -252,6 +256,7 @@ pub enum Dialog {
 
 /// 对话框里用户做出的选择，由 app.rs 执行。
 pub enum Action {
+    ExportXlsx(bool),
     SheetTransform(u64, TransformAction),
     FindNext,
     ReplaceCurrent,
@@ -312,6 +317,7 @@ impl Dialog {
         let mut action = match self {
             Self::LayerContents(contents) => contents.show(ctx, project, pal),
             Self::FindReplace(state) => state.show(ctx, &mut open),
+            Self::ExportXlsx { .. } => self.show_export_xlsx(ctx, &mut open),
             Self::ImportWizard(wizard) => wizard.show(ctx, pal, &mut open),
             Self::AnalysisCurves { .. } => self.show_analysis_curves(ctx, pal, &mut open, esc),
             Self::ColumnProps { .. } => self.show_column_props(ctx, pal, &mut open, esc),

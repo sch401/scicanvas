@@ -234,7 +234,7 @@ pub static TABS: &[Tab] = &[
             },
             Group {
                 label: "导出",
-                items: &[Smalls(&["book.export_csv"])],
+                items: &[Smalls(&["book.export_csv", "project.export_xlsx"])],
             },
             Group {
                 label: "绘图",
