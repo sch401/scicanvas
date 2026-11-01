@@ -1550,7 +1550,8 @@
   "evidence": {
    "auto": [
     "crates/scicanvas/src/app/batch_plot.rs::batch_plot_matches_column_names_and_is_atomic_and_undoable",
-    "crates/scicanvas/src/app/batch_plot.rs::batch_plot_command_opens_target_selection"
+    "crates/scicanvas/src/app/batch_plot.rs::batch_plot_command_opens_target_selection",
+    "crates/scicanvas/src/app/tests/graph.rs::batch_plot_controls_return_selected_workbook"
    ],
    "manual": {
     "checklist": "docs/acceptance/plotting.md#F088",
@@ -4099,7 +4100,8 @@
   "evidence": {
    "auto": [
     "crates/scicanvas/src/app/batch_export.rs::batch_export_writes_distinct_files_without_overwriting",
-    "crates/scicanvas/src/app/batch_export.rs::batch_export_command_opens_graph_selection"
+    "crates/scicanvas/src/app/batch_export.rs::batch_export_command_opens_graph_selection",
+    "crates/scicanvas/src/app/tests/graph.rs::batch_export_controls_return_selected_graphs_and_format"
    ],
    "manual": {
     "checklist": "docs/acceptance/import_export.md#F233",

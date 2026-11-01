@@ -1575,3 +1575,65 @@ fn mapped_area_color_is_live_undoable_and_saved_without_a_format_change() {
     assert_eq!(restored.version, scicanvas_core::project_file::CURRENT_VERSION);
     assert_eq!(svg::render_page(restored.graph(2).unwrap(), &restored), after_svg);
 }
+
+#[test]
+fn batch_plot_controls_return_selected_workbook() {
+    let mut app = app();
+    let target = app.project.new_book();
+    app.open_batch_plot();
+    let mut dialog = app.dialog.take().unwrap();
+    let project = app.project.clone();
+    let pal = app.pal;
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut h = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(900.0, 700.0)),
+        |dialog: &mut Dialog, ctx: &egui::Context| dialogs::show(ctx, dialog, &pal, &project),
+    );
+    let mut out = h.frame(&mut dialog, vec![]);
+    for _ in 0..2 {
+        out = h.frame(&mut dialog, vec![]);
+    }
+    let name = project.book(target).unwrap().name.clone();
+    out = h.click_text(&mut dialog, &out, &name);
+    let position = crate::test_ui::find_text(&out, "生成图形").unwrap() + egui::vec2(5.0, 5.0);
+    h.frame_value(&mut dialog, vec![egui::Event::PointerMoved(position)]);
+    h.frame_value(&mut dialog, vec![crate::test_ui::button(position, true)]);
+    let action = h.frame_value(&mut dialog, vec![crate::test_ui::button(position, false)]);
+    assert!(matches!(action, dialogs::Action::BatchPlot(2, books) if books == vec![target]));
+}
+
+#[test]
+fn batch_export_controls_return_selected_graphs_and_format() {
+    let mut app = app();
+    let first = app.project.graphs[0].id;
+    let mut second = app.project.graphs[0].clone();
+    second.id = app.project.alloc_id();
+    second.name = "Other Graph".into();
+    app.project.graphs.push(second);
+    app.open_batch_export();
+    let mut dialog = app.dialog.take().unwrap();
+    let project = app.project.clone();
+    let pal = app.pal;
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut h = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(900.0, 700.0)),
+        |dialog: &mut Dialog, ctx: &egui::Context| dialogs::show(ctx, dialog, &pal, &project),
+    );
+    let mut out = h.frame(&mut dialog, vec![]);
+    for _ in 0..2 {
+        out = h.frame(&mut dialog, vec![]);
+    }
+    out = h.click_text(&mut dialog, &out, "Other Graph");
+    out = h.click_text(&mut dialog, &out, "TIFF");
+    let position = crate::test_ui::find_text(&out, "选择目录并导出…").unwrap() + egui::vec2(5.0, 5.0);
+    h.frame_value(&mut dialog, vec![egui::Event::PointerMoved(position)]);
+    h.frame_value(&mut dialog, vec![crate::test_ui::button(position, true)]);
+    let action = h.frame_value(&mut dialog, vec![crate::test_ui::button(position, false)]);
+    assert!(
+        matches!(action, dialogs::Action::BatchExport(graphs, dialogs::BatchFormat::Tiff, 300) if graphs == vec![first])
+    );
+}

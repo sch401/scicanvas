@@ -156,8 +156,11 @@ mod tests {
                 styles.insert("B".into(), style);
             });
         let book = target(&mut app, "Target");
+        let other = target(&mut app, "Other");
         let before = app.project.clone();
-        let ids = app.create_batch_plots(2, vec![book]).unwrap();
+        let ids = app.create_batch_plots(2, vec![book, other]).unwrap();
+        assert_eq!(ids.len(), 2);
+        assert_eq!(app.project.graph(ids[1]).unwrap().first_layer().book_id, Some(other));
         let result = app.project.graph(ids[0]).unwrap().first_layer();
         let draft = result.draft();
         assert_eq!(result.book_id, Some(book));
@@ -176,6 +179,13 @@ mod tests {
         assert!(app.create_batch_plots(2, vec![book, bad]).is_none());
         assert_eq!(app.project, before, "a failed target rolls back the entire batch");
         assert!(app.status.contains("缺少列名"));
+        let duplicate = target(&mut app, "Duplicate");
+        let book_data = app.project.book_mut(duplicate).unwrap();
+        book_data.columns[2].long_name = book_data.columns[0].long_name.clone();
+        let before = app.project.clone();
+        assert!(app.create_batch_plots(2, vec![duplicate]).is_none());
+        assert_eq!(app.project, before);
+        assert!(app.status.contains("不唯一"));
     }
 
     #[test]
