@@ -43,11 +43,19 @@ fn main() {
         ..Default::default()
     };
     #[cfg(target_os = "windows")]
+    let wgpu_setup = {
+        let mut setup = eframe::egui_wgpu::WgpuConfiguration::default().wgpu_setup;
+        if let eframe::egui_wgpu::WgpuSetup::CreateNew { supported_backends, .. } = &mut setup {
+            *supported_backends = eframe::wgpu::Backends::DX12;
+        }
+        setup
+    };
+    #[cfg(target_os = "windows")]
     let options = eframe::NativeOptions {
         renderer: eframe::Renderer::Wgpu,
         wgpu_options: eframe::egui_wgpu::WgpuConfiguration {
             // 只用 DX12，不初始化 GL；无显卡加速时由 wgpu 选择 WARP。
-            supported_backends: eframe::wgpu::Backends::DX12,
+            wgpu_setup,
             present_mode: eframe::wgpu::PresentMode::Fifo,
             desired_maximum_frame_latency: Some(1),
             ..Default::default()

@@ -62,7 +62,7 @@ pub fn edges(ctx: &egui::Context, pal: &Palette) {
 
 /// 顶部栏空白处：拖动移动窗口，双击最大化 / 还原。在顶部栏的其他控件之前调用，控件优先接收点击。
 pub fn drag_area(ui: &mut egui::Ui, rect: Rect) {
-    let response = ui.interact(rect, egui::Id::new("title-drag"), Sense::click_and_drag());
+    let response = ui.interact(rect, ui.make_persistent_id("title-drag"), Sense::click_and_drag());
     if response.double_clicked() {
         let max = maximized(ui.ctx());
         ui.ctx().send_viewport_cmd(ViewportCommand::Maximized(!max));
@@ -81,8 +81,6 @@ pub fn modal_caption(ui: &mut egui::Ui, caption: Rect, pal: &Palette) {
     ui.spacing_mut().item_spacing = vec2(4., 0.);
     drag_area(ui, caption);
     let buttons = Rect::from_min_max(egui::pos2(caption.right() - BUTTONS_W, caption.top()), caption.max);
-    let rest = Rect::from_min_max(caption.min, egui::pos2(buttons.left(), caption.bottom()));
-    ui.painter().rect_filled(rest, 0., crate::dialogs::backdrop(ui.ctx()));
     ui.painter().rect_filled(buttons, 0., pal.chrome);
     ui.allocate_ui_with_layout(caption.size(), egui::Layout::right_to_left(egui::Align::Center), |ui| {
         if draw_buttons(ui, pal) {

@@ -144,4 +144,4 @@ Dalton Maag Ltd
 
 ## emoji-icon-font.ttf
 
-此字体未提供相关 name 记录，原始版权与许可见 [epaint_default_fonts-0.29.1/fonts](third-party/epaint_default_fonts-0.29.1/fonts/emoji-icon-font-mit-license.txt)。
+此字体未提供相关 name 记录，原始版权与许可见 [epaint_default_fonts-0.30.0/fonts](third-party/epaint_default_fonts-0.30.0/fonts/emoji-icon-font-mit-license.txt)。

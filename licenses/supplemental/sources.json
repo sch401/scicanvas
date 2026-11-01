@@ -451,5 +451,149 @@
     "url": "https://www.itl.nist.gov/div898/strd/nls/data/LINKS/DATA/Thurber.dat",
     "sha256": "806b8d00a5365eff907561db796fec3af8a26a5f353297d4311fd46ed5b0146f",
     "group": "nist-strd"
+  },
+  {
+    "path": "licenses/supplemental/accesskit-405d/LICENSE-MIT",
+    "url": "https://raw.githubusercontent.com/AccessKit/accesskit/405d578cdfd8496ee79020d24cfaac8c29a8a48f/LICENSE-MIT",
+    "sha256": "23f18e03dc49df91622fe2a76176497404e46ced8a715d9d2b67a7446571cca3",
+    "group": "accesskit-405d"
+  },
+  {
+    "path": "licenses/supplemental/accesskit-405d/LICENSE-APACHE",
+    "url": "https://raw.githubusercontent.com/AccessKit/accesskit/405d578cdfd8496ee79020d24cfaac8c29a8a48f/LICENSE-APACHE",
+    "sha256": "62c7a1e35f56406896d7aa7ca52d0cc0d272ac022b5d2796e7d6905db8a3636a",
+    "group": "accesskit-405d"
+  },
+  {
+    "path": "licenses/supplemental/egui-3203/LICENSE-MIT",
+    "url": "https://raw.githubusercontent.com/emilk/egui/320377e3ca63a298e9485cf79559fb150cffa635/LICENSE-MIT",
+    "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c",
+    "group": "egui-3203"
+  },
+  {
+    "path": "licenses/supplemental/egui-3203/LICENSE-APACHE",
+    "url": "https://raw.githubusercontent.com/emilk/egui/320377e3ca63a298e9485cf79559fb150cffa635/LICENSE-APACHE",
+    "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
+    "group": "egui-3203"
+  },
+  {
+    "path": "licenses/supplemental/egui-030/LICENSE-MIT",
+    "url": "https://raw.githubusercontent.com/emilk/egui/d864655018fcd73f2df629e5df4df04374b89a4b/LICENSE-MIT",
+    "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c",
+    "group": "egui-030",
+    "crate": "eframe-0.30.0",
+    "revision": "0a3edabd3544c6d339eacd9e606fccee302e4c35",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "path": "licenses/supplemental/egui-030/LICENSE-MIT",
+    "url": "https://raw.githubusercontent.com/emilk/egui/d864655018fcd73f2df629e5df4df04374b89a4b/LICENSE-MIT",
+    "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c",
+    "group": "egui-030",
+    "crate": "egui-0.30.0",
+    "revision": "0a3edabd3544c6d339eacd9e606fccee302e4c35",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "path": "licenses/supplemental/egui-030/LICENSE-MIT",
+    "url": "https://raw.githubusercontent.com/emilk/egui/d864655018fcd73f2df629e5df4df04374b89a4b/LICENSE-MIT",
+    "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c",
+    "group": "egui-030",
+    "crate": "egui-wgpu-0.30.0",
+    "revision": "0a3edabd3544c6d339eacd9e606fccee302e4c35",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "path": "licenses/supplemental/egui-030/LICENSE-MIT",
+    "url": "https://raw.githubusercontent.com/emilk/egui/d864655018fcd73f2df629e5df4df04374b89a4b/LICENSE-MIT",
+    "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c",
+    "group": "egui-030",
+    "crate": "egui-winit-0.30.0",
+    "revision": "0a3edabd3544c6d339eacd9e606fccee302e4c35",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "path": "licenses/supplemental/egui-030/LICENSE-MIT",
+    "url": "https://raw.githubusercontent.com/emilk/egui/d864655018fcd73f2df629e5df4df04374b89a4b/LICENSE-MIT",
+    "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c",
+    "group": "egui-030",
+    "crate": "egui_extras-0.30.0",
+    "revision": "0a3edabd3544c6d339eacd9e606fccee302e4c35",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "path": "licenses/supplemental/egui-030/LICENSE-MIT",
+    "url": "https://raw.githubusercontent.com/emilk/egui/d864655018fcd73f2df629e5df4df04374b89a4b/LICENSE-MIT",
+    "sha256": "95ca92f5f8ea5231f1580b3a2a799e8260af3114b900e1def5355a7f44bcf60c",
+    "group": "egui-030",
+    "crate": "egui_glow-0.30.0",
+    "revision": "0a3edabd3544c6d339eacd9e606fccee302e4c35",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "path": "licenses/supplemental/egui-030/LICENSE-APACHE",
+    "url": "https://raw.githubusercontent.com/emilk/egui/d864655018fcd73f2df629e5df4df04374b89a4b/LICENSE-APACHE",
+    "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
+    "group": "egui-030",
+    "crate": "eframe-0.30.0",
+    "revision": "0a3edabd3544c6d339eacd9e606fccee302e4c35",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "path": "licenses/supplemental/egui-030/LICENSE-APACHE",
+    "url": "https://raw.githubusercontent.com/emilk/egui/d864655018fcd73f2df629e5df4df04374b89a4b/LICENSE-APACHE",
+    "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
+    "group": "egui-030",
+    "crate": "egui-0.30.0",
+    "revision": "0a3edabd3544c6d339eacd9e606fccee302e4c35",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "path": "licenses/supplemental/egui-030/LICENSE-APACHE",
+    "url": "https://raw.githubusercontent.com/emilk/egui/d864655018fcd73f2df629e5df4df04374b89a4b/LICENSE-APACHE",
+    "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
+    "group": "egui-030",
+    "crate": "egui-wgpu-0.30.0",
+    "revision": "0a3edabd3544c6d339eacd9e606fccee302e4c35",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "path": "licenses/supplemental/egui-030/LICENSE-APACHE",
+    "url": "https://raw.githubusercontent.com/emilk/egui/d864655018fcd73f2df629e5df4df04374b89a4b/LICENSE-APACHE",
+    "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
+    "group": "egui-030",
+    "crate": "egui-winit-0.30.0",
+    "revision": "0a3edabd3544c6d339eacd9e606fccee302e4c35",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "path": "licenses/supplemental/egui-030/LICENSE-APACHE",
+    "url": "https://raw.githubusercontent.com/emilk/egui/d864655018fcd73f2df629e5df4df04374b89a4b/LICENSE-APACHE",
+    "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
+    "group": "egui-030",
+    "crate": "egui_extras-0.30.0",
+    "revision": "0a3edabd3544c6d339eacd9e606fccee302e4c35",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "path": "licenses/supplemental/egui-030/LICENSE-APACHE",
+    "url": "https://raw.githubusercontent.com/emilk/egui/d864655018fcd73f2df629e5df4df04374b89a4b/LICENSE-APACHE",
+    "sha256": "8173d5c29b4f956d532781d2b86e4e30f83e6b7878dce18c919451d6ba707c90",
+    "group": "egui-030",
+    "crate": "egui_glow-0.30.0",
+    "revision": "0a3edabd3544c6d339eacd9e606fccee302e4c35",
+    "license": "MIT OR Apache-2.0"
+  },
+  {
+    "path": "licenses/supplemental/wgpu-9993/LICENSE.MIT",
+    "url": "https://raw.githubusercontent.com/gfx-rs/wgpu/9993f5c9eceb91f9bb6b9c5c6994f35f50e5f378/LICENSE.MIT",
+    "sha256": "c7fea58d1cfe49634cd92e54fc10a9d871f4b275321a4cd8c09e449122caaeb4",
+    "group": "wgpu-9993"
+  },
+  {
+    "path": "licenses/supplemental/wgpu-9993/LICENSE.APACHE",
+    "url": "https://raw.githubusercontent.com/gfx-rs/wgpu/9993f5c9eceb91f9bb6b9c5c6994f35f50e5f378/LICENSE.APACHE",
+    "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9",
+    "group": "wgpu-9993"
   }
 ]
