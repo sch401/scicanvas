@@ -503,3 +503,49 @@ fn percent_stacked_bars_match_generated_numpy_reference() {
         }
     }
 }
+
+#[test]
+fn fit_reports_match_generated_numpy_scipy_reference() {
+    use scicanvas_core::nlfit::{self, Model};
+    for case in cases("fit_reports") {
+        let name = case["name"].as_str().unwrap();
+        let x = numbers(&case["x"]);
+        let y = numbers(&case["y"]);
+        let at = numbers(&case["at"]);
+        if case["kind"] == "poly" {
+            let (xs, ys): (Vec<_>, Vec<_>) = x
+                .iter()
+                .zip(&y)
+                .filter(|(a, b)| a.is_finite() && b.is_finite())
+                .map(|(&a, &b)| (a, b))
+                .unzip();
+            let f = analysis::polyfit(&xs, &ys, case["order"].as_u64().unwrap() as usize).unwrap();
+            let tolerance = case.get("tolerance").and_then(Value::as_f64).unwrap_or(1e-10);
+            array(&f.coef, &case["params"], tolerance, name);
+            array(&f.se, &case["se"], tolerance, name);
+            near(f.rss, &case["rss"], tolerance, name);
+            near(f.tss, &case["tss"], tolerance, name);
+            let a = f.anova();
+            near(a.f, &case["f"], tolerance, name);
+            near(a.p, &case["fp"], 1e-8, name);
+            let (t, p): (Vec<_>, Vec<_>) = f.t_tests().into_iter().unzip();
+            array(&t, &case["t"], tolerance, name);
+            array(&p, &case["p"], 1e-8, name);
+            let (conf, pred): (Vec<_>, Vec<_>) = at.iter().map(|&x| f.band(x, 0.95)).unzip();
+            array(&conf, &case["conf"], tolerance, name);
+            array(&pred, &case["pred"], tolerance, name);
+        } else {
+            let f = nlfit::fit(Model::ExpDec1, &x, &y, None, &[]).unwrap();
+            assert!(f.converged);
+            array(&f.params, &case["params"], 1e-5, name);
+            array(&f.se, &case["se"], 1e-3, name);
+            near(f.rss, &case["rss"], 1e-6, name);
+            let (t, p): (Vec<_>, Vec<_>) = f.t_tests().into_iter().unzip();
+            array(&t, &case["t"], 1e-3, name);
+            array(&p, &case["p"], case["p_tolerance"].as_f64().unwrap(), name);
+            let (conf, pred): (Vec<_>, Vec<_>) = at.iter().map(|&x| f.band(x, 0.95)).unzip();
+            array(&conf, &case["conf"], 1e-5, name);
+            array(&pred, &case["pred"], 1e-5, name);
+        }
+    }
+}
