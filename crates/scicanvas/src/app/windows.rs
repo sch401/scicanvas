@@ -385,7 +385,7 @@ impl SciApp {
                 egui::Align2::RIGHT_BOTTOM,
                 text,
                 egui::FontId::proportional(crate::theme::size::LABEL),
-                egui::Color32::from_gray(110),
+                plot::PAGE_HINT,
             );
         } else if out.zoomed {
             ui.painter().text(
@@ -393,7 +393,7 @@ impl SciApp {
                 egui::Align2::RIGHT_BOTTOM,
                 "双击恢复原始范围",
                 egui::FontId::proportional(crate::theme::size::LABEL),
-                egui::Color32::from_gray(140),
+                plot::PAGE_HINT_WEAK,
             );
         }
 

@@ -14,6 +14,10 @@ use scicanvas_core::{Graph, Project};
 
 use crate::fonts::plot_font;
 
+/// 出版图页上的辅助提示，沿用固定画布的颜色，不随界面主题变化。
+pub const PAGE_HINT: Color32 = Color32::from_gray(110);
+pub const PAGE_HINT_WEAK: Color32 = Color32::from_gray(140);
+
 /// 缩放平移后的视图，按图形保存在 egui 的临时内存里。
 /// 记下当时的坐标轴设置，在“绘图属性”里改了范围或对数轴后自动作废。
 #[derive(Clone)]

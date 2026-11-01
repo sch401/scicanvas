@@ -15,11 +15,7 @@ impl Dialog {
         window(ctx, "转换为文本列？").open(open).show(ctx, |ui| {
             ui.vertical_centered(|ui| {
                 ui.add_space(4.0);
-                ui.label(
-                    RichText::new(format!("列 {key} 第 {} 行的输入与当前列类型不符", *row + 1))
-                        .size(crate::theme::size::EMPHASIS)
-                        .strong(),
-                );
+                ui.label(RichText::new(format!("列 {key} 第 {} 行的输入与当前列类型不符", *row + 1)).strong());
                 ui.add_space(4.0);
                 ui.label(RichText::new("转换后整列已有内容原样保留，再写入本次输入；可以撤销。").color(pal.weak));
             });

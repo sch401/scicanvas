@@ -16,6 +16,8 @@ pub struct Palette {
     /// 强调色：当前窗口标题、选中状态、链接。
     pub accent: Color32,
     pub accent_fill: Color32,
+    pub on_accent: Color32,
+    pub hud_bg: Color32,
     pub danger: Color32,
     pub error: Color32,
     pub warn: Color32,
@@ -49,6 +51,12 @@ pub struct Palette {
     pub title: Color32,
     pub title2: Color32,
     pub title_in: Color32,
+}
+
+impl Palette {
+    pub fn on_accent_alpha(&self, alpha: u8) -> Color32 {
+        Color32::from_rgba_unmultiplied(self.on_accent.r(), self.on_accent.g(), self.on_accent.b(), alpha)
+    }
 }
 
 struct Tokens {
@@ -153,6 +161,12 @@ pub fn palette(theme: Theme) -> Palette {
         dark: t.dark,
         accent: t.accent,
         accent_fill: t.accent_fill,
+        on_accent: Color32::WHITE,
+        hud_bg: if t.dark {
+            Color32::from_rgba_unmultiplied(30, 34, 42, 225)
+        } else {
+            Color32::from_rgba_unmultiplied(236, 240, 246, 225)
+        },
         danger: t.danger,
         error: t.error,
         warn: t.warn,
@@ -278,7 +292,7 @@ pub mod size {
     pub const MONO: f32 = 12.5;
     pub const BODY: f32 = 13.0;
     pub const MENU: f32 = 13.5;
-    pub const EMPHASIS: f32 = 14.0;
+    pub const HUD: f32 = 12.5;
     pub const HEADING: f32 = 14.5;
     pub const INPUT: f32 = 15.0;
     pub const TITLE: f32 = 22.0;
@@ -321,6 +335,21 @@ mod consistency_tests {
         }
     }
     #[test]
+    fn overlay_and_accent_tokens_preserve_existing_colors() {
+        for (theme, expected) in [
+            (Theme::Light, Color32::from_rgba_unmultiplied(236, 240, 246, 225)),
+            (Theme::Dark, Color32::from_rgba_unmultiplied(30, 34, 42, 225)),
+        ] {
+            let pal = palette(theme);
+            assert_eq!(pal.hud_bg, expected);
+            assert_eq!(pal.on_accent, Color32::WHITE);
+            assert_eq!(
+                pal.on_accent_alpha(105),
+                Color32::from_rgba_unmultiplied(255, 255, 255, 105)
+            );
+        }
+    }
+    #[test]
     fn interface_colors_and_type_sizes_use_named_tokens() {
         fn scan(dir: &std::path::Path) {
             for entry in std::fs::read_dir(dir).unwrap() {
@@ -342,12 +371,18 @@ mod consistency_tests {
                 let exempt = path.components().any(|c| c.as_os_str() == "icons")
                     || path
                         .file_name()
-                        .is_some_and(|n| ["plot.rs", "export.rs", "assist.rs"].iter().any(|v| n == *v));
-                assert!(
-                    exempt || !text.contains("Color32::from_rgb("),
-                    "界面颜色应使用 theme：{}",
-                    path.display()
-                );
+                        .is_some_and(|n| ["plot.rs", "export.rs"].iter().any(|v| n == *v));
+                for pattern in [
+                    "Color32::from_rgb(",
+                    "Color32::from_rgba_unmultiplied(",
+                    "Color32::from_gray(",
+                ] {
+                    assert!(
+                        exempt || !text.contains(pattern),
+                        "界面颜色应使用 theme：{} {pattern}",
+                        path.display()
+                    );
+                }
                 for pattern in ["FontId::proportional(", "FontId::monospace(", ".size("] {
                     for rest in text.split(pattern).skip(1) {
                         assert!(
