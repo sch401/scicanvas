@@ -78,6 +78,7 @@ impl CustomFitEditor {
         self.limits
             .resize(names.len().min(scicanvas_core::nlfit::MAX_PARAMS), Default::default());
         self.limit_values.resize(self.limits.len(), [0.0; 3]);
+        // 设置窗口已提供限高滚动；参数共用同一滚动区，窄窗口也可到达末行。
         for ((name, limit), remembered) in names.iter().zip(&mut self.limits).zip(&mut self.limit_values) {
             ui.strong(*name);
             for ((label, value), remembered) in [
@@ -225,6 +226,7 @@ impl Dialog {
                 ui.text_edit_singleline(initial);
             }
             ui.add_space(4.0);
+            limits.resize(model.params().len(), (false, 0.0, false, 0.0, false, 1.0));
             for (name, (fix, fv, has_lo, lo, has_hi, hi)) in model.params().iter().zip(limits.iter_mut()) {
                 ui.strong(*name);
                 let free = !*fix;
@@ -317,7 +319,11 @@ impl Dialog {
                 });
             }
             ui.label(
-                RichText::new("使用 x 和参数名组成标量表达式，参数初值以逗号分隔。最多 7 个参数。").color(pal.weak),
+                RichText::new(format!(
+                    "使用 x 和参数名组成标量表达式，参数初值以逗号分隔。最多 {} 个参数。",
+                    scicanvas_core::nlfit::MAX_PARAMS
+                ))
+                .color(pal.weak),
             );
             if let Some(target) = &edit.target {
                 ui.label(format!(

@@ -133,6 +133,7 @@ def outputs():
                     for id, text in records:
                         font_lines += [f"nameID {id}:", "", "```text", text, "```", ""]
     notices += ["", "## 算法参考与代码来源复核", "", "统计实现中的 AS R94 来源复核见 [版权检查记录](docs/COPYRIGHT_AUDIT.md)。保守保留 [SciPy BSD 声明](licenses/supplemental/scipy-1.17.1/LICENSE.txt)，该声明不代表 SciPy/NumPy 作为运行依赖被打包。", ""]
+    notices += ["## 验收数据来源", "", "NIST/ITL StRD 原始认证数据为美国政府作品，仅用于离线测试；来源：[NIST StRD](https://www.itl.nist.gov/div898/strd/)。文件与 SHA-256 / 下载日期见 [非线性清单](crates/scicanvas-core/tests/nist/nls/MANIFEST.txt) 和 [线性清单](crates/scicanvas-core/tests/nist/lls/MANIFEST.txt)，按 supplemental/sources.json 校验原始字节。", ""]
     result["THIRD_PARTY_NOTICES.md"] = ("\n".join(notices)).encode()
     result["licenses/FONT_NOTICES.md"] = ("\n".join(font_lines)).encode()
     index = dict(target=TARGET, scope="normal,build; all workspace features", cargo_lock_sha256=sha(lock_bytes), packages=inventory, mpl=mpl)
