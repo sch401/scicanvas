@@ -798,14 +798,14 @@ impl SciApp {
             };
             let screen = ctx.screen_rect();
             let painter = ctx.layer_painter(egui::LayerId::new(egui::Order::Foreground, egui::Id::new("drop-hint")));
-            painter.rect_filled(screen, 0.0, egui::Color32::from_black_alpha(110));
+            painter.rect_filled(screen, 0.0, self.pal.scrim(110));
             painter.rect_stroke(screen.shrink(10.0), 8.0, egui::Stroke::new(3.0_f32, self.pal.accent));
             painter.text(
                 screen.center(),
                 egui::Align2::CENTER_CENTER,
                 text,
                 egui::FontId::proportional(crate::theme::size::OVERLAY),
-                egui::Color32::WHITE,
+                self.pal.on_accent,
             );
         }
         if !dropped.is_empty() {

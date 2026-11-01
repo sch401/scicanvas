@@ -1192,3 +1192,56 @@ fn software_renderer_notice_only_applies_to_cpu() {
         assert_eq!(renderer_notice(kind), None);
     }
 }
+
+#[test]
+fn delete_confirmation_requires_a_click_when_no_button_has_focus() {
+    let mut app = app();
+    app.confirm_delete = Some(1);
+    let original = app.project.clone();
+    let generation = app.history.generation();
+    let ctx = egui::Context::default();
+    crate::theme::install(&ctx);
+    crate::fonts::setup(&ctx);
+    let mut h = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1280., 900.)),
+        |a: &mut SciApp, c: &egui::Context| a.ui_frame(c),
+    );
+    for _ in 0..4 {
+        h.frame(&mut app, vec![]);
+    }
+    assert!(h.ctx.memory(|m| m.focused().is_none()));
+    let key = |key| egui::Event::Key {
+        key,
+        physical_key: None,
+        pressed: true,
+        repeat: false,
+        modifiers: egui::Modifiers::NONE,
+    };
+    h.frame(&mut app, vec![key(egui::Key::Enter)]);
+    assert_eq!(app.confirm_delete, Some(1));
+    assert_eq!(app.project, original);
+    assert_eq!(app.history.generation(), generation);
+    h.frame(&mut app, vec![key(egui::Key::Escape)]);
+    assert!(app.confirm_delete.is_none());
+    assert_eq!(app.project, original);
+    assert_eq!(app.history.generation(), generation);
+    app.confirm_delete = Some(1);
+    let mut output = h.frame(&mut app, vec![]);
+    for _ in 0..3 {
+        output = h.frame(&mut app, vec![]);
+    }
+    let delete = output
+        .shapes
+        .iter()
+        .filter_map(|s| match &s.shape {
+            egui::Shape::Text(t) if t.galley.job.text == "删除" => Some(t.pos),
+            _ => None,
+        })
+        .max_by(|a, b| a.y.total_cmp(&b.y))
+        .unwrap();
+    h.click(&mut app, delete + egui::vec2(5., 5.));
+    assert!(app.project.book(1).is_none());
+    app.run_command("edit.undo");
+    assert_eq!(app.project, original);
+}

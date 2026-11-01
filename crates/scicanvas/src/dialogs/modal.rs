@@ -1,23 +1,23 @@
 //! 确认框独立于可停靠设置面板，始终居中并阻挡背后指针。
 use eframe::egui::{self, Align2, Color32, Id, LayerId, Order, RichText};
 
+pub(crate) fn backdrop(ctx: &egui::Context) -> Color32 {
+    crate::theme::palette_for(ctx).scrim(if ctx.style().visuals.dark_mode { 120 } else { 70 })
+}
+
 pub(crate) fn modal<R>(ctx: &egui::Context, title: &str, contents: impl FnOnce(&mut egui::Ui) -> R) -> Option<R> {
     let id = Id::new(("scicanvas-modal", title));
     let screen = ctx.screen_rect();
     let caption = crate::chrome::caption(ctx);
-    let backdrop = caption.map_or(screen, |caption| {
+    let shaded = caption.map_or(screen, |caption| {
         egui::Rect::from_min_max(egui::pos2(screen.left(), caption.bottom()), screen.max)
     });
     egui::Area::new(id.with("backdrop"))
         .order(Order::Foreground)
-        .fixed_pos(backdrop.min)
+        .fixed_pos(shaded.min)
         .show(ctx, |ui| {
-            ui.allocate_rect(backdrop, egui::Sense::click_and_drag());
-            ui.painter().rect_filled(
-                backdrop,
-                0.,
-                Color32::from_black_alpha(if ctx.style().visuals.dark_mode { 120 } else { 70 }),
-            );
+            ui.allocate_rect(shaded, egui::Sense::click_and_drag());
+            ui.painter().rect_filled(shaded, 0., backdrop(ctx));
         });
     if let Some(caption) = caption {
         let pal = crate::theme::palette_for(ctx);

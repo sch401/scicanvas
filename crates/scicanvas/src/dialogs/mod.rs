@@ -54,7 +54,7 @@ mod window;
 pub use column_props::ColumnEdit;
 pub(crate) use docking::{begin_docks, end_docks, has_docks, place_docks, reset_docks, DockSide};
 pub use layer_contents::LayerContents;
-pub(crate) use modal::modal;
+pub(crate) use modal::{backdrop, modal};
 pub use nl_fit::{CustomFitAction, CustomFitEditor, FitEditTarget};
 pub(crate) use plot_object::PlotObjectEditor;
 pub(crate) use scientific_text::{scientific_text, scientific_text_multiline};

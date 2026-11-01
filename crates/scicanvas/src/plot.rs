@@ -14,7 +14,9 @@ use scicanvas_core::{Graph, Project};
 
 use crate::fonts::plot_font;
 
-/// 出版图页上的辅助提示，沿用固定画布的颜色，不随界面主题变化。
+/// 出版画布与辅助提示使用固定颜色，不随界面主题变化。
+pub const PAGE_BG: Color32 = Color32::WHITE;
+pub const PAGE_INK: Color32 = Color32::BLACK;
 pub const PAGE_HINT: Color32 = Color32::from_gray(110);
 pub const PAGE_HINT_WEAK: Color32 = Color32::from_gray(140);
 
@@ -465,7 +467,7 @@ fn paint_canvas(ui: &egui::Ui, canvas: Rect, page: Rect) {
         0.0,
         Color32::from_black_alpha(if dark { 140 } else { 70 }),
     );
-    painter.rect_filled(page, 0.0, Color32::WHITE);
+    painter.rect_filled(page, 0.0, PAGE_BG);
     painter.rect_stroke(
         page,
         0.0,
