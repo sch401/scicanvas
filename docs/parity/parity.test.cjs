@@ -83,9 +83,9 @@ const evidenceFixture = {
   },
 };
 function validateEvidence(row) {
-  return spawnSync(process.env.PYTHON || 'python', ['-c',
+  return spawnSync(process.env.PYTHON || 'python', ['-X', 'utf8', '-c',
     "import sys,json;sys.path.insert(0,'docs/parity');from build_parity import validate;validate([json.load(sys.stdin)])"],
-    { cwd: path.join(__dirname, '../..'), input: JSON.stringify(row), encoding: 'utf8' }).status;
+    { cwd: path.join(__dirname, '../..'), input: JSON.stringify(row), encoding: 'utf8', env: { ...process.env, PYTHONIOENCODING: 'utf-8' } }).status;
 }
 const invalidEvidence = [
   r => r.needs = ['bad'], r => r.needs = ['auto', 'auto'],
