@@ -23,8 +23,6 @@ pub enum Item {
     Smalls(&'static [&'static str]),
     /// 展开的图类型画廊（带缩略图）。
     Gallery(&'static [&'static str]),
-    /// 展开式图类型菜单。
-    Menu(&'static str, &'static [&'static str]),
 }
 
 pub struct Group {
@@ -254,7 +252,7 @@ pub static TABS: &[Tab] = &[
         groups: &[
             Group {
                 label: "图类型",
-                items: &[Menu("更换图类型 ▾", PLOT_TYPES)],
+                items: &[Gallery(PLOT_TYPES)],
             },
             Group {
                 label: "坐标轴",
@@ -527,7 +525,12 @@ fn panel(ui: &mut egui::Ui, app: &SciApp, tab_id: &str, pal: &Palette, clicked: 
         })
         .show(ui, |ui| {
             let available = ui.available_width();
-            let widths: Vec<_> = tab.groups.iter().map(|group| group_width(ui, group)).collect();
+            let preview_count = gallery_preview_count(ui, tab, available);
+            let widths: Vec<_> = tab
+                .groups
+                .iter()
+                .map(|group| group_width(ui, group, preview_count))
+                .collect();
             let spacing = 12.0;
             let total = widths.iter().sum::<f32>() + spacing * widths.len().saturating_sub(1) as f32;
             let visible = if total <= available {
@@ -552,7 +555,7 @@ fn panel(ui: &mut egui::Ui, app: &SciApp, tab_id: &str, pal: &Palette, clicked: 
                     if index > 0 {
                         ui.separator();
                     }
-                    group(ui, app, group_item, pal, clicked);
+                    group(ui, app, group_item, preview_count, pal, clicked);
                 }
                 if visible < tab.groups.len() {
                     if visible > 0 {
@@ -564,7 +567,14 @@ fn panel(ui: &mut egui::Ui, app: &SciApp, tab_id: &str, pal: &Palette, clicked: 
         });
 }
 
-fn group(ui: &mut egui::Ui, app: &SciApp, g: &Group, pal: &Palette, clicked: &mut Option<&'static str>) {
+fn group(
+    ui: &mut egui::Ui,
+    app: &SciApp,
+    g: &Group,
+    preview_count: usize,
+    pal: &Palette,
+    clicked: &mut Option<&'static str>,
+) {
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing = vec2(2.0, 1.0);
         let items = ui.horizontal_top(|ui| {
@@ -589,8 +599,7 @@ fn group(ui: &mut egui::Ui, app: &SciApp, g: &Group, pal: &Palette, clicked: &mu
                             }
                         });
                     }
-                    Gallery(ids) => plot_menu(ui, "选择图形 ▾", ids, app, pal, clicked),
-                    Menu(label, ids) => plot_menu(ui, label, ids, app, pal, clicked),
+                    Gallery(ids) => plot_gallery(ui, ids, preview_count, app, pal, clicked),
                 }
             }
         });
@@ -619,7 +628,7 @@ fn menu_width(ui: &egui::Ui, text: &str) -> f32 {
     text_width(ui, text, font) + 2.0 * ui.spacing().button_padding.x + 12.0
 }
 
-fn group_width(ui: &egui::Ui, group: &Group) -> f32 {
+fn group_width(ui: &egui::Ui, group: &Group, preview_count: usize) -> f32 {
     let font = FontId::proportional(crate::theme::size::COMPACT);
     let widths = group.items.iter().map(|item| match item {
         Big(id) => commands::find(id).map_or(0.0, |c| (text_width(ui, c.label, font.clone()) + 14.0).max(58.0)),
@@ -628,10 +637,86 @@ fn group_width(ui: &egui::Ui, group: &Group) -> f32 {
             .filter_map(|id| commands::find(id))
             .map(|c| text_width(ui, c.label, font.clone()) + 34.0)
             .fold(0.0, f32::max),
-        Gallery(_) => menu_width(ui, "选择图形 ▾"),
-        Menu(label, _) => menu_width(ui, label),
+        Gallery(ids) => {
+            let tiles = ids
+                .iter()
+                .take(preview_count)
+                .filter_map(|id| commands::find(id))
+                .map(|command| gallery_tile_width(ui, command) + 2.0)
+                .sum::<f32>();
+            tiles + menu_width(ui, "▾") + 4.0
+        }
     });
     (widths.sum::<f32>() + 2.0 * group.items.len().saturating_sub(1) as f32 + 6.0).max(40.0)
+}
+
+fn gallery_tile_width(ui: &egui::Ui, command: &Command) -> f32 {
+    (text_width(ui, command.label, FontId::proportional(crate::theme::size::LABEL)) + 12.0).max(72.0)
+}
+
+fn gallery_preview_count(ui: &egui::Ui, tab: &Tab, available: f32) -> usize {
+    let Some((index, ids)) = tab.groups.iter().enumerate().find_map(|(index, group)| {
+        group.items.iter().find_map(|item| match item {
+            Gallery(ids) => Some((index, *ids)),
+            _ => None,
+        })
+    }) else {
+        return 0;
+    };
+    let widths: Vec<_> = tab.groups.iter().map(|group| group_width(ui, group, 0)).collect();
+    let total = widths.iter().sum::<f32>() + 12.0 * widths.len().saturating_sub(1) as f32;
+    let prefix = widths[..=index].iter().sum::<f32>() + 12.0 * index as f32;
+    let mut cumulative = Vec::with_capacity(ids.len() + 1);
+    cumulative.push(0.0);
+    for id in ids {
+        let width = commands::find(id).map_or(0.0, |command| gallery_tile_width(ui, command) + 2.0);
+        cumulative.push(cumulative.last().copied().unwrap_or_default() + width);
+    }
+    let preferred = ids.len().min(3);
+    let budget = if total + cumulative[preferred] <= available {
+        available - total
+    } else {
+        (available - prefix - 117.0).max(0.0)
+    };
+    let limit = if total + cumulative[preferred] <= available {
+        ids.len()
+    } else {
+        preferred
+    };
+    (0..=limit)
+        .rev()
+        .find(|&count| cumulative[count] <= budget)
+        .unwrap_or(0)
+}
+
+fn plot_gallery(
+    ui: &mut egui::Ui,
+    ids: &'static [&'static str],
+    preview_count: usize,
+    app: &SciApp,
+    pal: &Palette,
+    clicked: &mut Option<&'static str>,
+) {
+    egui::Frame::none()
+        .fill(ui.visuals().extreme_bg_color)
+        .stroke(Stroke::new(1.0_f32, pal.line))
+        .rounding(4.0)
+        .inner_margin(2.0)
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                for id in ids.iter().take(preview_count) {
+                    if let Some(command) = commands::find(id) {
+                        if gallery_tile(ui, app, command, pal, clicked).clicked() {
+                            *clicked = Some(command.id);
+                        }
+                    }
+                }
+                ui.vertical(|ui| {
+                    ui.add_space(18.0);
+                    plot_menu(ui, "▾", ids, app, pal, clicked);
+                });
+            });
+        });
 }
 
 fn thumbnail_grid(
@@ -672,7 +757,9 @@ fn plot_menu(
     pal: &Palette,
     clicked: &mut Option<&'static str>,
 ) {
-    ui.menu_button(label, |ui| thumbnail_grid(ui, ids, app, pal, clicked));
+    ui.menu_button(label, |ui| thumbnail_grid(ui, ids, app, pal, clicked))
+        .response
+        .on_hover_text("展开全部图形类型");
 }
 
 fn overflow_group(
@@ -707,7 +794,7 @@ fn overflow_group(
                                         }
                                     }
                                 }
-                                Gallery(ids) | Menu(_, ids) => thumbnail_grid(ui, ids, app, pal, clicked),
+                                Gallery(ids) => thumbnail_grid(ui, ids, app, pal, clicked),
                             }
                             if clicked.is_some() {
                                 ui.close_menu();

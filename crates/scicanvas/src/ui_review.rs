@@ -460,7 +460,7 @@ fn title_buttons_share_native_geometry_at_each_dpi() {
 
 #[test]
 fn chart_type_menus_open_and_dispatch_in_both_tabs() {
-    for (tab, active, label) in [("plot", 1, "选择图形 ▾"), ("graph", 2, "更换图类型 ▾")] {
+    for (tab, active) in [("plot", 1), ("graph", 2)] {
         let ctx = egui::Context::default();
         crate::theme::install(&ctx);
         crate::fonts::setup(&ctx);
@@ -482,10 +482,25 @@ fn chart_type_menus_open_and_dispatch_in_both_tabs() {
         for _ in 0..3 {
             output = harness.frame(&mut state, vec![]);
         }
-        harness.click_text(&mut state, &output, label);
+        for label in ["折线图", "散点图", "点线图"] {
+            assert!(
+                crate::test_ui::find_text(&output, label).is_some(),
+                "{tab} should show {label}"
+            );
+        }
+        let direct = crate::test_ui::find_text(&output, "散点图").unwrap() + vec2(5.0, 5.0);
+        harness.frame_value(&mut state, vec![egui::Event::PointerMoved(direct)]);
+        harness.frame_value(&mut state, vec![crate::test_ui::button(direct, true)]);
+        let clicked = harness.frame_value(&mut state, vec![crate::test_ui::button(direct, false)]);
+        assert_eq!(clicked, Some("plot.scatter"), "{tab} preview");
         output = harness.frame(&mut state, vec![]);
-        let position =
-            crate::test_ui::find_text(&output, "柱状图").expect("chart menu should show bar chart") + vec2(5.0, 5.0);
+        harness.click_text(&mut state, &output, "▾");
+        output = harness.frame(&mut state, vec![]);
+        let position = crate::test_ui::text_positions(&output, "柱状图")
+            .into_iter()
+            .max_by(|a, b| a.y.total_cmp(&b.y))
+            .expect("chart menu should show bar chart")
+            + vec2(5.0, 5.0);
         harness.frame_value(&mut state, vec![egui::Event::PointerMoved(position)]);
         harness.frame_value(&mut state, vec![crate::test_ui::button(position, true)]);
         let clicked = harness.frame_value(&mut state, vec![crate::test_ui::button(position, false)]);
@@ -544,4 +559,59 @@ fn narrow_ribbon_exposes_overflow_without_horizontal_scrolling() {
     harness.frame_value(&mut state, vec![crate::test_ui::button(position, true)]);
     let clicked = harness.frame_value(&mut state, vec![crate::test_ui::button(position, false)]);
     assert_eq!(clicked, Some("signal.fft"));
+}
+
+#[test]
+fn chart_previews_grow_and_shrink_with_window_width() {
+    let ids = [
+        "plot.line",
+        "plot.scatter",
+        "plot.linesym",
+        "plot.bar",
+        "plot.stacked_bar",
+        "plot.percent_stacked_bar",
+        "plot.floating_bar",
+        "plot.horizontal_bar",
+        "plot.area",
+        "plot.spline",
+        "plot.spline_symbol",
+        "plot.vertical_drop",
+        "plot.step_horizontal",
+        "plot.step_vertical",
+    ];
+    for (tab, active) in [("plot", 1), ("graph", 2)] {
+        let ctx = egui::Context::default();
+        crate::theme::install(&ctx);
+        crate::fonts::setup(&ctx);
+        let pal = theme::palette(egui::Theme::Light);
+        let mut app = SciApp::initial(pal);
+        app.active = Some(active);
+        let mut state = UiState::default();
+        state.tab = tab;
+        let mut harness = crate::test_ui::Harness::new(
+            ctx,
+            Some(vec2(800.0, 820.0)),
+            |state: &mut UiState, ctx: &egui::Context| {
+                let mut clicked = None;
+                show(ctx, &app, state, &pal, &mut clicked);
+            },
+        );
+        let mut counts = Vec::new();
+        for width in [800.0, 1800.0, 800.0] {
+            harness.size = Some(vec2(width, 820.0));
+            let mut output = harness.frame(&mut state, vec![]);
+            for _ in 0..2 {
+                output = harness.frame(&mut state, vec![]);
+            }
+            let count = ids
+                .iter()
+                .filter_map(|id| commands::find(id))
+                .filter(|command| crate::test_ui::find_text(&output, command.label).is_some())
+                .count();
+            counts.push(count);
+        }
+        assert!(counts[0] >= 3, "{tab}: {counts:?}");
+        assert!(counts[1] > counts[0], "{tab}: {counts:?}");
+        assert_eq!(counts[2], counts[0], "{tab}: {counts:?}");
+    }
 }
