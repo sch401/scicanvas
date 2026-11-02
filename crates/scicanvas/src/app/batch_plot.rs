@@ -97,7 +97,21 @@ impl SciApp {
             .and_then(|id| self.project.graphs.iter().position(|g| g.id == id))
             .unwrap_or(0);
         self.dialog = Some(Dialog::BatchPlot(Box::new(dialogs::BatchPlot {
-            graphs: self.project.graphs.iter().map(|g| (g.id, g.name.clone())).collect(),
+            graphs: self
+                .project
+                .graphs
+                .iter()
+                .map(|g| {
+                    let foreign = g.page.layers().iter().any(|layer| {
+                        !layer.foreign_books().is_empty()
+                            || layer
+                                .styles()
+                                .keys()
+                                .any(|key| scicanvas_core::plotspec::split_key(key).1.is_some())
+                    });
+                    (g.id, g.name.clone(), foreign)
+                })
+                .collect(),
             selected_graph,
             books: self
                 .project
@@ -192,6 +206,66 @@ mod tests {
     fn batch_plot_command_opens_target_selection() {
         let mut app = SciApp::initial(theme::palette(egui::Theme::Light));
         app.run_command("graph.template.batch");
-        assert!(matches!(app.dialog, Some(Dialog::BatchPlot(_))));
+        let Some(Dialog::BatchPlot(dialog)) = app.dialog else {
+            panic!("应打开批量绘图对话框");
+        };
+        assert!(!dialog.graphs[0].2);
+    }
+
+    #[test]
+    fn batch_plot_command_marks_foreign_columns() {
+        let mut app = SciApp::initial(theme::palette(egui::Theme::Light));
+        let other = app.project.alloc_id();
+        let mut book = app.project.book(1).unwrap().clone();
+        book.id = other;
+        app.project.books.push(book);
+        app.project.add_curves(2, 0, other, &["B".into()]).unwrap();
+        app.run_command("graph.template.batch");
+        let Some(Dialog::BatchPlot(dialog)) = app.dialog else {
+            panic!("应打开批量绘图对话框");
+        };
+        assert!(dialog.graphs.iter().find(|graph| graph.0 == 2).unwrap().2);
+    }
+
+    #[test]
+    fn batch_plot_foreign_note_follows_selected_graph_in_both_themes() {
+        const NOTE: &str = "此图形引用了其他工作簿的列，这些列同样会在所选工作簿中按列名匹配，不会保留原工作簿。";
+        const MATCHING: &str = "各列按长名在所选工作簿中匹配；没有长名的列按列标识（A、B…）匹配。";
+        for theme in [egui::Theme::Light, egui::Theme::Dark] {
+            let ctx = egui::Context::default();
+            crate::theme::install(&ctx);
+            ctx.set_theme(theme);
+            crate::fonts::setup(&ctx);
+            let pal = theme::palette(theme);
+            let project = Project::sample();
+            let mut dialog = Dialog::BatchPlot(Box::new(dialogs::BatchPlot {
+                graphs: vec![(2, "local".into(), false), (3, "foreign".into(), true)],
+                selected_graph: 0,
+                books: vec![(1, "book".into(), false)],
+            }));
+            let mut h = crate::test_ui::Harness::new(
+                ctx,
+                Some(egui::vec2(1100.0, 700.0)),
+                |dialog: &mut Dialog, ctx: &egui::Context| dialogs::show(ctx, dialog, &pal, &project),
+            );
+            let mut output = h.frame(&mut dialog, vec![]);
+            for _ in 0..2 {
+                output = h.frame(&mut dialog, vec![]);
+            }
+            assert!(crate::test_ui::find_text(&output, MATCHING).is_some());
+            assert!(crate::test_ui::find_text(&output, NOTE).is_none());
+            let Dialog::BatchPlot(state) = &mut dialog else {
+                unreachable!()
+            };
+            state.selected_graph = 1;
+            let output = h.frame(&mut dialog, vec![]);
+            assert!(crate::test_ui::find_text(&output, NOTE).is_some());
+            let Dialog::BatchPlot(state) = &mut dialog else {
+                unreachable!()
+            };
+            state.selected_graph = 0;
+            let output = h.frame(&mut dialog, vec![]);
+            assert!(crate::test_ui::find_text(&output, NOTE).is_none());
+        }
     }
 }
