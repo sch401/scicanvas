@@ -248,7 +248,10 @@ mod tests {
                 Some(egui::vec2(1100.0, 700.0)),
                 |dialog: &mut Dialog, ctx: &egui::Context| dialogs::show(ctx, dialog, &pal, &project),
             );
-            let output = h.frame(&mut dialog, vec![]);
+            let mut output = h.frame(&mut dialog, vec![]);
+            for _ in 0..2 {
+                output = h.frame(&mut dialog, vec![]);
+            }
             assert!(crate::test_ui::find_text(&output, MATCHING).is_some());
             assert!(crate::test_ui::find_text(&output, NOTE).is_none());
             let Dialog::BatchPlot(state) = &mut dialog else {
