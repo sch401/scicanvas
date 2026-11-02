@@ -7,6 +7,44 @@ pub enum FilterEditor {
     Category { levels: Vec<(String, bool)> },
 }
 
+impl FilterEditor {
+    /// 根据编辑器内容得到筛选规则；Ok(None) 表示清除本列筛选。
+    fn rule(&self) -> Result<Option<FilterRule>, String> {
+        match self {
+            FilterEditor::Number { min, max } => {
+                let parse = |text: &str| {
+                    if text.trim().is_empty() {
+                        Ok(None)
+                    } else {
+                        text.trim()
+                            .parse::<f64>()
+                            .map(Some)
+                            .map_err(|_| "请输入有效数值".to_string())
+                    }
+                };
+                parse(min).and_then(|min| parse(max).map(|max| Some(FilterRule::Number { min, max })))
+            }
+            // 空文本匹配所有行，等于不筛选
+            FilterEditor::Text { contains } if contains.is_empty() => Ok(None),
+            FilterEditor::Text { contains } => Ok(Some(FilterRule::Text {
+                contains: contains.clone(),
+            })),
+            // 全部勾选等于不筛选
+            FilterEditor::Category { levels } if levels.iter().all(|(_, selected)| *selected) => Ok(None),
+            FilterEditor::Category { levels } if levels.iter().all(|(_, selected)| !*selected) => {
+                Err("请至少选择一个类别".to_string())
+            }
+            FilterEditor::Category { levels } => Ok(Some(FilterRule::Category {
+                values: levels
+                    .iter()
+                    .filter(|(_, selected)| *selected)
+                    .map(|(name, _)| name.clone())
+                    .collect(),
+            })),
+        }
+    }
+}
+
 pub struct FilterDialog {
     pub(crate) book: u64,
     pub(crate) key: String,
@@ -52,35 +90,10 @@ impl FilterDialog {
             }
             let (ok, cancel) = buttons(ui, "应用");
             if ok {
-                let rule = match &self.editor {
-                    FilterEditor::Number { min, max } => {
-                        let parse = |text: &str| {
-                            if text.trim().is_empty() {
-                                Ok(None)
-                            } else {
-                                text.trim()
-                                    .parse::<f64>()
-                                    .map(Some)
-                                    .map_err(|_| "请输入有效数值".to_string())
-                            }
-                        };
-                        parse(min).and_then(|min| parse(max).map(|max| FilterRule::Number { min, max }))
-                    }
-                    FilterEditor::Text { contains } => Ok(FilterRule::Text {
-                        contains: contains.clone(),
-                    }),
-                    FilterEditor::Category { levels } => Ok(FilterRule::Category {
-                        values: levels
-                            .iter()
-                            .filter(|(_, selected)| *selected)
-                            .map(|(name, _)| name.clone())
-                            .collect(),
-                    }),
-                };
-                match rule {
+                match self.editor.rule() {
                     Ok(rule) => {
                         self.error = None;
-                        action = Action::SetFilter(self.book, self.key.clone(), Some(rule), self.visible_only);
+                        action = Action::SetFilter(self.book, self.key.clone(), rule, self.visible_only);
                     }
                     Err(error) => self.error = Some(error),
                 }
@@ -92,5 +105,55 @@ impl FilterDialog {
             }
         });
         action
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn empty_text_and_full_category_clear_the_rule() {
+        assert_eq!(
+            FilterEditor::Text {
+                contains: String::new()
+            }
+            .rule(),
+            Ok(None)
+        );
+        assert_eq!(
+            FilterEditor::Text { contains: " a".into() }.rule(),
+            Ok(Some(FilterRule::Text { contains: " a".into() }))
+        );
+        let all = FilterEditor::Category {
+            levels: vec![("x".into(), true), (String::new(), true)],
+        };
+        assert_eq!(all.rule(), Ok(None));
+        let none = FilterEditor::Category {
+            levels: vec![("x".into(), false), (String::new(), false)],
+        };
+        assert!(none.rule().is_err());
+        let some = FilterEditor::Category {
+            levels: vec![("x".into(), true), (String::new(), false)],
+        };
+        assert_eq!(
+            some.rule(),
+            Ok(Some(FilterRule::Category {
+                values: vec!["x".into()]
+            }))
+        );
+        let blank_number = FilterEditor::Number {
+            min: String::new(),
+            max: String::new(),
+        };
+        assert_eq!(
+            blank_number.rule(),
+            Ok(Some(FilterRule::Number { min: None, max: None }))
+        );
+        let bad_number = FilterEditor::Number {
+            min: "abc".into(),
+            max: String::new(),
+        };
+        assert!(bad_number.rule().is_err());
     }
 }

@@ -197,6 +197,8 @@ pub enum Dialog {
         a: f64,
         b: f64,
         rows: usize,
+        /// 工作表有筛选：提示会改写隐藏行。
+        filtered: bool,
     },
     /// 通用结果表：标题、表头、各行和说明，可复制到 Excel。
     Table {
@@ -212,6 +214,8 @@ pub enum Dialog {
         keep: bool,
         columns: Vec<(String, String)>,
         error: Option<String>,
+        /// 工作表有筛选：提示会改写隐藏行。
+        filtered: bool,
     },
     /// 扣除基线：是否用 ALS、log10 λ 与非对称系数 p。
     Baseline {

@@ -8,6 +8,7 @@ impl Dialog {
             a,
             b,
             rows,
+            filtered,
         } = self
         else {
             unreachable!()
@@ -15,6 +16,9 @@ impl Dialog {
         let mut action = Action::None;
         window(ctx, "填充数据序列").open(open).show(ctx, |ui| {
             ui.label(RichText::new(format!("目标列：{target}")).strong());
+            if *filtered {
+                ui.colored_label(pal.warn, "工作表已筛选：填充会从第 1 行开始写入，包括隐藏行。");
+            }
             ui.horizontal_wrapped(|ui| {
                 for (i, name) in ["等差序列", "均匀分布随机数", "正态分布随机数"].into_iter().enumerate()
                 {

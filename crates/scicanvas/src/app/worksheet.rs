@@ -468,6 +468,7 @@ impl SciApp {
                 .map(|c| (c.key.clone(), c.display_name().to_owned()))
                 .collect(),
             error: None,
+            filtered: book.filter.is_some(),
         });
     }
 
@@ -513,6 +514,7 @@ impl SciApp {
             a: 1.0,
             b: 1.0,
             rows: if book.nrows() > 0 { book.nrows() } else { 10 },
+            filtered: book.filter.is_some(),
         });
     }
 
