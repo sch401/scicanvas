@@ -5,3 +5,8 @@ _gpt_session/
 
 # Development-only numerical and visual reference environment.
 .venv-ref/
+
+# 评审截图贴在 PR 评论里，不进仓库
+/review/
+/*.jpg
+/*.png
