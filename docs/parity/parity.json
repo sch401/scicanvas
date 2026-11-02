@@ -1462,7 +1462,7 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "图层内容窗口以单列纵向呈现可用工作簿/列及当前图层曲线和 X/Y 来源；支持添加、移除、上移/下移、名称排序和左右 Y 轴选择。修改即时写入并支持撤销重做；标题栏最小化/还原与叉号关闭，关闭保留已生效修改；侧栏吸附、右键快捷入口和浮动柱上下端配对保留。清空后换表清理旧标签列，同表加回保留 X、行范围和标签设置",
-  "verify": "真实界面添加/移除/排序/换轴/来源显示、目标图层隔离、即时预览、关窗保留与开窗撤销重做、换表清理及同表设置保留、浮动柱配对和 v15 保存重开回归；matplotlib 同数据视觉对照待做，Windows 人工验收待做",
+  "verify": "真实界面添加/移除/排序/换轴/来源显示、目标图层隔离、即时预览、关窗保留与开窗撤销重做、换表清理及同表设置保留、浮动柱配对和 v15 保存重开回归；matplotlib 同数据视觉对照已提交（docs/parity/visual/add-remove-curve），Windows 人工验收待做",
   "id": "F083",
   "milestone": "M1 日常够用",
   "needs": [
@@ -1479,6 +1479,9 @@
    },
    "auto": [
     "crates/scicanvas/src/app/tests/graph.rs::layer_contents_real_controls_apply_live_and_header_close_keeps_changes"
+   ],
+   "visual": [
+    "docs/parity/visual/add-remove-curve/README.md"
    ]
   }
  },
@@ -7414,7 +7417,7 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "绘图属性的曲线样式中，可独立选择跟随曲线颜色、空心或自定义内部填充；边框可单独启用并设置颜色/线宽，适用于已有符号图型。屏幕和 SVG/PNG/PDF 使用共享场景与符号几何，设置随 v17 及以后项目保存并可撤销重做",
-  "verify": "空心符号/边框共享场景与 SVG 回归、真实属性控件撤销重做、v16 默认值和 v17 JSON/SCV 往返通过；matplotlib 同数据视觉对照待做，Windows 人工验收待做",
+  "verify": "空心符号/边框共享场景与 SVG 回归、真实属性控件撤销重做、v16 默认值和 v17 JSON/SCV 往返通过；matplotlib 同数据位置与填充对照已提交（docs/parity/visual/symbol-fill-border），Windows 人工验收待做",
   "milestone": "M1 日常够用",
   "sub_items": {
    "填充模式": {
@@ -7438,6 +7441,9 @@
    "auto": [
     "crates/scicanvas-core/tests/plot_foundation.rs::column_mappings_drive_point_style_and_independent_symbol_fill_and_border",
     "crates/scicanvas/src/app/tests/graph.rs::curve_point_style_properties_map_columns_and_undo_the_changes"
+   ],
+   "visual": [
+    "docs/parity/visual/symbol-fill-border/README.md"
    ]
   }
  },
