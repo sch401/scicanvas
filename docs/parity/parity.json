@@ -576,7 +576,7 @@
   "feature": "数值显示格式（小数位、科学计数、工程单位）",
   "ref": "Controlling How Numeric Data Display in the Worksheet Column",
   "pri": "P0",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "工作表 → 列属性（双击列标题或右键“列属性…”）：数值列可选原样、固定小数位、科学计数、工程单位（SI 词头）、百分比及小数位，日期列可选 4 种显示格式；只改变显示，存储值与原始写法不变，格式随项目保存；列属性有效修改即时写入工作表和关联图形，切换窗口仍绑定原表；只用标题栏最小化/还原和叉号，关闭保留修改，撤回使用撤销",
   "verify": "格式化单元测试（舍入进位、负零、非有限值、SI 词头越界）、项目往返与未设格式时文件不变、列属性对话框一步撤销及转换失败不改动的界面测试；实际工作表/图形绘制、目标表固定、预览数据复用与取消回归；实时设置无底部确认/取消/关闭按钮，标题栏最小化/还原/叉号、关闭保留和开窗撤销重做回归",
   "id": "F032",
@@ -633,7 +633,7 @@
   "feature": "设置列值（公式列）",
   "ref": "Using Formulae to Set or Transform Worksheet Column Values",
   "pri": "P0",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "Ctrl+Q 设置列值：表达式、列引用/col(A)、行号 i、常数、比较运算与 121 个函数（含整列统计、按行序列）；可勾选“保存公式，引用的列变化时自动重算”，公式随项目保存，列标题带 ƒ 标记，再次打开对话框预填公式；任何编辑提交前（连续输入时每帧）按公式依赖顺序重算，结果并入同一步撤销；自引用与循环依赖拒绝，重算出错在状态栏说明；公式长度/解析递归/树深度在构建时受限，非线性拟合整组输出在所有模式下禁止保存第二份公式；新增输入与文件兼容使用两级解析限额，原旧表达式继续可重算与执行，较长旧表达式使用有界解析栈",
   "verify": "依赖顺序重算、自引用/循环拒绝、去掉公式后不再重算、项目往返的核心测试；改源单元格后公式列重算且一步撤销的界面测试；设置列值错误保留对话框回归",
   "id": "F035",
@@ -664,7 +664,7 @@
   "feature": "生成数据序列（等差、随机数、正态分布）",
   "ref": "Generating Simple Worksheet Datasets",
   "pri": "P1",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "工作表 → 填充序列：等差序列、均匀分布、正态分布随机数（SplitMix64 + Box–Muller），覆盖目标列，可撤销",
   "verify": "单元测试：等差值精确；20000 个随机数的均值、标准差落在理论值附近；同种子可复现",
   "id": "F037",
@@ -684,7 +684,7 @@
   "feature": "排序（列、工作表、按多列）",
   "ref": "Sorting Worksheet Data",
   "pri": "P0",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "升序/降序按一列稳定排序整张工作表，同行联动；“自定义排序…”最多三级关键字各自升/降序，可选“只排选中列”（选中列按关键字整体重排，其余列不动）；数值/文本/空值规则一致，一步撤销；自定义排序实时预览到工作表和关联图形，取消恢复原顺序",
   "verify": "多关键字稳定排序、只排选中列不动其他列、关键字不在范围内拒绝的核心测试；对话框真实点击与撤销/重做回归；百万行排序基准见 docs/perf.md；排序预览、无效关键字、取消与确认后撤销重做回归",
   "id": "F038",
@@ -704,12 +704,15 @@
   "feature": "数据筛选",
   "ref": "Data Filter",
   "pri": "P1",
-  "status": "部分实现",
-  "how": "列头筛选数值范围、文本和类别，隐藏行保留原数据；可选择绘图和分析使用可见行，筛选随 v23 项目保存。IFFT 在筛选可见行模式下提示需要完整频谱。",
-  "verify": "筛选组合、项目迁移、隐藏行编辑、可见行分析及撤销重做测试；工作表界面人工验收待做。",
+  "status": "已实现待验收",
+  "how": "列头筛选数值范围、文本和类别（日期时间列按文本包含筛选），隐藏行保留原数据；“绘图和分析只使用可见行”选项与筛选规则一起保存在工作簿（v23）并可撤销，表格上方显示可见行数和该选项。IFFT 在只用可见行模式下提示需要完整频谱。日期范围筛选不在本条范围。",
+  "verify": "筛选组合、项目迁移、隐藏行编辑、可见行分析及撤销重做测试；“只用可见行”选项的保存与撤销、表格提示条、可见行掩码与逐行判断一致性测试；工作表界面人工验收待做。",
   "id": "F039",
   "milestone": "M2 论文全流程",
-  "needs": ["auto", "manual"],
+  "needs": [
+   "auto",
+   "manual"
+  ],
   "evidence": {
    "auto": [
     "crates/scicanvas-core/tests/filter.rs::filters_combine_without_removing_rows_and_follow_column_deletion",
@@ -717,9 +720,17 @@
     "crates/scicanvas-core/tests/filter.rs::copy_paste_and_clear_filtered_ranges_leave_hidden_rows_untouched",
     "crates/scicanvas-core/tests/filter.rs::visible_only_analysis_plot_and_recalculation_keep_original_rows",
     "crates/scicanvas-core/tests/filter.rs::direct_analyses_use_visible_rows_without_changing_hidden_data",
-    "crates/scicanvas/src/app/filter.rs::applying_and_undoing_a_filter_preserves_original_data"
+    "crates/scicanvas/src/app/filter.rs::applying_and_undoing_a_filter_preserves_original_data",
+    "crates/scicanvas-core/tests/filter.rs::visible_only_setting_is_saved_with_the_filter",
+    "crates/scicanvas-core/tests/filter.rs::visible_mask_matches_row_visible",
+    "crates/scicanvas/src/app/filter.rs::filtered_sheet_shows_row_count_and_toggle_is_undoable"
    ],
-   "manual": {"checklist": "docs/acceptance/worksheet.md#F039", "result": "待做", "date": "", "build": ""}
+   "manual": {
+    "checklist": "docs/acceptance/worksheet.md#F039",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
   }
  },
  {
@@ -738,7 +749,7 @@
   "feature": "转置",
   "ref": "Transposing Worksheets",
   "pri": "P1",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "将当前工作簿转置为同文件夹的新工作簿，第一列为原列显示名，后续各列对应原数据行；保留缺失位置和原数据，操作一步撤销。",
   "verify": "数值、文本、缺失值、列名、文件夹、空表及命令撤销重做测试。",
   "id": "F041",
@@ -1143,7 +1154,7 @@
   "feature": "导入 Excel（.xlsx / .xls）",
   "ref": "Importing from Excel",
   "pri": "P0",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "导入 .xlsx/.xlsm（zip + roxmltree）与旧版 .xls（自写 OLE2 复合文档 + BIFF8 读取：FAT/DIFAT/迷你流，共享字符串跨 CONTINUE 记录，NUMBER/RK/MULRK/LABELSST/LABEL/BOOLERR/FORMULA 缓存值）；按单元格数字格式（内置 14–22、27–36、45–47、50–58 含中文日期及自定义格式）把日期序列号写成日期，支持 1904 日期制；合并单元格用左上角的值填满；数值按 15 位有效数字保留；全部为日期写法的列导入为日期时间列；每张非空工作表一个工作簿；加密或 Excel 95 文件给出提示",
   "verify": "Excel 16 另存的同一内容 .xls 与 .xlsx 读取结果逐格一致（含中文日期、日期时间、合并单元格、公式数值与字符串结果、布尔、1200 个跨记录共享字符串、301 字长文本、大数值精度）；原有 openpyxl/手写 xlsx 回归通过；RK 解码单元测试",
   "id": "F066",
@@ -2256,19 +2267,25 @@
   "feature": "线性回归（斜率、截距、标准误、R²、残差）",
   "ref": "The Linear Regression Dialog Box",
   "pri": "P0",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "斜率/截距、标准误、R²、残差平方和及报告；拟合时为每条数据写入逐点残差列（Y − 拟合值，与原数据同行，未参与拟合的行留空），拟合结果对话框“残差图”生成残差对 X 的散点图，一步撤销",
-  "verify": "残差逐行等于 Y − 拟合值且和为 0、残差图曲线映射的核心测试；残差图按钮的真实界面点击与撤销/重做回归；SciPy/NIST 参考值对照待做；NoInt1/NoInt2 过原点回归尚不支持，登记 S2-5",
+  "verify": "残差逐行等于 Y − 拟合值且和为 0、残差图曲线映射的核心测试；残差图按钮的真实界面点击与撤销/重做回归；NIST StRD Norris、Pontius 线性认证值达标（见 docs/parity/nist.md）；NoInt1/NoInt2 过原点回归尚不支持，登记 S2-5",
   "id": "F130",
   "milestone": "M1 日常够用",
   "needs": [
-   "auto"
+   "auto",
+   "reference"
   ],
   "evidence": {
    "auto": [
     "crates/scicanvas-core/src/analysis.rs::linear_fit_textbook",
     "crates/scicanvas-core/src/ops.rs::linear_fit_adds_columns_and_graph_curve",
-    "crates/scicanvas/src/app/tests/dialog_tests.rs::fit_report_residual_plot_button_creates_scatter_and_undoes"
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::fit_report_residual_plot_button_creates_scatter_and_undoes",
+    "crates/scicanvas-core/tests/nist.rs::linear_certified_values"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/nist/lls/Norris.dat",
+    "crates/scicanvas-core/tests/nist/lls/Pontius.dat"
    ]
   }
  },
@@ -2824,8 +2841,8 @@
   "feature": "内置拟合函数：多项式与有理函数（Poly、Rational 等）",
   "ref": "Curve Fitting Functions（共 239 个）",
   "pri": "P0",
-  "status": "部分实现",
-  "how": "线性入口提供一阶，多项式入口提供 2–6 阶；有理函数提供 Rational1（一阶/一阶）、Rational12（一阶/二阶）、Rational22（二阶/二阶）、Rational33（三阶/三阶），新增名按阶数定义，不作 Origin 别名。复用自动初值、解析导数、固定/上下界/线性约束、报告和结果曲线；分母极点处断线，项目保存和撤销重做沿用现有流程。更多参数化、多项式变体和数据驱动目录待做",
+  "status": "已实现待验收",
+  "how": "线性入口提供一阶，多项式入口提供 2–6 阶；有理函数提供 Rational1（一阶/一阶）、Rational12（一阶/二阶）、Rational22（二阶/二阶）、Rational33（三阶/三阶），新增名按阶数定义，不作 Origin 别名。复用自动初值、解析导数、固定/上下界/线性约束、报告和结果曲线；分母极点处断线，项目保存和撤销重做沿用现有流程。更多参数化、多项式变体和数据驱动目录不在本条范围，移至 S2-5 拟合补强，由 F514 目录总览跟踪",
   "verify": "四个有理模型与 SciPy 1.17.1 参数/标准误/RSS 对照；Rational33 的 NIST Thurber 37 点、自动初值与两组官方起点对照；完整 NIST 参考值对照待做",
   "id": "F152",
   "milestone": "M1 日常够用",
@@ -2842,6 +2859,22 @@
     "review": 4,
     "note": "Rational1/12/22/33 四个模型已接入，数字描述阶数，独立数值回归通过，人工操作与 Origin 对照待验收；不折算为 239 项目录已完成数。"
    }
+  },
+  "needs": [
+   "auto",
+   "reference"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/src/nlfit.rs::rational_models_match_scipy_parameters_standard_errors_and_rss",
+    "crates/scicanvas-core/src/nlfit.rs::rational33_matches_nist_thurber_certified_values",
+    "crates/scicanvas-core/tests/reference_scipy.rs::polynomial_degrees_two_to_six_match_numpy_with_large_x_offset",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::rational_models_run_from_dialog_save_reopen_and_undo"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/polynomial.json",
+    "crates/scicanvas-core/tests/nist/nls/Thurber.dat"
+   ]
   }
  },
  {
@@ -3154,7 +3187,8 @@
   "id": "F173",
   "milestone": "M2 论文全流程",
   "needs": [
-   "auto"
+   "auto",
+   "reference"
   ],
   "evidence": {
    "auto": [
@@ -3190,7 +3224,7 @@
   "feature": "行统计",
   "ref": "Statistics on Rows",
   "pri": "P1",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "统计 → 行统计：对点选的各列逐行求均值、标准差、标准误、N，写在最后一列右边；标准差设为 Y 误差列，可直接画误差棒",
   "verify": "单元测试覆盖缺失值、单值行与列属性",
   "id": "F175",
@@ -3825,7 +3859,7 @@
   "feature": "扣除基线",
   "ref": "Peak Analyzer",
   "pri": "P1",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "每条曲线在 Y 右边写入“基线”和“扣除基线”两列；来源是图形时基线画进图里，一步撤销",
   "verify": "单元测试覆盖缺失行、列位置与图层曲线",
   "id": "F217",
@@ -7348,7 +7382,7 @@
   "feature": "同一图层每条曲线独立图类型（柱 / 线 / 散点混合）",
   "ref": "Plot Details / Plot Type",
   "pri": "P0",
-  "status": "已实现待验收",
+  "status": "已完成",
   "how": "曲线样式里可为每条曲线单独选图型（折线、散点、点线、柱、面积、样条、样条点线、垂线、水平/垂直阶梯），同层混合绘制，柱子按改后的柱曲线重新分组；堆叠类与条形图按整层设置；一步撤销、随项目保存",
   "verify": "散点与折线混合、柱子重新分组、项目往返的场景测试；SVG 与屏幕共用场景",
   "milestone": "M1 日常够用",
