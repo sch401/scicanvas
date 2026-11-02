@@ -443,10 +443,26 @@ impl Project {
         y: &str,
         sample: &str,
     ) -> Result<(crate::stats::Calibration, String, String), String> {
+        self.calibrate_with_visibility(book_id, x, y, sample, false)
+    }
+
+    pub fn calibrate_with_visibility(
+        &mut self,
+        book_id: u64,
+        x: &str,
+        y: &str,
+        sample: &str,
+        visible_only: bool,
+    ) -> Result<(crate::stats::Calibration, String, String), String> {
         let book = self.book(book_id).ok_or("找不到工作簿")?;
         let col = |k: &str| book.column(k).ok_or_else(|| format!("找不到列 {k}"));
         let (cx, cy, cs) = (col(x)?, col(y)?, col(sample)?);
-        let cal = crate::stats::Calibration::fit(&cx.values(), &cy.values())?;
+        let (xs, ys) = if visible_only {
+            (book.visible_values(cx), book.visible_values(cy))
+        } else {
+            (cx.values(), cy.values())
+        };
+        let cal = crate::stats::Calibration::fit(&xs, &ys)?;
         let (x_name, x_units, s_name) = (
             cx.display_name().to_owned(),
             cx.units.clone(),
@@ -455,7 +471,8 @@ impl Project {
         let inv: Vec<Option<(f64, f64, f64)>> = cs
             .values()
             .iter()
-            .map(|v| v.is_finite().then(|| cal.inverse(*v, 1)))
+            .enumerate()
+            .map(|(row, v)| (v.is_finite() && (!visible_only || book.row_visible(row))).then(|| cal.inverse(*v, 1)))
             .collect();
         let note = format!(
             "{} = ({} − {}) / {}，R² = {}，n = {}",

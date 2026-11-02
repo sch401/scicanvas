@@ -414,26 +414,45 @@ pub fn paste_into(book: &mut Book, col: usize, row: usize, text: &str) -> (usize
 }
 
 /// Paste a rectangular block into visible source rows without changing hidden rows.
-pub fn paste_into_visible(book: &mut Book, col: usize, visible: &[usize], first_row: usize, text: &str) -> Result<(usize, usize, usize), String> {
+pub fn paste_into_visible(
+    book: &mut Book,
+    col: usize,
+    visible: &[usize],
+    first_row: usize,
+    text: &str,
+) -> Result<(usize, usize, usize), String> {
     let mut rows = paste_table(text);
-    let header = if first_row == 0 && paste_has_header(&rows) { Some(rows.remove(0)) } else { None };
+    let header = if first_row == 0 && paste_has_header(&rows) {
+        Some(rows.remove(0))
+    } else {
+        None
+    };
     let start = visible.partition_point(|&row| row < first_row);
-    if rows.len() > visible.len().saturating_sub(start) { return Err("可见行不足，请缩小粘贴区域或取消筛选".into()); }
+    if rows.len() > visible.len().saturating_sub(start) {
+        return Err("可见行不足，请缩小粘贴区域或取消筛选".into());
+    }
     if let Some(header) = header {
         book.ensure_columns(col + header.len());
         for (index, value) in header.iter().enumerate() {
             let (name, units) = split_name_units(value);
             let column = &mut book.columns[col + index];
             column.long_name = name;
-            if !units.is_empty() { column.units = units; }
+            if !units.is_empty() {
+                column.units = units;
+            }
         }
     }
     let ncols = rows.iter().map(|row| row.len()).max().unwrap_or(0);
     book.ensure_columns(col + ncols);
     for (index, row) in rows.iter().enumerate() {
-        for (offset, value) in row.iter().enumerate() { book.columns[col + offset].set(visible[start + index], value.clone()); }
+        for (offset, value) in row.iter().enumerate() {
+            book.columns[col + offset].set(visible[start + index], value.clone());
+        }
     }
-    let last = rows.len().checked_sub(1).map_or(first_row, |index| visible[start + index]);
+    let last = rows
+        .len()
+        .checked_sub(1)
+        .map_or(first_row, |index| visible[start + index]);
     Ok((rows.len(), ncols, last))
 }
 

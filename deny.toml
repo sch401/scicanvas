@@ -20,7 +20,7 @@ confidence-threshold = 0.93
 exceptions = [
     { name = "clipboard-win", version = "=5.4.3", allow = ["BSL-1.0"] },
     { name = "error-code", version = "=3.4.0", allow = ["BSL-1.0"] },
-    { name = "epaint_default_fonts", version = "=0.29.1", allow = ["OFL-1.1", "LicenseRef-UFL-1.0"] },
+    { name = "epaint_default_fonts", version = "=0.30.0", allow = ["OFL-1.1", "LicenseRef-UFL-1.0"] },
     # wgpu/naga 的十六进制解析依赖；随包提供上游声明与 CC0 完整原文，仅限此锁定版本。
     { name = "hexf-parse", version = "=0.2.1", allow = ["CC0-1.0"] },
 ]

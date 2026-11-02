@@ -62,7 +62,9 @@ fn data_fingerprint(g: &Graph, project: &Project) -> u64 {
         let books = std::iter::once(main).chain(layer.foreign_books().into_iter().filter_map(|b| project.book(b)));
         for book in books {
             mix(book.id);
-            if layer.visible_only { mix(book.filter_fingerprint()); }
+            if layer.visible_only {
+                mix(book.filter_fingerprint());
+            }
             text(&book.name, &mut mix);
             let local = book.id == main.id;
             for (index, col) in book.columns.iter().enumerate() {

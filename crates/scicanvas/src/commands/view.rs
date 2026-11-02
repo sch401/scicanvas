@@ -14,6 +14,16 @@ pub(super) fn help(commands: &mut Vec<Command>) {
             |a| a.show_help = true,
         ),
         c(
+            "help.about",
+            "关于 SciCanvas",
+            "help",
+            "",
+            "帮助",
+            "about version 版本",
+            always,
+            |a| a.show_about = true,
+        ),
+        c(
             "palette.open",
             "搜索命令",
             "search",

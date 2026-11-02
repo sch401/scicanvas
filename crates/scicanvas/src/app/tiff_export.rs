@@ -26,7 +26,7 @@ impl SciApp {
         };
         let result = crate::export::rasterize(&svg::render_page(&graph, &self.project), dpi).and_then(|pixmap| {
             let bytes = crate::export::tiff_bytes(&pixmap, dpi)?;
-            std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+            scicanvas_core::project_file::write_file_atomic(&path, &bytes)?;
             Ok((pixmap.width(), pixmap.height()))
         });
         self.status = match result {

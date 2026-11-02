@@ -661,6 +661,23 @@ fn null_space(rows: &[Vec<f64>], dim: usize) -> Vec<Vec<f64>> {
     out
 }
 
+fn reduced_covariance(cov: &[Vec<f64>], free: &[usize], basis: &[Vec<f64>]) -> Vec<Vec<f64>> {
+    let m = free.len();
+    basis
+        .iter()
+        .map(|left| {
+            basis
+                .iter()
+                .map(|right| {
+                    (0..m)
+                        .map(|u| (0..m).map(|v| left[u] * cov[free[u]][free[v]] * right[v]).sum::<f64>())
+                        .sum()
+                })
+                .collect()
+        })
+        .collect()
+}
+
 /// 用 QR 求逆估计协方差矩阵的无穷范数条件数。
 fn covariance_ill_conditioned(cov: &[Vec<f64>], design: impl FnOnce() -> Vec<Vec<f64>>) -> bool {
     let n = cov.len();
@@ -672,7 +689,20 @@ fn covariance_ill_conditioned(cov: &[Vec<f64>], design: impl FnOnce() -> Vec<Vec
         let design = design();
         return crate::linalg::lstsq(&design, &vec![0.0; design.len()]).is_err();
     }
-    let matrix: Vec<Vec<f64>> = cov.iter().map(|row| row.iter().map(|v| v / scale).collect()).collect();
+    // 相关矩阵排除参数自身量级对条件数的影响。
+    let diag: Vec<f64> = (0..n).map(|i| cov[i][i]).collect();
+    if diag.iter().any(|d| !d.is_finite() || *d < 0.0) {
+        return true;
+    }
+    let keep: Vec<usize> = (0..n).filter(|&i| diag[i] > 0.0).collect();
+    if keep.is_empty() {
+        return false;
+    }
+    let matrix: Vec<Vec<f64>> = keep
+        .iter()
+        .map(|&i| keep.iter().map(|&j| cov[i][j] / (diag[i] * diag[j]).sqrt()).collect())
+        .collect();
+    let n = keep.len();
     let norm = matrix
         .iter()
         .map(|row| row.iter().map(|v| v.abs()).sum::<f64>())
@@ -1396,7 +1426,7 @@ impl<'a> FitSession<'a> {
                     self.lambda = (self.lambda / 10.0).max(1e-12);
                     stepped = true;
                     // 被约束截短的一步不算收敛：下一步会把挡路的约束纳入活动集
-                    self.refine = small_gain && alpha >= 1.0;
+                    self.refine = small_gain && alpha >= 1.0 && low_damping;
                     self.converged = small_step && alpha >= 1.0 && low_damping;
                     break 'solve;
                 }
@@ -1439,7 +1469,7 @@ impl<'a> FitSession<'a> {
                 self.cost = new_cost;
                 self.lambda = (self.lambda / 10.0).max(1e-12);
                 stepped = true;
-                self.refine = small_gain;
+                self.refine = small_gain && low_damping;
                 self.converged = small_step && low_damping;
                 break;
             }
@@ -1619,26 +1649,11 @@ impl<'a> FitSession<'a> {
         let tss: f64 = self.ys.iter().map(|y| (y - mean).powi(2)).sum();
         let r2 = if tss > 0.0 { 1.0 - self.cost / tss } else { f64::NAN };
         let adj_r2 = 1.0 - (1.0 - r2) * (n as f64 - 1.0) / dof;
-        let reduced_cov: Vec<Vec<f64>> = basis
-            .iter()
-            .map(|left| {
-                basis
-                    .iter()
-                    .map(|right| {
-                        (0..m)
-                            .map(|u| (0..m).map(|v| left[u] * cov[free[u]][free[v]] * right[v]).sum::<f64>())
-                            .sum()
-                    })
-                    .collect()
-            })
-            .collect();
+        let reduced_cov = reduced_covariance(&cov, free, &basis);
 
-        let uncertain = free
-            .iter()
-            .any(|&k| se[k].is_finite() && se[k] > 10.0 * params[k].abs());
-        let warnings = if converged
-            && (uncertain
-                || adj_r2 < 0.0
+        let mut warnings = Vec::new();
+        if converged {
+            let ill = adj_r2 < 0.0
                 || covariance_ill_conditioned(&reduced_cov, || {
                     j.iter()
                         .map(|row| {
@@ -1648,11 +1663,23 @@ impl<'a> FitSession<'a> {
                                 .collect()
                         })
                         .collect()
-                })) {
-            vec!["结果可能停在局部极小或参数不可辨识：请尝试其他初值，或固定部分参数。".to_owned()]
-        } else {
-            Vec::new()
-        };
+                });
+            if ill {
+                warnings.push("结果可能停在局部极小或参数不可辨识：请尝试其他初值，或固定部分参数。".to_owned());
+            }
+            let parameter_names = model.params();
+            let names: Vec<&str> = free
+                .iter()
+                .filter(|&&k| se[k].is_finite() && se[k] > 10.0 * params[k].abs())
+                .map(|&k| parameter_names[k])
+                .collect();
+            if !names.is_empty() {
+                warnings.push(format!(
+                    "参数 {} 的标准误超过其绝对值的 10 倍，与 0 无显著差异；如物理上应为 0，可考虑固定。",
+                    names.join("、")
+                ));
+            }
+        }
         Ok(NlFit {
             model,
             params,
@@ -2475,25 +2502,48 @@ mod tests {
     fn fit_warning_covers_high_relative_error_and_negative_adjusted_r2() {
         let line = || CustomFitFunction::new("line", "a+b*x", vec!["a".into(), "b".into()]).unwrap();
         let x = [-2.0, -1.0, 0.0, 1.0, 2.0];
-        let y = [1.4, 0.9, 0.8, 0.9, 1.4];
-        let fit = fit_custom(line(), &x, &y, &[1.08, 0.0], &[], &[]).unwrap();
+        let y = [-3.8, -2.1, 0.0, 1.9, 4.0];
+        let fit = fit_custom(line(), &x, &y, &[0.0, 2.0], &[], &[]).unwrap();
         assert!(fit.converged);
-        assert!(fit.se[1] > 10.0 * fit.params[1].abs());
-        assert!(!fit.warnings.is_empty());
+        assert!(fit.adj_r2 > 0.0);
+        assert!(fit.se[0] > 10.0 * fit.params[0].abs());
+        assert_eq!(fit.warnings.len(), 1);
+        assert!(fit.warnings[0].contains("参数 a"));
+        assert!(fit.warnings[0].contains("与 0 无显著差异"));
+        assert!(!fit.warnings[0].contains("局部极小"));
         let x = [0.0, 1.0, 2.0, 3.0, 4.0, 5.0];
         let y = [-1.0, 0.0, 1.0, 0.0, -1.0, 1.0];
         let limits = [ParamLimits::fixed(10.0), ParamLimits::default()];
         let fit = fit_custom(line(), &x, &y, &[10.0, -2.0], &limits, &[]).unwrap();
         assert!(fit.converged);
         assert!(fit.adj_r2 < 0.0);
-        assert!(!fit.warnings.is_empty());
+        assert!(fit.warnings.iter().any(|warning| warning.contains("局部极小")));
+    }
+
+    #[test]
+    fn differently_scaled_line_parameters_do_not_warn_about_local_minima() {
+        let function = CustomFitFunction::new("line", "a+b*x", vec!["a".into(), "b".into()]).unwrap();
+        let x = [1000.0, 2000.0, 3000.0, 4000.0, 5000.0];
+        let y = [2.51, 4.48, 6.515, 8.49, 10.505];
+        let fit = fit_custom(function, &x, &y, &[0.5, 0.002], &[], &[]).unwrap();
+        assert!(fit.converged);
+        assert!(!fit.warnings.iter().any(|warning| warning.contains("局部极小")));
     }
 
     #[test]
     fn covariance_condition_respects_fixed_and_identifiable_directions() {
         let design = || vec![vec![1.0, 0.0], vec![0.0, 1.0], vec![1.0, 1.0]];
         assert!(!covariance_ill_conditioned(&[vec![1.0, 0.0], vec![0.0, 1e-10]], design));
-        assert!(covariance_ill_conditioned(&[vec![1.0, 0.0], vec![0.0, 1e-13]], design));
+        // 参数量级不同不代表病态。
+        assert!(!covariance_ill_conditioned(&[vec![1.0, 0.0], vec![0.0, 1e-13]], design));
+        assert!(covariance_ill_conditioned(
+            &[vec![1.0, 1.0 - 1e-14], vec![1.0 - 1e-14, 1.0]],
+            design
+        ));
+        assert!(!covariance_ill_conditioned(
+            &[vec![1e10, 0.0], vec![0.0, 1e-10]],
+            design
+        ));
         assert!(!covariance_ill_conditioned(&[vec![0.0, 0.0], vec![0.0, 0.0]], design));
         assert!(covariance_ill_conditioned(&[vec![0.0, 0.0], vec![0.0, 0.0]], || vec![
             vec![1.0, 1.0],

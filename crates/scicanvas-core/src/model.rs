@@ -965,7 +965,9 @@ impl Project {
             b.columns.retain(|c| !keys.contains(&c.key));
             if let Some(filter) = &mut b.filter {
                 filter.rules.retain(|key, _| !keys.contains(key));
-                if filter.rules.is_empty() { b.filter = None; }
+                if filter.rules.is_empty() {
+                    b.filter = None;
+                }
             }
         }
         for g in &mut self.graphs {

@@ -217,6 +217,10 @@ impl SciApp {
     pub(crate) fn open_ifft_dialog(&mut self) {
         let Some(id) = self.active_book() else { return };
         let Some(book) = self.project.book(id) else { return };
+        if book.filter.is_some() && self.sheets.get(&id).is_some_and(|state| state.visible_only) {
+            self.status = "IFFT 需要完整频谱，请取消只使用可见行后重试".into();
+            return;
+        }
         let named = |name: &str| book.columns.iter().find(|c| c.long_name == name).map(|c| c.key.clone());
         let sel = self.selected_keys(id);
         let (re, im) = if sel.is_empty() {
@@ -365,9 +369,14 @@ impl SciApp {
                 return;
             }
         };
+        let visible_only = self.sheets.get(&id).is_some_and(|state| state.visible_only);
         self.edit_with(
             "列运算",
-            |project| project.column_math(id, &a, op, &operand).map(Some),
+            |project| {
+                project
+                    .column_math_with_visibility(id, &a, op, &operand, visible_only)
+                    .map(Some)
+            },
             |app, key| app.status = format!("列运算结果在新列 {key}"),
         );
     }
@@ -487,7 +496,11 @@ impl SciApp {
     /// 自相关（选一列）或互相关（选两列）。
     pub(crate) fn correlation_function(&mut self) {
         let Some((id, keys)) = self.ttest_columns() else { return };
-        match self.project.correlation_function(id, &keys) {
+        let visible_only = self.sheets.get(&id).is_some_and(|state| state.visible_only);
+        match self
+            .project
+            .correlation_function_with_visibility(id, &keys, visible_only)
+        {
             Ok((bid, gid)) => {
                 let name = self.project.name_of(bid).unwrap_or_default().to_owned();
                 self.show_item(gid);
@@ -513,7 +526,8 @@ impl SciApp {
     /// 对点选的各列逐行统计（平行样的均值、标准差等）。
     pub(crate) fn row_stats(&mut self) {
         let Some((id, keys)) = self.ttest_columns() else { return };
-        match self.project.row_stats(id, &keys) {
+        let visible_only = self.sheets.get(&id).is_some_and(|state| state.visible_only);
+        match self.project.row_stats_with_visibility(id, &keys, visible_only) {
             Ok(made) => self.status = format!("行统计结果在新列 {}（标准差已设为 Y 误差列）", made.join(", ")),
             Err(e) => self.status = format!("{e}：请 Ctrl+单击选中平行样的各列"),
         }
@@ -528,9 +542,17 @@ impl SciApp {
         }
         let book = self.project.book(id).unwrap();
         let (ykey, xkeys) = keys.split_last().unwrap();
-        let xs: Vec<Vec<f64>> = xkeys.iter().map(|k| book.column(k).unwrap().values()).collect();
+        let visible_only = self.sheets.get(&id).is_some_and(|state| state.visible_only);
+        let values = |column: &scicanvas_core::Column| {
+            if visible_only {
+                book.visible_values(column)
+            } else {
+                column.values()
+            }
+        };
+        let xs: Vec<Vec<f64>> = xkeys.iter().map(|k| values(book.column(k).unwrap())).collect();
         let y = book.column(ykey).unwrap();
-        match scicanvas_core::stats::multiple_regression(&xs, &y.values()) {
+        match scicanvas_core::stats::multiple_regression(&xs, &values(y)) {
             Ok(r) => {
                 let mut rows = vec![["参数", "值", "标准误", "t", "p"].map(String::from).to_vec()];
                 let names = std::iter::once("截距".to_owned())
@@ -665,7 +687,11 @@ impl SciApp {
             self.status = "请按顺序 Ctrl+单击选中三列：标准浓度（X）、标准响应（Y）、样品响应".into();
             return;
         }
-        match self.project.calibrate(id, &keys[0], &keys[1], &keys[2]) {
+        let visible_only = self.sheets.get(&id).is_some_and(|state| state.visible_only);
+        match self
+            .project
+            .calibrate_with_visibility(id, &keys[0], &keys[1], &keys[2], visible_only)
+        {
             Ok((cal, k0, k1)) => {
                 self.status = format!(
                     "标准曲线 y = {} + {}·x，R² = {}；反查结果在新列 {k0}、{k1}",

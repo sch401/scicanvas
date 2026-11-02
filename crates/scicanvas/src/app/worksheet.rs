@@ -173,7 +173,11 @@ impl SciApp {
         };
         if let Some(b) = self.project.book(bid) {
             self.pending_copy = Some(b.visible_range_tsv(r.c0(), r.c1(), r.r0(), r.r1()));
-            let rows = if b.filter.is_some() { b.visible_range_rows(r.r0(), r.r1()).len() } else { r.rows() };
+            let rows = if b.filter.is_some() {
+                b.visible_range_rows(r.r0(), r.r1()).len()
+            } else {
+                r.rows()
+            };
             self.status = format!("已复制 {} 行 × {} 列，可直接粘贴到 Excel", rows, r.cols());
         }
     }
@@ -615,12 +619,22 @@ impl SciApp {
         }
         let range = st.range;
         let multi = range.filter(|r| r.is_multi());
-        let nrows = visible_rows.as_ref().map_or_else(|| (book.nrows() + 20)
-            .max(40)
-            .max(range.map_or(0, |r| r.r1().max(r.a.r) + 10))
-            .max(st.edit.as_ref().map_or(0, |e| e.cell.r + 10)), |rows| rows.len());
+        let nrows = visible_rows.as_ref().map_or_else(
+            || {
+                (book.nrows() + 20)
+                    .max(40)
+                    .max(range.map_or(0, |r| r.r1().max(r.a.r) + 10))
+                    .max(st.edit.as_ref().map_or(0, |e| e.cell.r + 10))
+            },
+            |rows| rows.len(),
+        );
         let drag = st.drag;
-        let scroll_to = st.scroll_to.take().map(|row| visible_rows.as_ref().map_or(row, |rows| rows.partition_point(|&value| value < row).min(rows.len().saturating_sub(1))));
+        let scroll_to = st.scroll_to.take().map(|row| {
+            visible_rows.as_ref().map_or(row, |rows| {
+                rows.partition_point(|&value| value < row)
+                    .min(rows.len().saturating_sub(1))
+            })
+        });
         let edit = st.edit.take();
         let text_color = ui.visuals().text_color();
         let sel_stroke = egui::Stroke::new(2.0_f32, pal.accent);
@@ -891,8 +905,12 @@ impl SciApp {
             }
             self.active = Some(id);
             if matches!(act, ColAction::Filter | ColAction::ClearFilter) {
-                if matches!(act, ColAction::Filter) { self.open_filter_dialog(id, &key); }
-                else { let visible_only = self.sheets.get(&id).is_some_and(|s| s.visible_only); self.apply_filter(id, key, None, visible_only); }
+                if matches!(act, ColAction::Filter) {
+                    self.open_filter_dialog(id, &key);
+                } else {
+                    let visible_only = self.sheets.get(&id).is_some_and(|s| s.visible_only);
+                    self.apply_filter(id, key, None, visible_only);
+                }
                 return;
             }
             if let ColAction::AddToGraph(gid) = act {
@@ -960,7 +978,9 @@ impl SciApp {
             return;
         }
         let visible_rows = st.cached_rows();
-        if visible_rows.as_ref().is_some_and(|rows| rows.is_empty()) { return; }
+        if visible_rows.as_ref().is_some_and(|rows| rows.is_empty()) {
+            return;
+        }
         let has_paste = ctx.input(|i| i.events.iter().any(|e| matches!(e, Event::Paste(_))));
         let anchor = st
             .edit
@@ -975,7 +995,16 @@ impl SciApp {
                             .iter()
                             .filter_map(|key| book.column_index(key))
                             .min()
-                            .map(|c| Range::single(c, visible_rows.as_ref().and_then(|rows| rows.first()).copied().unwrap_or(0)))
+                            .map(|c| {
+                                Range::single(
+                                    c,
+                                    visible_rows
+                                        .as_ref()
+                                        .and_then(|rows| rows.first())
+                                        .copied()
+                                        .unwrap_or(0),
+                                )
+                            })
                     })
                     .flatten()
             });
@@ -1056,10 +1085,21 @@ fn apply_sheet_events(
                 match key {
                     Key::A => {
                         g = Range {
-                            a: Cell { c: 0, r: visible_rows.as_ref().and_then(|rows| rows.first()).copied().unwrap_or(0) },
+                            a: Cell {
+                                c: 0,
+                                r: visible_rows
+                                    .as_ref()
+                                    .and_then(|rows| rows.first())
+                                    .copied()
+                                    .unwrap_or(0),
+                            },
                             b: Cell {
                                 c: last_col,
-                                r: visible_rows.as_ref().and_then(|rows| rows.last()).copied().unwrap_or_else(|| book.nrows().saturating_sub(1)),
+                                r: visible_rows
+                                    .as_ref()
+                                    .and_then(|rows| rows.last())
+                                    .copied()
+                                    .unwrap_or_else(|| book.nrows().saturating_sub(1)),
                             },
                         };
                         status = Some(range_status(book, &g));
@@ -1079,13 +1119,25 @@ fn apply_sheet_events(
                     }
                     Key::Escape => g = Range { a: g.a, b: g.a },
                     Key::Home => {
-                        let r = if modifiers.command { visible_rows.as_ref().and_then(|rows| rows.first()).copied().unwrap_or(0) } else { g.a.r };
+                        let r = if modifiers.command {
+                            visible_rows
+                                .as_ref()
+                                .and_then(|rows| rows.first())
+                                .copied()
+                                .unwrap_or(0)
+                        } else {
+                            g.a.r
+                        };
                         g = Range::single(0, r);
                         st.scroll_to = Some(r);
                     }
                     Key::End => {
                         let r = if modifiers.command {
-                            visible_rows.as_ref().and_then(|rows| rows.last()).copied().unwrap_or_else(|| book.nrows().saturating_sub(1))
+                            visible_rows
+                                .as_ref()
+                                .and_then(|rows| rows.last())
+                                .copied()
+                                .unwrap_or_else(|| book.nrows().saturating_sub(1))
                         } else {
                             g.a.r
                         };
@@ -1108,7 +1160,11 @@ fn apply_sheet_events(
             }
             Event::Copy | Event::Cut => {
                 copy = Some(book.visible_range_tsv(g.c0(), g.c1(), g.r0(), g.r1()));
-                let rows = if book.filter.is_some() { book.visible_range_rows(g.r0(), g.r1()).len() } else { g.rows() };
+                let rows = if book.filter.is_some() {
+                    book.visible_range_rows(g.r0(), g.r1()).len()
+                } else {
+                    g.rows()
+                };
                 if matches!(e, Event::Cut) {
                     book.clear_visible_range(g.c0(), g.c1(), g.r0(), g.r1());
                     status = Some(format!("已剪切 {} 行 × {} 列", rows, g.cols()));
@@ -1117,39 +1173,13 @@ fn apply_sheet_events(
                 }
             }
             Event::Paste(text) => {
-                let conflicts: Vec<String> = if csv::is_block_paste(&text) {
-                    csv::paste_conflicts(book, g.c0(), g.r0(), &text)
-                } else {
-                    book.columns[g.c0()..=g.c1()]
-                        .iter()
-                        .filter(|c| !c.data.accepts_paste(text.trim()))
-                        .map(|c| c.key.clone())
-                        .collect()
-                };
-                if !conflicts.is_empty() {
-                    status = Some(format!(
-                        "列 {} 与粘贴内容类型不符，数据保持原样。请从列头右键转换为文本列后再粘贴。",
-                        conflicts.join(", ")
-                    ));
-                    continue;
+                let (range, message, changed) = paste_sheet_cells(book, g, &text, visible_rows.as_deref())?;
+                g = range;
+                status = Some(message);
+                if changed {
+                    st.edit = None;
+                    pasted = true;
                 }
-                if csv::is_block_paste(&text) {
-                    let (c0, r0) = (g.c0(), g.r0());
-                    let (nr, nc, last_row) = if let Some(visible) = &visible_rows {
-                        csv::paste_into_visible(book, c0, visible, r0, &text)?
-                    } else {
-                        let (nr, nc) = csv::paste_into(book, c0, r0, &text);
-                        (nr, nc, r0 + nr.max(1) - 1)
-                    };
-                    g = Range { a: Cell { c: c0, r: r0 }, b: Cell { c: c0 + nc.max(1) - 1, r: last_row } };
-                    status = Some(format!("已粘贴 {} 行 × {} 列", nr, nc));
-                } else {
-                    let v = text.trim();
-                    let rows = book.fill_visible_range(g.c0(), g.c1(), g.r0(), g.r1(), v);
-                    status = Some(if g.is_multi() { format!("已把 {} 填入 {} 个单元格", v, rows * g.cols()) } else { "已粘贴".to_string() });
-                }
-                st.edit = None;
-                pasted = true;
             }
             Event::Text(t) => {
                 start_edit.get_or_insert_with(String::new).push_str(&t);
@@ -1168,6 +1198,59 @@ fn apply_sheet_events(
         st.range = Some(Range::single(g.a.c, g.a.r));
     }
     Ok((g, status, copy, pasted))
+}
+
+fn paste_sheet_cells(
+    book: &mut scicanvas_core::Book,
+    mut range: Range,
+    text: &str,
+    visible_rows: Option<&[usize]>,
+) -> Result<(Range, String, bool), String> {
+    let conflicts: Vec<String> = if csv::is_block_paste(text) {
+        csv::paste_conflicts(book, range.c0(), range.r0(), text)
+    } else {
+        book.columns[range.c0()..=range.c1()]
+            .iter()
+            .filter(|c| !c.data.accepts_paste(text.trim()))
+            .map(|c| c.key.clone())
+            .collect()
+    };
+    if !conflicts.is_empty() {
+        return Ok((
+            range,
+            format!(
+                "列 {} 与粘贴内容类型不符，数据保持原样。请从列头右键转换为文本列后再粘贴。",
+                conflicts.join(", ")
+            ),
+            false,
+        ));
+    }
+    let message = if csv::is_block_paste(text) {
+        let (c0, r0) = (range.c0(), range.r0());
+        let (nr, nc, last_row) = if let Some(visible) = visible_rows {
+            csv::paste_into_visible(book, c0, visible, r0, text)?
+        } else {
+            let (nr, nc) = csv::paste_into(book, c0, r0, text);
+            (nr, nc, r0 + nr.max(1) - 1)
+        };
+        range = Range {
+            a: Cell { c: c0, r: r0 },
+            b: Cell {
+                c: c0 + nc.max(1) - 1,
+                r: last_row,
+            },
+        };
+        format!("已粘贴 {} 行 × {} 列", nr, nc)
+    } else {
+        let value = text.trim();
+        let rows = book.fill_visible_range(range.c0(), range.c1(), range.r0(), range.r1(), value);
+        if range.is_multi() {
+            format!("已把 {} 填入 {} 个单元格", value, rows * range.cols())
+        } else {
+            "已粘贴".to_string()
+        }
+    };
+    Ok((range, message, true))
 }
 
 #[derive(Clone, Copy)]

@@ -704,11 +704,23 @@
   "feature": "数据筛选",
   "ref": "Data Filter",
   "pri": "P1",
-  "status": "未开始",
-  "how": "",
-  "verify": "手动操作",
+  "status": "部分实现",
+  "how": "列头筛选数值范围、文本和类别，隐藏行保留原数据；可选择绘图和分析使用可见行，筛选随 v23 项目保存。IFFT 在筛选可见行模式下提示需要完整频谱。",
+  "verify": "筛选组合、项目迁移、隐藏行编辑、可见行分析及撤销重做测试；工作表界面人工验收待做。",
   "id": "F039",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": ["auto", "manual"],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/filter.rs::filters_combine_without_removing_rows_and_follow_column_deletion",
+    "crates/scicanvas-core/tests/filter.rs::filter_project_format_v23_roundtrips_and_reads_v22",
+    "crates/scicanvas-core/tests/filter.rs::copy_paste_and_clear_filtered_ranges_leave_hidden_rows_untouched",
+    "crates/scicanvas-core/tests/filter.rs::visible_only_analysis_plot_and_recalculation_keep_original_rows",
+    "crates/scicanvas-core/tests/filter.rs::direct_analyses_use_visible_rows_without_changing_hidden_data",
+    "crates/scicanvas/src/app/filter.rs::applying_and_undoing_a_filter_preserves_original_data"
+   ],
+   "manual": {"checklist": "docs/acceptance/worksheet.md#F039", "result": "待做", "date": "", "build": ""}
+  }
  },
  {
   "module": "工作表",

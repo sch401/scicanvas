@@ -71,7 +71,9 @@ pub fn get_xy(book: &Book, item: &Item) -> (Vec<f64>, Vec<f64>, Vec<usize>) {
     };
     let (mut xs, mut ys, mut idx) = (vec![], vec![], vec![]);
     for i in i0..i1 {
-        if item.visible_only && !book.row_visible(i) { continue; }
+        if item.visible_only && !book.row_visible(i) {
+            continue;
+        }
         let x = match &xv {
             Some(v) => v.get(i).copied().unwrap_or(f64::NAN),
             None => (i + 1) as f64,
@@ -115,7 +117,9 @@ impl Project {
         match src {
             Source::Visible(source) => {
                 let mut resolved = self.resolve(source)?;
-                for item in &mut resolved.items { item.visible_only = true; }
+                for item in &mut resolved.items {
+                    item.visible_only = true;
+                }
                 Ok(resolved)
             }
             Source::Graph(gid) | Source::Layer { graph_id: gid, .. } | Source::Curves { graph_id: gid, .. } => {
@@ -231,7 +235,9 @@ impl Project {
         Ok(match src {
             Source::Visible(source) => {
                 let mut items = self.picked_columns(source)?;
-                for item in &mut items { item.visible_only = true; }
+                for item in &mut items {
+                    item.visible_only = true;
+                }
                 items
             }
             Source::Graph(_) | Source::Layer { .. } | Source::Curves { .. } => self.resolve(src)?.items,
@@ -271,7 +277,14 @@ impl Project {
                 let col = book.column(&item.y).ok_or("找不到数据列")?;
                 let mut values = col.values();
                 if item.visible_only {
-                    values = values.into_iter().enumerate().filter(|(row, _)| item.rows.is_none_or(|(a, b)| *row >= a && *row <= b) && book.row_visible(*row)).map(|(_, value)| value).collect();
+                    values = values
+                        .into_iter()
+                        .enumerate()
+                        .filter(|(row, _)| {
+                            item.rows.is_none_or(|(a, b)| *row >= a && *row <= b) && book.row_visible(*row)
+                        })
+                        .map(|(_, value)| value)
+                        .collect();
                 } else if let Some((a, b)) = item.rows {
                     values = values.into_iter().skip(a).take(b + 1 - a).collect();
                 }

@@ -51,6 +51,32 @@ fn sheet_name(name: &str, used: &mut HashSet<String>) -> String {
     }
 }
 
+fn excel_datetime(value_ms: f64, utc_offset_min: i32) -> Option<ExcelDateTime> {
+    let local = (value_ms as i64).checked_add(i64::from(utc_offset_min) * 60_000)?;
+    let date = chrono::DateTime::from_timestamp_millis(local)?;
+    ExcelDateTime::from_ymd(date.year().try_into().ok()?, date.month() as u8, date.day() as u8)
+        .ok()?
+        .and_hms_milli(
+            date.hour() as u16,
+            date.minute() as u8,
+            date.second() as u8,
+            date.timestamp_subsec_millis() as u16,
+        )
+        .ok()
+}
+
+fn check_text_length(text: &str, book_name: &str, col: usize, row: usize) -> Result<(), String> {
+    if text.encode_utf16().count() > 32_767 {
+        return Err(format!(
+            "工作簿 {} 的 {}{} 单元格超过 Excel 的 32767 字符上限",
+            book_name,
+            crate::column_letter(col),
+            row + 1
+        ));
+    }
+    Ok(())
+}
+
 pub fn write_project(project: &Project, headers: bool) -> Result<Vec<u8>, String> {
     if project.books.is_empty() {
         return Err("项目没有可导出的工作簿".into());
@@ -67,11 +93,12 @@ pub fn write_project(project: &Project, headers: bool) -> Result<Vec<u8>, String
         sheet
             .set_name(sheet_name(&book.name, &mut names))
             .map_err(|e| e.to_string())?;
-        for (index, column) in book.columns.iter().enumerate() {
-            let col: u16 = index.try_into().map_err(|_| "工作表的列数超出 Excel 限制")?;
+        for (col_index, column) in book.columns.iter().enumerate() {
+            let col: u16 = col_index.try_into().map_err(|_| "工作表的列数超出 Excel 限制")?;
             if headers {
                 for (row, text) in [&column.long_name, &column.units, &column.comment].iter().enumerate() {
                     if !text.is_empty() {
+                        check_text_length(text, &book.name, col_index, row)?;
                         sheet
                             .write_string(row as u32, col, text.as_str())
                             .map_err(|e| e.to_string())?;
@@ -88,37 +115,29 @@ pub fn write_project(project: &Project, headers: bool) -> Result<Vec<u8>, String
                             if value.is_finite() {
                                 sheet.write_number(row, col, value).map_err(|e| e.to_string())?;
                             } else {
+                                let text = column.data.text_at(index);
+                                check_text_length(&text, &book.name, col_index, index)?;
+                                sheet.write_string(row, col, text.as_ref()).map_err(|e| e.to_string())?;
+                            }
+                        }
+                    }
+                    DataKind::DateTime => {
+                        if let Some(value) = column.data.f64_at(index) {
+                            if let Some(date) = excel_datetime(value, column.format.utc_offset) {
+                                sheet
+                                    .write_datetime_with_format(row, col, &date, &date_format)
+                                    .map_err(|e| e.to_string())?;
+                            } else {
                                 sheet
                                     .write_string(row, col, column.data.text_at(index).as_ref())
                                     .map_err(|e| e.to_string())?;
                             }
                         }
                     }
-                    DataKind::DateTime => {
-                        if let Some(value) = column.data.f64_at(index) {
-                            let local = (value as i64)
-                                .checked_add(i64::from(column.format.utc_offset) * 60_000)
-                                .ok_or("日期超出支持范围")?;
-                            let date = chrono::DateTime::from_timestamp_millis(local).ok_or("日期超出支持范围")?;
-                            let year: u16 = date.year().try_into().map_err(|_| "日期超出 Excel 支持范围")?;
-                            let date = ExcelDateTime::from_ymd(year, date.month() as u8, date.day() as u8)
-                                .and_then(|v| {
-                                    v.and_hms_milli(
-                                        date.hour() as u16,
-                                        date.minute() as u8,
-                                        date.second() as u8,
-                                        date.timestamp_subsec_millis() as u16,
-                                    )
-                                })
-                                .map_err(|e| format!("日期超出 Excel 支持范围：{e}"))?;
-                            sheet
-                                .write_datetime_with_format(row, col, &date, &date_format)
-                                .map_err(|e| e.to_string())?;
-                        }
-                    }
                     DataKind::Text | DataKind::Category => {
                         let text = column.data.text_at(index);
                         if !text.is_empty() {
+                            check_text_length(&text, &book.name, col_index, index)?;
                             sheet.write_string(row, col, text.as_ref()).map_err(|e| e.to_string())?;
                         }
                     }

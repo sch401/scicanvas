@@ -228,13 +228,29 @@ impl SheetFrame {
                 resp.context_menu(|ui| {
                     self.column_menu(ui, col, ci);
                 });
-                let active = book.filter.as_ref().is_some_and(|filter| filter.rules.contains_key(&col.key));
+                let active = book
+                    .filter
+                    .as_ref()
+                    .is_some_and(|filter| filter.rules.contains_key(&col.key));
                 let button_rect = egui::Rect::from_min_max(egui::pos2(rect.right() - 20.0, rect.top()), rect.max);
-                let mut button_ui = ui.new_child(egui::UiBuilder::new().id_salt(("filter-menu", ci)).max_rect(button_rect));
-                button_ui.menu_button(RichText::new("▾").color(if active { self.pal.accent } else { self.pal.weak }), |ui| {
-                    if ui.button("筛选…").clicked() { self.action = Some((ci, ColAction::Filter)); ui.close_menu(); }
-                    if active && ui.button("清除筛选").clicked() { self.action = Some((ci, ColAction::ClearFilter)); ui.close_menu(); }
-                });
+                let mut button_ui = ui.new_child(
+                    egui::UiBuilder::new()
+                        .id_salt(("filter-menu", ci))
+                        .max_rect(button_rect),
+                );
+                button_ui.menu_button(
+                    RichText::new("▾").color(if active { self.pal.accent } else { self.pal.weak }),
+                    |ui| {
+                        if ui.button("筛选…").clicked() {
+                            self.action = Some((ci, ColAction::Filter));
+                            ui.close_menu();
+                        }
+                        if active && ui.button("清除筛选").clicked() {
+                            self.action = Some((ci, ColAction::ClearFilter));
+                            ui.close_menu();
+                        }
+                    },
+                );
             });
         }
     }

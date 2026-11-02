@@ -21,7 +21,7 @@ pub enum Item {
     Big(&'static str),
     /// 一列小按钮（最多三个）。
     Smalls(&'static [&'static str]),
-    /// 图类型画廊（带缩略图）。
+    /// 展开的图类型画廊（带缩略图）。
     Gallery(&'static [&'static str]),
 }
 
@@ -39,6 +39,23 @@ pub struct Tab {
 }
 
 use Item::*;
+
+const PLOT_TYPES: &[&str] = &[
+    "plot.line",
+    "plot.scatter",
+    "plot.linesym",
+    "plot.bar",
+    "plot.stacked_bar",
+    "plot.percent_stacked_bar",
+    "plot.floating_bar",
+    "plot.horizontal_bar",
+    "plot.area",
+    "plot.spline",
+    "plot.spline_symbol",
+    "plot.vertical_drop",
+    "plot.step_horizontal",
+    "plot.step_vertical",
+];
 
 pub static TABS: &[Tab] = &[
     Tab {
@@ -82,25 +99,7 @@ pub static TABS: &[Tab] = &[
         groups: &[
             Group {
                 label: "二维图",
-                items: &[
-                    Gallery(&[
-                        "plot.line",
-                        "plot.scatter",
-                        "plot.linesym",
-                        "plot.bar",
-                        "plot.stacked_bar",
-                        "plot.percent_stacked_bar",
-                        "plot.floating_bar",
-                        "plot.horizontal_bar",
-                        "plot.area",
-                        "plot.spline",
-                        "plot.spline_symbol",
-                        "plot.vertical_drop",
-                        "plot.step_horizontal",
-                        "plot.step_vertical",
-                    ]),
-                    Big("plot.builder"),
-                ],
+                items: &[Gallery(PLOT_TYPES), Big("plot.builder")],
             },
             Group {
                 label: "多面板",
@@ -253,13 +252,7 @@ pub static TABS: &[Tab] = &[
         groups: &[
             Group {
                 label: "图类型",
-                items: &[
-                    Smalls(&["plot.line", "plot.scatter", "plot.linesym"]),
-                    Smalls(&["plot.bar", "plot.step_horizontal", "plot.step_vertical"]),
-                    Smalls(&["plot.stacked_bar", "plot.percent_stacked_bar", "plot.floating_bar"]),
-                    Smalls(&["plot.horizontal_bar", "plot.area"]),
-                    Smalls(&["plot.spline", "plot.spline_symbol", "plot.vertical_drop"]),
-                ],
+                items: &[Gallery(PLOT_TYPES)],
             },
             Group {
                 label: "坐标轴",
@@ -316,7 +309,7 @@ pub static TABS: &[Tab] = &[
             },
             Group {
                 label: "帮助",
-                items: &[Big("help.show"), Smalls(&["palette.open"])],
+                items: &[Big("help.show"), Smalls(&["palette.open", "help.about"])],
             },
         ],
     },
@@ -531,25 +524,57 @@ fn panel(ui: &mut egui::Ui, app: &SciApp, tab_id: &str, pal: &Palette, clicked: 
             bottom: 2.0,
         })
         .show(ui, |ui| {
-            // 不收缩宽度：面板铺满整个窗口宽度
-            egui::ScrollArea::horizontal()
-                .id_salt("ribbon-scroll")
-                .auto_shrink([false, true])
-                .show(ui, |ui| {
-                    ui.horizontal_top(|ui| {
-                        ui.set_min_height(92.0);
-                        for (gi, g) in tab.groups.iter().enumerate() {
-                            if gi > 0 {
-                                ui.separator();
-                            }
-                            group(ui, app, g, pal, clicked);
-                        }
-                    });
-                });
+            let available = ui.available_width();
+            let preview_count = gallery_preview_count(ui, tab, available);
+            let widths: Vec<_> = tab
+                .groups
+                .iter()
+                .map(|group| group_width(ui, group, preview_count))
+                .collect();
+            let spacing = 12.0;
+            let total = widths.iter().sum::<f32>() + spacing * widths.len().saturating_sub(1) as f32;
+            let visible = if total <= available {
+                widths.len()
+            } else {
+                let mut used = 0.0;
+                let mut count = 0;
+                for width in widths {
+                    let next = used + if count == 0 { 0.0 } else { spacing } + width;
+                    if next + spacing + 105.0 > available {
+                        break;
+                    }
+                    used = next;
+                    count += 1;
+                }
+                count
+            };
+            ui.set_min_width(available);
+            ui.horizontal_top(|ui| {
+                ui.set_min_height(92.0);
+                for (index, group_item) in tab.groups.iter().take(visible).enumerate() {
+                    if index > 0 {
+                        ui.separator();
+                    }
+                    group(ui, app, group_item, preview_count, pal, clicked);
+                }
+                if visible < tab.groups.len() {
+                    if visible > 0 {
+                        ui.separator();
+                    }
+                    overflow_group(ui, app, &tab.groups[visible..], pal, clicked);
+                }
+            });
         });
 }
 
-fn group(ui: &mut egui::Ui, app: &SciApp, g: &Group, pal: &Palette, clicked: &mut Option<&'static str>) {
+fn group(
+    ui: &mut egui::Ui,
+    app: &SciApp,
+    g: &Group,
+    preview_count: usize,
+    pal: &Palette,
+    clicked: &mut Option<&'static str>,
+) {
     ui.vertical(|ui| {
         ui.spacing_mut().item_spacing = vec2(2.0, 1.0);
         let items = ui.horizontal_top(|ui| {
@@ -574,24 +599,7 @@ fn group(ui: &mut egui::Ui, app: &SciApp, g: &Group, pal: &Palette, clicked: &mu
                             }
                         });
                     }
-                    Gallery(ids) => {
-                        egui::Frame::none()
-                            .fill(ui.visuals().extreme_bg_color)
-                            .stroke(Stroke::new(1.0_f32, pal.line))
-                            .rounding(4.0)
-                            .inner_margin(2.0)
-                            .show(ui, |ui| {
-                                ui.horizontal(|ui| {
-                                    for id in *ids {
-                                        if let Some(c) = commands::find(id) {
-                                            if gallery_tile(ui, app, c, pal, clicked).clicked() {
-                                                *clicked = Some(c.id);
-                                            }
-                                        }
-                                    }
-                                });
-                            });
-                    }
+                    Gallery(ids) => plot_gallery(ui, ids, preview_count, app, pal, clicked),
                 }
             }
         });
@@ -602,6 +610,207 @@ fn group(ui: &mut egui::Ui, app: &SciApp, g: &Group, pal: &Palette, clicked: &mu
             rect.center(),
             Align2::CENTER_CENTER,
             g.label,
+            FontId::proportional(crate::theme::size::SMALL),
+            pal.weak,
+        );
+    });
+}
+
+fn text_width(ui: &egui::Ui, text: &str, font: FontId) -> f32 {
+    ui.painter()
+        .layout_no_wrap(text.to_owned(), font, ui.visuals().text_color())
+        .size()
+        .x
+}
+
+fn menu_width(ui: &egui::Ui, text: &str) -> f32 {
+    let font = egui::TextStyle::Button.resolve(ui.style());
+    text_width(ui, text, font) + 2.0 * ui.spacing().button_padding.x + 12.0
+}
+
+fn group_width(ui: &egui::Ui, group: &Group, preview_count: usize) -> f32 {
+    let font = FontId::proportional(crate::theme::size::COMPACT);
+    let widths = group.items.iter().map(|item| match item {
+        Big(id) => commands::find(id).map_or(0.0, |c| (text_width(ui, c.label, font.clone()) + 14.0).max(58.0)),
+        Smalls(ids) => ids
+            .iter()
+            .filter_map(|id| commands::find(id))
+            .map(|c| text_width(ui, c.label, font.clone()) + 34.0)
+            .fold(0.0, f32::max),
+        Gallery(ids) => {
+            let tiles = ids
+                .iter()
+                .take(preview_count)
+                .filter_map(|id| commands::find(id))
+                .map(|command| gallery_tile_width(ui, command) + 2.0)
+                .sum::<f32>();
+            tiles + menu_width(ui, "▾") + 4.0
+        }
+    });
+    (widths.sum::<f32>() + 2.0 * group.items.len().saturating_sub(1) as f32 + 6.0).max(40.0)
+}
+
+fn gallery_tile_width(ui: &egui::Ui, command: &Command) -> f32 {
+    (text_width(ui, command.label, FontId::proportional(crate::theme::size::LABEL)) + 12.0).max(72.0)
+}
+
+fn gallery_preview_count(ui: &egui::Ui, tab: &Tab, available: f32) -> usize {
+    let Some((index, ids)) = tab.groups.iter().enumerate().find_map(|(index, group)| {
+        group.items.iter().find_map(|item| match item {
+            Gallery(ids) => Some((index, *ids)),
+            _ => None,
+        })
+    }) else {
+        return 0;
+    };
+    let widths: Vec<_> = tab.groups.iter().map(|group| group_width(ui, group, 0)).collect();
+    let total = widths.iter().sum::<f32>() + 12.0 * widths.len().saturating_sub(1) as f32;
+    let prefix = widths[..=index].iter().sum::<f32>() + 12.0 * index as f32;
+    let mut cumulative = Vec::with_capacity(ids.len() + 1);
+    cumulative.push(0.0);
+    for id in ids {
+        let width = commands::find(id).map_or(0.0, |command| gallery_tile_width(ui, command) + 2.0);
+        cumulative.push(cumulative.last().copied().unwrap_or_default() + width);
+    }
+    let preferred = ids.len().min(3);
+    let budget = if total + cumulative[preferred] <= available {
+        available - total
+    } else {
+        (available - prefix - 117.0).max(0.0)
+    };
+    let limit = if total + cumulative[preferred] <= available {
+        ids.len()
+    } else {
+        preferred
+    };
+    (0..=limit)
+        .rev()
+        .find(|&count| cumulative[count] <= budget)
+        .unwrap_or(0)
+}
+
+fn plot_gallery(
+    ui: &mut egui::Ui,
+    ids: &'static [&'static str],
+    preview_count: usize,
+    app: &SciApp,
+    pal: &Palette,
+    clicked: &mut Option<&'static str>,
+) {
+    egui::Frame::none()
+        .fill(ui.visuals().extreme_bg_color)
+        .stroke(Stroke::new(1.0_f32, pal.line))
+        .rounding(4.0)
+        .inner_margin(2.0)
+        .show(ui, |ui| {
+            ui.horizontal(|ui| {
+                for id in ids.iter().take(preview_count) {
+                    if let Some(command) = commands::find(id) {
+                        if gallery_tile(ui, app, command, pal, clicked).clicked() {
+                            *clicked = Some(command.id);
+                        }
+                    }
+                }
+                ui.vertical(|ui| {
+                    ui.add_space(18.0);
+                    plot_menu(ui, "▾", ids, app, pal, clicked);
+                });
+            });
+        });
+}
+
+fn thumbnail_grid(
+    ui: &mut egui::Ui,
+    ids: &'static [&'static str],
+    app: &SciApp,
+    pal: &Palette,
+    clicked: &mut Option<&'static str>,
+) {
+    let height = (ui.ctx().screen_rect().height() - 150.0).clamp(120.0, 380.0);
+    egui::ScrollArea::vertical().max_height(height).show(ui, |ui| {
+        egui::Grid::new(("plot-menu-grid", ids.as_ptr() as usize))
+            .num_columns(3)
+            .spacing(vec2(4.0, 4.0))
+            .show(ui, |ui| {
+                for (index, id) in ids.iter().enumerate() {
+                    if let Some(command) = commands::find(id) {
+                        if gallery_tile(ui, app, command, pal, clicked).clicked() {
+                            *clicked = Some(command.id);
+                        }
+                        if clicked.is_some() {
+                            ui.close_menu();
+                        }
+                    }
+                    if index % 3 == 2 {
+                        ui.end_row();
+                    }
+                }
+            });
+    });
+}
+
+fn plot_menu(
+    ui: &mut egui::Ui,
+    label: &str,
+    ids: &'static [&'static str],
+    app: &SciApp,
+    pal: &Palette,
+    clicked: &mut Option<&'static str>,
+) {
+    ui.menu_button(label, |ui| thumbnail_grid(ui, ids, app, pal, clicked))
+        .response
+        .on_hover_text("展开全部图形类型");
+}
+
+fn overflow_group(
+    ui: &mut egui::Ui,
+    app: &SciApp,
+    groups: &[Group],
+    pal: &Palette,
+    clicked: &mut Option<&'static str>,
+) {
+    ui.vertical(|ui| {
+        ui.spacing_mut().item_spacing = vec2(2.0, 1.0);
+        let items = ui.horizontal_top(|ui| {
+            ui.set_min_height(72.0);
+            ui.menu_button("更多功能 ▾", |ui| {
+                for group in groups {
+                    ui.menu_button(group.label, |ui| {
+                        for item in group.items {
+                            match item {
+                                Big(id) => {
+                                    if let Some(command) = commands::find(id) {
+                                        if small_button(ui, app, command, pal, clicked).clicked() {
+                                            *clicked = Some(command.id);
+                                        }
+                                    }
+                                }
+                                Smalls(ids) => {
+                                    for id in *ids {
+                                        if let Some(command) = commands::find(id) {
+                                            if small_button(ui, app, command, pal, clicked).clicked() {
+                                                *clicked = Some(command.id);
+                                            }
+                                        }
+                                    }
+                                }
+                                Gallery(ids) => thumbnail_grid(ui, ids, app, pal, clicked),
+                            }
+                            if clicked.is_some() {
+                                ui.close_menu();
+                            }
+                        }
+                    });
+                }
+            });
+        });
+        let width = items.response.rect.width().max(40.0);
+        ui.add_space((72.0 - items.response.rect.height()).max(0.0));
+        let (rect, _) = ui.allocate_exact_size(vec2(width, 16.0), Sense::hover());
+        ui.painter().text(
+            rect.center(),
+            Align2::CENTER_CENTER,
+            "更多",
             FontId::proportional(crate::theme::size::SMALL),
             pal.weak,
         );

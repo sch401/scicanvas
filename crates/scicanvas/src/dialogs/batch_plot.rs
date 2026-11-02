@@ -1,7 +1,7 @@
 use super::*;
 
 pub struct BatchPlot {
-    pub(crate) graphs: Vec<(u64, String)>,
+    pub(crate) graphs: Vec<(u64, String, bool)>,
     pub(crate) selected_graph: usize,
     pub(crate) books: Vec<(u64, String, bool)>,
 }
@@ -15,12 +15,19 @@ impl BatchPlot {
                 egui::ComboBox::from_id_salt("batch-plot-template")
                     .selected_text(&self.graphs[self.selected_graph].1)
                     .show_ui(ui, |ui| {
-                        for (index, (_, name)) in self.graphs.iter().enumerate() {
+                        for (index, (_, name, _)) in self.graphs.iter().enumerate() {
                             ui.selectable_value(&mut self.selected_graph, index, name);
                         }
                     });
             });
             ui.label("选择工作簿，按列名匹配：");
+            ui.weak("各列按长名在所选工作簿中匹配；没有长名的列按列标识（A、B…）匹配。");
+            if self.graphs[self.selected_graph].2 {
+                ui.colored_label(
+                    crate::theme::palette_for(ctx).warn,
+                    "此图形引用了其他工作簿的列，这些列同样会在所选工作簿中按列名匹配，不会保留原工作簿。",
+                );
+            }
             egui::ScrollArea::vertical().max_height(220.0).show(ui, |ui| {
                 for (_, name, selected) in &mut self.books {
                     ui.checkbox(selected, name.as_str());

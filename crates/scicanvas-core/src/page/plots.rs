@@ -898,7 +898,9 @@ impl serde::Serialize for LayerSpec {
             "book_id":self.book_id,"x_key":self.x_key,"plot_type":self.plot_type,
             "rows":self.rows,"transform":self.transform,"color_map":self.color_map,
         });
-        if self.visible_only { value["visible_only"] = true.into(); }
+        if self.visible_only {
+            value["visible_only"] = true.into();
+        }
         if self.book_id.is_none() {
             value = serde_json::to_value(self.draft()).map_err(S::Error::custom)?;
             let styles = self.styles();

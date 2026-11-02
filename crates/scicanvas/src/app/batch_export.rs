@@ -67,7 +67,11 @@ fn write_unique(directory: &Path, name: &str, extension: &str, bytes: &[u8]) -> 
         let path = directory.join(format!("{name}{suffix}.{extension}"));
         match std::fs::OpenOptions::new().write(true).create_new(true).open(&path) {
             Ok(mut file) => {
-                file.write_all(bytes).map_err(|e| e.to_string())?;
+                if let Err(error) = file.write_all(bytes) {
+                    drop(file);
+                    let _ = std::fs::remove_file(&path);
+                    return Err(error.to_string());
+                }
                 return Ok(path);
             }
             Err(error) if error.kind() == std::io::ErrorKind::AlreadyExists => continue,
@@ -178,6 +182,20 @@ mod tests {
         }
         std::fs::remove_file(existing).unwrap();
         std::fs::remove_dir(folder).unwrap();
+    }
+
+    #[test]
+    fn batch_export_to_missing_directory_does_not_create_files() {
+        let directory = std::env::temp_dir().join(format!(
+            "scicanvas-batch-missing-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        assert!(write_unique(&directory, "plot", "svg", b"data").is_err());
+        assert!(!directory.exists());
     }
 
     #[test]

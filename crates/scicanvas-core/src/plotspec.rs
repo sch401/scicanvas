@@ -605,7 +605,8 @@ impl PlotSpec {
                 None => (0, n),
             };
             let filtered = self.visible_only && !c.independent_rows;
-            let point_style_columns = PointStyleColumns::new(plot.style.as_ref(), cbook, i0..i1, self.color_map, filtered);
+            let point_style_columns =
+                PointStyleColumns::new(plot.style.as_ref(), cbook, i0..i1, self.color_map, filtered);
             let mut pts = Vec::with_capacity(i1.saturating_sub(i0));
             let error_values = [crate::Role::XError, crate::Role::YError].map(|role| {
                 if mapping.line_only || c.derived_from.is_some() {
@@ -634,7 +635,9 @@ impl PlotSpec {
             // 分类列做 X：按类别显示顺序放在 1、2、3…
             let categories = xv.and_then(|v| v.data.plot_category_positions());
             for i in i0..i1 {
-                if filtered && !cbook.row_visible(i) { continue; }
+                if filtered && !cbook.row_visible(i) {
+                    continue;
+                }
                 let x = match (&categories, xv) {
                     (Some(c), _) => c.get(i).copied().unwrap_or(f64::NAN),
                     (None, Some(v)) => v.f64_at(i).unwrap_or(f64::NAN),

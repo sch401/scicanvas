@@ -1,0 +1,39 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package Name="SciCanvas" Manufacturer="SciCanvas" Version="$(var.Version)"
+           UpgradeCode="{B23A1965-9D4C-45E7-9549-71E074996F32}" Scope="perUser">
+    <MajorUpgrade DowngradeErrorMessage="已安装更新版本的 SciCanvas。" Schedule="afterInstallInitialize" />
+    <MediaTemplate EmbedCab="yes" />
+    <Feature Id="Application" Title="SciCanvas" Level="1">
+      <ComponentGroupRef Id="Payload" />
+    </Feature>
+    <Property Id="DefaultUIFont" Value="DefaultFont" />
+    <Property Id="DELETEUSERDATA" Secure="yes" />
+    <UI>
+      <TextStyle Id="DefaultFont" FaceName="Segoe UI" Size="9" />
+      <Dialog Id="RemoveDataDialog" Width="370" Height="150" Title="卸载 SciCanvas">
+        <Control Id="Question" Type="Text" X="20" Y="20" Width="330" Height="35"
+                 Text="卸载程序时是否同时删除本机的 SciCanvas 恢复数据？默认保留数据。" />
+        <Control Id="DeleteData" Type="CheckBox" X="20" Y="65" Width="330" Height="18"
+                 Property="DELETEUSERDATA" CheckBoxValue="1" Text="删除本机恢复数据" />
+        <Control Id="Continue" Type="PushButton" X="205" Y="115" Width="65" Height="18" Default="yes" Text="继续">
+          <Publish Event="EndDialog" Value="Return" />
+        </Control>
+        <Control Id="Cancel" Type="PushButton" X="280" Y="115" Width="65" Height="18" Cancel="yes" Text="取消">
+          <Publish Event="EndDialog" Value="Exit" />
+        </Control>
+      </Dialog>
+    </UI>
+    <CustomAction Id="RemoveUserData" Directory="SystemFolder" Execute="immediate" Return="ignore"
+                  ExeCommand="cmd.exe /c rmdir /s /q &quot;[LocalAppDataFolder]SciCanvas&quot;" />
+    <InstallUISequence>
+      <Show Dialog="RemoveDataDialog" Before="ExecuteAction"
+            Condition="Installed AND REMOVE=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
+    </InstallUISequence>
+    <InstallExecuteSequence>
+      <Custom Action="RemoveUserData" After="InstallFinalize"
+              Condition="REMOVE=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE AND DELETEUSERDATA=&quot;1&quot;" />
+    </InstallExecuteSequence>
+  </Package>
+  <?include $(var.Payload) ?>
+</Wix>

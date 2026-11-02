@@ -6,8 +6,8 @@ mod batch_export;
 mod batch_plot;
 mod dialog_actions;
 mod excel_export;
-mod find_replace;
 mod filter;
+mod find_replace;
 mod notes;
 mod props;
 mod tiff_export;
@@ -185,8 +185,7 @@ pub struct SciApp {
     modal_focus_restore: Option<egui::Id>,
     modal_was_active: bool,
     background_focus: Option<egui::Id>,
-    drawing_frozen: bool,
-    modal_input_backup: Option<egui::InputState>,
+    background_blocked: bool,
     recovery_file: Option<PathBuf>,
     recovery_lock: Option<std::fs::File>,
     last_recovery: std::time::Instant,
@@ -228,6 +227,8 @@ pub struct SciApp {
     pub(crate) status: String,
     pub(crate) show_explorer: bool,
     pub(crate) show_help: bool,
+    pub(crate) show_about: bool,
+    renderer_info: String,
     pub(crate) confirm_delete: Option<u64>,
     /// 每个工作簿的单元格选区和编辑状态。
     pub(crate) sheets: HashMap<u64, SheetState>,
@@ -313,10 +314,11 @@ impl SciApp {
         #[cfg(windows)]
         if let Some(render) = cc.wgpu_render_state.as_ref() {
             let info = render.adapter.get_info();
-            scicanvas_core::project_file::session::write_startup_log(&format!(
-                "图形后端：{:?}；适配器：{}；类型：{:?}；驱动：{} {}",
+            app.renderer_info = format!(
+                "{:?}；{}；{:?}；{} {}",
                 info.backend, info.name, info.device_type, info.driver, info.driver_info
-            ));
+            );
+            scicanvas_core::project_file::session::write_startup_log(&format!("图形后端：{}", app.renderer_info));
             if let Some(notice) = renderer_notice(info.device_type) {
                 app.status = if app.status.is_empty() {
                     notice.into()
@@ -324,6 +326,9 @@ impl SciApp {
                     format!("{}；{notice}", app.status)
                 };
             }
+        }
+        if let Some(path) = std::env::args_os().nth(1) {
+            app.open_startup_path(std::path::Path::new(&path));
         }
         app
     }
@@ -345,8 +350,7 @@ impl SciApp {
             modal_focus_restore: None,
             modal_was_active: false,
             background_focus: None,
-            drawing_frozen: false,
-            modal_input_backup: None,
+            background_blocked: false,
             recovery_file: None,
             recovery_lock: None,
             last_recovery: std::time::Instant::now(),
@@ -382,6 +386,8 @@ impl SciApp {
             status: String::new(),
             show_explorer: true,
             show_help: false,
+            show_about: false,
+            renderer_info: "未检测到图形后端".into(),
             confirm_delete: None,
             sheets: HashMap::new(),
             pending_copy: None,
@@ -807,6 +813,24 @@ impl SciApp {
         )
     }
 
+    fn open_startup_path(&mut self, path: &std::path::Path) {
+        let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("");
+        if Self::is_project_file(path) {
+            self.open_path_now(path);
+        } else if ext.eq_ignore_ascii_case("scgt") {
+            match scicanvas_core::project_file::load_graph_template(path) {
+                Ok(template) => {
+                    if let Some(id) = self.project.books.first().map(|book| book.id) {
+                        self.apply_graph_template_to_book(template, id);
+                    }
+                }
+                Err(error) => self.status = format!("无法应用图形模板：{error}"),
+            }
+        } else if ext.eq_ignore_ascii_case("scfn") {
+            self.import_custom_fit_function(path);
+        }
+    }
+
     fn open_path(&mut self, path: &std::path::Path) {
         self.request_discard(PendingDiscard::Open(path.to_path_buf()));
     }
@@ -962,7 +986,7 @@ impl SciApp {
             return;
         };
         self.settings.last_dir = path.parent().map(std::path::Path::to_path_buf);
-        self.status = match std::fs::write(&path, content) {
+        self.status = match scicanvas_core::project_file::write_file_atomic(&path, content.as_bytes()) {
             Ok(()) => format!("已导出 {}", path.display()),
             Err(e) => format!("导出失败：{}", e),
         };
@@ -983,7 +1007,7 @@ impl SciApp {
         self.settings.last_dir = path.parent().map(std::path::Path::to_path_buf);
         // Finish conversion and font checks before opening/replacing the chosen output file.
         let result = crate::export::pdf_bytes(&svg::render_page(g, &self.project))
-            .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
+            .and_then(|bytes| scicanvas_core::project_file::write_file_atomic(&path, &bytes));
         self.status = match result {
             Ok(()) => format!("已导出 {}（矢量 PDF，已嵌入字体）", path.display()),
             Err(e) => format!("导出失败：{e}"),
@@ -1015,7 +1039,7 @@ impl SciApp {
         };
         let result = crate::export::rasterize(&svg::render_page(&g, &self.project), dpi).and_then(|pixmap| {
             let bytes = crate::export::png_bytes(&pixmap, dpi)?;
-            std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+            scicanvas_core::project_file::write_file_atomic(&path, &bytes)?;
             Ok((pixmap.width(), pixmap.height()))
         });
         self.status = match result {
@@ -1040,7 +1064,7 @@ impl SciApp {
             return;
         };
         self.settings.last_dir = path.parent().map(std::path::Path::to_path_buf);
-        self.status = match std::fs::write(&path, content) {
+        self.status = match scicanvas_core::project_file::write_file_atomic(&path, content.as_bytes()) {
             Ok(()) => format!("已导出 {}（{rows} 行 × {cols} 列）", path.display()),
             Err(e) => format!("导出失败：{e}"),
         };
@@ -1065,7 +1089,7 @@ impl SciApp {
 
     /// 执行一条命令（功能区、快捷键、命令面板都走这里）。不能执行时在状态栏说明原因。
     pub(crate) fn run_command(&mut self, id: &str) {
-        if self.drawing_frozen {
+        if self.background_blocked {
             return;
         }
         let Some(c) = commands::find(id) else { return };
@@ -1122,7 +1146,7 @@ impl SciApp {
         f: impl FnOnce(&mut Self) -> Result<Option<T>, String>,
         show: impl FnOnce(&mut Self, T) -> R,
     ) -> Option<R> {
-        if self.drawing_frozen {
+        if self.background_blocked {
             return None;
         }
         let outer = self.edit_depth == 0;
@@ -1194,7 +1218,7 @@ impl SciApp {
         f: impl FnOnce(&mut Project) -> Result<T, String>,
         show: impl FnOnce(&mut Self, T),
     ) -> Result<(), String> {
-        if self.drawing_frozen {
+        if self.background_blocked {
             return Ok(());
         }
         if self.history.is_pending() && (group.is_none() || self.last_history_group != group) {
@@ -1503,16 +1527,32 @@ impl SciApp {
             let index = self.layer_index(g);
             let visible_only = self.active_layer().is_some_and(|layer| layer.visible_only);
             let source = if let Some(curves) = self.analysis_curves.get(&(g, index)) {
-                Some(Source::Curves { graph_id: g, index, curves: curves.clone() })
+                Some(Source::Curves {
+                    graph_id: g,
+                    index,
+                    curves: curves.clone(),
+                })
             } else {
-                self.active_layer().and_then(|layer| layer.book_id).map(|_| Source::Layer { graph_id: g, index })
+                self.active_layer()
+                    .and_then(|layer| layer.book_id)
+                    .map(|_| Source::Layer { graph_id: g, index })
             };
-            return source.map(|source| if visible_only { Source::Visible(Box::new(source)) } else { source });
+            return source.map(|source| {
+                if visible_only {
+                    Source::Visible(Box::new(source))
+                } else {
+                    source
+                }
+            });
         }
         self.active_book_id().map(|id| {
             let (selected, rows) = self.picked(id);
             let source = Source::Book { id, selected, rows };
-            if self.sheets.get(&id).is_some_and(|state| state.visible_only) { Source::Visible(Box::new(source)) } else { source }
+            if self.sheets.get(&id).is_some_and(|state| state.visible_only) {
+                Source::Visible(Box::new(source))
+            } else {
+                source
+            }
         })
     }
 
@@ -1696,14 +1736,17 @@ impl SciApp {
         if self.closing_frame(ctx) {
             return;
         }
-        self.freeze_modal_background(ctx);
+        let modal_was_open = self.modal_active();
+        self.prepare_modal_focus(ctx);
+        if modal_was_open {
+            self.background_blocked = false;
+            self.show_modal(ctx);
+            self.prepare_modal_focus(ctx);
+        }
         self.background_frame(ctx);
-        self.thaw_modal_input(ctx);
-        if self.cleanup_blocks_ui() {
-            self.cleanup_progress(ctx);
-        } else {
-            self.confirm_window(ctx);
-            self.session_dialogs(ctx);
+        self.background_blocked = false;
+        if !modal_was_open {
+            self.show_modal(ctx);
         }
         self.restore_modal_focus(ctx);
         if !self.modal_active() {
@@ -1719,12 +1762,20 @@ impl SciApp {
             ctx.request_repaint();
         }
     }
+    fn show_modal(&mut self, ctx: &egui::Context) {
+        if self.cleanup_blocks_ui() {
+            self.cleanup_progress(ctx);
+        } else {
+            self.confirm_window(ctx);
+            self.session_dialogs(ctx);
+        }
+    }
     fn background_frame(&mut self, ctx: &egui::Context) {
         let reset = egui::Modifiers {
             shift: true,
             ..egui::Modifiers::COMMAND
         };
-        if !self.drawing_frozen && ctx.input_mut(|input| input.consume_key(reset, egui::Key::R)) {
+        if !self.background_blocked && ctx.input_mut(|input| input.consume_key(reset, egui::Key::R)) {
             self.run_command("win.reset");
         }
         if std::mem::take(&mut self.pending_window_reset) {
@@ -1733,10 +1784,10 @@ impl SciApp {
         }
         dialogs::begin_docks(ctx);
         crate::chrome::edges(ctx, &self.pal);
-        if !self.drawing_frozen {
+        if !self.background_blocked {
             self.dropped_files(ctx);
         }
-        if !self.drawing_frozen
+        if !self.background_blocked
             && self.last_history_group.is_some()
             && ctx.input(|i| {
                 i.pointer.any_pressed()
@@ -1753,20 +1804,20 @@ impl SciApp {
         }
         self.pal = theme::palette(ctx.theme());
         // 命令面板打开时不处理全局快捷键，避免和输入框冲突
-        if !self.drawing_frozen && self.ui.palette.is_none() {
+        if !self.background_blocked && self.ui.palette.is_none() {
             self.shortcuts(ctx);
         }
 
-        self.freeze_modal_background(ctx);
+        self.prepare_modal_focus(ctx);
         // 功能区和命令面板只读地访问程序状态，被点击的命令在绘制完成后执行
         let mut clicked: Option<&'static str> = None;
         let mut ui_state = std::mem::take(&mut self.ui);
         let pal = self.pal;
         ribbon::show(ctx, self, &mut ui_state, &pal, &mut clicked);
-        if clicked == Some("app.quit") && !self.drawing_frozen {
+        if clicked == Some("app.quit") && !self.background_blocked {
             self.run_command("app.quit");
             clicked = None;
-            self.freeze_modal_background(ctx);
+            self.prepare_modal_focus(ctx);
         }
 
         let style = ctx.style();
@@ -1828,7 +1879,7 @@ impl SciApp {
                         dialogs::place_docks(ui, dialogs::DockSide::Right, ui.available_rect_before_wrap())
                     });
             }
-            self.freeze_modal_background(ctx);
+            self.prepare_modal_focus(ctx);
             // 子窗口放在面板之间剩下的区域里（Origin 的 MDI 工作区）
             self.refresh_book_preview();
             self.child_windows(ctx);
@@ -1839,12 +1890,12 @@ impl SciApp {
         ribbon::palette(ctx, self, &mut ui_state, &pal, &mut clicked);
         self.ui = ui_state;
 
-        if !self.drawing_frozen {
+        if !self.background_blocked {
             if let Some(id) = clicked {
                 self.run_command(id);
             }
         }
-        self.freeze_modal_background(ctx);
+        self.prepare_modal_focus(ctx);
         if let Some(t) = self.pending_copy.take() {
             ctx.copy_text(t);
         }
@@ -1852,18 +1903,19 @@ impl SciApp {
         self.props_window(ctx);
         self.object_window(ctx);
         self.help_window(ctx);
-        if self.drawing_frozen {
+        self.about_window(ctx);
+        if self.background_blocked {
             if let Some(dialog) = self.dialog.as_mut() {
                 let _ = dialogs::show(ctx, dialog, &self.pal, &self.project);
             }
         } else {
             self.dialogs(ctx);
         }
-        if crate::builder::show(ctx, &self.project, &mut self.plot_draft) && !self.drawing_frozen {
+        if crate::builder::show(ctx, &self.project, &mut self.plot_draft) && !self.background_blocked {
             self.run_command("plot.apply_spec");
         }
         dialogs::end_docks(ctx);
-        if !self.drawing_frozen {
+        if !self.background_blocked {
             self.finish_frame_edit(self.history_group);
         }
         if std::mem::take(&mut self.pending_repaint) {
@@ -2367,38 +2419,15 @@ impl SciApp {
             || self.confirm_delete.is_some()
             || self.cleanup_blocks_ui()
     }
-    fn freeze_modal_background(&mut self, ctx: &egui::Context) {
-        if !self.modal_active() {
-            return;
-        }
-        if !self.modal_was_active {
+    fn prepare_modal_focus(&mut self, ctx: &egui::Context) {
+        self.background_blocked = self.modal_active();
+        if self.background_blocked && !self.modal_was_active {
             self.modal_focus_restore = ctx.memory(|m| m.focused()).or(self.background_focus);
             if let Some(id) = self.modal_focus_restore {
                 ctx.memory_mut(|m| m.surrender_focus(id));
             }
             self.modal_was_active = true;
         }
-        if self.modal_input_backup.is_none() {
-            self.modal_input_backup = Some(ctx.input(Clone::clone));
-            ctx.input_mut(|i| {
-                i.events.clear();
-                i.raw.events.clear();
-                i.keys_down.clear();
-                i.modifiers = egui::Modifiers::NONE;
-                i.pointer = Default::default();
-                i.raw_scroll_delta = egui::Vec2::ZERO;
-                i.smooth_scroll_delta = egui::Vec2::ZERO;
-                i.raw.dropped_files.clear();
-                i.raw.hovered_files.clear();
-            });
-        }
-        self.drawing_frozen = true;
-    }
-    fn thaw_modal_input(&mut self, ctx: &egui::Context) {
-        if let Some(input) = self.modal_input_backup.take() {
-            ctx.input_mut(|i| *i = input);
-        }
-        self.drawing_frozen = false;
     }
     fn restore_modal_focus(&mut self, ctx: &egui::Context) {
         if self.modal_was_active && !self.modal_active() {

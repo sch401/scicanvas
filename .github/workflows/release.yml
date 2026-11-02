@@ -1,0 +1,75 @@
+name: Windows release draft
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+jobs:
+  package:
+    runs-on: windows-latest
+    env:
+      CARGO_INCREMENTAL: 0
+      DOTNET_CLI_TELEMETRY_OPTOUT: 1
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - name: Rust 工具链
+        run: |
+          rustup toolchain install stable --profile minimal
+          rustup default stable
+      - name: 下载 Windows 依赖
+        run: cargo fetch --locked --target x86_64-pc-windows-msvc
+      - name: 检查版本标签
+        run: |
+          $version = python -c "import tomllib; print(tomllib.load(open('Cargo.toml','rb'))['workspace']['package']['version'])"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $tag = $env:GITHUB_REF_NAME
+          if ($tag -ne "v$version" -and $tag -ne 'v0.0.0-test') { throw "标签 $tag 与程序版本 $version 不一致" }
+      - name: 安装 WiX
+        run: |
+          dotnet tool install --tool-path "$env:RUNNER_TEMP/wix" wix --version 5.0.2
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          "$env:RUNNER_TEMP/wix" | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+      - name: 构建 MSI 和 ZIP
+        run: |
+          python tools/build_msi.py
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Windows 首帧冒烟
+        timeout-minutes: 1
+        run: |
+          $env:SCICANVAS_SMOKE_TEST = '1'
+          $process = Start-Process ./target/release/scicanvas.exe -PassThru -WindowStyle Hidden
+          $null = $process.Handle
+          if (-not $process.WaitForExit(50000)) {
+            $process.Kill()
+            throw 'SciCanvas 未在首帧后退出'
+          }
+          if ($process.ExitCode -ne 0) { throw "SciCanvas 启动失败：$($process.ExitCode)" }
+      - name: 生成 SHA-256
+        run: |
+          $files = Get-ChildItem target/releases -File | Where-Object { $_.Extension -in '.msi', '.zip' } | Sort-Object Name
+          if ($files.Count -ne 2) { throw '需要一个 MSI 和一个 ZIP' }
+          $lines = $files | ForEach-Object { "$( (Get-FileHash -Algorithm SHA256 -LiteralPath $_.FullName).Hash.ToLower() )  $($_.Name)" }
+          [System.IO.File]::WriteAllLines((Join-Path $PWD 'target/releases/SHA256SUMS.txt'), $lines, [System.Text.UTF8Encoding]::new($false))
+      - name: 上传构建产物
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: SciCanvas-release-candidate
+          retention-days: 14
+          path: |
+            target/releases/*.msi
+            target/releases/*.zip
+            target/releases/SHA256SUMS.txt
+          if-no-files-found: error
+      - name: 创建草稿发布
+        uses: softprops/action-gh-release@3bb12739c298aeb8a4eeaf626c5b8d85266b0e65 # v2
+        with:
+          draft: true
+          fail_on_unmatched_files: true
+          files: |
+            target/releases/*.msi
+            target/releases/*.zip
+            target/releases/SHA256SUMS.txt
