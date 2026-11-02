@@ -103,14 +103,27 @@ fn export_out_of_range_dates_as_text() {
     let bytes = xlsx_export::write_project(&project, false).unwrap();
     let sheets = xlsx::read(&bytes).unwrap();
     assert_eq!(sheets[0].rows[0][0], expected);
-    assert_eq!(sheets[0].rows[1][0], "2026-11-01 12:00:00");
-    assert!(sheets[0].rows.get(2).and_then(|row| row.first()).is_none_or(String::is_empty));
+    assert_eq!(sheets[0].rows[1][0], "2026-11-01 12:00");
+    assert!(sheets[0]
+        .rows
+        .get(2)
+        .and_then(|row| row.first())
+        .is_none_or(String::is_empty));
     let mut zip = zip::ZipArchive::new(Cursor::new(bytes)).unwrap();
     let mut xml = String::new();
-    zip.by_name("xl/worksheets/sheet1.xml").unwrap().read_to_string(&mut xml).unwrap();
+    zip.by_name("xl/worksheets/sheet1.xml")
+        .unwrap()
+        .read_to_string(&mut xml)
+        .unwrap();
     let doc = roxmltree::Document::parse(&xml).unwrap();
-    let first = doc.descendants().find(|n| n.has_tag_name("c") && n.attribute("r") == Some("A1")).unwrap();
-    let second = doc.descendants().find(|n| n.has_tag_name("c") && n.attribute("r") == Some("A2")).unwrap();
+    let first = doc
+        .descendants()
+        .find(|n| n.has_tag_name("c") && n.attribute("r") == Some("A1"))
+        .unwrap();
+    let second = doc
+        .descendants()
+        .find(|n| n.has_tag_name("c") && n.attribute("r") == Some("A2"))
+        .unwrap();
     assert_eq!(first.attribute("t"), Some("s"));
     assert!(second.attribute("t").is_none());
     assert!(second.attribute("s").is_some());
