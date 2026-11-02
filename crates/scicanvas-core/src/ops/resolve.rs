@@ -69,9 +69,10 @@ pub fn get_xy(book: &Book, item: &Item) -> (Vec<f64>, Vec<f64>, Vec<usize>) {
         Some((a, b)) => (a, (b + 1).min(n)),
         None => (0, n),
     };
+    let mask = if item.visible_only { book.visible_mask() } else { None };
     let (mut xs, mut ys, mut idx) = (vec![], vec![], vec![]);
     for i in i0..i1 {
-        if item.visible_only && !book.row_visible(i) {
+        if !crate::filter::visible_at(mask.as_deref(), i) {
             continue;
         }
         let x = match &xv {
@@ -277,11 +278,13 @@ impl Project {
                 let col = book.column(&item.y).ok_or("找不到数据列")?;
                 let mut values = col.values();
                 if item.visible_only {
+                    let mask = book.visible_mask();
                     values = values
                         .into_iter()
                         .enumerate()
                         .filter(|(row, _)| {
-                            item.rows.is_none_or(|(a, b)| *row >= a && *row <= b) && book.row_visible(*row)
+                            item.rows.is_none_or(|(a, b)| *row >= a && *row <= b)
+                                && crate::filter::visible_at(mask.as_deref(), *row)
                         })
                         .map(|(_, value)| value)
                         .collect();
