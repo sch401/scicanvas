@@ -845,6 +845,11 @@ pub fn save(path: &Path, project: &Project) -> Result<(), String> {
     write_atomic(path, &content, "项目文件名为空", "保存项目失败：")
 }
 
+/// 先写临时文件再替换，失败时不破坏已有文件。
+pub fn write_file_atomic(path: &Path, content: &[u8]) -> Result<(), String> {
+    write_atomic(path, content, "文件名为空", "写入文件失败：")
+}
+
 fn write_atomic(path: &Path, content: &[u8], missing_name: &str, failure_prefix: &str) -> Result<(), String> {
     write_atomic_with(path, missing_name, failure_prefix, |file| {
         file.write_all(content).map_err(|e| e.to_string())
@@ -1237,6 +1242,26 @@ pub mod session {
 #[cfg(test)]
 mod review_session_tests {
     use super::*;
+
+    #[test]
+    fn atomic_export_replaces_file_without_leaving_temporary_files() {
+        let directory = std::env::temp_dir().join(format!(
+            "scicanvas-atomic-export-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        std::fs::create_dir(&directory).unwrap();
+        let path = directory.join("output.svg");
+        write_file_atomic(&path, b"old").unwrap();
+        write_file_atomic(&path, b"new").unwrap();
+        assert_eq!(std::fs::read(&path).unwrap(), b"new");
+        assert_eq!(std::fs::read_dir(&directory).unwrap().count(), 1);
+        std::fs::remove_file(path).unwrap();
+        std::fs::remove_dir(directory).unwrap();
+    }
     #[test]
     fn recovery_is_a_readable_project_and_settings_bound_recent_files() {
         let directory = std::env::temp_dir().join(format!(

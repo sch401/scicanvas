@@ -977,7 +977,7 @@ impl SciApp {
             return;
         };
         self.settings.last_dir = path.parent().map(std::path::Path::to_path_buf);
-        self.status = match std::fs::write(&path, content) {
+        self.status = match scicanvas_core::project_file::write_file_atomic(&path, content.as_bytes()) {
             Ok(()) => format!("已导出 {}", path.display()),
             Err(e) => format!("导出失败：{}", e),
         };
@@ -998,7 +998,7 @@ impl SciApp {
         self.settings.last_dir = path.parent().map(std::path::Path::to_path_buf);
         // Finish conversion and font checks before opening/replacing the chosen output file.
         let result = crate::export::pdf_bytes(&svg::render_page(g, &self.project))
-            .and_then(|bytes| std::fs::write(&path, bytes).map_err(|e| e.to_string()));
+            .and_then(|bytes| scicanvas_core::project_file::write_file_atomic(&path, &bytes));
         self.status = match result {
             Ok(()) => format!("已导出 {}（矢量 PDF，已嵌入字体）", path.display()),
             Err(e) => format!("导出失败：{e}"),
@@ -1030,7 +1030,7 @@ impl SciApp {
         };
         let result = crate::export::rasterize(&svg::render_page(&g, &self.project), dpi).and_then(|pixmap| {
             let bytes = crate::export::png_bytes(&pixmap, dpi)?;
-            std::fs::write(&path, bytes).map_err(|e| e.to_string())?;
+            scicanvas_core::project_file::write_file_atomic(&path, &bytes)?;
             Ok((pixmap.width(), pixmap.height()))
         });
         self.status = match result {
@@ -1055,7 +1055,7 @@ impl SciApp {
             return;
         };
         self.settings.last_dir = path.parent().map(std::path::Path::to_path_buf);
-        self.status = match std::fs::write(&path, content) {
+        self.status = match scicanvas_core::project_file::write_file_atomic(&path, content.as_bytes()) {
             Ok(()) => format!("已导出 {}（{rows} 行 × {cols} 列）", path.display()),
             Err(e) => format!("导出失败：{e}"),
         };
