@@ -4005,7 +4005,7 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "图形 → 导出 PNG：SVG 版面经 resvg 栅格化，可选 150/300/600/1200 dpi 或自定义；写入 pHYs 物理分辨率，像素尺寸按页面毫米换算；中文回退到系统字体；字体集与屏幕/核心度量共用同一字节，SVG 使用自然字宽和明确基线，支持科学文字分段字号/上下标偏移/粗斜体",
-  "verify": "自动化回归核对像素尺寸、pHYs、可解码和绘制内容；插入 Word 的实际尺寸待人工验收；字体实际字节匹配及 96/300/600 DPI 标题栅格边界回归；科学文字真实字形、屏幕/SVG 基线对照与 96/300/600 DPI 边界回归",
+  "verify": "自动化回归核对像素尺寸、pHYs、可解码和绘制内容；插入 Word 的实际尺寸待人工验收；字体实际字节匹配及 96/300/600 DPI 标题栅格边界回归；科学文字真实字形、屏幕/SVG 基线对照与 96/300/600 DPI 边界回归；导出样例（SVG / 300 dpi PNG / PDF）见 docs/parity/export，供目视复核",
   "id": "F227",
   "milestone": "M1 日常够用",
   "needs": [
@@ -4021,7 +4021,11 @@
     "build": ""
    },
    "auto": [
-    "crates/scicanvas/src/export.rs::png_size_and_resolution_follow_page_millimetres_and_dpi"
+    "crates/scicanvas/src/export.rs::png_size_and_resolution_follow_page_millimetres_and_dpi",
+    "crates/scicanvas/src/export.rs::committed_export_samples_keep_page_size_and_resolution"
+   ],
+   "visual": [
+    "docs/parity/export/README.md"
    ]
   }
  },
@@ -4032,7 +4036,7 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "文件页、功能区、图形右键和命令搜索导出 PDF；复用页面 SVG 为矢量，保持毫米尺寸、裁剪、透明面积、双轴、多图层与科学文字；嵌入实际字体子集并保留 Unicode 文本。按实际使用字体的 fsType 拒绝受限/仅位图/禁止子集等权限，导出不改项目；自由文字和手动图例沿用相同页面比例位置",
-  "verify": "14 图型+科学文字/中文/误差棒/双轴+多面板/插图共 16 样例回归；独立 pypdf 检查字体流、Unicode、页面尺寸和无页面位图，Poppler 渲染与 PNG 对照并逐图查看；实际打印与 Windows 文件对话框人工验收待做；新增自由文字和手动图例的 PDF/PNG 独立渲染对照",
+  "verify": "14 图型+科学文字/中文/误差棒/双轴+多面板/插图共 16 样例回归；独立 pypdf 检查字体流、Unicode、页面尺寸和无页面位图，Poppler 渲染与 PNG 对照并逐图查看；实际打印与 Windows 文件对话框人工验收待做；新增自由文字和手动图例的 PDF/PNG 独立渲染对照；导出样例（SVG / 300 dpi PNG / PDF）见 docs/parity/export，供目视复核",
   "id": "F228",
   "milestone": "M1 日常够用",
   "sub_items": {
@@ -4056,7 +4060,11 @@
     "build": ""
    },
    "auto": [
-    "crates/scicanvas/src/export.rs::pdf_exports_vectors_embedded_fonts_and_page_sizes_for_every_preset"
+    "crates/scicanvas/src/export.rs::pdf_exports_vectors_embedded_fonts_and_page_sizes_for_every_preset",
+    "crates/scicanvas/src/export.rs::committed_export_samples_keep_page_size_and_resolution"
+   ],
+   "visual": [
+    "docs/parity/export/README.md"
    ]
   }
  },
@@ -4105,7 +4113,7 @@
   "pri": "P0",
   "status": "已实现待验收",
   "how": "复制图形（Ctrl+J）：按 300 dpi 栅格化后经 arboard 写入剪贴板位图；矢量 EMF 待评估",
-  "verify": "与 PNG 共用栅格化回归；粘贴到 Word / PPT 待人工验收",
+  "verify": "剪贴板位图按 300 dpi 页面尺寸生成非预乘 RGBA 的自动测试；粘贴到 Word / PPT 待人工验收",
   "id": "F231",
   "milestone": "M1 日常够用",
   "needs": [
@@ -4113,6 +4121,9 @@
    "manual"
   ],
   "evidence": {
+   "auto": [
+    "crates/scicanvas/src/export.rs::clipboard_copy_uses_a_300_dpi_straight_rgba_page_image"
+   ],
    "manual": {
     "checklist": "docs/acceptance/import_export.md#F231",
     "result": "待做",

@@ -148,12 +148,17 @@ pub fn straight_rgba(pixmap: &Pixmap) -> Vec<u8> {
         .collect()
 }
 
-pub fn copy_to_clipboard(pixmap: &Pixmap) -> Result<(), String> {
-    let image = arboard::ImageData {
+/// 剪贴板位图：非预乘 RGBA，尺寸与栅格化结果一致。
+pub fn clipboard_image(pixmap: &Pixmap) -> arboard::ImageData<'static> {
+    arboard::ImageData {
         width: pixmap.width() as usize,
         height: pixmap.height() as usize,
         bytes: straight_rgba(pixmap).into(),
-    };
+    }
+}
+
+pub fn copy_to_clipboard(pixmap: &Pixmap) -> Result<(), String> {
+    let image = clipboard_image(pixmap);
     arboard::Clipboard::new()
         .and_then(|mut c| c.set_image(image))
         .map_err(|e| format!("无法写入剪贴板：{e}"))
@@ -559,6 +564,78 @@ mod tests {
             let back = Pixmap::decode_png(&png).unwrap();
             assert_eq!((back.width(), back.height()), (pixmap.width(), pixmap.height()));
         }
+    }
+
+    #[test]
+    fn clipboard_copy_uses_a_300_dpi_straight_rgba_page_image() {
+        let p = Project::sample();
+        let g = &p.graphs[0];
+        let pixmap = rasterize(&svg::render_page(g, &p), CLIPBOARD_DPI).unwrap();
+        let image = clipboard_image(&pixmap);
+        let expected = |mm: f64| (mm / 25.4 * f64::from(CLIPBOARD_DPI)).round() as usize;
+        assert!(image.width.abs_diff(expected(g.page.width_mm)) <= 1);
+        assert!(image.height.abs_diff(expected(g.page.height_mm)) <= 1);
+        assert_eq!(image.bytes.len(), image.width * image.height * 4);
+        assert_eq!(&image.bytes[0..4], &[255, 255, 255, 255], "页面左上角是不透明白色");
+    }
+
+    /// docs/parity/export 下导出样例使用的图：示例项目第一张图，单栏 89 × 80 mm。
+    fn export_sample() -> (Project, String) {
+        let mut p = Project::sample();
+        p.graphs[0].page.width_mm = 89.0;
+        p.graphs[0].page.height_mm = 80.0;
+        let page = svg::render_page(&p.graphs[0], &p);
+        (p, page)
+    }
+
+    fn export_samples_directory() -> std::path::PathBuf {
+        std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../docs/parity/export")
+    }
+
+    #[test]
+    #[ignore = "维护者在 Windows 上显式生成导出样例，目视复核后提交"]
+    fn update_export_samples() {
+        let (_, page) = export_sample();
+        let dir = export_samples_directory();
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("sample.svg"), &page).unwrap();
+        let pixmap = rasterize(&page, 300).unwrap();
+        std::fs::write(dir.join("sample-300dpi.png"), png_bytes(&pixmap, 300).unwrap()).unwrap();
+        std::fs::write(dir.join("sample.pdf"), pdf_bytes(&page).unwrap()).unwrap();
+    }
+
+    #[test]
+    fn committed_export_samples_keep_page_size_and_resolution() {
+        let (p, page) = export_sample();
+        let g = &p.graphs[0];
+        let dir = export_samples_directory();
+        assert!(dir.join("sample.svg").is_file() && dir.join("README.md").is_file());
+        let png = std::fs::read(dir.join("sample-300dpi.png")).unwrap();
+        let committed = Pixmap::decode_png(&png).unwrap();
+        let current = rasterize(&page, 300).unwrap();
+        assert_eq!(
+            (committed.width(), committed.height()),
+            (current.width(), current.height()),
+            "页面尺寸变了：重新生成导出样例并复核"
+        );
+        let phys = chunk(&png, b"pHYs").expect("pHYs chunk");
+        assert_eq!(
+            u32::from_be_bytes(phys[0..4].try_into().unwrap()),
+            (300.0_f64 / 0.0254).round() as u32
+        );
+        let pdf = std::fs::read(dir.join("sample.pdf")).unwrap();
+        assert!(pdf.starts_with(b"%PDF-1."));
+        let structure = String::from_utf8_lossy(&pdf);
+        let box_text = structure
+            .split("/MediaBox [")
+            .nth(1)
+            .unwrap()
+            .split(']')
+            .next()
+            .unwrap();
+        let dimensions: Vec<f64> = box_text.split_whitespace().map(|v| v.parse().unwrap()).collect();
+        assert!((dimensions[2] - g.page.width_mm * 72.0 / 25.4).abs() < 0.01);
+        assert!((dimensions[3] - g.page.height_mm * 72.0 / 25.4).abs() < 0.01);
     }
 
     #[test]
