@@ -42,7 +42,7 @@ impl PointStyleColumns {
         book: &Book,
         rows: std::ops::Range<usize>,
         color_map: crate::colormap::ColorMap,
-        visible_only: bool,
+        mask: Option<&[bool]>,
     ) -> Self {
         let column = |key: Option<&String>| key.and_then(|key| book.column(key));
         let color = column(style.and_then(|style| style.color_column.as_ref()));
@@ -63,7 +63,7 @@ impl PointStyleColumns {
                 .unwrap_or_default()
                 .iter()
                 .enumerate()
-                .filter(|(offset, value)| value.is_finite() && (!visible_only || book.row_visible(rows.start + offset)))
+                .filter(|(offset, value)| value.is_finite() && crate::filter::visible_at(mask, rows.start + offset))
                 .map(|(_, value)| *value)
                 .fold(None, |range, value| {
                     Some(range.map_or((value, value), |(lo, hi): (f64, f64)| (lo.min(value), hi.max(value))))
@@ -605,8 +605,9 @@ impl PlotSpec {
                 None => (0, n),
             };
             let filtered = self.visible_only && !c.independent_rows;
+            let mask = if filtered { cbook.visible_mask() } else { None };
             let point_style_columns =
-                PointStyleColumns::new(plot.style.as_ref(), cbook, i0..i1, self.color_map, filtered);
+                PointStyleColumns::new(plot.style.as_ref(), cbook, i0..i1, self.color_map, mask.as_deref());
             let mut pts = Vec::with_capacity(i1.saturating_sub(i0));
             let error_values = [crate::Role::XError, crate::Role::YError].map(|role| {
                 if mapping.line_only || c.derived_from.is_some() {
@@ -635,7 +636,7 @@ impl PlotSpec {
             // 分类列做 X：按类别显示顺序放在 1、2、3…
             let categories = xv.and_then(|v| v.data.plot_category_positions());
             for i in i0..i1 {
-                if filtered && !cbook.row_visible(i) {
+                if !crate::filter::visible_at(mask.as_deref(), i) {
                     continue;
                 }
                 let x = match (&categories, xv) {

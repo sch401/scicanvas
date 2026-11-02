@@ -306,3 +306,77 @@ fn direct_analyses_use_visible_rows_without_changing_hidden_data() {
         Some(100.0)
     );
 }
+
+#[test]
+fn visible_mask_matches_row_visible() {
+    let mut project = Project::sample();
+    let book = project.book_mut(1).unwrap();
+    // A 比其他列短，B 有空单元格，C 是分类列
+    book.columns[0].data = vec!["1".into(), "".into(), "3".into(), "4".into(), "5".into()].into();
+    book.columns[1].data = ColumnData::Text(
+        ["apple", "", "apricot", "pear", "apple", "grape", "ap"]
+            .map(str::to_string)
+            .to_vec(),
+    )
+    .into();
+    book.columns[2].data = ColumnData::Text(
+        ["red", "blue", "", "red", "green", "red", "blue"]
+            .map(str::to_string)
+            .to_vec(),
+    )
+    .converted(DataKind::Category)
+    .unwrap()
+    .into();
+    let check = |book: &scicanvas_core::Book| {
+        let expected: Vec<bool> = (0..book.nrows()).map(|row| book.row_visible(row)).collect();
+        match book.visible_mask() {
+            Some(mask) => assert_eq!(mask, expected),
+            None => assert!(expected.iter().all(|v| *v)),
+        }
+        assert_eq!(
+            book.visible_rows(),
+            (0..book.nrows())
+                .filter(|&row| book.row_visible(row))
+                .collect::<Vec<_>>()
+        );
+    };
+    // 没有筛选
+    check(book);
+    let mut filter = Filter::default();
+    filter.rules.insert(
+        "A".into(),
+        FilterRule::Number {
+            min: Some(2.0),
+            max: None,
+        },
+    );
+    book.filter = Some(filter.clone());
+    check(book);
+    filter
+        .rules
+        .insert("B".into(), FilterRule::Text { contains: "ap".into() });
+    book.filter = Some(filter.clone());
+    check(book);
+    filter.rules.insert(
+        "C".into(),
+        FilterRule::Category {
+            values: vec!["red".into(), String::new()],
+        },
+    );
+    book.filter = Some(filter.clone());
+    check(book);
+    // 规则引用的列不存在：全部不可见
+    filter.rules.insert(
+        "ZZ".into(),
+        FilterRule::Text {
+            contains: String::new(),
+        },
+    );
+    book.filter = Some(filter);
+    check(book);
+    assert!(book.visible_rows().is_empty());
+    // 空规则集：全部可见
+    book.filter = Some(Filter::default());
+    check(book);
+    assert_eq!(book.visible_rows().len(), book.nrows());
+}

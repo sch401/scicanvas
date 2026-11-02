@@ -40,6 +40,25 @@ impl Filter {
     }
 }
 
+/// 一条规则对某一行是否匹配。超出列长度的行按缺失值处理。
+fn rule_matches(column: &crate::Column, rule: &FilterRule, row: usize) -> bool {
+    match rule {
+        FilterRule::Number { min, max } => column.data.f64_at(row).is_some_and(|value| {
+            value.is_finite() && min.is_none_or(|min| value >= min) && max.is_none_or(|max| value <= max)
+        }),
+        FilterRule::Text { contains } => column.data.text_at(row).contains(contains.as_str()),
+        FilterRule::Category { values } => {
+            let text = column.data.text_at(row);
+            values.iter().any(|value| value == text.as_ref())
+        }
+    }
+}
+
+/// 按 `Book::visible_mask()` 的结果判断某行是否可见；mask 为 None 表示没有筛选。
+pub fn visible_at(mask: Option<&[bool]>, row: usize) -> bool {
+    mask.is_none_or(|mask| mask.get(row).copied().unwrap_or(false))
+}
+
 impl Book {
     /// 有筛选，且选择了“绘图和分析只使用可见行”。
     pub fn uses_visible_rows(&self) -> bool {
@@ -48,19 +67,31 @@ impl Book {
 
     pub fn row_visible(&self, row: usize) -> bool {
         self.filter.as_ref().is_none_or(|filter| {
-            filter.rules.iter().all(|(key, rule)| {
-                let Some(column) = self.column(key) else { return false };
-                match rule {
-                    FilterRule::Number { min, max } => column.data.f64_at(row).is_some_and(|value| {
-                        value.is_finite() && min.is_none_or(|min| value >= min) && max.is_none_or(|max| value <= max)
-                    }),
-                    FilterRule::Text { contains } => column.data.text_at(row).contains(contains),
-                    FilterRule::Category { values } => {
-                        values.iter().any(|value| value == column.data.text_at(row).as_ref())
-                    }
-                }
-            })
+            filter
+                .rules
+                .iter()
+                .all(|(key, rule)| self.column(key).is_some_and(|column| rule_matches(column, rule, row)))
         })
+    }
+
+    /// 一次算出每一行是否可见；没有筛选时返回 None，表示全部可见。
+    /// 长度为 `nrows()`，更靠后的行按不可见处理。
+    pub fn visible_mask(&self) -> Option<Vec<bool>> {
+        let filter = self.filter.as_ref()?;
+        let n = self.nrows();
+        let rules: Option<Vec<(&crate::Column, &FilterRule)>> = filter
+            .rules
+            .iter()
+            .map(|(key, rule)| self.column(key).map(|column| (column, rule)))
+            .collect();
+        let Some(rules) = rules else {
+            return Some(vec![false; n]);
+        };
+        Some(
+            (0..n)
+                .map(|row| rules.iter().all(|(column, rule)| rule_matches(column, rule, row)))
+                .collect(),
+        )
     }
 
     /// Fingerprint filter rules and input columns for the plot cache.
@@ -93,16 +124,20 @@ impl Book {
 
     /// 数值列按原始行号应用筛选，保留可见行的缺失值。
     pub fn visible_values(&self, column: &crate::Column) -> Vec<f64> {
+        let mask = self.visible_mask();
         column
             .values()
             .into_iter()
             .enumerate()
-            .filter_map(|(row, value)| self.row_visible(row).then_some(value))
+            .filter_map(|(row, value)| visible_at(mask.as_deref(), row).then_some(value))
             .collect()
     }
 
     pub fn visible_rows(&self) -> Vec<usize> {
-        (0..self.nrows()).filter(|&row| self.row_visible(row)).collect()
+        let mask = self.visible_mask();
+        (0..self.nrows())
+            .filter(|&row| visible_at(mask.as_deref(), row))
+            .collect()
     }
 
     pub fn visible_range_rows(&self, first: usize, last: usize) -> Vec<usize> {
@@ -112,8 +147,9 @@ impl Book {
         if self.nrows() == 0 {
             return Vec::new();
         }
+        let mask = self.visible_mask();
         (first..=last.min(self.nrows().saturating_sub(1)))
-            .filter(|&row| self.row_visible(row))
+            .filter(|&row| visible_at(mask.as_deref(), row))
             .collect()
     }
 
