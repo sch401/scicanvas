@@ -8,6 +8,9 @@ use std::collections::BTreeMap;
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Filter {
     pub rules: BTreeMap<String, FilterRule>,
+    /// 绘图和分析只使用筛选后的可见行。
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "std::ops::Not::not"))]
+    pub visible_only: bool,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -38,6 +41,11 @@ impl Filter {
 }
 
 impl Book {
+    /// 有筛选，且选择了“绘图和分析只使用可见行”。
+    pub fn uses_visible_rows(&self) -> bool {
+        self.filter.as_ref().is_some_and(|filter| filter.visible_only)
+    }
+
     pub fn row_visible(&self, row: usize) -> bool {
         self.filter.as_ref().is_none_or(|filter| {
             filter.rules.iter().all(|(key, rule)| {

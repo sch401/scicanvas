@@ -115,7 +115,6 @@ pub struct SheetState {
     pub frozen_scroll_y: f32,
     pub viewport_width: f32,
     pub filter_cache: Option<FilterCache>,
-    pub visible_only: bool,
 }
 
 impl SheetState {
