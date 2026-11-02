@@ -212,6 +212,40 @@ fn visible_only_analysis_plot_and_recalculation_keep_original_rows() {
     assert_eq!(series[0].rows, vec![2, 3, 4]);
 }
 
+#[cfg(feature = "serde")]
+#[test]
+fn visible_only_setting_is_saved_with_the_filter() {
+    use scicanvas_core::project_file;
+    let mut project = Project::sample();
+    let mut filter = Filter::default();
+    filter.rules.insert(
+        "A".into(),
+        FilterRule::Number {
+            min: Some(1.0),
+            max: Some(3.0),
+        },
+    );
+    filter.visible_only = true;
+    project.books[0].filter = Some(filter);
+    assert!(project.books[0].uses_visible_rows());
+    let loaded = project_file::from_scv(&project_file::to_scv(&project).unwrap()).unwrap();
+    assert!(loaded.books[0].uses_visible_rows());
+    assert_eq!(loaded, project);
+    // 没有 visible_only 字段的 v23 文件按 false 读取
+    let mut json: serde_json::Value = serde_json::from_str(&project_file::to_json(&project).unwrap()).unwrap();
+    json["books"][0]["filter"]
+        .as_object_mut()
+        .unwrap()
+        .remove("visible_only");
+    let loaded = project_file::from_json(&json.to_string()).unwrap();
+    assert!(loaded.books[0].filter.is_some());
+    assert!(!loaded.books[0].uses_visible_rows());
+    // false 时不写入
+    project.books[0].filter.as_mut().unwrap().visible_only = false;
+    let json: serde_json::Value = serde_json::from_str(&project_file::to_json(&project).unwrap()).unwrap();
+    assert!(json["books"][0]["filter"].get("visible_only").is_none());
+}
+
 #[test]
 fn direct_analyses_use_visible_rows_without_changing_hidden_data() {
     use scicanvas_core::ops::{ColumnOp, Operand};

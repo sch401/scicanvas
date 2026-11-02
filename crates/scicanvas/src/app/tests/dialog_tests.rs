@@ -1888,8 +1888,8 @@ fn regression_uses_only_visible_rows_when_requested() {
             max: Some(5.0),
         },
     );
+    filter.visible_only = true;
     book.filter = Some(filter);
-    app.sheets.entry(1).or_default().visible_only = true;
     app.regression();
     let Some(Dialog::Table { note, .. }) = &app.dialog else {
         panic!("应显示回归报告：{}", app.status)
@@ -1909,8 +1909,8 @@ fn ifft_rejects_filtered_spectra_when_only_visible_rows_are_selected() {
             max: None,
         },
     );
+    filter.visible_only = true;
     app.project.book_mut(1).unwrap().filter = Some(filter);
-    app.sheets.entry(1).or_default().visible_only = true;
     app.open_ifft_dialog();
     assert!(app.dialog.is_none());
     assert!(app.status.contains("IFFT 需要完整频谱"));

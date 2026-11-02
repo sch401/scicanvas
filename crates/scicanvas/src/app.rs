@@ -501,7 +501,7 @@ impl SciApp {
         }
         let Some(bid) = self.active_book() else { return };
         let (sel, rows) = self.picked(bid);
-        let visible_only = self.sheets.get(&bid).is_some_and(|state| state.visible_only);
+        let visible_only = self.project.book(bid).is_some_and(|book| book.uses_visible_rows());
         match self.project.plot_from_selection(bid, &sel, t) {
             Ok((gid, msg)) => {
                 if let Some(g) = self.project.graph_mut(gid) {
@@ -522,7 +522,7 @@ impl SciApp {
     pub(crate) fn plot_panels(&mut self, panels: scicanvas_core::Panels) {
         let Some(bid) = self.active_book() else { return };
         let (sel, rows) = self.picked(bid);
-        let visible_only = self.sheets.get(&bid).is_some_and(|state| state.visible_only);
+        let visible_only = self.project.book(bid).is_some_and(|book| book.uses_visible_rows());
         match self.project.plot_panels(bid, &sel, PlotType::Line, panels) {
             Ok((gid, msg)) => {
                 if let Some(g) = self.project.graph_mut(gid) {
@@ -1548,7 +1548,7 @@ impl SciApp {
         self.active_book_id().map(|id| {
             let (selected, rows) = self.picked(id);
             let source = Source::Book { id, selected, rows };
-            if self.sheets.get(&id).is_some_and(|state| state.visible_only) {
+            if self.project.book(id).is_some_and(|book| book.uses_visible_rows()) {
                 Source::Visible(Box::new(source))
             } else {
                 source
@@ -1643,7 +1643,7 @@ impl SciApp {
             ) {
                 Ok(mut spec) => {
                     spec.rows = rows;
-                    spec.visible_only = self.sheets.get(&id).is_some_and(|state| state.visible_only);
+                    spec.visible_only = self.project.book(id).is_some_and(|book| book.uses_visible_rows());
                     self.plot_draft = Some(spec);
                 }
                 Err(e) => self.status = e,
