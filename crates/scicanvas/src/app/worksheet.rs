@@ -468,6 +468,7 @@ impl SciApp {
                 .map(|c| (c.key.clone(), c.display_name().to_owned()))
                 .collect(),
             error: None,
+            filtered: book.filter.is_some(),
         });
     }
 
@@ -513,6 +514,7 @@ impl SciApp {
             a: 1.0,
             b: 1.0,
             rows: if book.nrows() > 0 { book.nrows() } else { 10 },
+            filtered: book.filter.is_some(),
         });
     }
 
@@ -534,6 +536,7 @@ impl SciApp {
     /// 工作表：列标题、长名称 / 单位 / 注释三行和数据区。
     /// 数据区像 Excel 一样：单击选格、拖动选区域、拖动行号选整行、拖动列标题选多列，
     /// 双击或 F2 或直接打字进入编辑。
+    #[allow(clippy::too_many_lines)]
     pub(super) fn book_ui(&mut self, ui: &mut egui::Ui, id: u64) {
         let pal = self.pal;
         let active = self.active == Some(id);
@@ -555,6 +558,22 @@ impl SciApp {
             if st.edit.is_none() && st.range.is_some_and(|range| rows.binary_search(&range.a.r).is_err()) {
                 st.range = rows.first().map(|&row| Range::single(st.range.unwrap().a.c, row));
             }
+        }
+        // 有筛选时在表格上方说明显示了多少行，以及分析是否只用可见行
+        let mut visible_toggle = None;
+        if let (Some(rows), Some(book)) = (&visible_rows, self.project.book(id)) {
+            let mut use_visible = book.uses_visible_rows();
+            let total = book.nrows();
+            let enabled = !self.modal_active();
+            ui.horizontal(|ui| {
+                ui.label(RichText::new(format!("已筛选：显示 {} / {} 行", rows.len(), total)).color(pal.accent));
+                if ui
+                    .add_enabled(enabled, egui::Checkbox::new(&mut use_visible, "绘图和分析只使用可见行"))
+                    .changed()
+                {
+                    visible_toggle = Some(use_visible);
+                }
+            });
         }
 
         // 表格本身是一个可获得键盘焦点的部件：方向键、Tab、Esc 留给表格，不让 egui 拿去切换焦点
@@ -687,6 +706,9 @@ impl SciApp {
         frame.draw(ui, book, preview, &mut self.history_group);
         st.frozen_scroll_y = frame.frozen_scroll_y;
         self.finish_sheet_frame(ui, id, st, frame, &keys);
+        if let Some(visible_only) = visible_toggle {
+            self.set_filter_visible_only(id, visible_only);
+        }
     }
 
     fn finish_sheet_frame(
@@ -908,7 +930,7 @@ impl SciApp {
                 if matches!(act, ColAction::Filter) {
                     self.open_filter_dialog(id, &key);
                 } else {
-                    let visible_only = self.sheets.get(&id).is_some_and(|s| s.visible_only);
+                    let visible_only = self.project.book(id).is_some_and(|book| book.uses_visible_rows());
                     self.apply_filter(id, key, None, visible_only);
                 }
                 return;

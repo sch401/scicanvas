@@ -217,7 +217,7 @@ impl SciApp {
     pub(crate) fn open_ifft_dialog(&mut self) {
         let Some(id) = self.active_book() else { return };
         let Some(book) = self.project.book(id) else { return };
-        if book.filter.is_some() && self.sheets.get(&id).is_some_and(|state| state.visible_only) {
+        if book.uses_visible_rows() {
             self.status = "IFFT 需要完整频谱，请取消只使用可见行后重试".into();
             return;
         }
@@ -369,7 +369,7 @@ impl SciApp {
                 return;
             }
         };
-        let visible_only = self.sheets.get(&id).is_some_and(|state| state.visible_only);
+        let visible_only = self.project.book(id).is_some_and(|book| book.uses_visible_rows());
         self.edit_with(
             "列运算",
             |project| {
@@ -496,7 +496,7 @@ impl SciApp {
     /// 自相关（选一列）或互相关（选两列）。
     pub(crate) fn correlation_function(&mut self) {
         let Some((id, keys)) = self.ttest_columns() else { return };
-        let visible_only = self.sheets.get(&id).is_some_and(|state| state.visible_only);
+        let visible_only = self.project.book(id).is_some_and(|book| book.uses_visible_rows());
         match self
             .project
             .correlation_function_with_visibility(id, &keys, visible_only)
@@ -526,7 +526,7 @@ impl SciApp {
     /// 对点选的各列逐行统计（平行样的均值、标准差等）。
     pub(crate) fn row_stats(&mut self) {
         let Some((id, keys)) = self.ttest_columns() else { return };
-        let visible_only = self.sheets.get(&id).is_some_and(|state| state.visible_only);
+        let visible_only = self.project.book(id).is_some_and(|book| book.uses_visible_rows());
         match self.project.row_stats_with_visibility(id, &keys, visible_only) {
             Ok(made) => self.status = format!("行统计结果在新列 {}（标准差已设为 Y 误差列）", made.join(", ")),
             Err(e) => self.status = format!("{e}：请 Ctrl+单击选中平行样的各列"),
@@ -542,7 +542,7 @@ impl SciApp {
         }
         let book = self.project.book(id).unwrap();
         let (ykey, xkeys) = keys.split_last().unwrap();
-        let visible_only = self.sheets.get(&id).is_some_and(|state| state.visible_only);
+        let visible_only = book.uses_visible_rows();
         let values = |column: &scicanvas_core::Column| {
             if visible_only {
                 book.visible_values(column)
@@ -687,7 +687,7 @@ impl SciApp {
             self.status = "请按顺序 Ctrl+单击选中三列：标准浓度（X）、标准响应（Y）、样品响应".into();
             return;
         }
-        let visible_only = self.sheets.get(&id).is_some_and(|state| state.visible_only);
+        let visible_only = self.project.book(id).is_some_and(|book| book.uses_visible_rows());
         match self
             .project
             .calibrate_with_visibility(id, &keys[0], &keys[1], &keys[2], visible_only)

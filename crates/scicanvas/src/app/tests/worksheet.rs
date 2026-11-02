@@ -1763,3 +1763,25 @@ fn tiff_export_command_opens_resolution_settings() {
     app.run_command("graph.export_tiff");
     assert!(matches!(app.dialog, Some(Dialog::Tiff { dpi: 600, .. })));
 }
+
+#[test]
+fn set_values_and_fill_dialogs_know_the_sheet_is_filtered() {
+    let mut app = app();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["B".into()]);
+    app.open_set_values_dialog();
+    assert!(matches!(app.dialog, Some(Dialog::SetValues { filtered: false, .. })));
+    let mut filter = scicanvas_core::filter::Filter::default();
+    filter.rules.insert(
+        "A".into(),
+        scicanvas_core::filter::FilterRule::Number {
+            min: Some(2.0),
+            max: None,
+        },
+    );
+    app.project.book_mut(1).unwrap().filter = Some(filter);
+    app.open_set_values_dialog();
+    assert!(matches!(app.dialog, Some(Dialog::SetValues { filtered: true, .. })));
+    app.open_fill_dialog();
+    assert!(matches!(app.dialog, Some(Dialog::Fill { filtered: true, .. })));
+}
