@@ -33,6 +33,7 @@ impl Project {
                 y: item.y.clone(),
                 x: item.x.clone(),
                 rows: item.rows,
+                visible_only: item.visible_only,
                 mode: RecalcMode::Auto,
             });
             c.data = vec![String::new(); book.nrows()].into();

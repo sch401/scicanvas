@@ -308,6 +308,9 @@ fn validate(project: &Project) -> Result<(), String> {
         return Err("Note 名称不能为空".into());
     }
     for book in &project.books {
+        if let Some(filter) = &book.filter {
+            filter.validate(book)?;
+        }
         let mut keys = BTreeSet::new();
         let mut fit_outputs = BTreeSet::new();
         for col in &book.columns {

@@ -1867,3 +1867,51 @@ fn nonlinear_fit_warning_is_visible_in_report() {
     let output = harness.frame(&mut app, vec![]);
     assert!(crate::test_ui::find_text(&output, &warning).is_some());
 }
+
+#[test]
+fn regression_uses_only_visible_rows_when_requested() {
+    let mut app = app();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["A".into(), "B".into()]);
+    let book = app.project.book_mut(1).unwrap();
+    book.columns[0].data = (1..=6).map(|v| v.to_string()).collect::<Vec<_>>().into();
+    book.columns[1].data = [2, 4, 6, 8, 10, 100]
+        .iter()
+        .map(|v| v.to_string())
+        .collect::<Vec<_>>()
+        .into();
+    let mut filter = scicanvas_core::filter::Filter::default();
+    filter.rules.insert(
+        "A".into(),
+        scicanvas_core::filter::FilterRule::Number {
+            min: None,
+            max: Some(5.0),
+        },
+    );
+    book.filter = Some(filter);
+    app.sheets.entry(1).or_default().visible_only = true;
+    app.regression();
+    let Some(Dialog::Table { note, .. }) = &app.dialog else {
+        panic!("应显示回归报告：{}", app.status)
+    };
+    assert!(note.contains("N = 5"), "{note}");
+}
+
+#[test]
+fn ifft_rejects_filtered_spectra_when_only_visible_rows_are_selected() {
+    let mut app = app();
+    app.active = Some(1);
+    let mut filter = scicanvas_core::filter::Filter::default();
+    filter.rules.insert(
+        "A".into(),
+        scicanvas_core::filter::FilterRule::Number {
+            min: Some(1.0),
+            max: None,
+        },
+    );
+    app.project.book_mut(1).unwrap().filter = Some(filter);
+    app.sheets.entry(1).or_default().visible_only = true;
+    app.open_ifft_dialog();
+    assert!(app.dialog.is_none());
+    assert!(app.status.contains("IFFT 需要完整频谱"));
+}

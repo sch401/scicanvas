@@ -12,6 +12,8 @@ pub struct AnalysisColumn {
 /// 分析的输入来自哪里。
 #[derive(Clone, Debug, PartialEq)]
 pub enum Source {
+    /// Apply the source workbook's filter while keeping original row identities.
+    Visible(Box<Source>),
     /// 当前图形里的数据曲线（不含拟合、平滑等结果曲线）。
     Graph(u64),
     /// 指定页面中的图层；Graph 保留为第一图层的兼容入口。
@@ -37,6 +39,7 @@ pub struct Item {
     pub y: String,
     pub x: Option<String>,
     pub rows: Option<(usize, usize)>,
+    pub visible_only: bool,
 }
 
 pub struct Resolved {
@@ -68,6 +71,9 @@ pub fn get_xy(book: &Book, item: &Item) -> (Vec<f64>, Vec<f64>, Vec<usize>) {
     };
     let (mut xs, mut ys, mut idx) = (vec![], vec![], vec![]);
     for i in i0..i1 {
+        if item.visible_only && !book.row_visible(i) {
+            continue;
+        }
         let x = match &xv {
             Some(v) => v.get(i).copied().unwrap_or(f64::NAN),
             None => (i + 1) as f64,
@@ -109,6 +115,13 @@ impl Project {
     /// 把分析输入解析成具体的数据组。
     pub fn resolve(&self, src: &Source) -> Result<Resolved, String> {
         match src {
+            Source::Visible(source) => {
+                let mut resolved = self.resolve(source)?;
+                for item in &mut resolved.items {
+                    item.visible_only = true;
+                }
+                Ok(resolved)
+            }
             Source::Graph(gid) | Source::Layer { graph_id: gid, .. } | Source::Curves { graph_id: gid, .. } => {
                 let layer_index = match src {
                     Source::Layer { index, .. } | Source::Curves { index, .. } => *index,
@@ -144,6 +157,7 @@ impl Project {
                             y: curve.y.col,
                             x: curve.x.filter(|x| x.book == source_book.id).map(|x| x.col),
                             rows: curve.rows,
+                            visible_only: false,
                         })
                     })
                     .collect();
@@ -180,6 +194,7 @@ impl Project {
                         y: y.key.clone(),
                         x: x_for(book, y, &cols),
                         rows: *rows,
+                        visible_only: false,
                     })
                     .collect();
                 Ok(Resolved {
@@ -218,6 +233,13 @@ impl Project {
     /// 统计类操作的输入：工作簿、要统计的列（图层里的曲线或工作簿中选中的列，没选时用全部 Y 列）和行范围。
     fn picked_columns(&self, src: &Source) -> Result<Vec<Item>, String> {
         Ok(match src {
+            Source::Visible(source) => {
+                let mut items = self.picked_columns(source)?;
+                for item in &mut items {
+                    item.visible_only = true;
+                }
+                items
+            }
             Source::Graph(_) | Source::Layer { .. } | Source::Curves { .. } => self.resolve(src)?.items,
             Source::Book { id, selected, rows } => {
                 let book = self.book(*id).ok_or("找不到工作簿")?;
@@ -236,6 +258,7 @@ impl Project {
                         y,
                         x: None,
                         rows: *rows,
+                        visible_only: false,
                     })
                     .collect()
             }
@@ -253,7 +276,16 @@ impl Project {
                 let book = self.book(item.book_id).ok_or("找不到工作簿")?;
                 let col = book.column(&item.y).ok_or("找不到数据列")?;
                 let mut values = col.values();
-                if let Some((a, b)) = item.rows {
+                if item.visible_only {
+                    values = values
+                        .into_iter()
+                        .enumerate()
+                        .filter(|(row, _)| {
+                            item.rows.is_none_or(|(a, b)| *row >= a && *row <= b) && book.row_visible(*row)
+                        })
+                        .map(|(_, value)| value)
+                        .collect();
+                } else if let Some((a, b)) = item.rows {
                     values = values.into_iter().skip(a).take(b + 1 - a).collect();
                 }
                 Ok(AnalysisColumn {

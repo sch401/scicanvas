@@ -263,6 +263,7 @@ impl Project {
                 y: item.y.clone(),
                 x: item.x.clone(),
                 rows: item.rows,
+                visible_only: item.visible_only,
                 mode: RecalcMode::Auto,
             });
             let key = self
@@ -306,6 +307,17 @@ impl Project {
     /// 对应不同 X 列时（如原始曲线减拟合曲线）先把 B 线性插值到 A 的 X 上，超出 B 的 X 范围处留空。
     /// 结果不是有限数（除以 0、缺失值）的单元格留空。
     pub fn column_math(&mut self, book_id: u64, a: &str, op: ColumnOp, b: &Operand) -> Result<String, String> {
+        self.column_math_with_visibility(book_id, a, op, b, false)
+    }
+
+    pub fn column_math_with_visibility(
+        &mut self,
+        book_id: u64,
+        a: &str,
+        op: ColumnOp,
+        b: &Operand,
+        visible_only: bool,
+    ) -> Result<String, String> {
         let book = self.book(book_id).ok_or("找不到工作簿")?;
         let ca = book.column(a).ok_or("找不到列 A")?;
         let av = ca.values();
@@ -329,6 +341,7 @@ impl Project {
                         y: k.clone(),
                         x: xb.clone(),
                         rows: None,
+                        visible_only,
                     };
                     let (xs, ys, _) = get_xy(book, &item);
                     let lo = xs.iter().copied().fold(f64::INFINITY, f64::min);
@@ -360,7 +373,11 @@ impl Project {
         let mut data: Vec<String> = av
             .iter()
             .zip(&bv)
-            .map(|(x, y)| {
+            .enumerate()
+            .map(|(row, (x, y))| {
+                if visible_only && !book.row_visible(row) {
+                    return String::new();
+                }
                 let r = op.apply(*x, *y);
                 if r.is_finite() {
                     fmt_num(r)
@@ -386,6 +403,7 @@ impl Project {
             y: a.to_string(),
             x: None,
             rows: None,
+            visible_only: false,
         };
         Ok(self
             .write_result(&item, vec![col], ResultLink::None)?

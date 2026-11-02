@@ -107,6 +107,9 @@ impl SciApp {
     pub(super) fn apply_dialog_action(&mut self, ctx: &egui::Context, action: dialogs::Action) -> bool {
         match action {
             dialogs::Action::FindNext => self.find_next(),
+            dialogs::Action::SetFilter(book, key, rule, visible_only) => {
+                self.apply_filter(book, key, rule, visible_only)
+            }
             dialogs::Action::BatchPlot(graph, books) => {
                 self.create_batch_plots(graph, books);
             }

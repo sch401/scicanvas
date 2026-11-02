@@ -3,7 +3,7 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-pub const PROJECT_VERSION: u32 = 22;
+pub const PROJECT_VERSION: u32 = 23;
 pub const GRAPH_TEMPLATE_VERSION: u32 = 1;
 
 /// 列的绘图角色，对应 Origin 里的 X / Y / 忽略。
@@ -245,6 +245,8 @@ pub struct Book {
     pub id: u64,
     pub name: String,
     pub columns: Vec<Column>,
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Option::is_none"))]
+    pub filter: Option<crate::filter::Filter>,
 }
 
 impl Book {
@@ -253,6 +255,7 @@ impl Book {
             id,
             name: name.into(),
             columns: Vec::new(),
+            filter: None,
         }
     }
 
@@ -960,6 +963,12 @@ impl Project {
                 }
             }
             b.columns.retain(|c| !keys.contains(&c.key));
+            if let Some(filter) = &mut b.filter {
+                filter.rules.retain(|key, _| !keys.contains(key));
+                if filter.rules.is_empty() {
+                    b.filter = None;
+                }
+            }
         }
         for g in &mut self.graphs {
             for layer in g.page.layers_mut() {

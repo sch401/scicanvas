@@ -187,6 +187,7 @@ impl NonlinearRecipe {
             y: op.y.clone(),
             x: op.x.clone(),
             rows: op.rows,
+            visible_only: op.visible_only,
         };
         let (xs, ys, idx) = get_xy(book, &item);
         idx.hash(&mut h);
@@ -203,6 +204,7 @@ impl NonlinearRecipe {
             y: op.y.clone(),
             x: op.x.clone(),
             rows: op.rows,
+            visible_only: op.visible_only,
         };
         book.column(&op.y).ok_or("来源 Y 列已删除")?;
         if let Some(x) = &op.x {
@@ -356,6 +358,8 @@ pub struct Operation {
     pub y: String,
     pub x: Option<String>,
     pub rows: Option<(usize, usize)>,
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "std::ops::Not::not"))]
+    pub visible_only: bool,
     #[cfg_attr(feature = "serde", serde(default))]
     pub mode: RecalcMode,
 }
@@ -372,6 +376,7 @@ impl Operation {
             y: self.y.clone(),
             x: self.x.clone(),
             rows: self.rows,
+            visible_only: self.visible_only,
         };
         let (xs, ys, idx) = get_xy(book, &item);
         let vals = if xs.len() < 3 {
@@ -811,6 +816,7 @@ impl NonlinearRecipe {
                 y: op.y.clone(),
                 x: op.x.clone(),
                 rows: op.rows,
+                visible_only: op.visible_only,
             },
         );
         h.integer(rows.len() as u64);

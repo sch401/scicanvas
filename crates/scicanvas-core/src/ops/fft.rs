@@ -41,6 +41,15 @@ impl Project {
     /// 自相关 / 互相关：选一列时求自相关，两列时求第二列相对第一列的互相关（滞后以数据点计）。
     /// 结果放进新工作簿（滞后、相关系数）并画成线图。返回 (工作簿, 图形) 编号。
     pub fn correlation_function(&mut self, book_id: u64, keys: &[String]) -> Result<(u64, u64), String> {
+        self.correlation_function_with_visibility(book_id, keys, false)
+    }
+
+    pub fn correlation_function_with_visibility(
+        &mut self,
+        book_id: u64,
+        keys: &[String],
+        visible_only: bool,
+    ) -> Result<(u64, u64), String> {
         let book = self.book(book_id).ok_or("找不到工作簿")?;
         let (a, b) = match keys {
             [a] => (a, a),
@@ -49,7 +58,11 @@ impl Project {
         };
         let col = |k: &str| book.column(k).ok_or_else(|| format!("找不到列 {k}"));
         let (ca, cb) = (col(a)?, col(b)?);
-        let (va, vb) = (ca.values(), cb.values());
+        let (va, vb) = if visible_only {
+            (book.visible_values(ca), book.visible_values(cb))
+        } else {
+            (ca.values(), cb.values())
+        };
         let (lags, r) = crate::stats::cross_correlation(&va, &vb)?;
         let auto = a == b;
         let title = if auto {

@@ -5,6 +5,15 @@ impl Project {
     /// 行统计：对选中的列逐行求均值、标准差、标准误和 N（如平行样），写在最后一列右边。
     /// 均值为 Y 列、标准差为 Y 误差列，可直接画带误差棒的图。返回新列标识。
     pub fn row_stats(&mut self, book_id: u64, keys: &[String]) -> Result<Vec<String>, String> {
+        self.row_stats_with_visibility(book_id, keys, false)
+    }
+
+    pub fn row_stats_with_visibility(
+        &mut self,
+        book_id: u64,
+        keys: &[String],
+        visible_only: bool,
+    ) -> Result<Vec<String>, String> {
         if keys.len() < 2 {
             return Err("行统计至少需要选中两列".into());
         }
@@ -22,6 +31,12 @@ impl Project {
         let rows = cols.iter().map(Vec::len).max().unwrap_or(0);
         let mut out: [Vec<String>; 4] = Default::default();
         for r in 0..rows {
+            if visible_only && !book.row_visible(r) {
+                for column in &mut out {
+                    column.push(String::new());
+                }
+                continue;
+            }
             let v: Vec<f64> = cols
                 .iter()
                 .filter_map(|c| c.get(r).copied())
@@ -63,6 +78,7 @@ impl Project {
             y: keys.last().unwrap().clone(),
             x: None,
             rows: None,
+            visible_only: false,
         };
         Ok(self.write_result(&item, columns, ResultLink::None)?.columns)
     }

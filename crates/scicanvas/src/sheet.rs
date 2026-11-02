@@ -93,6 +93,14 @@ pub struct Edit {
     pub focused: bool,
 }
 
+#[derive(Clone, Debug)]
+pub struct FilterCache {
+    filter: scicanvas_core::filter::Filter,
+    versions: Vec<(String, u64)>,
+    nrows: usize,
+    rows: std::sync::Arc<[usize]>,
+}
+
 #[derive(Clone, Debug, Default)]
 pub struct SheetState {
     pub range: Option<Range>,
@@ -106,6 +114,55 @@ pub struct SheetState {
     pub frozen_columns: usize,
     pub frozen_scroll_y: f32,
     pub viewport_width: f32,
+    pub filter_cache: Option<FilterCache>,
+    pub visible_only: bool,
+}
+
+impl SheetState {
+    pub fn filtered_rows(&mut self, book: &scicanvas_core::Book) -> Option<std::sync::Arc<[usize]>> {
+        let Some(filter) = &book.filter else {
+            self.filter_cache = None;
+            return None;
+        };
+        let versions = filter
+            .rules
+            .keys()
+            .filter_map(|key| book.column(key).map(|column| (key.clone(), column.data.version())))
+            .collect::<Vec<_>>();
+        let valid = self
+            .filter_cache
+            .as_ref()
+            .is_some_and(|cache| cache.filter == *filter && cache.versions == versions && cache.nrows == book.nrows());
+        if !valid {
+            self.filter_cache = Some(FilterCache {
+                filter: filter.clone(),
+                versions,
+                nrows: book.nrows(),
+                rows: book.visible_rows().into(),
+            });
+        }
+        self.filter_cache.as_ref().map(|cache| cache.rows.clone())
+    }
+
+    pub fn cached_rows(&self) -> Option<std::sync::Arc<[usize]>> {
+        self.filter_cache.as_ref().map(|cache| cache.rows.clone())
+    }
+
+    pub fn step_row(&self, row: usize, delta: i64) -> usize {
+        step_visible_row(self.filter_cache.as_ref().map(|cache| cache.rows.as_ref()), row, delta)
+    }
+}
+
+pub fn step_visible_row(rows: Option<&[usize]>, row: usize, delta: i64) -> usize {
+    let Some(rows) = rows else {
+        return (row as i64 + delta).max(0) as usize;
+    };
+    if rows.is_empty() {
+        return row;
+    }
+    let index = rows.partition_point(|&value| value < row).min(rows.len() - 1);
+    let next = (index as i64 + delta).clamp(0, rows.len() as i64 - 1) as usize;
+    rows[next]
 }
 
 #[cfg(test)]

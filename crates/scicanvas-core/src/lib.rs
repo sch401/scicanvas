@@ -11,6 +11,7 @@ pub mod coord;
 pub mod csv;
 pub mod data;
 pub mod fft;
+pub mod filter;
 pub mod format;
 pub mod formula;
 pub mod history;

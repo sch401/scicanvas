@@ -42,6 +42,7 @@ impl PointStyleColumns {
         book: &Book,
         rows: std::ops::Range<usize>,
         color_map: crate::colormap::ColorMap,
+        visible_only: bool,
     ) -> Self {
         let column = |key: Option<&String>| key.and_then(|key| book.column(key));
         let color = column(style.and_then(|style| style.color_column.as_ref()));
@@ -61,8 +62,9 @@ impl PointStyleColumns {
                 .get(rows.clone())
                 .unwrap_or_default()
                 .iter()
-                .copied()
-                .filter(|value| value.is_finite())
+                .enumerate()
+                .filter(|(offset, value)| value.is_finite() && (!visible_only || book.row_visible(rows.start + offset)))
+                .map(|(_, value)| *value)
                 .fold(None, |range, value| {
                     Some(range.map_or((value, value), |(lo, hi): (f64, f64)| (lo.min(value), hi.max(value))))
                 })
@@ -238,6 +240,8 @@ pub struct PlotSpec {
         serde(default, skip_serializing_if = "std::collections::BTreeMap::is_empty")
     )]
     pub row_by_y: std::collections::BTreeMap<String, Option<(usize, usize)>>,
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "std::ops::Not::not"))]
+    pub visible_only: bool,
     #[cfg_attr(feature = "serde", serde(default))]
     pub transform: Transform,
     #[cfg_attr(feature = "serde", serde(default))]
@@ -255,6 +259,7 @@ impl Default for PlotSpec {
             line_only: vec![],
             rows: None,
             row_by_y: Default::default(),
+            visible_only: false,
             transform: Transform::Identity,
             color_map: Default::default(),
         }
@@ -599,7 +604,9 @@ impl PlotSpec {
                 Some((a, b)) => (a, b.saturating_add(1).min(n)),
                 None => (0, n),
             };
-            let point_style_columns = PointStyleColumns::new(plot.style.as_ref(), cbook, i0..i1, self.color_map);
+            let filtered = self.visible_only && !c.independent_rows;
+            let point_style_columns =
+                PointStyleColumns::new(plot.style.as_ref(), cbook, i0..i1, self.color_map, filtered);
             let mut pts = Vec::with_capacity(i1.saturating_sub(i0));
             let error_values = [crate::Role::XError, crate::Role::YError].map(|role| {
                 if mapping.line_only || c.derived_from.is_some() {
@@ -628,6 +635,9 @@ impl PlotSpec {
             // 分类列做 X：按类别显示顺序放在 1、2、3…
             let categories = xv.and_then(|v| v.data.plot_category_positions());
             for i in i0..i1 {
+                if filtered && !cbook.row_visible(i) {
+                    continue;
+                }
                 let x = match (&categories, xv) {
                     (Some(c), _) => c.get(i).copied().unwrap_or(f64::NAN),
                     (None, Some(v)) => v.f64_at(i).unwrap_or(f64::NAN),

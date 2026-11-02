@@ -21,6 +21,7 @@ pub(super) struct SheetFrame {
     pub(super) nrows: usize,
     pub(super) frozen_columns: usize,
     pub(super) frozen_scroll_y: f32,
+    pub(super) visible_rows: Option<std::sync::Arc<[usize]>>,
     pub(super) range: Option<Range>,
     pub(super) multi: Option<Range>,
     pub(super) drag: Option<Drag>,
@@ -227,6 +228,29 @@ impl SheetFrame {
                 resp.context_menu(|ui| {
                     self.column_menu(ui, col, ci);
                 });
+                let active = book
+                    .filter
+                    .as_ref()
+                    .is_some_and(|filter| filter.rules.contains_key(&col.key));
+                let button_rect = egui::Rect::from_min_max(egui::pos2(rect.right() - 20.0, rect.top()), rect.max);
+                let mut button_ui = ui.new_child(
+                    egui::UiBuilder::new()
+                        .id_salt(("filter-menu", ci))
+                        .max_rect(button_rect),
+                );
+                button_ui.menu_button(
+                    RichText::new("▾").color(if active { self.pal.accent } else { self.pal.weak }),
+                    |ui| {
+                        if ui.button("筛选…").clicked() {
+                            self.action = Some((ci, ColAction::Filter));
+                            ui.close_menu();
+                        }
+                        if active && ui.button("清除筛选").clicked() {
+                            self.action = Some((ci, ColAction::ClearFilter));
+                            ui.close_menu();
+                        }
+                    },
+                );
             });
         }
     }
@@ -292,7 +316,8 @@ impl SheetFrame {
                 self.metadata_row(row, book, preview, history_group, (start, end), row_header);
                 return;
             }
-            let r = ri - META_ROWS.len();
+            let visible_row = ri - META_ROWS.len();
+            let r = self.visible_rows.as_ref().map_or(visible_row, |rows| rows[visible_row]);
             if row_header {
                 row.col(|ui| self.row_header(ui, r));
             } else if start == end {
