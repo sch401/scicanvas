@@ -1,7 +1,7 @@
 #![cfg(feature = "serde")]
 //! 场景导出属于验收测试，不改变运行时 / 文件格式。
 use scicanvas_core::{
-    page::{Connect, CurveStyle, ReferenceAxis, ReferenceLine},
+    page::{Connect, CurveStyle, ReferenceAxis, ReferenceLine, SymbolFill},
     plotspec::PlotSpec,
     scene::{self, Prim},
     svg,
@@ -171,6 +171,50 @@ fn cases() -> Vec<(String, Project, Graph)> {
     g.page.add_layer(l);
     g.page.columns = 2;
     cases.push(("bspline-bezier".into(), p, g));
+    // F083：先画 B、C，移除 C 后加入 D；核对剩余曲线位置。
+    let (_, mut p, mut g) = case("add-remove-curve", PlotType::LineSymbol);
+    p.book_mut(1).unwrap().columns.extend([
+        column("C", Role::Y, &["1", "-2", "4", "2", "-3"]),
+        column("D", Role::Y, &["0.5", "1.5", "2.5", "-1.5", "4"]),
+    ]);
+    let selected = ["A".to_string(), "B".to_string(), "C".to_string()];
+    g.first_layer_mut().spec = PlotSpec::from_selection(p.book(1).unwrap(), &selected, PlotType::LineSymbol)
+        .unwrap()
+        .into();
+    g.first_layer_mut().remove_curve("C");
+    assert_eq!(
+        g.first_layer_mut()
+            .add_book_curves(p.book(1).unwrap(), &["D".to_string()], true),
+        Ok(1)
+    );
+    cases.push(("add-remove-curve".into(), p, g));
+    // F497：空心加红色边框、自定义填充加黑色边框；核对位置与内部填充，边框只在并排图展示。
+    let (_, mut p, mut g) = case("symbol-fill-border", PlotType::Scatter);
+    p.book_mut(1)
+        .unwrap()
+        .columns
+        .push(column("C", Role::Y, &["1", "-2", "4", "2", "-3"]));
+    g.first_layer_mut().spec = PlotSpec::from_selection(p.book(1).unwrap(), &[], PlotType::Scatter)
+        .unwrap()
+        .into();
+    g.first_layer_mut().set_plot_style(
+        "B",
+        Some(CurveStyle {
+            symbol_fill: Some(SymbolFill::Hollow),
+            symbol_border_color: Some([200, 30, 30]),
+            symbol_border_width: Some(1.2),
+            ..Default::default()
+        }),
+    );
+    g.first_layer_mut().set_plot_style(
+        "C",
+        Some(CurveStyle {
+            symbol_fill: Some(SymbolFill::Color([31, 119, 180])),
+            symbol_border_color: Some([0, 0, 0]),
+            ..Default::default()
+        }),
+    );
+    cases.push(("symbol-fill-border".into(), p, g));
     cases
 }
 
