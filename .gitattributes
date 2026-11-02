@@ -17,3 +17,8 @@ crates/scicanvas-core/tests/reference/*.json text eol=lf
 # Reproducible visual references use LF on Windows and in CI.
 docs/parity/visual/**/*.json text eol=lf
 docs/parity/visual/**/*.svg text eol=lf
+
+# Export samples for visual review; keep bytes as generated.
+docs/parity/export/*.svg text eol=lf
+docs/parity/export/*.png binary
+docs/parity/export/*.pdf binary

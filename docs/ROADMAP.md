@@ -1,5 +1,9 @@
 # SciCanvas 技术路线（第二阶段）
 
+## S0-4 ACC-6 导出样例与剪贴板测试
+
+docs/parity/export 提交示例图（89 × 80 mm）的 SVG、300 dpi PNG 和 PDF，供目视复核；自动测试核对已提交 PNG 的像素尺寸与 pHYs、PDF 页面尺寸仍与当前导出一致。剪贴板复制抽出 `clipboard_image`，测试其按 300 dpi 页面尺寸生成非预乘 RGBA。F227、F228、F231 仍待 Windows 人工验收。项目格式不变。
+
 ## S0-4 ACC-5 图层增删曲线与符号填充的视觉对照
 
 新增 add-remove-curve（先画 B、C，移除 C 后加入 D）和 symbol-fill-border（空心加红色边框、自定义填充加黑色边框）两个 matplotlib 同数据样例，样例总数 27。前者覆盖 F083 增删后剩余曲线的位置，后者覆盖 F497 的符号位置与内部填充；边框颜色和线宽只在并排图中展示。F083 仍待 Windows 人工验收，F497 状态留待下一次状态复核。项目格式不变。
