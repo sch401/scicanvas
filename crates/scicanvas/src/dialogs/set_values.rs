@@ -14,6 +14,7 @@ impl Dialog {
             keep,
             columns,
             error,
+            filtered,
         } = self
         else {
             unreachable!()
@@ -71,6 +72,9 @@ impl Dialog {
                 .small()
                 .color(pal.weak),
             );
+            if *filtered {
+                ui.colored_label(pal.warn, "工作表已筛选：设置列值会改写所有行，包括隐藏行。");
+            }
             ui.checkbox(keep, "保存公式，引用的列变化时自动重算");
             let (ok, cancel) = buttons(ui, "计算");
             if ok {
