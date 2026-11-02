@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import json
 from pathlib import Path
 import platform
+import sys
 
 import matplotlib
 matplotlib.use("Agg")
@@ -203,6 +204,16 @@ def generate(source):
                         scatter = target.scatter([xx], [yy], c=[color], s=(size*72/96)**2, marker=["o", "s", "^"][code])
                         marks["symbols"].extend(target.transAxes.inverted().transform(scatter.get_offset_transform().transform(scatter.get_offsets())).tolist())
                     marks["colors"].extend(np.floor(rgba[:, :3]*255+.5).astype(int).tolist())
+                elif doc["case"] == "symbol-fill-border":
+                    # 只比较位置与内部填充；边框颜色和线宽只在并排图中展示。
+                    fill = None if key == "B" else [31, 119, 180]
+                    scatter = target.scatter(
+                        xconvert(x[valid]), y[valid], s=36,
+                        facecolors="none" if fill is None else [np.array(fill)/255],
+                        edgecolors=[(200/255, 30/255, 30/255)] if fill is None else ["black"],
+                        linewidths=1.2 if fill is None else .6)
+                    marks["symbols"].extend(target.transAxes.inverted().transform(scatter.get_offset_transform().transform(scatter.get_offsets())).tolist())
+                    marks["colors"].extend([fill]*int(valid.sum()))
                 else:
                     scatter = target.scatter(xconvert(x[valid]), y[valid], s=10)
                     marks["symbols"].extend(target.transAxes.inverted().transform(scatter.get_offset_transform().transform(scatter.get_offsets())).tolist())
@@ -228,5 +239,8 @@ def generate(source):
 
 
 if __name__ == "__main__":
-    for path in sorted(DIRECTORY.glob("*/scicanvas.json")):
+    # 可只重生成指定样例：gen_matplotlib.py add-remove-curve symbol-fill-border
+    names = sys.argv[1:]
+    paths = [DIRECTORY / name / "scicanvas.json" for name in names] or sorted(DIRECTORY.glob("*/scicanvas.json"))
+    for path in paths:
         generate(path)
