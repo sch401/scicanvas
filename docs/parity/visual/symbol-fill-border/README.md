@@ -1,6 +1,6 @@
 # symbol-fill-border
 
-覆盖：F497。数据来源：本仓库自建最小样例，构造见 tests/visual_cases.rs。B 为空心符号加红色边框（线宽 1.2），C 为自定义蓝色填充（31, 119, 180）加黑色边框；原始数据、轴范围和图元完整记录在 scicanvas.json。
+覆盖：F497。数据来源：本仓库自建最小样例，构造见 tests/visual_cases.rs。B 为空心符号加红色边框（线宽 1.2），C 为自定义蓝色填充（31, 119, 180）加黑色边框；原始数据、轴范围和图元完整记录在 scicanvas.json。SciCanvas 按默认顺序给 C 用方块符号，matplotlib 两条都用圆点；符号形状不参与比较。
 
 | SciCanvas | matplotlib |
 |---|---|
