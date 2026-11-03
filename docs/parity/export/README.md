@@ -16,4 +16,4 @@ PDF：[sample.pdf](sample.pdf)，矢量，嵌入字体子集，可选中文字�
 
 生成环境：Windows 11（10.0.26300），提交 `fbf4b31`。
 
-结论：待审查目视复核。插入 Word 后的实际尺寸和打印效果属于 Windows 人工验收，见 docs/acceptance/import_export.md。
+结论：2026-11-03 目视复核通过：PNG 图形完整，中文清晰无方块字，像素尺寸与 pHYs 符合上面的预期；PDF 页面尺寸与字体嵌入按文件结构核对一致。插入 Word 后的实际尺寸和打印效果属于 Windows 人工验收，见 docs/acceptance/import_export.md。
