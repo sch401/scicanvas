@@ -2513,11 +2513,35 @@
   "feature": "加权拟合（误差列权重等）",
   "ref": "Parameters,Bounds,Constraints and Weighting",
   "pri": "P1",
-  "status": "部分实现",
-  "how": "核心求解器支持按 Y 误差加权（权重 1/σ²，Origin 的“仪器”权重）：σ 缺失的点跳过，0、负数或无穷大报错；加权时 RSS、约化 χ² 和 R² 为加权值，协方差按约化 χ² 缩放。拟合对话框的权重选项、项目保存和报告显示待做",
-  "verify": "与 SciPy curve_fit(sigma, absolute_sigma=False) 参考值对照（ExpDec1、Gauss、σ 缺失）；全 1 误差与不加权结果逐位一致、误差整体缩放不改变参数和标准误的回归",
+  "status": "已实现待验收",
+  "how": "非线性拟合对话框可勾选“按 Y 误差加权（1/σ²）”，使用与 Y 列关联的 Y 误差列（Origin 的“仪器”权重）：σ 为空的点跳过，0、负数或无穷大报错；加权时 RSS、约化 χ² 和 R² 为加权值，协方差按约化 χ² 缩放。权重随拟合定义保存（v24），改误差列自动重算，报告显示权重并把残差平方和标为 χ²，原位重编辑可切换。自定义函数新建拟合暂不提供权重选项（重编辑保留原权重），线性/多项式拟合不加权，预测带按单位权重计算",
+  "verify": "与 SciPy curve_fit(sigma, absolute_sigma=False) 参考值对照；全 1 误差与不加权逐位一致、误差缺失与非法值；误差列来源、改误差重算、v24 保存与 v23 读取；对话框勾选到报告与重编辑的真实界面回归；Windows 人工验收待做",
   "id": "F137",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/src/nlfit.rs::unit_errors_reproduce_the_unweighted_fit_exactly",
+    "crates/scicanvas-core/src/nlfit.rs::weighted_fit_skips_missing_errors_and_rejects_invalid_ones",
+    "crates/scicanvas-core/tests/reference_scipy.rs::weighted_fits_match_generated_scipy_reference",
+    "crates/scicanvas-core/tests/weighted_fit.rs::weighted_fit_uses_the_linked_error_column_and_follows_error_edits",
+    "crates/scicanvas-core/tests/weighted_fit.rs::weight_is_saved_in_v24_and_omitted_when_unweighted",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::weighted_fit_checkbox_reaches_the_report_and_reedit"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/weighted_fits.json"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/fitting.md#F137",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "回归与拟合",

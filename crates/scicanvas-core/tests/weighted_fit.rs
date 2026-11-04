@@ -31,12 +31,14 @@ fn project(sigma: impl Fn(f64) -> f64) -> Project {
 }
 
 fn direct_fit(p: &Project) -> nlfit::NlFit {
+    // 拟合会在 B 后插入结果列，列位置会变，所以按列标识取数据。
     let book = p.book(1).unwrap();
-    let sigma = book.columns[2].values();
+    let values = |key: &str| book.column(key).unwrap().values();
+    let sigma = values("C");
     nlfit::fit_function_weighted(
         FitFunction::Builtin(Model::ExpDec1),
-        &book.columns[0].values(),
-        &book.columns[1].values(),
+        &values("A"),
+        &values("B"),
         Some(&sigma),
         None,
         &[],
@@ -62,8 +64,10 @@ fn weighted_fit_uses_the_linked_error_column_and_follows_error_edits() {
     assert_eq!(reports[0].fit.params, direct_fit(&p).params);
     let key = reports[0].curve.1.clone();
     // 改误差列后自动重算，结果与直接按新误差拟合一致。
-    let xs = p.book(1).unwrap().columns[0].values();
-    p.book_mut(1).unwrap().columns[2].data = xs.iter().map(|x| (0.2 - 0.02 * x).to_string()).collect();
+    let xs = p.book(1).unwrap().column("A").unwrap().values();
+    let book = p.book_mut(1).unwrap();
+    let error = book.columns.iter_mut().find(|c| c.key == "C").unwrap();
+    error.data = xs.iter().map(|x| (0.2 - 0.02 * x).to_string()).collect();
     assert!(p.recalc_computed(false).is_empty());
     let report = p.book(1).unwrap().column(&key).unwrap().fit_report.as_deref().unwrap();
     assert!(report.current && report.fit.weighted);
