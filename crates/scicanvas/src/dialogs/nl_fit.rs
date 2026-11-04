@@ -178,6 +178,7 @@ impl Dialog {
             target,
             limits,
             constraints,
+            weighted,
         } = self
         else {
             unreachable!()
@@ -247,6 +248,8 @@ impl Dialog {
                     .font(egui::TextStyle::Monospace)
                     .hint_text("每行一条，如 A1 + A2 = 1、t2 >= t1"),
             );
+            ui.checkbox(weighted, "按 Y 误差加权（1/σ²）")
+                .on_hover_text("使用与 Y 列关联的 Y 误差列：误差为空的点跳过，误差为 0 或负数时报错");
             if target.is_none() && ui.button("自定义函数…").clicked() {
                 action = Action::OpenCustomNlFit;
             }
@@ -266,8 +269,8 @@ impl Dialog {
                     let values = if initial.trim().is_empty() { Ok(None) } else {
                         initial.split([',', '，']).map(|v| v.trim().parse::<f64>().map_err(|_| "初始值应为逗号分隔的有限数".to_string())).collect::<Result<Vec<_>, _>>().map(Some)
                     };
-                    Action::Refit(Box::new(FitEditTarget { report: target.report.clone(), before: target.before.clone() }), values.and_then(|values| target.recipe(scicanvas_core::ops::FitMethod::Builtin(*model), values, held, constraints.clone())))
-                } else { Action::NlFit(*model, held, constraints.clone()) };
+                    Action::Refit(Box::new(FitEditTarget { report: target.report.clone(), before: target.before.clone() }), values.and_then(|values| target.recipe(scicanvas_core::ops::FitMethod::Builtin(*model), values, held, constraints.clone())).map(|mut recipe| { recipe.weight = scicanvas_core::ops::FitWeight::from_y_error(*weighted); recipe }))
+                } else { Action::NlFit(*model, held, constraints.clone(), *weighted) };
             } else if cancel && !matches!(action, Action::OpenCustomNlFit) {
                 action = Action::Close;
             }

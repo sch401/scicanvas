@@ -22,11 +22,11 @@ mod transpose;
 pub use calculus::AreaReport;
 pub use columns::{ColumnOp, Operand};
 pub use fit::{FitReport, NlFitReport};
-pub use recalc::{FitBands, FitMethod, NonlinearRecipe, OpKind, Operation, RecalcMode};
+pub use recalc::{FitBands, FitMethod, FitWeight, NonlinearRecipe, OpKind, Operation, RecalcMode};
 pub use resolve::{get_xy, AnalysisColumn, Item, Resolved, Source};
 
 use columns::{analysis_plot, ResultLink};
-use resolve::{name_of, x_for};
+use resolve::{name_of, x_for, y_errors};
 
 #[cfg(test)]
 mod tests {
@@ -1567,6 +1567,7 @@ mod nonlinear_recalc_tests {
             constraints: String::new(),
             output_x: "D".into(),
             bands: vec![],
+            weight: FitWeight::None,
             input_digest: None,
             attempted_digest: None,
         };
