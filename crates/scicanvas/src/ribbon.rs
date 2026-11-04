@@ -58,6 +58,10 @@ const PLOT_TYPES: &[&str] = &[
     "plot.histogram",
     "plot.qq",
     "plot.box",
+    "plot.stacked_horizontal_bar",
+    "plot.percent_stacked_horizontal_bar",
+    "plot.stacked_area",
+    "plot.fill_between",
 ];
 
 pub static TABS: &[Tab] = &[

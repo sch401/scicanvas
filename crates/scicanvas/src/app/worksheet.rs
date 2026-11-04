@@ -978,6 +978,11 @@ impl SciApp {
                 ColAction::Plot(PlotType::Histogram) => "plot.histogram",
                 ColAction::Plot(PlotType::QQ) => "plot.qq",
                 ColAction::Plot(PlotType::Box) => "plot.box",
+                ColAction::Plot(PlotType::StackedHorizontalBar) => "plot.stacked_horizontal_bar",
+                ColAction::Plot(PlotType::PercentStackedHorizontalBar) => "plot.percent_stacked_horizontal_bar",
+                ColAction::Plot(PlotType::StackedArea) => "plot.stacked_area",
+                ColAction::Plot(PlotType::FillBetween) => "plot.fill_between",
+
                 ColAction::AddToGraph(_) => unreachable!(),
             };
             self.run_command(command);

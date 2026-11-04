@@ -130,4 +130,28 @@ pub const ALL: &[Example] = &[
         "17-箱线图",
         "比较三组测量值的中位数、四分位范围和离群点，空心菱形为均值。每个 Y 列对应一个箱子。"
     ),
+    example!(
+        "stacked_horizontal_bar",
+        StackedHorizontalBar,
+        "18-堆叠条形图",
+        "共同 X 和两个 Y 列，展示堆叠条形图。"
+    ),
+    example!(
+        "percent_stacked_horizontal_bar",
+        PercentStackedHorizontalBar,
+        "19-百分比堆叠条形图",
+        "共同 X 和两个 Y 列，展示百分比堆叠条形图。"
+    ),
+    example!(
+        "stacked_area",
+        StackedArea,
+        "20-堆叠面积图",
+        "共同 X 和两个 Y 列，展示堆叠面积图。"
+    ),
+    example!(
+        "fill_between",
+        FillBetween,
+        "21-两曲线间填充",
+        "共同 X 和两个 Y 列，展示两曲线间填充。"
+    ),
 ];

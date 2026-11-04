@@ -318,6 +318,50 @@ pub(super) fn decorations(commands: &mut Vec<Command>) {
         )
         .modifies(),
         c(
+            "plot.stacked_horizontal_bar",
+            "堆叠条形图",
+            "area",
+            "",
+            "绘图",
+            "堆叠条形图",
+            need_data,
+            |a| a.plot(PlotType::StackedHorizontalBar),
+        )
+        .modifies(),
+        c(
+            "plot.percent_stacked_horizontal_bar",
+            "百分比堆叠条形图",
+            "area",
+            "",
+            "绘图",
+            "百分比堆叠条形图",
+            need_data,
+            |a| a.plot(PlotType::PercentStackedHorizontalBar),
+        )
+        .modifies(),
+        c(
+            "plot.stacked_area",
+            "堆叠面积图",
+            "area",
+            "",
+            "绘图",
+            "堆叠面积图",
+            need_data,
+            |a| a.plot(PlotType::StackedArea),
+        )
+        .modifies(),
+        c(
+            "plot.fill_between",
+            "两曲线间填充",
+            "area",
+            "",
+            "绘图",
+            "两曲线间填充",
+            need_data,
+            |a| a.plot(PlotType::FillBetween),
+        )
+        .modifies(),
+        c(
             "graph.labels",
             "数据标签",
             "props",

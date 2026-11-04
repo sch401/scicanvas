@@ -28,7 +28,7 @@ fn case(name: &str, kind: PlotType) -> (String, Project, Graph) {
         column("A", Role::X, &["0", "1", "2", "3", "4"]),
         column("B", Role::Y, &["-2", "3", "", "5", "-1"]),
     ];
-    if kind.is_bar() || kind == PlotType::QQ {
+    if kind.is_bar() || matches!(kind, PlotType::QQ | PlotType::StackedArea | PlotType::FillBetween) {
         p.book_mut(1)
             .unwrap()
             .columns
@@ -274,11 +274,18 @@ fn export(p: &Project, g: &Graph) -> (Value, String) {
                 Prim::Rect { x, y, w, h, .. } if clipped => {
                     let a = point([*x, *y], rect);
                     let b = point([x + w, y + h], rect);
-                    bars.push(if l.plot_type == PlotType::HorizontalBar {
-                        json!([a[0].min(b[0]), a[0].max(b[0]), (a[1] + b[1]) / 2.0])
-                    } else {
-                        json!([(a[0] + b[0]) / 2.0, a[1].min(b[1]), a[1].max(b[1])])
-                    });
+                    bars.push(
+                        if matches!(
+                            l.plot_type,
+                            PlotType::HorizontalBar
+                                | PlotType::StackedHorizontalBar
+                                | PlotType::PercentStackedHorizontalBar
+                        ) {
+                            json!([a[0].min(b[0]), a[0].max(b[0]), (a[1] + b[1]) / 2.0])
+                        } else {
+                            json!([(a[0] + b[0]) / 2.0, a[1].min(b[1]), a[1].max(b[1])])
+                        },
+                    );
                 }
                 Prim::Segments { segs, .. } if clipped => {
                     for s in segs {

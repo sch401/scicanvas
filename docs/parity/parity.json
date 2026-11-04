@@ -5031,11 +5031,31 @@
   "feature": "堆叠条形图",
   "ref": "Stacked Bar Graph",
   "pri": "P1",
-  "status": "未开始",
-  "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 Origin 同数据出图目视比较",
+  "status": "已实现待验收",
+  "how": "绘图 → 堆叠条形图；复用共同 X、现有堆叠位置和曲线样式。正负值分开累计，缺失行断开。",
+  "verify": "核心几何、配对、正负堆叠、缺失行、v29 保存往返；真实命令一步撤销/重做；新增 SVG 与 matplotlib 同数据位置对照。",
   "id": "F286",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "visual",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/stacked_bands.rs::b1_horizontal_stacks_keep_bases_and_percent_signs",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::b1_new_plot_commands_create_and_undo_in_one_step"
+   ],
+   "visual": [
+    "docs/parity/visual/stacked-horizontal-bar/README.md"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/plotting.md#F286",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "图类型 · 2D 柱状图与条形图",
@@ -5073,11 +5093,31 @@
   "feature": "百分比堆叠条形图",
   "ref": "100% Stacked Bar Graph",
   "pri": "P1",
-  "status": "未开始",
-  "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 Origin 同数据出图目视比较",
+  "status": "已实现待验收",
+  "how": "绘图 → 百分比堆叠条形图；复用共同 X、现有堆叠位置和曲线样式。正负值分开累计，缺失行断开。",
+  "verify": "核心几何、配对、正负堆叠、缺失行、v29 保存往返；真实命令一步撤销/重做；新增 SVG 与 matplotlib 同数据位置对照。",
   "id": "F288",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "visual",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/stacked_bands.rs::b1_horizontal_stacks_keep_bases_and_percent_signs",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::b1_new_plot_commands_create_and_undo_in_one_step"
+   ],
+   "visual": [
+    "docs/parity/visual/percent-stacked-horizontal-bar/README.md"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/plotting.md#F288",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "图类型 · 2D 柱状图与条形图",
@@ -6486,11 +6526,31 @@
   "feature": "堆叠面积图",
   "ref": "Stacked Area Graph",
   "pri": "P1",
-  "status": "未开始",
-  "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 Origin 同数据出图目视比较",
+  "status": "已实现待验收",
+  "how": "绘图 → 堆叠面积图；复用共同 X、现有堆叠位置和曲线样式。正负值分开累计，缺失行断开。",
+  "verify": "核心几何、配对、正负堆叠、缺失行、v29 保存往返；真实命令一步撤销/重做；新增 SVG 与 matplotlib 同数据位置对照。",
   "id": "F400",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "visual",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/stacked_bands.rs::b1_fill_pairs_stacked_area_geometry_and_gaps",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::b1_new_plot_commands_create_and_undo_in_one_step"
+   ],
+   "visual": [
+    "docs/parity/visual/stacked-area/README.md"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/plotting.md#F400",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "图类型 · 面积图",
@@ -6508,11 +6568,32 @@
   "feature": "填充面积图",
   "ref": "Fill Area Graph",
   "pri": "P1",
-  "status": "未开始",
-  "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 Origin 同数据出图目视比较",
+  "status": "已实现待验收",
+  "how": "绘图 → 两曲线间填充；复用共同 X、现有堆叠位置和曲线样式。两条曲线按选列顺序配对，上下界按原始行对齐，奇数末列只画线。",
+  "verify": "核心几何、配对、正负堆叠、缺失行、v29 保存往返；真实命令一步撤销/重做；新增 SVG 与 matplotlib 同数据位置对照。",
   "id": "F402",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "visual",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/stacked_bands.rs::b1_fill_pairs_stacked_area_geometry_and_gaps",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::b1_new_plot_commands_create_and_undo_in_one_step",
+    "crates/scicanvas-core/tests/stacked_bands.rs::b1_odd_fill_column_is_a_line_and_crossing_area_is_correct"
+   ],
+   "visual": [
+    "docs/parity/visual/fill-between/README.md"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/plotting.md#F402",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "图类型 · 面积图",

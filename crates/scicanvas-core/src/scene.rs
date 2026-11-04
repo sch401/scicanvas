@@ -209,13 +209,8 @@ pub fn nearest_point<'a>(
             }
             let d = (at[0] - x).hypot(at[1] - y);
             if d <= radius && best.as_ref().is_none_or(|(b, _)| d < *b) {
-                let value = if horizontal {
-                    point[0]
-                } else if layer.plot_type.is_stacked() {
-                    point[1] - s.bases[i]
-                } else {
-                    point[1]
-                };
+                let value =
+                    point[usize::from(!horizontal)] - if layer.plot_type.is_stacked() { s.bases[i] } else { 0.0 };
                 best = Some((
                     d,
                     PointHit {
@@ -757,15 +752,22 @@ fn prepare_layer_data(ctx: &LayerContext<'_, '_, '_>) -> LayerData {
         };
         target.extend(paths.iter().flatten().map(|p| p[1]).filter(|v| !g.y_log || *v > 0.0));
     }
-    if g.plot_type.is_bar() && recipe.position != crate::position::Position::Dodge && !horizontal {
-        all_y.extend(
-            plots
-                .iter()
-                .map(|p| &p.series)
-                .filter(|s| !s.line_only)
-                .flat_map(|s| s.bases.iter().copied())
-                .filter(|v| !g.y_log || *v > 0.0),
-        );
+    if (g.plot_type.is_bar() && recipe.position != crate::position::Position::Dodge)
+        || matches!(g.plot_type, PlotType::StackedArea | PlotType::FillBetween)
+    {
+        for p in plots
+            .iter()
+            .filter(|p| !p.series.line_only && (g.plot_type != PlotType::FillBetween || p.plot.mapping.base.is_some()))
+        {
+            let (target, log) = if horizontal {
+                (&mut all_x, g.x_log)
+            } else if p.style.y_axis == crate::coord::YAxis::Right {
+                (&mut all_y2, g.y_log)
+            } else {
+                (&mut all_y, g.y_log)
+            };
+            target.extend(p.series.bases.iter().copied().filter(|v| !log || *v > 0.0));
+        }
     }
     if g.error_bars.visible {
         for (s, st) in plots.iter().map(|p| (&p.series, &p.style)) {

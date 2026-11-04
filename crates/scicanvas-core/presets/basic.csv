@@ -16,3 +16,7 @@ step-vertical,垂直阶梯图,StepVertical,Line,Identity,Vertical,StepVertical
 histogram,直方图,Histogram,Bar,Bin,Vertical,Straight
 qq,Q-Q 图,QQ,Symbol,Identity,Vertical,Straight
 box,箱线图,Box,Box,Identity,Vertical,Straight
+stacked-horizontal-bar,堆叠条形图,StackedHorizontalBar,Bar,Stack,Horizontal,Straight
+percent-stacked-horizontal-bar,百分比堆叠条形图,PercentStackedHorizontalBar,Bar,PercentStack,Horizontal,Straight
+stacked-area,堆叠面积图,StackedArea,Area,Stack,Vertical,Straight
+fill-between,两曲线间填充,FillBetween,Area,Identity,Vertical,Straight

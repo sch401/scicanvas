@@ -171,12 +171,12 @@ fn histogram_defaults_are_omitted_and_options_roundtrip_in_v28() {
         normal_curve: true,
     };
     assert_eq!(project_file::from_scv(&project_file::to_scv(&p).unwrap()).unwrap(), p);
-    assert_eq!(p.version, 28);
+    assert_eq!(p.version, scicanvas_core::PROJECT_VERSION);
     assert_eq!(p.graphs[0].first_layer().y_axis_title(Some(&p.books[0])), "累积计数");
     let mut legacy: serde_json::Value =
         serde_json::from_str(&project_file::to_json(&Project::sample()).unwrap()).unwrap();
     legacy["version"] = 27.into();
     let loaded = project_file::from_json(&legacy.to_string()).unwrap();
     assert!(loaded.graphs[0].first_layer().histogram.is_default());
-    assert_eq!(loaded.version, 28);
+    assert_eq!(loaded.version, scicanvas_core::PROJECT_VERSION);
 }
