@@ -120,7 +120,7 @@ fn empty_constant_and_single_value_boxes_render_without_panicking() {
 fn boxes_roundtrip_in_v27_and_read_v26_projects() {
     let p = project(&[("A", &["1", "2", "3", "4", "40"])], None);
     assert_eq!(project_file::from_scv(&project_file::to_scv(&p).unwrap()).unwrap(), p);
-    assert_eq!(scicanvas_core::model::PROJECT_VERSION, 27);
+    assert_eq!(p.version, scicanvas_core::model::PROJECT_VERSION);
     let mut legacy: serde_json::Value =
         serde_json::from_str(&project_file::to_json(&Project::sample()).unwrap()).unwrap();
     legacy["version"] = 26.into();

@@ -72,26 +72,7 @@ pub(super) fn draw(
                 );
             }
         } else {
-            for path in splines {
-                for run in
-                    path.split(|point| (ctx.layer.x_log && point[0] <= 0.0) || (ctx.layer.y_log && point[1] <= 0.0))
-                {
-                    if run.len() > 1 {
-                        ctx.push(
-                            items,
-                            Prim::Polyline {
-                                pts: run
-                                    .iter()
-                                    .map(|point| [ctx.px(point[0]), ctx.py(point[1], style.y_axis)])
-                                    .collect(),
-                                color,
-                                width: f64::from(style.line_width),
-                            },
-                            true,
-                        );
-                    }
-                }
-            }
+            draw_paths(ctx, style, splines, items);
         }
     } else if recipe.marks.contains(&Kind::Line) {
         if mapped_color {
@@ -151,6 +132,30 @@ pub(super) fn draw(
         }
     }
     draw_symbols(ctx, series, style, curve_style, color)
+}
+
+/// 样条、Q-Q 参考线和直方图分布曲线复用的路径绘制。
+pub(super) fn draw_paths(
+    ctx: &Context<'_, '_, '_, '_>,
+    style: &SeriesStyle,
+    paths: &[Vec<[f64; 2]>],
+    items: &mut Vec<crate::scene::Item>,
+) {
+    for path in paths {
+        for run in path.split(|p| (ctx.layer.x_log && p[0] <= 0.0) || (ctx.layer.y_log && p[1] <= 0.0)) {
+            if run.len() > 1 {
+                ctx.push(
+                    items,
+                    Prim::Polyline {
+                        pts: run.iter().map(|p| [ctx.px(p[0]), ctx.py(p[1], style.y_axis)]).collect(),
+                        color: style.color.rgb(),
+                        width: f64::from(style.line_width),
+                    },
+                    true,
+                );
+            }
+        }
+    }
 }
 
 fn draw_symbols(

@@ -5714,12 +5714,13 @@
   "ref": "Histogram/Distribution Graph",
   "pri": "P1",
   "status": "已实现待验收",
-  "how": "绘图 → 直方图：每个 Y 列是一组测量值（不需要 X 列）；全部曲线共用等宽区间，范围取全部有效值的最小、最大值，区间数按最长一列用 Sturges 规则，分箱与 numpy.histogram 相同；柱子占满区间、相邻相接，多列重叠时半透明；横轴标题取第一列名称，纵轴为“计数”。图型随项目保存（v25）。区间数与范围的手动设置、累积分布和分布曲线叠加不在本条范围，留待后续",
-  "verify": "共同 Sturges 分箱与 numpy 一致、轴标题、柱子相接、v25 保存的自动测试；matplotlib 同数据柱子位置与计数对照（docs/parity/visual/histogram）；示例项目、绘图命令与撤销回归；Windows 人工验收待做",
+  "how": "直方图的图层属性可选择 Sturges 自动区间、指定区间数或宽度，并设置手动范围。各列共用边界，固定宽度的最后边界不小于终点，手动范围外的值不计入柱高。累积模式显示累积计数，可叠加按当前有限样本均值和样本标准差估计的正态 pdf/cdf 曲线，并缩放到计数尺度。单区间保留实际宽度，分箱和均值变换仅使用 Y 样本，取点不返回工作表行号。设置支持即时更新、撤销重做和项目保存（v28）。区间数上限为 10000，宽度推导区间过多时用自动区间数；少于 2 点或标准差为 0 时显示柱子",
+  "verify": "NumPy 指定区间数、宽度、手动范围与累计计数，SciPy 正态 pdf/cdf 曲线按 1e-12 对照；单箱宽度与曲线轴范围、非法参数自动回退、默认字段省略、v28 保存与 v27 读取；X 缺失取样、跳过均值变换和区间取点行号三个独立回归；真实属性控件切换、即时更新、撤销重做、保存和零宽度拦截；matplotlib 几何对照；Windows 人工验收待做",
   "id": "F343",
   "milestone": "M2 论文全流程",
   "needs": [
    "auto",
+   "reference",
    "visual",
    "manual"
   ],
@@ -5731,17 +5732,30 @@
     "crates/scicanvas-core/tests/histogram.rs::histogram_is_saved_in_v25",
     "crates/scicanvas-core/tests/plot_samples.rs::every_plot_type_has_a_sample_with_one_table_and_one_graph",
     "crates/scicanvas/src/app/tests/history.rs::commands_restore_columns_graphs_fits_and_sorting",
-    "crates/scicanvas/src/app/tests/graph.rs::embedded_plot_examples_preserve_current_project_and_undo_as_one_step"
+    "crates/scicanvas/src/app/tests/graph.rs::embedded_plot_examples_preserve_current_project_and_undo_as_one_step",
+    "crates/scicanvas-core/tests/histogram_options.rs::histogram_sampling_keeps_y_values_when_x_is_missing",
+    "crates/scicanvas-core/tests/histogram_options.rs::histogram_skips_the_x_group_mean_transform",
+    "crates/scicanvas-core/tests/histogram_options.rs::histogram_bin_hits_have_no_worksheet_row",
+    "crates/scicanvas-core/tests/histogram_options.rs::invalid_histogram_options_fall_back_to_automatic_bins",
+    "crates/scicanvas-core/tests/histogram_options.rs::one_bin_keeps_its_actual_width_and_the_normal_curve_sets_the_y_range",
+    "crates/scicanvas-core/tests/histogram_options.rs::constant_and_single_value_samples_keep_bars_without_a_normal_curve",
+    "crates/scicanvas-core/tests/histogram_options.rs::histogram_defaults_are_omitted_and_options_roundtrip_in_v28",
+    "crates/scicanvas-core/tests/reference_scipy.rs::histogram_options_match_numpy_counts_and_scipy_normal_curves",
+    "crates/scicanvas/src/app/props.rs::histogram_property_controls_update_plot_undo_and_save"
    ],
    "visual": [
-    "docs/parity/visual/histogram/README.md"
+    "docs/parity/visual/histogram/README.md",
+    "docs/parity/visual/histogram-options/README.md"
    ],
    "manual": {
     "checklist": "docs/acceptance/plotting.md#F343",
     "result": "待做",
     "date": "",
     "build": ""
-   }
+   },
+   "reference": [
+    "crates/scicanvas-core/tests/reference/histogram_options.json"
+   ]
   }
  },
  {
