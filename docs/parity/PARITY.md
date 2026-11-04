@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 97 项，P1 146 项，P2 259 项，不做 12 项。
-状态：已完成 82 项，已实现待验收 55 项，部分实现 16 项，未开始 349 项，不做 12 项。
+状态：已完成 82 项，已实现待验收 56 项，部分实现 16 项，未开始 348 项，不做 12 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -487,7 +487,7 @@
 | F340 | Bland-Altman 图 | Bland-Altman Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F341 | 箱线图 | Box Chart Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F342 | 双 Y 箱线图 | 2Ys Box Chart Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
-| F343 | 直方图 / 分布图 | Histogram/Distribution Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F343 | 直方图 / 分布图 | Histogram/Distribution Graph | P1 | 已实现待验收 | 绘图 → 直方图：每个 Y 列是一组测量值（不需要 X 列）；全部曲线共用等宽区间，范围取全部有效值的最小、最大值，区间数按最长一列用 Sturges 规则，分箱与 numpy.histogram 相同；柱子占满区间、相邻相接，多列重叠时半透明；横轴标题取第一列名称，纵轴为“计数”。图型随项目保存（v25）。区间数与范围的手动设置、累积分布和分布曲线叠加不在本条范围，留待后续 | 共同 Sturges 分箱与 numpy 一致、轴标题、柱子相接、v25 保存的自动测试；matplotlib 同数据柱子位置与计数对照（docs/parity/visual/histogram）；示例项目、绘图命令与撤销回归；Windows 人工验收待做 | — |
 | F344 | 概率直方图 | Histogram Probabilities Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F345 | 直方图 + 地毯图 | Histogram + Rug/Distribution + Rug Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F346 | 区间图 | Interval Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |

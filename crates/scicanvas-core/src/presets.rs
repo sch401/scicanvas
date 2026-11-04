@@ -58,6 +58,7 @@ fn entries() -> &'static [(Preset, Recipe)] {
                     "VerticalDrop" => PlotType::VerticalDrop,
                     "StepHorizontal" => PlotType::StepHorizontal,
                     "StepVertical" => PlotType::StepVertical,
+                    "Histogram" => PlotType::Histogram,
                     _ => unreachable!("built-in preset type"),
                 };
                 let marks = columns
@@ -79,6 +80,7 @@ fn entries() -> &'static [(Preset, Recipe)] {
                     "Stack" => Position::Stack,
                     "PercentStack" => Position::PercentStack,
                     "Interval" => Position::Interval,
+                    "Bin" => Position::Bin,
                     _ => unreachable!("built-in position"),
                 };
                 let orientation = match columns.next().unwrap() {

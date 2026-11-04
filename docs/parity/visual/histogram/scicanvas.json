@@ -1,0 +1,221 @@
+{
+  "case": "histogram",
+  "data": [
+    {
+      "category": null,
+      "key": "A",
+      "kind": "Num",
+      "role": "X",
+      "utc_offset": 0,
+      "values": [
+        0.0,
+        1.0,
+        2.0,
+        3.0,
+        4.0
+      ]
+    },
+    {
+      "category": null,
+      "key": "B",
+      "kind": "Num",
+      "role": "Y",
+      "utc_offset": 0,
+      "values": [
+        -2.0,
+        3.0,
+        null,
+        5.0,
+        -1.0
+      ]
+    },
+    {
+      "category": null,
+      "key": "C",
+      "kind": "Num",
+      "role": "Y",
+      "utc_offset": 0,
+      "values": [
+        1.0,
+        -2.0,
+        4.0,
+        2.0,
+        -3.0
+      ]
+    }
+  ],
+  "layers": [
+    {
+      "axes": {
+        "right_y": null,
+        "x": {
+          "hi": 6.0,
+          "lo": -4.0,
+          "log": false,
+          "minor": [
+            {
+              "position": 0.1,
+              "value": -3.0
+            },
+            {
+              "position": 0.3,
+              "value": -1.0
+            },
+            {
+              "position": 0.5,
+              "value": 1.0
+            },
+            {
+              "position": 0.7,
+              "value": 3.0
+            },
+            {
+              "position": 0.9,
+              "value": 5.0
+            }
+          ],
+          "ticks": [
+            {
+              "position": 0.0,
+              "value": -4.0
+            },
+            {
+              "position": 0.2,
+              "value": -2.0
+            },
+            {
+              "position": 0.4,
+              "value": 0.0
+            },
+            {
+              "position": 0.6,
+              "value": 2.0
+            },
+            {
+              "position": 0.8,
+              "value": 4.0
+            },
+            {
+              "position": 1.0,
+              "value": 6.0
+            }
+          ]
+        },
+        "y": {
+          "hi": 2.0,
+          "lo": 0.0,
+          "log": false,
+          "minor": [
+            {
+              "position": 0.125,
+              "value": 0.25
+            },
+            {
+              "position": 0.375,
+              "value": 0.75
+            },
+            {
+              "position": 0.625,
+              "value": 1.25
+            },
+            {
+              "position": 0.875,
+              "value": 1.75
+            }
+          ],
+          "ticks": [
+            {
+              "position": 0.0,
+              "value": 0.0
+            },
+            {
+              "position": 0.25,
+              "value": 0.5
+            },
+            {
+              "position": 0.5,
+              "value": 1.0
+            },
+            {
+              "position": 0.75,
+              "value": 1.5
+            },
+            {
+              "position": 1.0,
+              "value": 2.0
+            }
+          ]
+        }
+      },
+      "base_by_y": {},
+      "connect": "Straight",
+      "kind": "Histogram",
+      "marks": {
+        "area": [],
+        "bars": [
+          [
+            0.19999999999999998,
+            1.1102230246251565e-16,
+            0.5
+          ],
+          [
+            0.3999999999999999,
+            1.1102230246251565e-16,
+            0.5
+          ],
+          [
+            0.5999999999999999,
+            0.0,
+            0.0
+          ],
+          [
+            0.7999999999999998,
+            0.0,
+            1.0
+          ],
+          [
+            0.19999999999999998,
+            0.0,
+            1.0
+          ],
+          [
+            0.3999999999999999,
+            0.0,
+            0.0
+          ],
+          [
+            0.5999999999999999,
+            0.0,
+            1.0
+          ],
+          [
+            0.7999999999999998,
+            1.1102230246251565e-16,
+            0.5
+          ]
+        ],
+        "colors": [],
+        "polylines": [],
+        "segments": [],
+        "symbols": []
+      },
+      "plot": [
+        89.66292134831461,
+        23.59550561797753,
+        671.0041581880918,
+        484.37671414668677
+      ],
+      "reference_lines": [],
+      "right_keys": [],
+      "rows": null,
+      "y_keys": [
+        "B",
+        "C"
+      ]
+    }
+  ],
+  "page": {
+    "h": 595.2755905511812,
+    "w": 793.7007874015749
+  }
+}

@@ -666,6 +666,9 @@ impl Layer {
         let recipe = crate::presets::recipe(self.plot_type);
         let horizontal = recipe.orientation == crate::coord::Orientation::Horizontal;
         recipe.orientation.apply(&mut series);
+        if self.plot_type == crate::PlotType::Histogram {
+            crate::stat::histogram(&mut series);
+        }
         crate::stat::prepare(self, &mut series);
         // 样式：默认按图层递增，再用逐曲线设置覆盖（图型、颜色、符号、线宽、符号大小、右侧 Y 轴）
         let mut styles = crate::model::series_styles(&series, g.plot_type);
@@ -696,7 +699,10 @@ impl Layer {
                         crate::coord::YAxis::Left
                     };
                     if !series.line_only {
-                        if let Some(kind) = c.kind.filter(|_| !self.plot_type.is_stacked() && !horizontal) {
+                        // 直方图按整层分箱，不接受逐曲线图型。
+                        if let Some(kind) = c.kind.filter(|_| {
+                            !self.plot_type.is_stacked() && !horizontal && self.plot_type != crate::PlotType::Histogram
+                        }) {
                             style.kind = kind;
                         }
                         if let Some([r, g, b]) = c.color {
@@ -868,7 +874,10 @@ impl Layer {
         if !self.x_title.trim().is_empty() {
             return self.x_title.clone();
         }
-        if self.plot_type == crate::PlotType::HorizontalBar {
+        if matches!(
+            self.plot_type,
+            crate::PlotType::HorizontalBar | crate::PlotType::Histogram
+        ) {
             return self
                 .plot_keys(true)
                 .first()
@@ -889,6 +898,9 @@ impl Layer {
     pub fn y_axis_title_in<'a>(&self, book: Option<&'a Book>, others: crate::plotspec::BookLookup<'a, '_>) -> String {
         if !self.y_title.trim().is_empty() {
             return self.y_title.clone();
+        }
+        if self.plot_type == crate::PlotType::Histogram {
+            return "计数".into();
         }
         if self.plot_type == crate::PlotType::HorizontalBar {
             return book

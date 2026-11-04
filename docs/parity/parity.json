@@ -5683,11 +5683,36 @@
   "feature": "直方图 / 分布图",
   "ref": "Histogram/Distribution Graph",
   "pri": "P1",
-  "status": "未开始",
-  "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 Origin 同数据出图目视比较",
+  "status": "已实现待验收",
+  "how": "绘图 → 直方图：每个 Y 列是一组测量值（不需要 X 列）；全部曲线共用等宽区间，范围取全部有效值的最小、最大值，区间数按最长一列用 Sturges 规则，分箱与 numpy.histogram 相同；柱子占满区间、相邻相接，多列重叠时半透明；横轴标题取第一列名称，纵轴为“计数”。图型随项目保存（v25）。区间数与范围的手动设置、累积分布和分布曲线叠加不在本条范围，留待后续",
+  "verify": "共同 Sturges 分箱与 numpy 一致、轴标题、柱子相接、v25 保存的自动测试；matplotlib 同数据柱子位置与计数对照（docs/parity/visual/histogram）；示例项目、绘图命令与撤销回归；Windows 人工验收待做",
   "id": "F343",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "visual",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/histogram.rs::histogram_counts_every_y_column_on_shared_sturges_bins",
+    "crates/scicanvas-core/tests/histogram.rs::histogram_axis_titles_describe_values_and_counts",
+    "crates/scicanvas-core/tests/histogram.rs::histogram_bars_fill_each_bin_without_gaps",
+    "crates/scicanvas-core/tests/histogram.rs::histogram_is_saved_in_v25",
+    "crates/scicanvas-core/tests/plot_samples.rs::every_plot_type_has_a_sample_with_one_table_and_one_graph",
+    "crates/scicanvas/src/app/tests/history.rs::commands_restore_columns_graphs_fits_and_sorting",
+    "crates/scicanvas/src/app/tests/graph.rs::embedded_plot_examples_preserve_current_project_and_undo_as_one_step"
+   ],
+   "visual": [
+    "docs/parity/visual/histogram/README.md"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/plotting.md#F343",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "图类型 · 统计图",

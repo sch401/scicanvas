@@ -975,6 +975,7 @@ impl SciApp {
                 ColAction::Plot(PlotType::VerticalDrop) => "plot.vertical_drop",
                 ColAction::Plot(PlotType::StepHorizontal) => "plot.step_horizontal",
                 ColAction::Plot(PlotType::StepVertical) => "plot.step_vertical",
+                ColAction::Plot(PlotType::Histogram) => "plot.histogram",
                 ColAction::AddToGraph(_) => unreachable!(),
             };
             self.run_command(command);
