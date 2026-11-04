@@ -87,6 +87,10 @@ impl GlobalFitEditor {
                     }
                 });
             });
+            if matches!(self.model,Model::CompetitiveInhibition | Model::NoncompetitiveInhibition | Model::UncompetitiveInhibition)
+                && (self.shared[3] || self.names.iter().enumerate().filter(|(_,name)|name.starts_with("I_")).any(|(i,_)|self.limits[i].fixed.is_none())) {
+                ui.colored_label(pal.warn,"请把 I 设为独立参数，并逐组固定为该组抑制剂浓度。");
+            }
             ui.checkbox(&mut self.weighted,"按各组关联的 Y 误差加权（1/σ²）");
             ui.label("线性约束（展开的参数名可用于等式或不等式）");ui.text_edit_multiline(&mut self.constraints);
             ui.label("初值自动估计，共享参数取各组中位数。结果曲线和 Note 为一次性快照，暂不支持自动重算。最多 60 个展开参数。");

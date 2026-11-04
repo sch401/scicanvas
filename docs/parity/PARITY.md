@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 97 项，P1 146 项，P2 259 项，不做 12 项。
-状态：已完成 82 项，已实现待验收 78 项，部分实现 13 项，未开始 329 项，不做 12 项。
+状态：已完成 82 项，已实现待验收 80 项，部分实现 12 项，未开始 328 项，不做 12 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -211,12 +211,12 @@
 | F150 | 内置拟合函数：S 形与生长（Boltzmann、Logistic、DoseResp、Hill、Gompertz 等） | Curve Fitting Functions（共 239 个） | P0 | 已完成 | S 形与生长：Boltzmann、Logistic、DoseResp、Hill、Gompertz，公式与参数名同 Origin，均有数据驱动初值 | 从自动初值收敛到 SciPy 1.17.1 curve_fit 的参数（1e-5）、标准误（1e-3）与 RSS；2026-11：生成并通过 SciPy 参数、标准误和残差参考对照。 | — |
 | F151 | 内置拟合函数：幂函数与对数（Power、Allometric、Log 等） | Curve Fitting Functions（共 239 个） | P0 | 已完成 | 幂函数与对数：Allometric1、Allometric2、Power1、Log3P1，公式与参数名同 Origin，均有数据驱动初值 | 从自动初值收敛到 SciPy 1.17.1 curve_fit 的参数（1e-5）、标准误（1e-3）与 RSS；2026-11：生成并通过 SciPy 参数、标准误和残差参考对照。 | — |
 | F152 | 内置拟合函数：多项式与有理函数（Poly、Rational 等） | Curve Fitting Functions（共 239 个） | P0 | 已实现待验收 | 线性入口提供一阶，多项式入口提供 2–6 阶；有理函数提供 Rational1（一阶/一阶）、Rational12（一阶/二阶）、Rational22（二阶/二阶）、Rational33（三阶/三阶），新增名按阶数定义，不作 Origin 别名。复用自动初值、解析导数、固定/上下界/线性约束、报告和结果曲线；分母极点处断线，项目保存和撤销重做沿用现有流程。更多参数化、多项式变体和数据驱动目录不在本条范围，移至 S2-5 拟合补强，由 F514 目录总览跟踪 | 四个有理模型与 SciPy 1.17.1 参数/标准误/RSS 对照；Rational33 的 NIST Thurber 37 点、自动初值与两组官方起点对照；完整 NIST 参考值对照待做 | 当前多项式阶数：已完成 0/6，待验收 6，部分实现 0；一阶走线性拟合入口，2–6 阶走多项式入口；按支持阶数计数，不折算为 239 项参考函数目录进度。；当前有理模型：已完成 0/4，待验收 4，部分实现 0；Rational1/12/22/33 四个模型已接入，数字描述阶数，独立数值回归通过，人工操作与 Origin 对照待验收；不折算为 239 项目录已完成数。 |
-| F153 | 内置拟合函数：波形（Sine、SineDamp、Pulse、SquareWave 等） | Curve Fitting Functions（共 239 个） | P1 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 | — |
-| F154 | 内置拟合函数：酶动力学（MichaelisMenten、各类抑制模型等） | Curve Fitting Functions（共 239 个） | P1 | 部分实现 | 酶动力学：MichaelisMenten（Hanes–Woolf 线性化估计初值）；各类抑制模型待做 | 与 SciPy 1.17.1 curve_fit 的参数（1e-6）、标准误（1e-4）一致，从自动初值（线性化回归）收敛 | — |
-| F155 | 内置拟合函数：吸附与结合（Langmuir、Freundlich、BET、OneSiteBind 等） | Curve Fitting Functions（共 239 个） | P1 | 部分实现 | 吸附：Langmuir、Freundlich 等温线，准一级、准二级吸附动力学（线性化估计初值）；BET、OneSiteBind 等待做 | 与 SciPy 1.17.1 curve_fit 的参数（1e-6）、标准误（1e-4）一致，从自动初值（线性化回归）收敛 | — |
+| F153 | 内置拟合函数：波形（Sine、SineDamp、Pulse、SquareWave 等） | Curve Fitting Functions（共 239 个） | P1 | 部分实现 | 新增 Sine、SineDamp、Pulse，自动周期初值使用插值 FFT，含噪声参考；SineDamp 固定首批有效数据最小 X 为时间原点并保存。方波按卡片暂缓，等待平滑近似方案。 | SciPy 参数参考覆盖自动初值和真值 ×1.1 初值，相对误差 1e-6；抑制模型三浓度全局拟合；BET 定义域及阻尼时间原点保存、重算、重新编辑回归。 | 波形模型：已完成 0/4，待验收 3，部分实现 0；Sine、SineDamp、Pulse 待验收；方波暂缓。 |
+| F154 | 内置拟合函数：酶动力学（MichaelisMenten、各类抑制模型等） | Curve Fitting Functions（共 239 个） | P1 | 已实现待验收 | Michaelis–Menten 之外新增底物、竞争、非竞争和反竞争抑制。后三种使用全局拟合共享 Vmax/Km/Ki，并逐组固定抑制剂浓度 I；普通窗口提示固定 I。 | SciPy 参数参考覆盖自动初值和真值 ×1.1 初值，相对误差 1e-6；抑制模型三浓度全局拟合；BET 定义域及阻尼时间原点保存、重算、重新编辑回归。 | — |
+| F155 | 内置拟合函数：吸附与结合（Langmuir、Freundlich、BET、OneSiteBind 等） | Curve Fitting Functions（共 239 个） | P1 | 已实现待验收 | 现有 Langmuir、Freundlich、准一级和准二级外新增 BET、TwoSiteBind、OneSiteTotal。BET 过滤定义域外点。单位点结合请用 Langmuir，Kd=1/KL。 | SciPy 参数参考覆盖自动初值和真值 ×1.1 初值，相对误差 1e-6；抑制模型三浓度全局拟合；BET 定义域及阻尼时间原点保存、重算、重新编辑回归。 | — |
 | F156 | 内置拟合函数：其余专业函数（流变、热力学、统计分布等） | Curve Fitting Functions（共 239 个） | P2 | 未开始 | 函数表达式 + 初值估计，数据驱动注册 | 每个函数用 Origin 拟合结果做回归测试 | — |
 | F157 | 寻峰分析专用函数（Bigaussian、FraserSuzuki 等 7 个） | Peak Analyzer Functions | P2 | 未开始 | — | 与 Origin 比较 | 寻峰函数：已完成 0/7，待验收 0，部分实现 0；第三阶段路线参考数量，目录待逐项核对 |
-| F514 | 内置拟合函数库总览 | Fitting Function Library | P1 | 部分实现 | 当前 Model::ALL 为 28 个内置非线性模型（原 24 个加四个有理模型）；另有线性及 2–6 阶多项式入口和支持项目保存/重编辑和 .scfn 跨项目复用的自定义标量拟合。内置模型：Gauss、Lorentz、Voigt、PsdVoigt1、LogNormal、ExpDec1、ExpDec2、ExpDec3、ExpGro1、ExpAssoc、Boltzmann、Logistic、DoseResp、Hill、Gompertz、Allometric1、Allometric2、Power1、Log3P1、Langmuir、Freundlich、PseudoFirstOrder、PseudoSecondOrder、MichaelisMenten、Rational1、Rational12、Rational22、Rational33。239 项参考目录逐项对应、更多函数族与数据驱动函数库仍待补 | 原 24 模型已有参考回归；四个有理模型通过 SciPy 参数/标准误/RSS 对照，Rational33 通过 NIST Thurber 专项；完整 NIST 参考值对照待做 | 显函数参考目录：已完成 0/239，待验收 0，部分实现 0；239 为路线参考基数；当前 28 个模型的逐项目录归属仍待确认，与 F148–F156 重叠，不直接折算为目录完成数。；当前内置模型：已完成 0/28，待验收 28，部分实现 0；当前 Model::ALL 的 28 个模型已有各自回归，均待完整参考/人工验收；不含线性与多项式阶数，也不含用户自定义表达式。 |
+| F514 | 内置拟合函数库总览 | Fitting Function Library | P1 | 部分实现 | 当前内置 38 个模型、10 类，新增波形和结合分类；显函数参考目录仍为 239 项，目录逐项映射另行推进。 | SciPy 参数参考覆盖自动初值和真值 ×1.1 初值，相对误差 1e-6；抑制模型三浓度全局拟合；BET 定义域及阻尼时间原点保存、重算、重新编辑回归。 | 显函数参考目录：已完成 0/239，待验收 0，部分实现 0；当前 38 个内置模型，239 项目录映射待做。；当前内置模型：已完成 0/38，待验收 38，部分实现 0；当前 Model::ALL 的 28 个模型已有各自回归，均待完整参考/人工验收；不含线性与多项式阶数，也不含用户自定义表达式。 |
 
 ## 数学运算
 

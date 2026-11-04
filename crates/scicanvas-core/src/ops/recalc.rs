@@ -72,6 +72,9 @@ pub enum OpKind {
 )]
 pub enum FitMethod {
     Builtin(crate::nlfit::Model),
+    SineDamp {
+        origin: f64,
+    },
     Custom {
         name: String,
         formula: String,
@@ -83,6 +86,7 @@ impl FitMethod {
     pub fn from_function(function: &crate::nlfit::FitFunction) -> Self {
         match function {
             crate::nlfit::FitFunction::Builtin(model) => Self::Builtin(*model),
+            crate::nlfit::FitFunction::SineDamp { origin } => Self::SineDamp { origin: *origin },
             crate::nlfit::FitFunction::Indexed(_) => unreachable!("全局索引模型只生成一次性报告"),
             _ => Self::Custom {
                 name: function.name().into(),
@@ -95,6 +99,12 @@ impl FitMethod {
     pub fn resolve(&self) -> Result<crate::nlfit::FitFunction, String> {
         Ok(match self {
             Self::Builtin(model) => crate::nlfit::FitFunction::Builtin(*model),
+            Self::SineDamp { origin } => {
+                if !origin.is_finite() {
+                    return Err("阻尼正弦时间原点必须是有限数".into());
+                }
+                crate::nlfit::FitFunction::SineDamp { origin: *origin }
+            }
             Self::Custom {
                 name,
                 formula,
@@ -336,7 +346,7 @@ impl NonlinearRecipe {
     pub(crate) fn estimated_bytes(&self) -> usize {
         use std::mem::size_of;
         let function = match &self.function {
-            FitMethod::Builtin(_) => 0,
+            FitMethod::Builtin(_) | FitMethod::SineDamp { .. } => 0,
             FitMethod::Custom {
                 name,
                 formula,
@@ -836,6 +846,10 @@ impl NonlinearRecipe {
         let mut h = Digest(0xcbf29ce484222325);
         h.text("SciCanvas-fit-v21");
         match &self.function {
+            FitMethod::SineDamp { origin } => {
+                h.integer(2);
+                h.number(Some(*origin));
+            }
             FitMethod::Builtin(model) => {
                 h.integer(0);
                 h.text(model.name());

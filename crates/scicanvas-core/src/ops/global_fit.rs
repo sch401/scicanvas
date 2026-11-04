@@ -29,6 +29,11 @@ impl GlobalFitReport {
     }
     pub fn note(&self) -> String {
         let fit = &self.fit.joint;
+        let origin = if let FitFunction::SineDamp { origin } = self.fit.per_group[0].model {
+            format!(" 固定时间原点 x₀={}。", fmt_num(origin))
+        } else {
+            String::new()
+        };
         let names = self.fit.per_group[0].model.params();
         let shared = names
             .iter()
@@ -37,7 +42,7 @@ impl GlobalFitReport {
             .map(|(n, _)| *n)
             .collect::<Vec<_>>()
             .join("、");
-        format!("模型：{}。共享参数：{}；有效 N={}，联合残差自由度={}，{}={}。\n一次性结果，暂不支持自动重算。标准误取自联合协方差；各组 R²：{}。{}",fit.model.name(),if shared.is_empty(){"无"}else{&shared},fit.n,fit.dof,if fit.weighted {"χ²"}else{"RSS"},fmt_num(fit.rss),self.fit.per_group.iter().map(|f|fmt_num(f.r2)).collect::<Vec<_>>().join("、"),fit.warnings.join("\n"))
+        format!("模型：{}。共享参数：{}；有效 N={}，联合残差自由度={}，{}={}。\n一次性结果，暂不支持自动重算。标准误取自联合协方差；各组 R²：{}。{}",fit.model.name(),if shared.is_empty(){"无"}else{&shared},fit.n,fit.dof,if fit.weighted {"χ²"}else{"RSS"},fmt_num(fit.rss),self.fit.per_group.iter().map(|f|fmt_num(f.r2)).collect::<Vec<_>>().join("、"),origin + &fit.warnings.join("\n"))
     }
     fn markdown(&self) -> String {
         let rows = self.rows();

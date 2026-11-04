@@ -3,6 +3,7 @@
 
 use crate::analysis::mat_inv;
 
+mod extended;
 mod global;
 mod guess;
 mod model;
@@ -231,6 +232,9 @@ impl CustomFitFunction {
 pub enum FitFunction {
     Builtin(Model),
     Custom(CustomFitFunction),
+    SineDamp {
+        origin: f64,
+    },
     #[doc(hidden)]
     Indexed(std::sync::Arc<IndexedModel>),
 }
@@ -239,6 +243,7 @@ impl FitFunction {
     pub fn name(&self) -> &str {
         match self {
             Self::Builtin(model) => model.name(),
+            Self::SineDamp { .. } => Model::SineDamp.name(),
             Self::Custom(function) => &function.name,
             Self::Indexed(function) => function.base.name(),
         }
@@ -247,6 +252,7 @@ impl FitFunction {
     pub fn formula(&self) -> &str {
         match self {
             Self::Builtin(model) => model.formula(),
+            Self::SineDamp { .. } => Model::SineDamp.formula(),
             Self::Custom(function) => &function.formula,
             Self::Indexed(function) => function.base.formula(),
         }
@@ -255,6 +261,7 @@ impl FitFunction {
     pub fn params(&self) -> Vec<&str> {
         match self {
             Self::Builtin(model) => model.params().to_vec(),
+            Self::SineDamp { .. } => Model::SineDamp.params().to_vec(),
             Self::Custom(function) => function.parameters.iter().map(String::as_str).collect(),
             Self::Indexed(function) => function.names.iter().map(String::as_str).collect(),
         }
@@ -263,6 +270,12 @@ impl FitFunction {
     fn eval(&self, x: f64, params: &[f64]) -> f64 {
         match self {
             Self::Builtin(model) => model.eval(x, params),
+            Self::SineDamp { origin } => {
+                params[0]
+                    + params[1]
+                        * (-(x - origin) / params[4]).exp()
+                        * (std::f64::consts::TAU * (x - params[2]) / params[3]).sin()
+            }
             Self::Custom(function) => function.eval(x, params),
             Self::Indexed(function) => function.eval(x, params),
         }
@@ -271,6 +284,7 @@ impl FitFunction {
     fn guess(&self, xs: &[f64], ys: &[f64]) -> Option<Vec<f64>> {
         match self {
             Self::Builtin(model) => Some(model.guess(xs, ys)),
+            Self::SineDamp { .. } => Some(Model::SineDamp.guess(xs, ys)),
             Self::Custom(_) => None,
             Self::Indexed(function) => Some(function.initial.clone()),
         }
@@ -888,6 +902,7 @@ impl<'a> FitSession<'a> {
         limits: &'a [ParamLimits],
         constraints: &[LinearConstraint],
     ) -> Result<Self, String> {
+        let model = model.for_data(xs, ys, sigma);
         let names = model.params();
         let all = names.len();
         if initial.is_some_and(|values| values.len() != all) {
@@ -909,7 +924,7 @@ impl<'a> FitSession<'a> {
                 return Err("上下限必须是有限数".into());
             }
         }
-        let (xs, ys, w) = weighted_points(xs, ys, sigma)?;
+        let (xs, ys, w) = model.points(xs, ys, sigma)?;
         let is_fixed = |k: usize| fixed.get(k).is_some_and(|v| v.is_some());
         let free: Vec<usize> = (0..all).filter(|k| !is_fixed(*k)).collect();
         let m = free.len();
@@ -2426,7 +2441,7 @@ mod tests {
             }
             close(f.rss, rss, 1e-8);
         }
-        assert_eq!(Model::ALL.len(), 28);
+        assert_eq!(Model::ALL.len(), 38);
         assert!(
             Model::ALL.iter().all(|m| m.params().len() <= MAX_PARAMS),
             "the dialog holds up to MAX_PARAMS parameters"

@@ -827,11 +827,74 @@ def global_fits():
     write("global_fits",cases)
 
 
+
+def extended_fit_cases():
+    import hashlib
+    models={
+        "Sine":lambda x,y0,a,xc,t:y0+a*np.sin(2*np.pi*(x-xc)/t),
+        "SineDamp":lambda x,y0,a,xc,t,t0:y0+a*np.exp(-(x-x.min())/t0)*np.sin(2*np.pi*(x-xc)/t),
+        "Pulse":lambda x,y0,a,x0,t1,t2,p:y0+a*np.maximum(1-np.exp(-np.maximum(x-x0,0)/t1),0)**p*np.exp(-np.maximum(x-x0,0)/t2),
+        "SubstrateInhibition":lambda x,v,k,ki:v*x/(k+x*(1+x/ki)),
+        "BET":lambda x,q,c:q*c*x/((1-x)*(1-x+c*x)),
+        "TwoSiteBind":lambda x,a,k,b,u:a*x/(k+x)+b*x/(u+x),
+        "OneSiteTotal":lambda x,a,k,ns,bkg:a*x/(k+x)+ns*x+bkg,
+    }
+    specs=[
+        ("Sine",np.linspace(0,10,201)+.003*np.sin(np.arange(201)*.9),[1.2,2,.3,2.5],.01),
+        ("Sine-noisy",np.linspace(0,10,201),[1.2,2,.3,2.5],.15),
+        ("SineDamp",np.linspace(1,11,201),[.3,3,1.3,2.5,6],.005),
+        ("Pulse",np.linspace(0,15,241),[.2,6,3.03,.6,3.5,1.5],.002),
+        ("SubstrateInhibition",np.linspace(.02,20,101),[8,1.2,5],.002),
+        ("BET",np.linspace(.02,.85,101),[2,6],.001),
+        ("TwoSiteBind",np.geomspace(.005,60,121),[3,.4,5,8],.001),
+        ("OneSiteTotal",np.r_[0,np.geomspace(.01,50,120)],[4,.8,.03,.4],.001),
+    ]
+    new=[]
+    for name,x,truth,amp in specs:
+        model="Sine" if name=="Sine-noisy" else name;function=models[model]
+        i=np.arange(len(x));noise=.6*np.sin(1.7*i)+.4*np.cos(.37*i*i)
+        y=function(x,*truth)+amp*noise
+        initial=np.asarray(truth)*1.1
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore",RuntimeWarning)
+            p,cov=optimize.curve_fit(function,x,y,p0=initial,maxfev=100000,ftol=1e-13,xtol=1e-13,gtol=1e-13)
+        new.append(dict(name=name,model=model,x=x,y=y,params=p,se=np.sqrt(np.diag(cov)),rss=np.sum((y-function(x,*p))**2),extra_initial=initial))
+    path=OUT/"builtin_fits.json"
+    existing=json.loads(path.read_text(encoding="utf-8"))
+    legacy=[case for case in existing['cases'] if case['model'] not in models]
+    frozen=json.dumps(legacy,ensure_ascii=False,separators=(",",":"),sort_keys=True)
+    write("builtin_fits",legacy+new)
+    actual=json.loads(path.read_text(encoding="utf-8"))['cases'][:len(legacy)]
+    assert json.dumps(actual,ensure_ascii=False,separators=(",",":"),sort_keys=True)==frozen
+    print("Legacy builtin cases unchanged:",len(legacy),hashlib.sha256(frozen.encode()).hexdigest())
+
+
+def inhibition_fits():
+    functions={
+        "CompetitiveInhibition":lambda x,v,k,ki,i:v*x/(k*(1+i/ki)+x),
+        "NoncompetitiveInhibition":lambda x,v,k,ki,i:v*x/((1+i/ki)*(k+x)),
+        "UncompetitiveInhibition":lambda x,v,k,ki,i:v*x/(k+x*(1+i/ki)),
+    }
+    cases=[]
+    for model,function in functions.items():
+        groups=[];concentrations=[0.,1.,4.];truth=np.array([8.,1.2,3.]+concentrations)
+        for i,concentration in enumerate(concentrations):
+            x=np.linspace(.05,20,61);y=function(x,*truth[:3],concentration)+.002*np.sin(np.arange(len(x))*1.7+i)
+            groups.append(dict(x=x,y=y,sigma=None))
+        def residual(p):
+            return np.concatenate([function(g['x'],*p,c)-g['y'] for g,c in zip(groups,concentrations)])
+        result=optimize.least_squares(residual,truth[:3]*1.1,method="lm",jac="3-point",ftol=1e-13,xtol=1e-13,gtol=1e-13,max_nfev=100000)
+        params=np.r_[result.x,concentrations];rss=np.dot(result.fun,result.fun)
+        cases.append(dict(name=model,model=model,groups=groups,shared=[True,True,True,False],initial=truth*1.1,
+            limits=[dict(fixed=None,lower=None,upper=None)]*3+[dict(fixed=v,lower=None,upper=None) for v in concentrations],params=params,rss=rss))
+    write("inhibition_fits",cases)
+
+
 GENERATORS = [
     integrals, normalization, descriptive, column_math, polynomial, statistical_tests, signal_tests,
     interpolation_cases, derivative_cases, peak_cases, constrained_fit_cases, builtin_fit_cases,
     smoothing_cases, percent_bar_cases, fit_report_cases, formula_cases, weighted_fit_cases, qq_cases, box_cases,
-    histogram_option_cases, normality_ks_ad, ks_2samp, two_way_anova, fit_tools, global_fits,
+    histogram_option_cases, normality_ks_ad, ks_2samp, two_way_anova, fit_tools, global_fits, extended_fit_cases, inhibition_fits,
 ]
 
 

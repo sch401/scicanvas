@@ -3020,33 +3020,107 @@
   "feature": "内置拟合函数：波形（Sine、SineDamp、Pulse、SquareWave 等）",
   "ref": "Curve Fitting Functions（共 239 个）",
   "pri": "P1",
-  "status": "未开始",
-  "how": "函数表达式 + 初值估计，数据驱动注册",
-  "verify": "每个函数用 Origin 拟合结果做回归测试",
+  "status": "部分实现",
+  "how": "新增 Sine、SineDamp、Pulse，自动周期初值使用插值 FFT，含噪声参考；SineDamp 固定首批有效数据最小 X 为时间原点并保存。方波按卡片暂缓，等待平滑近似方案。",
+  "verify": "SciPy 参数参考覆盖自动初值和真值 ×1.1 初值，相对误差 1e-6；抑制模型三浓度全局拟合；BET 定义域及阻尼时间原点保存、重算、重新编辑回归。",
   "id": "F153",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/extended_models.rs::a4_bet_domain_and_damped_origin_save_recalculate_and_reedit",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::a4_damped_model_real_report_reedit_preserves_fixed_origin"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/builtin_fits.json",
+    "crates/scicanvas-core/tests/reference/inhibition_fits.json",
+    "crates/scicanvas-core/tests/reference_scipy.rs"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/fitting.md#F153",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  },
+  "sub_items": {
+   "波形模型": {
+    "total": 4,
+    "done": 0,
+    "review": 3,
+    "note": "Sine、SineDamp、Pulse 待验收；方波暂缓。"
+   }
+  }
  },
  {
   "module": "回归与拟合",
   "feature": "内置拟合函数：酶动力学（MichaelisMenten、各类抑制模型等）",
   "ref": "Curve Fitting Functions（共 239 个）",
   "pri": "P1",
-  "status": "部分实现",
-  "how": "酶动力学：MichaelisMenten（Hanes–Woolf 线性化估计初值）；各类抑制模型待做",
-  "verify": "与 SciPy 1.17.1 curve_fit 的参数（1e-6）、标准误（1e-4）一致，从自动初值（线性化回归）收敛",
+  "status": "已实现待验收",
+  "how": "Michaelis–Menten 之外新增底物、竞争、非竞争和反竞争抑制。后三种使用全局拟合共享 Vmax/Km/Ki，并逐组固定抑制剂浓度 I；普通窗口提示固定 I。",
+  "verify": "SciPy 参数参考覆盖自动初值和真值 ×1.1 初值，相对误差 1e-6；抑制模型三浓度全局拟合；BET 定义域及阻尼时间原点保存、重算、重新编辑回归。",
   "id": "F154",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/extended_models.rs::a4_bet_domain_and_damped_origin_save_recalculate_and_reedit",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::a4_damped_model_real_report_reedit_preserves_fixed_origin"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/builtin_fits.json",
+    "crates/scicanvas-core/tests/reference/inhibition_fits.json",
+    "crates/scicanvas-core/tests/reference_scipy.rs"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/fitting.md#F154",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "回归与拟合",
   "feature": "内置拟合函数：吸附与结合（Langmuir、Freundlich、BET、OneSiteBind 等）",
   "ref": "Curve Fitting Functions（共 239 个）",
   "pri": "P1",
-  "status": "部分实现",
-  "how": "吸附：Langmuir、Freundlich 等温线，准一级、准二级吸附动力学（线性化估计初值）；BET、OneSiteBind 等待做",
-  "verify": "与 SciPy 1.17.1 curve_fit 的参数（1e-6）、标准误（1e-4）一致，从自动初值（线性化回归）收敛",
+  "status": "已实现待验收",
+  "how": "现有 Langmuir、Freundlich、准一级和准二级外新增 BET、TwoSiteBind、OneSiteTotal。BET 过滤定义域外点。单位点结合请用 Langmuir，Kd=1/KL。",
+  "verify": "SciPy 参数参考覆盖自动初值和真值 ×1.1 初值，相对误差 1e-6；抑制模型三浓度全局拟合；BET 定义域及阻尼时间原点保存、重算、重新编辑回归。",
   "id": "F155",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/extended_models.rs::a4_bet_domain_and_damped_origin_save_recalculate_and_reedit",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::a4_damped_model_real_report_reedit_preserves_fixed_origin"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/builtin_fits.json",
+    "crates/scicanvas-core/tests/reference/inhibition_fits.json",
+    "crates/scicanvas-core/tests/reference_scipy.rs"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/fitting.md#F155",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "回归与拟合",
@@ -8399,21 +8473,43 @@
   "ref": "Fitting Function Library",
   "pri": "P1",
   "status": "部分实现",
-  "how": "当前 Model::ALL 为 28 个内置非线性模型（原 24 个加四个有理模型）；另有线性及 2–6 阶多项式入口和支持项目保存/重编辑和 .scfn 跨项目复用的自定义标量拟合。内置模型：Gauss、Lorentz、Voigt、PsdVoigt1、LogNormal、ExpDec1、ExpDec2、ExpDec3、ExpGro1、ExpAssoc、Boltzmann、Logistic、DoseResp、Hill、Gompertz、Allometric1、Allometric2、Power1、Log3P1、Langmuir、Freundlich、PseudoFirstOrder、PseudoSecondOrder、MichaelisMenten、Rational1、Rational12、Rational22、Rational33。239 项参考目录逐项对应、更多函数族与数据驱动函数库仍待补",
-  "verify": "原 24 模型已有参考回归；四个有理模型通过 SciPy 参数/标准误/RSS 对照，Rational33 通过 NIST Thurber 专项；完整 NIST 参考值对照待做",
+  "how": "当前内置 38 个模型、10 类，新增波形和结合分类；显函数参考目录仍为 239 项，目录逐项映射另行推进。",
+  "verify": "SciPy 参数参考覆盖自动初值和真值 ×1.1 初值，相对误差 1e-6；抑制模型三浓度全局拟合；BET 定义域及阻尼时间原点保存、重算、重新编辑回归。",
   "milestone": "M2 论文全流程",
   "sub_items": {
    "显函数参考目录": {
     "total": 239,
     "done": 0,
     "review": 0,
-    "note": "239 为路线参考基数；当前 28 个模型的逐项目录归属仍待确认，与 F148–F156 重叠，不直接折算为目录完成数。"
+    "note": "当前 38 个内置模型，239 项目录映射待做。"
    },
    "当前内置模型": {
-    "total": 28,
+    "total": 38,
     "done": 0,
-    "review": 28,
+    "review": 38,
     "note": "当前 Model::ALL 的 28 个模型已有各自回归，均待完整参考/人工验收；不含线性与多项式阶数，也不含用户自定义表达式。"
+   }
+  },
+  "needs": [
+   "auto",
+   "reference",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/extended_models.rs::a4_bet_domain_and_damped_origin_save_recalculate_and_reedit",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::a4_damped_model_real_report_reedit_preserves_fixed_origin"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/builtin_fits.json",
+    "crates/scicanvas-core/tests/reference/inhibition_fits.json",
+    "crates/scicanvas-core/tests/reference_scipy.rs"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/fitting.md#F514",
+    "result": "待做",
+    "date": "",
+    "build": ""
    }
   }
  }
