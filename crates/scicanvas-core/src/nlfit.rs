@@ -310,6 +310,9 @@ pub struct NlFit {
     pub status: FitStatus,
     #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Vec::is_empty"))]
     pub warnings: Vec<String>,
+    /// 按 Y 误差 1/σ² 加权（仪器权重）。加权时 rss、reduced_chi2 是加权值（χ²、约化 χ²）。
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "std::ops::Not::not"))]
+    pub weighted: bool,
     /// 被固定的参数（标准误记为 0，不计入自由度）。
     pub fixed: Vec<bool>,
     /// 结果停在下限或上限上的参数。
@@ -371,13 +374,56 @@ impl NlFit {
     }
 }
 
-fn rss(model: &FitFunction, xs: &[f64], ys: &[f64], p: &[f64]) -> f64 {
-    let s: f64 = xs.iter().zip(ys).map(|(x, y)| (y - model.eval(*x, p)).powi(2)).sum();
+/// 加权残差平方和 Σ(√wᵢ·(yᵢ − f(xᵢ)))²；不加权时 √wᵢ = 1。
+fn rss(model: &FitFunction, xs: &[f64], ys: &[f64], w: &[f64], p: &[f64]) -> f64 {
+    let s: f64 = xs
+        .iter()
+        .zip(ys)
+        .zip(w)
+        .map(|((x, y), w)| (w * (y - model.eval(*x, p))).powi(2))
+        .sum();
     if s.is_finite() {
         s
     } else {
         f64::INFINITY
     }
+}
+
+/// 有效点的 X、Y 和每点 √wᵢ，三个数组等长。
+type WeightedPoints = (Vec<f64>, Vec<f64>, Vec<f64>);
+
+/// 取 X、Y（加权时还有 σ）都有效的点并按 X 排序，返回 X、Y 和每点 √wᵢ = 1/σᵢ（不加权时为 1）。
+/// σ 为缺失值（NaN）的点跳过；0、负数或无穷大的 σ 报错。
+fn weighted_points(xs: &[f64], ys: &[f64], sigma: Option<&[f64]>) -> Result<WeightedPoints, String> {
+    if sigma.is_some_and(|s| s.len() != xs.len() || s.len() != ys.len()) {
+        return Err("Y 误差的个数与数据点个数不一致".into());
+    }
+    let mut pts = Vec::with_capacity(xs.len());
+    for (i, (&x, &y)) in xs.iter().zip(ys).enumerate() {
+        let s = sigma.map_or(1.0, |s| s[i]);
+        if !x.is_finite() || !y.is_finite() || s.is_nan() {
+            continue;
+        }
+        if !s.is_finite() || s <= 0.0 {
+            return Err(format!(
+                "第 {} 个数据点的 Y 误差为 {s}，加权拟合要求误差是正的有限数",
+                i + 1
+            ));
+        }
+        pts.push((x, y, 1.0 / s));
+    }
+    pts.sort_by(|a, b| a.0.total_cmp(&b.0));
+    let mut out = (
+        Vec::with_capacity(pts.len()),
+        Vec::with_capacity(pts.len()),
+        Vec::with_capacity(pts.len()),
+    );
+    for (x, y, w) in pts {
+        out.0.push(x);
+        out.1.push(y);
+        out.2.push(w);
+    }
+    Ok(out)
 }
 
 /// 雅可比 ∂f/∂p（有理模型解析求导，其余中心差分），只对 `free` 中的参数求导，n × free.len()。
@@ -757,6 +803,9 @@ struct FitSession<'a> {
     model: FitFunction,
     xs: Vec<f64>,
     ys: Vec<f64>,
+    /// 每点 √wᵢ = 1/σᵢ；不加权时全为 1。
+    w: Vec<f64>,
+    weighted: bool,
     limits: &'a [ParamLimits],
     fixed: Vec<Option<f64>>,
     free: Vec<usize>,
@@ -776,6 +825,7 @@ impl<'a> FitSession<'a> {
         model: FitFunction,
         xs: &[f64],
         ys: &[f64],
+        sigma: Option<&[f64]>,
         initial: Option<&[f64]>,
         limits: &'a [ParamLimits],
         constraints: &[LinearConstraint],
@@ -801,14 +851,7 @@ impl<'a> FitSession<'a> {
                 return Err("上下限必须是有限数".into());
             }
         }
-        let mut pts: Vec<(f64, f64)> = xs
-            .iter()
-            .zip(ys)
-            .filter(|(x, y)| x.is_finite() && y.is_finite())
-            .map(|(x, y)| (*x, *y))
-            .collect();
-        pts.sort_by(|a, b| a.0.total_cmp(&b.0));
-        let (xs, ys): (Vec<f64>, Vec<f64>) = pts.into_iter().unzip();
+        let (xs, ys, w) = weighted_points(xs, ys, sigma)?;
         let is_fixed = |k: usize| fixed.get(k).is_some_and(|v| v.is_some());
         let free: Vec<usize> = (0..all).filter(|k| !is_fixed(*k)).collect();
         let m = free.len();
@@ -911,7 +954,7 @@ impl<'a> FitSession<'a> {
             }
         }
 
-        let cost = rss(&model, &xs, &ys, &params);
+        let cost = rss(&model, &xs, &ys, &w, &params);
         if !cost.is_finite() {
             return Err("初值处函数值无效，请检查数据是否适合该函数".into());
         }
@@ -919,6 +962,8 @@ impl<'a> FitSession<'a> {
             model,
             xs,
             ys,
+            w,
+            weighted: sigma.is_some(),
             limits,
             fixed: fixed_values,
             free,
@@ -946,18 +991,40 @@ impl<'a> FitSession<'a> {
         1e-8 * self.free.iter().map(|&k| p[k].abs()).fold(1.0, f64::max)
     }
 
+    /// 加权残差 √wᵢ·(yᵢ − f(xᵢ))；不加权时 √wᵢ = 1，与普通残差相同。
+    fn residuals(&self, p: &[f64]) -> Vec<f64> {
+        self.xs
+            .iter()
+            .zip(&self.ys)
+            .zip(&self.w)
+            .map(|((x, y), w)| w * (y - self.model.eval(*x, p)))
+            .collect()
+    }
+
+    /// 雅可比每行乘 √wᵢ，与加权残差对应。
+    fn weigh(&self, mut j: Vec<Vec<f64>>) -> Vec<Vec<f64>> {
+        for (row, w) in j.iter_mut().zip(&self.w) {
+            for v in row {
+                *v *= *w;
+            }
+        }
+        j
+    }
+
+    /// 总平方和：加权时用加权均值和 wᵢ（与 Origin 加权 R² 口径一致）；不加权时与普通 TSS 相同。
+    fn total_sum_of_squares(&self) -> f64 {
+        let weight: f64 = self.w.iter().map(|w| w * w).sum();
+        let mean = self.ys.iter().zip(&self.w).map(|(y, w)| w * w * y).sum::<f64>() / weight;
+        self.ys.iter().zip(&self.w).map(|(y, w)| (w * (y - mean)).powi(2)).sum()
+    }
+
     fn optimize(&mut self) {
         while self.iterations < 500 {
             self.iterations += 1;
             let n = self.xs.len();
             let m = self.free.len();
-            let j = jacobian(&self.model, &self.xs, &self.params, &self.free);
-            let residuals: Vec<f64> = self
-                .xs
-                .iter()
-                .zip(&self.ys)
-                .map(|(x, y)| y - self.model.eval(*x, &self.params))
-                .collect();
+            let j = self.weigh(jacobian(&self.model, &self.xs, &self.params, &self.free));
+            let residuals = self.residuals(&self.params);
             let mut a = vec![vec![0.0; m]; m];
             let mut g = vec![0.0; m];
             for i in 0..n {
@@ -1147,14 +1214,14 @@ impl<'a> FitSession<'a> {
                     / (12.0 * h);
             }
         }
-        jac
+        self.weigh(jac)
     }
 
     fn refinement_rss(&self, trial: &[f64]) -> f64 {
         let mut total = 0.0_f64;
         let mut correction = 0.0_f64;
-        for (&x, &y) in self.xs.iter().zip(&self.ys) {
-            let value = (y - self.model.eval(x, trial)).powi(2);
+        for ((&x, &y), &w) in self.xs.iter().zip(&self.ys).zip(&self.w) {
+            let value = (w * (y - self.model.eval(x, trial))).powi(2);
             let next = total + value;
             correction += if total.abs() >= value.abs() {
                 (total - next) + value
@@ -1170,12 +1237,7 @@ impl<'a> FitSession<'a> {
         for _ in 0..5 {
             let m = self.free.len();
             let jac = self.refinement_jacobian(&self.params);
-            let residual: Vec<f64> = self
-                .xs
-                .iter()
-                .zip(&self.ys)
-                .map(|(&x, &y)| y - self.model.eval(x, &self.params))
-                .collect();
+            let residual = self.residuals(&self.params);
             let mut a = vec![vec![0.0; m]; m];
             let mut g = vec![0.0; m];
             for (row, r) in jac.iter().zip(&residual) {
@@ -1256,7 +1318,7 @@ impl<'a> FitSession<'a> {
             let mut na = vec![vec![0.0; m]; m];
             let mut ng = vec![0.0; m];
             for (i, row) in new_j.iter().enumerate() {
-                let r = self.ys[i] - self.model.eval(self.xs[i], &trial);
+                let r = self.w[i] * (self.ys[i] - self.model.eval(self.xs[i], &trial));
                 for u in 0..m {
                     ng[u] += row[u] * r;
                     for v in 0..m {
@@ -1286,12 +1348,12 @@ impl<'a> FitSession<'a> {
                 return;
             }
         }
-        let jac = jacobian(&self.model, &self.xs, &self.params, &self.free);
+        let jac = self.weigh(jacobian(&self.model, &self.xs, &self.params, &self.free));
         let m = self.free.len();
         let mut a = vec![vec![0.0; m]; m];
         let mut g = vec![0.0; m];
         for (i, row) in jac.iter().enumerate() {
-            let r = self.ys[i] - self.model.eval(self.xs[i], &self.params);
+            let r = self.w[i] * (self.ys[i] - self.model.eval(self.xs[i], &self.params));
             for u in 0..m {
                 g[u] += row[u] * r;
                 for v in 0..m {
@@ -1413,7 +1475,7 @@ impl<'a> FitSession<'a> {
                 for (u, &k) in self.free.iter().enumerate() {
                     trial[k] = self.limit(k).clamp(self.params[k] + alpha * delta[u]);
                 }
-                let new_cost = rss(&self.model, &self.xs, &self.ys, &trial);
+                let new_cost = rss(&self.model, &self.xs, &self.ys, &self.w, &trial);
                 if new_cost < self.cost {
                     let low_damping = self.lambda <= 1e-6;
                     let small_step = self
@@ -1457,7 +1519,7 @@ impl<'a> FitSession<'a> {
             for (d, &k) in delta.iter().zip(&self.free) {
                 trial[k] = self.limit(k).clamp(trial[k] + d);
             }
-            let new_cost = rss(&self.model, &self.xs, &self.ys, &trial);
+            let new_cost = rss(&self.model, &self.xs, &self.ys, &self.w, &trial);
             if new_cost < self.cost {
                 let low_damping = self.lambda <= 1e-6;
                 let small_step = self
@@ -1479,7 +1541,8 @@ impl<'a> FitSession<'a> {
     }
 
     fn classify_stall(&self, a: &[Vec<f64>], g: &[f64], open: &[usize]) -> FitStatus {
-        if self.cost <= f64::EPSILON * self.ys.iter().map(|y| y * y).sum::<f64>() {
+        let scale: f64 = self.ys.iter().zip(&self.w).map(|(y, w)| (w * y).powi(2)).sum();
+        if self.cost <= f64::EPSILON * scale {
             return FitStatus::Converged;
         }
         if open.is_empty() {
@@ -1562,7 +1625,8 @@ impl<'a> FitSession<'a> {
         let active_tol = |p: &[f64]| self.active_tol(p);
         let lhs = |p: &[f64], a: &[f64]| self.lhs(p, a);
         let cost = self.cost;
-        let j = jacobian(&self.model, &self.xs, &self.params, &self.free);
+        let tss = self.total_sum_of_squares();
+        let j = self.weigh(jacobian(&self.model, &self.xs, &self.params, &self.free));
         let mut a = vec![vec![0.0; m]; m];
         for row in &j {
             for u in 0..m {
@@ -1645,8 +1709,6 @@ impl<'a> FitSession<'a> {
         let converged = self.converged;
         let x_min = self.xs[0];
         let x_max = self.xs[n - 1];
-        let mean = self.ys.iter().sum::<f64>() / n as f64;
-        let tss: f64 = self.ys.iter().map(|y| (y - mean).powi(2)).sum();
         let r2 = if tss > 0.0 { 1.0 - self.cost / tss } else { f64::NAN };
         let adj_r2 = 1.0 - (1.0 - r2) * (n as f64 - 1.0) / dof;
         let reduced_cov = reduced_covariance(&cov, free, &basis);
@@ -1693,6 +1755,7 @@ impl<'a> FitSession<'a> {
             converged,
             status: if converged { self.status } else { FitStatus::Failed },
             warnings,
+            weighted: self.weighted,
             fixed: fixed_flags,
             at_bound,
             dof: dof_n,
@@ -1724,7 +1787,21 @@ pub fn fit_function(
     limits: &[ParamLimits],
     constraints: &[LinearConstraint],
 ) -> Result<NlFit, String> {
-    let mut session = FitSession::new(function, xs, ys, initial, limits, constraints)?;
+    fit_function_weighted(function, xs, ys, None, initial, limits, constraints)
+}
+
+/// 按 Y 误差加权的拟合，权重 wᵢ = 1/σᵢ²（Origin 的“仪器”权重）。σ 为缺失值（NaN）的点与 X、Y 无效的点
+/// 一样跳过；0、负数或无穷大报错。协方差按约化 χ² 缩放，与 SciPy `curve_fit(sigma=σ, absolute_sigma=False)` 相同。
+pub fn fit_function_weighted(
+    function: FitFunction,
+    xs: &[f64],
+    ys: &[f64],
+    sigma: Option<&[f64]>,
+    initial: Option<&[f64]>,
+    limits: &[ParamLimits],
+    constraints: &[LinearConstraint],
+) -> Result<NlFit, String> {
+    let mut session = FitSession::new(function, xs, ys, sigma, initial, limits, constraints)?;
     session.optimize();
     session.finish()
 }
@@ -2471,7 +2548,7 @@ mod tests {
         .unwrap();
         let model = FitFunction::Custom(function);
         let ys: Vec<_> = xs.iter().map(|&x| model.eval(x, &p)).collect();
-        let session = FitSession::new(model, &xs, &ys, Some(&p), &[], &[]).unwrap();
+        let session = FitSession::new(model, &xs, &ys, None, Some(&p), &[], &[]).unwrap();
         let derivatives = jacobian(&session.model, &xs, &p, &session.free);
         let refined = session.refinement_jacobian(&p);
         for (i, &x) in xs.iter().enumerate() {
@@ -2576,6 +2653,7 @@ mod tests {
             function,
             &[0.0, 1.0, 2.0, 3.0],
             &[2.0, 4.0, 6.0, 8.0],
+            None,
             Some(&[1.0, 0.1]),
             &[],
             &constraints,
@@ -2586,6 +2664,104 @@ mod tests {
         let result = session.finish().unwrap();
         assert!(!result.converged);
         assert_eq!(result.status, FitStatus::Failed);
+    }
+
+    #[test]
+    fn unit_errors_reproduce_the_unweighted_fit_exactly() {
+        let (xs, ys) = data(Model::ExpDec1, 0.0, 8.0, &[0.3, 5.0, 1.7], 0.05);
+        let plain = fit(Model::ExpDec1, &xs, &ys, None, &[]).unwrap();
+        let ones = vec![1.0; xs.len()];
+        let unit = fit_function_weighted(
+            FitFunction::Builtin(Model::ExpDec1),
+            &xs,
+            &ys,
+            Some(&ones),
+            None,
+            &[],
+            &[],
+        )
+        .unwrap();
+        assert!(unit.weighted && !plain.weighted);
+        assert_eq!(
+            NlFit {
+                weighted: false,
+                ..unit
+            },
+            plain
+        );
+    }
+
+    #[test]
+    fn scaling_every_error_keeps_parameters_standard_errors_and_r2() {
+        let (xs, ys) = data(Model::ExpDec1, 0.0, 8.0, &[0.3, 5.0, 1.7], 0.05);
+        let sigma: Vec<f64> = ys.iter().map(|y| 0.02 + 0.05 * y.abs()).collect();
+        let scaled: Vec<f64> = sigma.iter().map(|s| 4.0 * s).collect();
+        let run = |sigma: &[f64]| {
+            fit_function_weighted(
+                FitFunction::Builtin(Model::ExpDec1),
+                &xs,
+                &ys,
+                Some(sigma),
+                None,
+                &[],
+                &[],
+            )
+            .unwrap()
+        };
+        let (a, b) = (run(&sigma), run(&scaled));
+        for k in 0..3 {
+            close(b.params[k], a.params[k], 1e-8);
+            close(b.se[k], a.se[k], 1e-8);
+        }
+        close(b.rss * 16.0, a.rss, 1e-8);
+        close(b.r2, a.r2, 1e-8);
+    }
+
+    #[test]
+    fn weighted_fit_skips_missing_errors_and_rejects_invalid_ones() {
+        let (xs, ys) = data(Model::ExpDec1, 0.0, 8.0, &[0.3, 5.0, 1.7], 0.05);
+        let run = |sigma: &[f64]| {
+            fit_function_weighted(
+                FitFunction::Builtin(Model::ExpDec1),
+                &xs,
+                &ys,
+                Some(sigma),
+                None,
+                &[],
+                &[],
+            )
+        };
+        let mut sigma = vec![0.1; xs.len()];
+        sigma[3] = f64::NAN;
+        assert_eq!(run(&sigma).unwrap().n, xs.len() - 1);
+        for bad in [0.0, -0.1, f64::INFINITY] {
+            sigma[3] = bad;
+            let error = run(&sigma).unwrap_err();
+            assert!(error.contains("第 4 个数据点"), "{error}");
+        }
+        assert!(run(&sigma[1..]).unwrap_err().contains("个数"));
+    }
+
+    #[cfg(feature = "serde")]
+    #[test]
+    fn weighted_flag_is_saved_only_for_weighted_fits() {
+        let (xs, ys) = data(Model::ExpDec1, 0.0, 8.0, &[0.3, 5.0, 1.7], 0.05);
+        let plain = fit(Model::ExpDec1, &xs, &ys, None, &[]).unwrap();
+        assert!(serde_json::to_value(&plain).unwrap().get("weighted").is_none());
+        let sigma = vec![0.1; xs.len()];
+        let weighted = fit_function_weighted(
+            FitFunction::Builtin(Model::ExpDec1),
+            &xs,
+            &ys,
+            Some(&sigma),
+            None,
+            &[],
+            &[],
+        )
+        .unwrap();
+        let value = serde_json::to_value(&weighted).unwrap();
+        assert_eq!(value["weighted"], true);
+        assert_eq!(serde_json::from_value::<NlFit>(value).unwrap(), weighted);
     }
 
     #[cfg(feature = "serde")]
@@ -2613,6 +2789,7 @@ mod tests {
             FitFunction::Builtin(Model::Rational12),
             &xs,
             &ys,
+            None,
             Some(&[1., 1., 0., 0.]),
             &[],
             &[],
@@ -3153,6 +3330,7 @@ impl PartialEq for NlFit {
             && self.converged == other.converged
             && self.status == other.status
             && self.warnings == other.warnings
+            && self.weighted == other.weighted
             && self.fixed == other.fixed
             && self.at_bound == other.at_bound
             && self.dof == other.dof

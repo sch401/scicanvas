@@ -2513,9 +2513,9 @@
   "feature": "加权拟合（误差列权重等）",
   "ref": "Parameters,Bounds,Constraints and Weighting",
   "pri": "P1",
-  "status": "未开始",
-  "how": "",
-  "verify": "与 Origin 比较",
+  "status": "部分实现",
+  "how": "核心求解器支持按 Y 误差加权（权重 1/σ²，Origin 的“仪器”权重）：σ 缺失的点跳过，0、负数或无穷大报错；加权时 RSS、约化 χ² 和 R² 为加权值，协方差按约化 χ² 缩放。拟合对话框的权重选项、项目保存和报告显示待做",
+  "verify": "与 SciPy curve_fit(sigma, absolute_sigma=False) 参考值对照（ExpDec1、Gauss、σ 缺失）；全 1 误差与不加权结果逐位一致、误差整体缩放不改变参数和标准误的回归",
   "id": "F137",
   "milestone": "M2 论文全流程"
  },

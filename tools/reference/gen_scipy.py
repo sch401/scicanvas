@@ -9,6 +9,7 @@ import math
 from datetime import datetime, timezone
 from pathlib import Path
 import platform
+import sys
 import warnings
 
 import numpy as np
@@ -406,6 +407,42 @@ def builtin_fit_cases():
     write("builtin_fits",cases)
 
 
+def weighted_fit_cases():
+    # curve_fit(sigma=σ, absolute_sigma=False)：权重 1/σ²，协方差按约化 χ² 缩放（Origin 默认口径）。
+    def exp1(x, y0, a, t):
+        return y0 + a*np.exp(-x/t)
+    def gauss(x, y0, xc, w, a):
+        return y0 + a/(w*np.sqrt(np.pi/2))*np.exp(-2*((x-xc)/w)**2)
+    i = np.arange(41, dtype=float)
+    noise = np.sin(1.7*i)*.6 + np.cos(.37*i*i)*.4
+    options = dict(absolute_sigma=False, maxfev=100000, ftol=1e-12, xtol=1e-12, gtol=1e-12)
+    cases = []
+    for model, fn, lo, hi, truth, error in [
+        ("ExpDec1", exp1, 0, 8, [.3, 5., 1.7], lambda x, y: .02 + .05*np.abs(y)),
+        ("Gauss", gauss, 0, 10, [1., 4.2, 1.5, 6.], lambda x, y: .05 + .02*x),
+    ]:
+        x = np.linspace(lo, hi, 41)
+        exact = fn(x, *truth)
+        sigma = error(x, exact)
+        y = exact + sigma*noise
+        p, cov = optimize.curve_fit(fn, x, y, p0=truth, sigma=sigma, **options)
+        r = (y - fn(x, *p))/sigma
+        mean = np.sum(y/sigma**2)/np.sum(1/sigma**2)
+        tss = np.sum(((y - mean)/sigma)**2)
+        cases.append(dict(name=model, model=model, x=x, y=y, sigma=sigma, params=p,
+                          se=np.sqrt(np.diag(cov)), chi2=np.sum(r**2), r2=1 - np.sum(r**2)/tss))
+    # σ 缺失的点跳过：结果与去掉该点后拟合相同。
+    x, y = cases[0]["x"], cases[0]["y"]
+    sigma = cases[0]["sigma"].copy()
+    sigma[5] = np.nan
+    keep = np.isfinite(sigma)
+    p, cov = optimize.curve_fit(exp1, x[keep], y[keep], p0=[.3, 5., 1.7], sigma=sigma[keep], **options)
+    r = (y[keep] - exp1(x[keep], *p))/sigma[keep]
+    cases.append(dict(name="missing-sigma", model="ExpDec1", x=x, y=y, sigma=sigma, params=p,
+                      se=np.sqrt(np.diag(cov)), chi2=np.sum(r**2)))
+    write("weighted_fits", cases)
+
+
 def smoothing_cases():
     cases=[]
     for name, y, window in [
@@ -573,20 +610,19 @@ def formula_cases():
     write("formulas",cases)
 
 
+GENERATORS = [
+    integrals, normalization, descriptive, column_math, polynomial, statistical_tests, signal_tests,
+    interpolation_cases, derivative_cases, peak_cases, constrained_fit_cases, builtin_fit_cases,
+    smoothing_cases, percent_bar_cases, fit_report_cases, formula_cases, weighted_fit_cases,
+]
+
+
 if __name__ == "__main__":
-    integrals()
-    normalization()
-    descriptive()
-    column_math()
-    polynomial()
-    statistical_tests()
-    signal_tests()
-    interpolation_cases()
-    derivative_cases()
-    peak_cases()
-    constrained_fit_cases()
-    builtin_fit_cases()
-    smoothing_cases()
-    percent_bar_cases()
-    fit_report_cases()
-    formula_cases()
+    # 不带参数时生成全部；也可只生成指定函数，例如：gen_scipy.py weighted_fit_cases
+    names = sys.argv[1:]
+    unknown = sorted(set(names) - {generator.__name__ for generator in GENERATORS})
+    if unknown:
+        sys.exit("未知的生成函数：" + ", ".join(unknown))
+    for generator in GENERATORS:
+        if not names or generator.__name__ in names:
+            generator()
