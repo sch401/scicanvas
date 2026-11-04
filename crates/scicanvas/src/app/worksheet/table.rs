@@ -569,6 +569,7 @@ impl SheetFrame {
             ("plot.step_horizontal", "水平阶梯图"),
             ("plot.step_vertical", "垂直阶梯图"),
             ("plot.histogram", "直方图"),
+            ("plot.qq", "Q-Q 图"),
         ] {
             if cid.is_empty() {
                 ui.separator();

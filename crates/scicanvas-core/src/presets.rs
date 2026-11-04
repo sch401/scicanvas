@@ -59,6 +59,7 @@ fn entries() -> &'static [(Preset, Recipe)] {
                     "StepHorizontal" => PlotType::StepHorizontal,
                     "StepVertical" => PlotType::StepVertical,
                     "Histogram" => PlotType::Histogram,
+                    "QQ" => PlotType::QQ,
                     _ => unreachable!("built-in preset type"),
                 };
                 let marks = columns

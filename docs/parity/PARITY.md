@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 97 项，P1 146 项，P2 259 项，不做 12 项。
-状态：已完成 82 项，已实现待验收 56 项，部分实现 16 项，未开始 348 项，不做 12 项。
+状态：已完成 82 项，已实现待验收 57 项，部分实现 16 项，未开始 347 项，不做 12 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -499,7 +499,7 @@
 | F352 | 帕累托图（原始数据） | Pareto Chart - Raw Data | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F353 | 人口金字塔图（龙卷风图） | Population Pyramid Graph(Tornado Chart) | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F354 | 概率图 | Probability Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
-| F355 | Q-Q 图 | Q-Q Plot | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F355 | Q-Q 图 | Q-Q Plot | P1 | 已实现待验收 | 绘图 → Q-Q 图：每个 Y 列一组样本，不需要 X 列；剔除非有限值，少于 3 个有效值的列不画。使用 Filliben 排序位置和理论正态分位数，每列附最小二乘参考线，与 scipy.stats.probplot(dist=norm) 一致。横轴为理论分位数，纵轴取第一列名称；支持命令、功能区图库、列标题菜单、示例和项目保存（v26） | SciPy 正常、缺失、3 点、重复与常数样本的 osm/osr/斜率/截距按 1e-12 对照；X 列独立性、短样本跳过、参考线绘制与取点、轴标题、v26 保存和 v25 读取；matplotlib 同数据点和参考线位置对照；示例与命令撤销回归；Windows 人工验收待做 | — |
 | F356 | 质量控制图（X̄-R） | QC(x bar R) Chart Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F357 | 点图 | Dot Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F358 | 堆叠点图 | Stacked Dot Plots | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |

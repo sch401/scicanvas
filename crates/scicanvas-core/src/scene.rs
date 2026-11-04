@@ -181,7 +181,7 @@ pub fn nearest_point<'a>(
 ) -> Option<PointHit> {
     let (_, plots) = layer.prepared_plots_in(books(layer.book_id?)?, books);
     let horizontal = layer.plot_type == PlotType::HorizontalBar;
-    let identity = layer.transform == crate::plotspec::Transform::Identity;
+    let identity = layer.transform == crate::plotspec::Transform::Identity && layer.plot_type != PlotType::QQ;
     let categories: Vec<_> = plots
         .iter()
         .filter(|p| !p.series.line_only)
@@ -710,8 +710,8 @@ fn prepare_layer_data(ctx: &LayerContext<'_, '_, '_>) -> LayerData {
         Some(b) => g.prepared_plots_in(b, others),
         None => (None, Vec::new()),
     };
-    // 直方图的横轴是 Y 值的区间，不使用 X 列的日期或类别格式。
-    let x_col = x_col.filter(|_| g.plot_type != PlotType::Histogram);
+    // 统计图的横轴由 Y 样本生成，不使用 X 列的日期或类别格式。
+    let x_col = x_col.filter(|_| !matches!(g.plot_type, PlotType::Histogram | PlotType::QQ));
     let x_date = !horizontal && !g.x_log && x_col.is_some_and(|c| c.data.kind() == crate::DataKind::DateTime);
     let date_offset = x_col.map_or(0.0, |c| f64::from(c.format.utc_offset) * 60_000.0);
     let categories = x_col.and_then(|c| c.data.plot_category_levels());

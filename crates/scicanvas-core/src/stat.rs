@@ -91,6 +91,51 @@ pub(crate) fn histogram(series: &mut [Series]) {
     }
 }
 
+/// 正态 Q-Q 图：Filliben 排序位置，与 SciPy probplot(dist="norm") 一致。
+pub(crate) fn qq(series: &mut [Series]) {
+    for s in series.iter_mut().filter(|s| !s.line_only) {
+        let mut values: Vec<f64> = s.points.iter().map(|p| p[1]).filter(|v| v.is_finite()).collect();
+        values.sort_by(f64::total_cmp);
+        let n = values.len();
+        s.points = if n < 3 {
+            Vec::new()
+        } else {
+            let end = 0.5_f64.powf(1.0 / n as f64);
+            values
+                .into_iter()
+                .enumerate()
+                .map(|(i, value)| {
+                    let position = if i == 0 {
+                        1.0 - end
+                    } else if i == n - 1 {
+                        end
+                    } else {
+                        (i as f64 + 1.0 - 0.3175) / (n as f64 + 0.365)
+                    };
+                    [crate::stats::norm_ppf(position), value]
+                })
+                .collect()
+        };
+        s.bases = vec![0.0; s.points.len()];
+        s.rows = (0..s.points.len()).collect();
+        s.errors = vec![[None; 2]; s.points.len()];
+        s.point_styles.clear();
+    }
+}
+
+/// 在理论分位数两端绘制最小二乘参考线，复用已有线性拟合。
+pub(crate) fn qq_reference(s: &Series) -> Option<Vec<[f64; 2]>> {
+    if s.line_only || s.points.len() < 3 {
+        return None;
+    }
+    let xs: Vec<_> = s.points.iter().map(|p| p[0]).collect();
+    let ys: Vec<_> = s.points.iter().map(|p| p[1]).collect();
+    let fit = crate::analysis::polyfit(&xs, &ys, 1)?;
+    let first = s.points.first()?[0];
+    let last = s.points.last()?[0];
+    Some(vec![[first, fit.eval(first)], [last, fit.eval(last)]])
+}
+
 pub(crate) fn row_runs(s: &crate::Series) -> Vec<std::ops::Range<usize>> {
     let mut out = Vec::new();
     let mut start = 0;

@@ -3,7 +3,7 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-pub const PROJECT_VERSION: u32 = 25;
+pub const PROJECT_VERSION: u32 = 26;
 pub const GRAPH_TEMPLATE_VERSION: u32 = 1;
 
 /// 列的绘图角色，对应 Origin 里的 X / Y / 忽略。
@@ -489,10 +489,11 @@ pub enum PlotType {
     SplineSymbol,
     VerticalDrop,
     Histogram,
+    QQ,
 }
 
 impl PlotType {
-    pub const ALL: [PlotType; 15] = [
+    pub const ALL: [PlotType; 16] = [
         PlotType::Line,
         PlotType::Scatter,
         PlotType::LineSymbol,
@@ -508,6 +509,7 @@ impl PlotType {
         PlotType::SplineSymbol,
         PlotType::VerticalDrop,
         PlotType::Histogram,
+        PlotType::QQ,
     ];
 
     pub fn label(self) -> &'static str {
@@ -527,6 +529,7 @@ impl PlotType {
             PlotType::SplineSymbol => "样条点线图",
             PlotType::VerticalDrop => "垂线图",
             PlotType::Histogram => "直方图",
+            PlotType::QQ => "Q-Q 图",
         }
     }
 

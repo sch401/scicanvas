@@ -598,7 +598,8 @@ impl PlotSpec {
                 .x
                 .as_ref()
                 .and_then(|x| if x.book == cbook.id { cbook.column(&x.col) } else { None });
-            let xv = own_x;
+            // Q-Q 图只使用 Y 样本，X 列的缺失值和类别不参与取样。
+            let xv = own_x.filter(|_| self.plot_type != PlotType::QQ || mapping.line_only);
             let n = yv.len().max(xv.as_ref().map_or(0, |v| v.len()));
             let (i0, i1) = match mapping.rows {
                 Some((a, b)) => (a, b.saturating_add(1).min(n)),
@@ -683,7 +684,9 @@ impl PlotSpec {
                     .map(|source| DataRef::new(cbook.id, source).key(self.book_id)),
             });
         }
-        crate::stat::apply(&mut out, self.transform);
+        if self.plot_type != PlotType::QQ {
+            crate::stat::apply(&mut out, self.transform);
+        }
         crate::presets::recipe(self.plot_type).position.apply(&mut out);
 
         (xcol, out)

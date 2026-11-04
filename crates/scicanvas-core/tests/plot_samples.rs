@@ -84,7 +84,10 @@ fn samples() -> Vec<(String, Project)> {
             for g in &mut p.graphs {
                 (g.page.width_mm, g.page.height_mm) = scicanvas_core::page::LEGACY_PAGE_MM;
             }
-            (format!("{:02}-{}.scv", i + 1, p.graphs[0].name), p)
+            (
+                format!("{:02}-{}.scv", i + 1, p.graphs[0].name.replace("Q-Q 图", "Q-Q图")),
+                p,
+            )
         })
         .collect()
 }
@@ -446,6 +449,32 @@ fn sample_group_4() -> Vec<Project> {
                     2,
                 ),
             )],
+        ),
+        sample(
+            QQ,
+            "样本正态性",
+            vec![
+                (
+                    Y,
+                    "近似正态",
+                    "mg/L",
+                    "Y 列：40 个近似正态测量值，不需要 X 列；点应接近参考直线",
+                    values(
+                        (0..40).map(|i| 2.0 + 0.7 * scicanvas_core::stats::norm_ppf((i as f64 + 0.5) / 40.0)),
+                        4,
+                    ),
+                ),
+                (
+                    Y,
+                    "右偏样本",
+                    "mg/L",
+                    "Y 列：40 个右偏测量值；点偏离参考直线，便于与近似正态列比较",
+                    values(
+                        (0..40).map(|i| (1.0 + 0.5 * scicanvas_core::stats::norm_ppf((i as f64 + 0.5) / 40.0)).exp()),
+                        4,
+                    ),
+                ),
+            ],
         ),
     ]
 }

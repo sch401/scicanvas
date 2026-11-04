@@ -21,6 +21,7 @@ fn commands_restore_columns_graphs_fits_and_sorting() {
         "plot.step_horizontal",
         "plot.step_vertical",
         "plot.histogram",
+        "plot.qq",
         "col.setXError",
         "col.setYError",
         "col.setZ",

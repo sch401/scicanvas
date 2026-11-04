@@ -5840,11 +5840,42 @@
   "feature": "Q-Q 图",
   "ref": "Q-Q Plot",
   "pri": "P1",
-  "status": "未开始",
-  "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 Origin 同数据出图目视比较",
+  "status": "已实现待验收",
+  "how": "绘图 → Q-Q 图：每个 Y 列一组样本，不需要 X 列；剔除非有限值，少于 3 个有效值的列不画。使用 Filliben 排序位置和理论正态分位数，每列附最小二乘参考线，与 scipy.stats.probplot(dist=norm) 一致。横轴为理论分位数，纵轴取第一列名称；支持命令、功能区图库、列标题菜单、示例和项目保存（v26）",
+  "verify": "SciPy 正常、缺失、3 点、重复与常数样本的 osm/osr/斜率/截距按 1e-12 对照；X 列独立性、短样本跳过、参考线绘制与取点、轴标题、v26 保存和 v25 读取；matplotlib 同数据点和参考线位置对照；示例与命令撤销回归；Windows 人工验收待做",
   "id": "F355",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "visual",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/reference_scipy.rs::qq_points_and_reference_lines_match_scipy_probplot",
+    "crates/scicanvas-core/tests/qq.rs::qq_ignores_x_values_and_per_curve_plot_types",
+    "crates/scicanvas-core/tests/qq.rs::qq_skips_columns_with_fewer_than_three_finite_values",
+    "crates/scicanvas-core/tests/qq.rs::qq_reference_line_is_rendered_and_sorted_points_have_no_source_row",
+    "crates/scicanvas-core/tests/qq.rs::qq_axis_titles_and_v26_project_roundtrip",
+    "crates/scicanvas-core/tests/qq.rs::qq_clears_measurement_errors_before_rendering",
+    "crates/scicanvas-core/tests/plot_samples.rs::every_plot_type_has_a_sample_with_one_table_and_one_graph",
+    "crates/scicanvas/src/app/tests/history.rs::commands_restore_columns_graphs_fits_and_sorting",
+    "crates/scicanvas/src/app/tests/graph.rs::embedded_plot_examples_preserve_current_project_and_undo_as_one_step"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/qq.json"
+   ],
+   "visual": [
+    "docs/parity/visual/qq/README.md"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/plotting.md#F355",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "图类型 · 统计图",
