@@ -6,6 +6,7 @@ pub(super) fn draw(
     ctx: &Context<'_, '_, '_, '_>,
     series: &Series,
     style: &SeriesStyle,
+    paths: &[Vec<[f64; 2]>],
     items: &mut Vec<crate::scene::Item>,
 ) -> bool {
     if super::contains(style.kind, Kind::Bar) {
@@ -62,6 +63,7 @@ pub(super) fn draw(
                 true,
             );
         }
+        super::path::draw_paths(ctx, style, paths, items);
         return true;
     }
     if super::contains(style.kind, Kind::Area) {

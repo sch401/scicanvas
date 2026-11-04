@@ -1186,6 +1186,16 @@ pub fn histogram(values: &[f64], bins: usize, range: Option<(f64, f64)>) -> Resu
     let step = (hi - lo) / bins as f64;
     let mut edges: Vec<f64> = (0..=bins).map(|i| lo + step * i as f64).collect();
     edges[bins] = hi;
+    histogram_edges(&v, &edges)
+}
+
+/// 按显式非递减边界计数，最后一个区间闭合；与 numpy.histogram(bins=edges) 一致。
+pub fn histogram_edges(values: &[f64], edges: &[f64]) -> Result<Vec<Bin>, String> {
+    if edges.len() < 2 || edges.iter().any(|v| !v.is_finite()) || edges.windows(2).any(|p| p[0] > p[1]) {
+        return Err("区间边界应为非递减的有限数".into());
+    }
+    let bins = edges.len() - 1;
+    let (lo, hi) = (edges[0], edges[bins]);
     let mut out: Vec<Bin> = edges
         .windows(2)
         .map(|w| Bin {
@@ -1194,7 +1204,7 @@ pub fn histogram(values: &[f64], bins: usize, range: Option<(f64, f64)>) -> Resu
             count: 0,
         })
         .collect();
-    for x in v {
+    for x in values.iter().copied().filter(|v| v.is_finite()) {
         if x < lo || x > hi {
             continue;
         }

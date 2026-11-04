@@ -59,6 +59,7 @@ impl SciApp {
                         }
                         titles(ui, g, history_group);
                         axes(ui, g, history_group);
+                        histogram_options(ui, g, history_group);
                         layer_style(ui, g, history_group);
                         labels(ui, g, &cols, history_group);
                         error_bars(ui, g, history_group);
@@ -635,6 +636,102 @@ fn axes(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_group: &
     }
 }
 
+fn histogram_options(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_group: &mut Option<egui::Id>) {
+    use scicanvas_core::page::{HistogramBins, HistogramOptions};
+    if g.plot_type != PlotType::Histogram {
+        return;
+    }
+    let mut options = g.histogram;
+    ui.label(egui::RichText::new("直方图").strong());
+    ui.label("等宽分箱");
+    ui.end_row();
+    ui.label("区间方式");
+    let mut mode = match options.bins {
+        HistogramBins::Auto => 0,
+        HistogramBins::Count(_) => 1,
+        HistogramBins::Width(_) => 2,
+    };
+    let before = mode;
+    let labels = ["自动（Sturges）", "指定区间数", "指定宽度"];
+    egui::ComboBox::from_id_salt("histogram-bins")
+        .selected_text(labels[mode])
+        .show_ui(ui, |ui| {
+            for (index, label) in labels.iter().enumerate() {
+                edit_group(&ui.selectable_value(&mut mode, index, *label), history_group);
+            }
+        });
+    if mode != before {
+        options.bins = match mode {
+            1 => HistogramBins::Count(10),
+            2 => HistogramBins::Width(1.0),
+            _ => HistogramBins::Auto,
+        };
+    }
+    ui.end_row();
+    match &mut options.bins {
+        HistogramBins::Auto => {}
+        HistogramBins::Count(n) => {
+            ui.label("区间数");
+            edit_group(
+                &ui.add(
+                    egui::DragValue::new(n)
+                        .range(1..=HistogramOptions::MAX_BINS)
+                        .suffix(" 个区间"),
+                ),
+                history_group,
+            );
+            ui.end_row();
+        }
+        HistogramBins::Width(width) => {
+            ui.label("区间宽度");
+            edit_group(
+                &ui.add(egui::DragValue::new(width).speed(0.1))
+                    .on_hover_text("区间数超过 10000 时采用自动区间数"),
+                history_group,
+            );
+            ui.end_row();
+        }
+    }
+    ui.label("范围");
+    let mut manual = options.range.is_some();
+    let response = ui.checkbox(&mut manual, "手动范围");
+    edit_group(&response, history_group);
+    if response.changed() {
+        options.range = manual.then_some([g.x_min, g.x_max]);
+    }
+    ui.end_row();
+    if let Some([lo, hi]) = &mut options.range {
+        ui.label("起止值");
+        ui.horizontal(|ui| {
+            edit_group(
+                &ui.add(egui::DragValue::new(lo).prefix("起点 ").speed(0.1)),
+                history_group,
+            );
+            edit_group(
+                &ui.add(egui::DragValue::new(hi).prefix("终点 ").speed(0.1)),
+                history_group,
+            );
+        });
+        ui.end_row();
+    }
+    ui.label("分布");
+    ui.vertical(|ui| {
+        edit_group(&ui.checkbox(&mut options.cumulative, "累积计数"), history_group);
+        edit_group(&ui.checkbox(&mut options.normal_curve, "正态分布曲线"), history_group);
+    });
+    ui.end_row();
+    if options.is_valid() {
+        g.histogram = options;
+    } else {
+        ui.label("设置提示");
+        ui.colored_label(
+            crate::theme::palette_for(ui.ctx()).error,
+            "区间数需为 1–10000，宽度为正数，起点小于终点。",
+        );
+        ui.end_row();
+    }
+}
+
 fn layer_style(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_group: &mut Option<egui::Id>) {
     ui.label("线宽");
     edit_group(&ui.add(egui::Slider::new(&mut g.line_width, 0.5..=6.0)), history_group);
@@ -1066,4 +1163,99 @@ fn mapped_column_combo(
         })
         .response;
     edit_group(&response, history_group);
+}
+
+#[cfg(test)]
+mod histogram_tests {
+    use super::*;
+    use scicanvas_core::{page::HistogramBins, project_file, scene};
+
+    #[test]
+    fn histogram_property_controls_update_plot_undo_and_save() {
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        let mut app = SciApp::initial(crate::theme::palette(egui::Theme::Light));
+        app.project.graph_mut(2).unwrap().first_layer_mut().plot_type = PlotType::Histogram;
+        app.props_for = Some(2);
+        let mut harness = crate::test_ui::Harness::new(
+            ctx,
+            Some(egui::vec2(1400.0, 2200.0)),
+            |app: &mut SciApp, ctx: &egui::Context| {
+                app.props_window(ctx);
+                app.finish_edit();
+            },
+        );
+        for _ in 0..3 {
+            harness.frame(&mut app, vec![]);
+        }
+        let output = harness.frame(&mut app, vec![]);
+        harness.click_text(&mut app, &output, "自动（Sturges）");
+        let output = harness.frame(&mut app, vec![]);
+        harness.click_text(&mut app, &output, "指定区间数");
+        let output = harness.frame(&mut app, vec![]);
+        assert_eq!(
+            app.project.graph(2).unwrap().first_layer().histogram.bins,
+            HistogramBins::Count(10)
+        );
+        let (_, plots) = app
+            .project
+            .graph(2)
+            .unwrap()
+            .first_layer()
+            .prepared_plots_in(app.project.book(1).unwrap(), &|_| None);
+        assert_eq!(plots[0].series.points.len(), 10);
+        let before = app.project.clone();
+        let output = harness.click_text(&mut app, &output, "正态分布曲线");
+        assert!(app.project.graph(2).unwrap().first_layer().histogram.normal_curve);
+        let after = app.project.clone();
+        let sc = scene::layout_page(app.project.graph(2).unwrap(), &app.project, &[]);
+        assert!(sc
+            .items
+            .iter()
+            .any(|item| item.clip.is_some()
+                && matches!(&item.prim, scene::Prim::Polyline { pts, .. } if pts.len() == 100)));
+        assert_eq!(app.history.undo_label(), Some("绘图属性"));
+        app.undo();
+        assert_eq!(app.project, before);
+        app.redo();
+        assert_eq!(app.project, after);
+        let output = harness.click_text(&mut app, &output, "累积计数");
+        assert!(crate::test_ui::find_text(&output, "累积计数").is_some());
+        let layer = app.project.graph(2).unwrap().first_layer();
+        assert!(layer.histogram.cumulative);
+        assert_eq!(layer.y_axis_title(app.project.book(1)), "累积计数");
+        let (_, plots) = layer.prepared_plots_in(app.project.book(1).unwrap(), &|_| None);
+        assert!(plots[0].series.points.windows(2).all(|p| p[0][1] <= p[1][1]));
+        let loaded = project_file::from_scv(&project_file::to_scv(&app.project).unwrap()).unwrap();
+        assert_eq!(loaded, app.project);
+        assert_eq!(loaded.version, 28);
+        harness.click_text(&mut app, &output, "指定区间数");
+        let output = harness.frame(&mut app, vec![]);
+        harness.click_text(&mut app, &output, "指定宽度");
+        let output = harness.frame(&mut app, vec![]);
+        assert_eq!(
+            app.project.graph(2).unwrap().first_layer().histogram.bins,
+            HistogramBins::Width(1.0)
+        );
+        let before_invalid = app.project.clone();
+        let at = crate::test_ui::text_rect(&output, "1.0").unwrap().center();
+        harness.click(&mut app, at);
+        harness.click(&mut app, at);
+        harness.frame(
+            &mut app,
+            vec![egui::Event::Key {
+                key: egui::Key::A,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers {
+                    ctrl: true,
+                    ..Default::default()
+                },
+            }],
+        );
+        let output = harness.frame(&mut app, vec![egui::Event::Text("0".into())]);
+        assert!(crate::test_ui::find_text(&output, "区间数需为 1–10000，宽度为正数，起点小于终点。").is_some());
+        assert_eq!(app.project, before_invalid);
+    }
 }

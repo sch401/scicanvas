@@ -77,6 +77,44 @@ fn box_statistics_match_matplotlib_boxplot_stats() {
     }
 }
 
+#[test]
+fn histogram_options_match_numpy_counts_and_scipy_normal_curves() {
+    for case in cases("histogram_options") {
+        let name = case["name"].as_str().unwrap();
+        let mut p = Project::default();
+        let id = p.alloc_id();
+        let mut book = scicanvas_core::Book::new(id, name);
+        book.columns.push(column("A", Role::Y, &case["input"]));
+        p.books.push(book);
+        p.plot_from_selection(id, &[], scicanvas_core::PlotType::Histogram)
+            .unwrap();
+        p.graphs[0].first_layer_mut().histogram = serde_json::from_value(case["options"].clone()).unwrap();
+        let (_, plots) = p.graphs[0].first_layer().prepared_plots_in(&p.books[0], &|_| None);
+        let plot = &plots[0];
+        array(
+            &plot.series.points.iter().map(|p| p[0]).collect::<Vec<_>>(),
+            &case["centers"],
+            1e-12,
+            name,
+        );
+        array(
+            &plot.series.points.iter().map(|p| p[1]).collect::<Vec<_>>(),
+            &case["counts"],
+            1e-12,
+            name,
+        );
+        if case["curve"].as_array().unwrap().is_empty() {
+            assert!(plot.paths.is_empty(), "{name}");
+        } else {
+            assert_eq!(plot.paths.len(), 1, "{name}");
+            assert_eq!(plot.paths[0].len(), 100, "{name}");
+            for (actual, expected) in plot.paths[0].iter().zip(case["curve"].as_array().unwrap()) {
+                array(actual, expected, 1e-12, name);
+            }
+        }
+    }
+}
+
 fn numbers(value: &Value) -> Vec<f64> {
     value
         .as_array()

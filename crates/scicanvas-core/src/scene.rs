@@ -181,7 +181,8 @@ pub fn nearest_point<'a>(
 ) -> Option<PointHit> {
     let (_, plots) = layer.prepared_plots_in(books(layer.book_id?)?, books);
     let horizontal = layer.plot_type == PlotType::HorizontalBar;
-    let identity = layer.transform == crate::plotspec::Transform::Identity && layer.plot_type != PlotType::QQ;
+    let identity = layer.transform == crate::plotspec::Transform::Identity
+        && !matches!(layer.plot_type, PlotType::QQ | PlotType::Histogram);
     let categories: Vec<_> = plots
         .iter()
         .filter(|p| !p.series.line_only)
@@ -794,7 +795,12 @@ fn prepare_layer_data(ctx: &LayerContext<'_, '_, '_>) -> LayerData {
         .filter(|s| !s.line_only)
         .flat_map(|s| s.points.iter().map(|p| p[usize::from(horizontal)]))
         .collect();
-    let dx = min_spacing(&data_x);
+    // 单个区间没有相邻中点可推断宽度，使用分箱时保留的实际宽度。
+    let dx = plots
+        .iter()
+        .filter(|p| p.series.points.len() == 1)
+        .find_map(|p| p.histogram_width)
+        .unwrap_or_else(|| min_spacing(&data_x));
 
     LayerData {
         plots,

@@ -47,6 +47,7 @@ def generate(source):
     x_column = columns["A"]
     date = x_column["kind"] == "DateTime"
     category = x_column["category"]
+    source_date, source_category = date, category
     def xconvert(values):
         values = np.asarray(values, dtype=float)
         if date:
@@ -62,6 +63,9 @@ def generate(source):
     fig = plt.figure(figsize=(page["w"]/96, page["h"]/96))
     output = dict(case=doc["case"], page=page, data=doc["data"], versions=VERSIONS, layers=[])
     for layer in doc["layers"]:
+        statistical = layer["kind"] in ("Histogram", "QQ", "Box")
+        date = source_date and not statistical
+        category = None if statistical else source_category
         left, top, width, height = layer["plot"]
         ax = fig.add_axes([left/page["w"], 1-(top+height)/page["h"], width/page["w"], height/page["h"]])
         axes = layer["axes"]
@@ -114,7 +118,7 @@ def generate(source):
         for si, (key, y) in enumerate(zip(keys, arrays)):
             target = right if key in layer["right_keys"] else ax
             valid = np.isfinite(y)
-            if kind not in ("QQ", "Box"):
+            if kind not in ("QQ", "Box", "Histogram"):
                 valid &= np.isfinite(x)
             if layer["rows"] is not None:
                 lo, hi = layer["rows"]
@@ -149,15 +153,48 @@ def generate(source):
                 marks["polylines"].append(artist_points(line, target).tolist())
                 continue
             if kind == "Histogram":
-                # 与 SciCanvas 相同：各列共用区间，范围取全部有效值的最小、最大值，区间数按最长一列用 Sturges 规则。
-                pools = [yy[np.isfinite(x) & np.isfinite(yy)] for yy in arrays]
+                options = layer.get("histogram", {})
+                pools = []
+                for yy in arrays:
+                    keep = np.isfinite(yy)
+                    if layer["rows"] is not None:
+                        first, last = layer["rows"]
+                        keep &= (np.arange(len(yy)) >= first) & (np.arange(len(yy)) <= last)
+                    pools.append(yy[keep])
                 pooled = np.concatenate(pools)
-                bins = int(np.ceil(np.log2(max(len(v) for v in pools)))) + 1
-                counts, edges = np.histogram(y[valid], bins=bins, range=(pooled.min(), pooled.max()))
-                patches = target.bar((edges[:-1]+edges[1:])/2, counts, width=np.diff(edges))
+                if not len(pooled):
+                    continue
+                requested = options.get("range")
+                lo, hi = requested if requested is not None else (pooled.min(), pooled.max())
+                if lo == hi:
+                    lo, hi = lo-.5, hi+.5
+                mode = options.get("bins", "Auto")
+                if "Width" in mode:
+                    width = mode["Width"]
+                    bins = int(np.ceil((hi-lo)/width))
+                    if lo+bins*width < hi:
+                        bins += 1
+                    edges = lo + np.arange(bins+1)*width
+                else:
+                    bins = mode["Count"] if "Count" in mode else int(np.ceil(np.log2(max(len(v) for v in pools))))+1
+                    edges = np.linspace(lo, hi, bins+1)
+                selected = y[valid]
+                if requested is not None:
+                    selected = selected[(selected >= lo) & (selected <= hi)]
+                counts = np.histogram(selected, bins=edges)[0]
+                if options.get("cumulative", False):
+                    counts = np.cumsum(counts)
+                patches = target.bar((edges[:-1]+edges[1:])/2, counts, width=np.diff(edges), alpha=.6 if len(keys)>1 else 1)
                 for patch in patches:
                     a, b = target.transAxes.inverted().transform(patch.get_data_transform().transform(patch.get_bbox().get_points()))
                     marks["bars"].append([(a[0]+b[0])/2, min(a[1], b[1]), max(a[1], b[1])])
+                values = y[valid]
+                if options.get("normal_curve", False) and len(values)>1 and values.std(ddof=1)>0:
+                    xx = np.linspace(edges[0], edges[-1], 100)
+                    mean, sd = values.mean(), values.std(ddof=1)
+                    yy = len(values)*stats.norm.cdf((xx-mean)/sd) if options.get("cumulative", False) else len(values)*(edges[1]-edges[0])*stats.norm.pdf((xx-mean)/sd)/sd
+                    line, = target.plot(xx, yy)
+                    marks["polylines"].append(artist_points(line, target).tolist())
                 continue
             if kind in ("Bar", "HorizontalBar", "StackedBar", "PercentStackedBar", "FloatingBar"):
                 base = np.zeros(len(x))

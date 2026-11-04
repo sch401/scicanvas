@@ -220,6 +220,10 @@ fn cases() -> Vec<(String, Project, Graph)> {
         }),
     );
     cases.push(("symbol-fill-border".into(), p, g));
+    let (_, p, mut g) = case("histogram-options", PlotType::Histogram);
+    g.first_layer_mut().histogram.bins = scicanvas_core::page::HistogramBins::Width(2.0);
+    g.first_layer_mut().histogram.normal_curve = true;
+    cases.push(("histogram-options".into(), p, g));
     cases
 }
 
@@ -306,7 +310,11 @@ fn export(p: &Project, g: &Graph) -> (Value, String) {
             .filter(|p| p.style.as_ref().is_some_and(|s| s.right_axis))
             .map(|p| p.key.clone())
             .collect();
-        layers.push(json!({"axes":{"x":axis(&view.axes.x),"y":axis(&view.axes.left_y),"right_y":view.axes.right_y.as_ref().map(axis)},"plot":rect,"kind":format!("{:?}",l.plot_type),"connect":format!("{:?}",l.connect),"y_keys":draft.y_keys,"base_by_y":draft.base_by_y,"right_keys":right,"rows":draft.rows,"reference_lines":l.reference_lines.iter().map(|r|json!({"axis":format!("{:?}",r.axis),"value":r.value})).collect::<Vec<_>>(),"marks":{"symbols":symbols,"polylines":lines,"bars":bars,"segments":segments,"area":bounds,"colors":colors}}));
+        let mut entry = json!({"axes":{"x":axis(&view.axes.x),"y":axis(&view.axes.left_y),"right_y":view.axes.right_y.as_ref().map(axis)},"plot":rect,"kind":format!("{:?}",l.plot_type),"connect":format!("{:?}",l.connect),"y_keys":draft.y_keys,"base_by_y":draft.base_by_y,"right_keys":right,"rows":draft.rows,"reference_lines":l.reference_lines.iter().map(|r|json!({"axis":format!("{:?}",r.axis),"value":r.value})).collect::<Vec<_>>(),"marks":{"symbols":symbols,"polylines":lines,"bars":bars,"segments":segments,"area":bounds,"colors":colors}});
+        if !l.histogram.is_default() {
+            entry["histogram"] = serde_json::to_value(l.histogram).unwrap();
+        }
+        layers.push(entry);
     }
     let data:Vec<_>=p.book(1).unwrap().columns.iter().map(|c| {
         let category=if let ColumnData::Category {codes,levels,..}=&*c.data {Some(json!({"codes":codes,"levels":levels}))}else{None};

@@ -57,9 +57,23 @@ pub(crate) fn apply(series: &mut [Series], transform: Transform) {
     }
 }
 
-/// 直方图：把各数据曲线的 Y 值按共同的等宽区间计数，点改为（区间中点，计数），柱底为 0。
-/// 区间范围取全部曲线有效值的最小、最大值，区间数按点数最多的曲线用 Sturges 规则；分箱与 numpy.histogram 相同。
-pub(crate) fn histogram(series: &mut [Series]) {
+/// 直方图的派生路径和实际区间宽度。
+pub(crate) struct HistogramData {
+    pub paths: Vec<Vec<[f64; 2]>>,
+    pub bin_width: Option<f64>,
+}
+
+/// 各数据曲线使用共同等宽区间，默认按 Sturges 规则分箱。
+pub(crate) fn histogram(series: &mut [Series], options: &crate::page::HistogramOptions) -> HistogramData {
+    let mut options = *options;
+    if !options.is_valid() {
+        options.bins = crate::page::HistogramBins::Auto;
+        options.range = None;
+    }
+    let mut result = HistogramData {
+        paths: vec![Vec::new(); series.len()],
+        bin_width: None,
+    };
     let pools: Vec<Vec<f64>> = series
         .iter()
         .map(|s| {
@@ -71,24 +85,108 @@ pub(crate) fn histogram(series: &mut [Series]) {
         })
         .collect();
     let Some(longest) = pools.iter().map(Vec::len).max().filter(|n| *n > 0) else {
-        return;
+        return result;
     };
-    let lo = pools.iter().flatten().copied().fold(f64::INFINITY, f64::min);
-    let hi = pools.iter().flatten().copied().fold(f64::NEG_INFINITY, f64::max);
-    let bins = crate::stats::sturges_bins(longest);
-    for (s, values) in series.iter_mut().zip(&pools) {
+    let automatic = [
+        pools.iter().flatten().copied().fold(f64::INFINITY, f64::min),
+        pools.iter().flatten().copied().fold(f64::NEG_INFINITY, f64::max),
+    ];
+    let edges = histogram_boundaries(options.range.unwrap_or(automatic), longest, options.bins);
+    result.bin_width = edges
+        .get(1)
+        .map(|edge| edge - edges[0])
+        .filter(|width| width.is_finite() && *width > 0.0);
+    for (index, (s, values)) in series.iter_mut().zip(&pools).enumerate() {
         if s.line_only {
             continue;
         }
-        let Ok(counts) = crate::stats::histogram(values, bins, Some((lo, hi))) else {
-            continue;
-        };
-        s.points = counts.iter().map(|b| [(b.lo + b.hi) / 2.0, b.count as f64]).collect();
+        let selected: Vec<_> = values
+            .iter()
+            .copied()
+            .filter(|v| options.range.is_none_or(|[lo, hi]| *v >= lo && *v <= hi))
+            .collect();
+        let counts = crate::stats::histogram_edges(&selected, &edges).unwrap_or_default();
+        if options.normal_curve {
+            result.paths[index] = histogram_normal_curve(values, &counts, options.cumulative);
+        }
+        let mut cumulative = 0;
+        s.points = counts
+            .iter()
+            .map(|b| {
+                cumulative += b.count;
+                [
+                    (b.lo + b.hi) / 2.0,
+                    if options.cumulative { cumulative } else { b.count } as f64,
+                ]
+            })
+            .collect();
         s.bases = vec![0.0; s.points.len()];
         s.rows = (0..s.points.len()).collect();
         s.errors = vec![[None; 2]; s.points.len()];
         s.point_styles = Vec::new();
     }
+    result
+}
+
+fn histogram_boundaries(mut range: [f64; 2], n: usize, bins: crate::page::HistogramBins) -> Vec<f64> {
+    use crate::page::{HistogramBins, HistogramOptions};
+    if range[0] == range[1] {
+        range = [range[0] - 0.5, range[1] + 0.5];
+    }
+    let [lo, hi] = range;
+    let automatic = crate::stats::sturges_bins(n);
+    let count = match bins {
+        HistogramBins::Auto => automatic,
+        HistogramBins::Count(n) => n,
+        HistogramBins::Width(width) => {
+            let count = ((hi - lo) / width).ceil();
+            if count.is_finite() && (1.0..=HistogramOptions::MAX_BINS as f64).contains(&count) {
+                let mut n = count as usize;
+                if lo + n as f64 * width < hi {
+                    n += 1;
+                }
+                if n <= HistogramOptions::MAX_BINS && (lo + n as f64 * width).is_finite() {
+                    return (0..=n).map(|i| lo + i as f64 * width).collect();
+                }
+            }
+            automatic
+        }
+    };
+    let step = (hi - lo) / count as f64;
+    let mut edges: Vec<_> = (0..=count).map(|i| lo + step * i as f64).collect();
+    edges[count] = hi;
+    edges
+}
+
+fn histogram_normal_curve(values: &[f64], bins: &[crate::stats::Bin], cumulative: bool) -> Vec<[f64; 2]> {
+    let (Some(first), Some(last)) = (bins.first(), bins.last()) else {
+        return Vec::new();
+    };
+    if values.len() < 2 {
+        return Vec::new();
+    }
+    let n = values.len() as f64;
+    let mean = values.iter().sum::<f64>() / n;
+    let sd = (values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / (n - 1.0)).sqrt();
+    if !sd.is_finite() || sd == 0.0 {
+        return Vec::new();
+    }
+    (0..100)
+        .map(|i| {
+            let x = if i == 99 {
+                last.hi
+            } else {
+                first.lo + (last.hi - first.lo) * i as f64 / 99.0
+            };
+            let z = (x - mean) / sd;
+            let y = if cumulative {
+                n * crate::stats::norm_cdf(z)
+            } else {
+                n * (first.hi - first.lo) / sd * (-0.5 * z * z).exp() / (2.0 * std::f64::consts::PI).sqrt()
+            };
+            [x, y]
+        })
+        .collect()
 }
 
 /// 正态 Q-Q 图：Filliben 排序位置，与 SciPy probplot(dist="norm") 一致。

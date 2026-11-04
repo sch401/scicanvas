@@ -644,10 +644,51 @@ def box_cases():
     write("box", cases, {"matplotlib": matplotlib.__version__})
 
 
+def histogram_option_cases():
+    raw = np.array([-1., 0., .1, .3, .6, .9, 1.4, 2., 3.5, 4., 5., np.nan])
+    values = raw[np.isfinite(raw)]
+    cases = []
+    for name, mode, requested, cumulative, normal in [
+        ("auto", "Auto", None, False, False),
+        ("count", {"Count": 4}, None, False, False),
+        ("width", {"Width": .3}, None, False, False),
+        ("manual-range", {"Count": 4}, [0., 4.], False, False),
+        ("width-manual-range", {"Width": 2.}, [0., 3.], False, False),
+        ("cumulative", {"Count": 4}, None, True, False),
+        ("normal", {"Width": .75}, None, False, True),
+        ("cumulative-normal", {"Count": 4}, [0., 4.], True, True),
+    ]:
+        lo, hi = requested if requested is not None else (values.min(), values.max())
+        if "Width" in mode:
+            width = mode["Width"]
+            n = int(np.ceil((hi-lo)/width))
+            if lo+n*width < hi:
+                n += 1
+            edges = lo + np.arange(n+1)*width
+        else:
+            n = mode["Count"] if "Count" in mode else int(np.ceil(np.log2(len(values))))+1
+            edges = np.linspace(lo, hi, n+1)
+        selected = values if requested is None else values[(values >= lo) & (values <= hi)]
+        counts = np.histogram(selected, bins=edges)[0]
+        if cumulative:
+            counts = np.cumsum(counts)
+        curve = []
+        if normal:
+            x = np.linspace(edges[0], edges[-1], 100)
+            mean, sd = values.mean(), values.std(ddof=1)
+            y = len(values)*stats.norm.cdf((x-mean)/sd) if cumulative else len(values)*(edges[1]-edges[0])*stats.norm.pdf((x-mean)/sd)/sd
+            curve = np.column_stack([x, y])
+        cases.append(dict(name=name, input=raw,
+            options=dict(bins=mode, range=requested, cumulative=cumulative, normal_curve=normal),
+            edges=edges, centers=(edges[:-1]+edges[1:])/2, counts=counts, curve=curve))
+    write("histogram_options", cases)
+
+
 GENERATORS = [
     integrals, normalization, descriptive, column_math, polynomial, statistical_tests, signal_tests,
     interpolation_cases, derivative_cases, peak_cases, constrained_fit_cases, builtin_fit_cases,
     smoothing_cases, percent_bar_cases, fit_report_cases, formula_cases, weighted_fit_cases, qq_cases, box_cases,
+    histogram_option_cases,
 ]
 
 

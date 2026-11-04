@@ -85,7 +85,7 @@ pub(crate) fn draw(ctx: &Context<'_, '_, '_, '_>, plots: &[crate::page::Prepared
             continue;
         }
         let (series, style, paths) = (&plot.series, &plot.style, &plot.paths);
-        if bars::draw(ctx, series, style, items) {
+        if bars::draw(ctx, series, style, paths, items) {
             continue;
         }
         if let Some(symbol) = path::draw(ctx, series, style, plot.plot.style.as_ref(), paths, items) {

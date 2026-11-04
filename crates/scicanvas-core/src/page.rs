@@ -215,6 +215,46 @@ impl Page {
         Ok(())
     }
 }
+/// 直方图的等宽区间选择。
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum HistogramBins {
+    #[default]
+    Auto,
+    Count(usize),
+    Width(f64),
+}
+
+/// 图层级直方图设置。默认设置不写入项目文件。
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize), serde(default))]
+pub struct HistogramOptions {
+    pub bins: HistogramBins,
+    pub range: Option<[f64; 2]>,
+    pub cumulative: bool,
+    pub normal_curve: bool,
+}
+
+impl HistogramOptions {
+    /// 单图最多一万个区间，限制交互绘图的图元数量。
+    pub const MAX_BINS: usize = 10_000;
+
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+
+    pub fn is_valid(&self) -> bool {
+        let bins = match self.bins {
+            HistogramBins::Auto => true,
+            HistogramBins::Count(n) => (1..=Self::MAX_BINS).contains(&n),
+            HistogramBins::Width(w) => w.is_finite() && w > 0.0,
+        };
+        bins && self
+            .range
+            .is_none_or(|[lo, hi]| lo.is_finite() && hi.is_finite() && lo < hi)
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Layer {
@@ -243,6 +283,11 @@ pub struct Layer {
     pub symbol_size: f32,
     #[cfg_attr(feature = "serde", serde(default = "default_area_opacity"))]
     pub area_opacity: f32,
+    #[cfg_attr(
+        feature = "serde",
+        serde(default, skip_serializing_if = "HistogramOptions::is_default")
+    )]
+    pub histogram: HistogramOptions,
     #[cfg_attr(feature = "serde", serde(default))]
     pub error_bars: ErrorBars,
     #[cfg_attr(feature = "serde", serde(default))]
@@ -496,6 +541,7 @@ impl Default for Layer {
             line_width: 1.0,
             symbol_size: 4.5,
             area_opacity: default_area_opacity(),
+            histogram: HistogramOptions::default(),
             error_bars: Default::default(),
             labels: Default::default(),
             reference_lines: Vec::new(),
@@ -646,6 +692,7 @@ pub struct PreparedPlot {
     pub style: crate::SeriesStyle,
     pub paths: Vec<Vec<[f64; 2]>>,
     pub box_stats: Option<crate::stats::BoxStats>,
+    pub histogram_width: Option<f64>,
 }
 
 impl Layer {
@@ -667,9 +714,9 @@ impl Layer {
         let recipe = crate::presets::recipe(self.plot_type);
         let horizontal = recipe.orientation == crate::coord::Orientation::Horizontal;
         recipe.orientation.apply(&mut series);
-        if self.plot_type == crate::PlotType::Histogram {
-            crate::stat::histogram(&mut series);
-        } else if self.plot_type == crate::PlotType::QQ {
+        let histogram = (self.plot_type == crate::PlotType::Histogram)
+            .then(|| crate::stat::histogram(&mut series, &self.histogram));
+        if self.plot_type == crate::PlotType::QQ {
             crate::stat::qq(&mut series);
         }
         crate::stat::prepare(self, &mut series);
@@ -733,11 +780,20 @@ impl Layer {
                     style,
                     paths: Vec::new(),
                     box_stats: None,
+                    histogram_width: None,
                 }
             })
             .collect();
         if self.plot_type == crate::PlotType::Box {
             crate::stat::boxes(&mut prepared);
+        }
+        if let Some(histogram) = histogram {
+            for (p, path) in prepared.iter_mut().zip(histogram.paths) {
+                p.histogram_width = histogram.bin_width;
+                if !path.is_empty() {
+                    p.paths.push(path);
+                }
+            }
         }
         for p in &mut prepared {
             if self.plot_type == crate::PlotType::QQ {
@@ -921,7 +977,12 @@ impl Layer {
             return self.y_title.clone();
         }
         if self.plot_type == crate::PlotType::Histogram {
-            return "计数".into();
+            return if self.histogram.cumulative {
+                "累积计数"
+            } else {
+                "计数"
+            }
+            .into();
         }
         if self.plot_type == crate::PlotType::HorizontalBar {
             return book
