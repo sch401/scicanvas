@@ -83,6 +83,7 @@ impl FitMethod {
     pub fn from_function(function: &crate::nlfit::FitFunction) -> Self {
         match function {
             crate::nlfit::FitFunction::Builtin(model) => Self::Builtin(*model),
+            crate::nlfit::FitFunction::Indexed(_) => unreachable!("全局索引模型只生成一次性报告"),
             _ => Self::Custom {
                 name: function.name().into(),
                 formula: function.formula().into(),

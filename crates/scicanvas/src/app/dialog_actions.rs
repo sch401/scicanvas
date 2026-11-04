@@ -194,6 +194,7 @@ impl SciApp {
                 return self.apply_nlfit_action(model, limits, text, weighted);
             }
             dialogs::Action::OpenCustomNlFit => self.open_custom_nlfit_dialog(),
+            dialogs::Action::GlobalFit(edit) => self.run_global_fit(*edit),
             dialogs::Action::CustomFitLibrary(action) => return self.apply_custom_fit_library_action(*action),
             dialogs::Action::CustomNlFit {
                 name,

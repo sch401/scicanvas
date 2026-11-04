@@ -13,6 +13,7 @@ mod columns;
 mod fft;
 mod fit;
 mod fit_tools;
+mod global_fit;
 mod recalc;
 mod resolve;
 mod smooth;
@@ -24,6 +25,7 @@ pub use calculus::AreaReport;
 pub use columns::{ColumnOp, Operand};
 pub use fit::{FitReport, NlFitReport};
 pub use fit_tools::{compare_fits, FitComparison};
+pub use global_fit::GlobalFitReport;
 pub use recalc::{FitBands, FitMethod, FitWeight, NonlinearRecipe, OpKind, Operation, RecalcMode};
 pub use resolve::{get_xy, AnalysisColumn, Item, Resolved, Source};
 

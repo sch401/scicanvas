@@ -35,6 +35,7 @@ mod find_replace;
 mod fit_compare;
 mod fit_report;
 mod frequency;
+mod global_fit;
 mod ifft;
 mod import_wizard;
 mod interpolate;
@@ -67,6 +68,7 @@ pub use column_props::ColumnEdit;
 pub(crate) use docking::{begin_docks, end_docks, has_docks, place_docks, reset_docks, DockSide};
 pub use filter::{FilterDialog, FilterEditor};
 pub(crate) use find_replace::FindReplace;
+pub(crate) use global_fit::GlobalFitEditor;
 pub(crate) use import_wizard::ImportWizard;
 pub use layer_contents::LayerContents;
 pub(crate) use modal::modal;
@@ -203,6 +205,7 @@ pub enum Dialog {
         /// 按与 Y 列关联的 Y 误差列加权（1/σ²）。
         weighted: bool,
     },
+    GlobalFit(Box<GlobalFitEditor>),
     CustomNlFit(CustomFitEditor),
     /// 非线性拟合结果。
     NlFitReport(Vec<NlFitReport>),
@@ -349,6 +352,7 @@ pub enum Action {
     /// 内置函数、参数限制、约束文字、是否按 Y 误差加权。
     NlFit(Model, Vec<scicanvas_core::nlfit::ParamLimits>, String, bool),
     OpenCustomNlFit,
+    GlobalFit(Box<GlobalFitEditor>),
     CustomFitLibrary(Box<CustomFitAction>),
     CustomNlFit {
         name: String,
@@ -397,6 +401,7 @@ impl Dialog {
             Self::Anova { .. } => self.show_anova(ctx, pal, &mut open, esc),
             Self::Correlations(..) => self.show_correlations(ctx, pal, &mut open, esc),
             Self::NlFit { .. } => self.show_nl_fit(ctx, pal, &mut open, esc),
+            Self::GlobalFit(editor) => editor.show(ctx, pal, &mut open),
             Self::CustomNlFit(..) => self.show_custom_nl_fit(ctx, pal, &mut open, esc, project),
             Self::NlFitReport(..) => self.show_nl_fit_report(ctx, pal, &mut open, esc, project),
             Self::FftFilter { .. } => self.show_fft_filter(ctx, pal, &mut open, esc),
