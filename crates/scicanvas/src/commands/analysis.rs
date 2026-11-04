@@ -16,6 +16,7 @@ pub(super) fn curve_selection(commands: &mut Vec<Command>) {
 pub(super) fn fits(commands: &mut Vec<Command>) {
     commands.extend([
         c("fit.reports", "拟合报告…", "fitpoly", "", "分析", "report 拟合报告 重新编辑", |_| Ok(()), |a| a.open_nlfit_reports()),
+        c("fit.compare","拟合比较","fitpoly","","分析","AIC AICc BIC nested F test 拟合比较",|_|Ok(()),|a|a.open_fit_compare()),
         // 分析
         c(
             "fit.linear",
@@ -308,8 +309,7 @@ pub(super) fn statistics(commands: &mut Vec<Command>) {
             "calibration curve standard inverse prediction concentration 标准曲线 反查 浓度 定量 校准",
             need_book,
             |a| a.calibrate(),
-        )
-        .modifies(),
+        ),
         c(
             "stats.anova",
             "单因素方差分析",

@@ -860,28 +860,75 @@ impl SciApp {
         });
     }
 
-    /// 标准曲线反查：按点选顺序取标准浓度、标准响应、样品响应三列。
-    pub(crate) fn calibrate(&mut self) {
-        let Some((id, keys)) = self.ttest_columns() else { return };
-        if keys.len() != 3 {
-            self.status = "请按顺序 Ctrl+单击选中三列：标准浓度（X）、标准响应（Y）、样品响应".into();
+    pub(crate) fn open_fit_compare(&mut self) {
+        let reports: Vec<_> = self.project.nlfit_reports().into_iter().filter(|r| r.current).collect();
+        if reports.len() < 2 {
+            self.status = "请先对同一 Y 列完成至少两个非线性拟合".into();
             return;
         }
-        let visible_only = self.project.book(id).is_some_and(|book| book.uses_visible_rows());
-        match self
-            .project
-            .calibrate_with_visibility(id, &keys[0], &keys[1], &keys[2], visible_only)
-        {
-            Ok((cal, k0, k1)) => {
-                self.status = format!(
-                    "标准曲线 y = {} + {}·x，R² = {}；反查结果在新列 {k0}、{k1}",
-                    fmt_num(round_sig(cal.intercept, 6)),
-                    fmt_num(round_sig(cal.slope, 6)),
-                    fmt_num(round_sig(cal.r2, 6))
-                );
+        self.dialog = Some(Dialog::FitCompare {
+            reports,
+            first: 0,
+            second: 1,
+        });
+    }
+
+    pub(super) fn compare_fits(&mut self, reports: &[scicanvas_core::ops::NlFitReport; 2]) {
+        match scicanvas_core::ops::compare_fits(&reports[0], &reports[1]) {
+            Ok(comparison) => {
+                let mut rows = vec![["模型", "K", "RSS / χ²", "AIC", "AICc", "BIC", "ΔAICc", "Akaike 权重"]
+                    .map(String::from)
+                    .to_vec()];
+                for (i, r) in reports.iter().enumerate() {
+                    let f = &r.fit;
+                    rows.push(vec![
+                        f.model.name().into(),
+                        (f.n - f.dof + 1).to_string(),
+                        fmt_num(f.rss),
+                        fmt_num(f.aic()),
+                        fmt_num(f.aicc()),
+                        fmt_num(f.bic()),
+                        fmt_num(comparison.delta[i]),
+                        fmt_num(comparison.weights[i]),
+                    ]);
+                }
+                let conclusion = if comparison.p < 0.05 {
+                    "自由参数较多模型的改善显著"
+                } else {
+                    "改善不显著或自由度相同"
+                };
+                self.dialog=Some(Dialog::Table {title:"拟合比较".into(),rows,note:format!("K = 自由参数数 + 1（误差方差）；加权时使用 χ²。AICc 需 n > K+1。\nF = {}，p = {}；{conclusion}。F 检验只对嵌套模型有效，嵌套关系由用户判断。",fmt_num(comparison.f),fmt_num(comparison.p))});
             }
-            Err(e) => self.status = e,
+            Err(error) => self.status = error,
         }
+    }
+
+    /// 标准 X、标准 Y、样品三列作为默认选择，方向和模型在窗口中修改。
+    pub(crate) fn calibrate(&mut self) {
+        let Some((id, keys)) = self.ttest_columns() else {
+            return;
+        };
+        if keys.len() != 3 {
+            self.status = "请按顺序 Ctrl+单击选中三列：标准 X、标准 Y、样品".into();
+            return;
+        }
+        let columns = self
+            .project
+            .book(id)
+            .unwrap()
+            .columns
+            .iter()
+            .map(|c| (c.key.clone(), format!("{}：{}", c.key, c.display_name())))
+            .collect();
+        let reports = self.project.nlfit_reports();
+        self.dialog = Some(Dialog::Calibration {
+            book: id,
+            columns,
+            keys: keys.try_into().unwrap(),
+            reports,
+            model: None,
+            forward: false,
+        });
     }
 
     /// 每个点选的列作为一组做单因素方差分析。

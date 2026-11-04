@@ -19,6 +19,7 @@ mod areas;
 mod baseline;
 mod batch_export;
 mod batch_plot;
+mod calibration;
 mod category_order;
 mod column_math;
 mod column_props;
@@ -31,6 +32,7 @@ mod fft_filter;
 mod fill;
 mod filter;
 mod find_replace;
+mod fit_compare;
 mod fit_report;
 mod frequency;
 mod ifft;
@@ -153,6 +155,19 @@ pub enum Dialog {
         method: NormalizeMethod,
     },
     FitReport(Vec<FitReport>),
+    FitCompare {
+        reports: Vec<NlFitReport>,
+        first: usize,
+        second: usize,
+    },
+    Calibration {
+        book: u64,
+        columns: Vec<(String, String)>,
+        keys: [String; 3],
+        reports: Vec<NlFitReport>,
+        model: Option<usize>,
+        forward: bool,
+    },
     Areas(Vec<AreaReport>),
     /// 插值：方法、点数，以及是否使用自定义 X 范围（默认是数据的 X 范围）。
     Interpolate {
@@ -294,6 +309,15 @@ pub enum Action {
     AnalysisCurves(u64, usize, Vec<scicanvas_core::plotspec::DataRef>),
     SaveNote(String, String),
     ResidualPlot(Vec<FitReport>),
+    ResidualQQ(Vec<FitReport>),
+    NlResidualPlot(Vec<NlFitReport>, bool),
+    CompareFits(Box<[NlFitReport; 2]>),
+    EvaluateCalibration {
+        book: u64,
+        keys: [String; 3],
+        report: Option<Box<NlFitReport>>,
+        forward: bool,
+    },
     FitBands(Vec<FitReport>),
     NlFitBands(Vec<NlFitReport>),
     EditNlFit(Box<NlFitReport>),
@@ -364,6 +388,8 @@ impl Dialog {
             Self::Ifft { .. } => self.show_ifft(ctx, pal, &mut open, esc),
             Self::SgDiff { .. } => self.show_sg_diff(ctx, pal, &mut open, esc),
             Self::Normalize { .. } => self.show_normalize(ctx, pal, &mut open, esc),
+            Self::FitCompare { .. } => self.show_fit_compare(ctx, &mut open),
+            Self::Calibration { .. } => self.show_calibration(ctx, &mut open),
             Self::FitReport(..) => self.show_fit_report(ctx, pal, &mut open, esc),
             Self::Areas(..) => self.show_areas(ctx, pal, &mut open, esc),
             Self::Interpolate { .. } => self.show_interpolate(ctx, pal, &mut open, esc),

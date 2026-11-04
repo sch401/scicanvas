@@ -286,6 +286,11 @@ impl Project {
             let plot = analysis_plot(&layer, book, &r.residual_key, r.x_key.as_deref(), false, None);
             layer.add_plot(plot, &|id| self.book(id))?;
         }
+        layer.reference_lines.push(crate::page::ReferenceLine {
+            axis: crate::page::ReferenceAxis::YLeft,
+            value: 0.0,
+            ..Default::default()
+        });
         self.plot_spec(layer.draft())
     }
 
@@ -404,6 +409,7 @@ impl Project {
                         .join("\n"),
                     output_x: kx.clone(),
                     bands: Vec::new(),
+                    residual: None,
                     weight,
                     input_digest: None,
                     attempted_digest: None,
@@ -570,7 +576,7 @@ impl Project {
         let OpKind::Nonlinear(old) = &op.kind else {
             unreachable!()
         };
-        if recipe.output_x != old.output_x || recipe.bands != old.bands {
+        if recipe.output_x != old.output_x || recipe.bands != old.bands || recipe.residual != old.residual {
             return Err("拟合输出组已改变，请重新打开设置".into());
         }
         op.kind = OpKind::Nonlinear(Box::new(recipe));

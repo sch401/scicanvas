@@ -149,6 +149,7 @@ pub static TABS: &[Tab] = &[
                     Big("fit.linear"),
                     Big("fit.poly"),
                     Big("fit.nonlinear"),
+                    Big("fit.compare"),
                     Smalls(&["fit.reports"]),
                     Big("fit.calibration"),
                     Big("fit.mlr"),

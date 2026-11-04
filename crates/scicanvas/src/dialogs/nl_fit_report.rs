@@ -14,103 +14,116 @@ impl Dialog {
             unreachable!()
         };
         let mut action = Action::None;
-        window(ctx, "非线性拟合结果").open(open).show(ctx, |ui| {
-            egui::ScrollArea::both()
-                .max_height((ctx.available_rect().height() - 220.0).clamp(100.0, 480.0))
-                .show(ui, |ui| {
-                    for (ri, r) in reports.iter().enumerate() {
-                        let live = project.nlfit_report(r);
-                        let r = live.unwrap_or(r);
-                        let f = &r.fit;
-                        let status = if live.is_none() {
-                            "结果列已删除，以下为窗口保留的报告快照".into()
-                        } else {
-                            report_status(r)
-                        };
-                        ui.label(RichText::new(status).small().color(pal.weak));
-                        ui.label(
-                            RichText::new(format!(
-                                "{} · 结果列 {} · 报告 #{}",
-                                project.name_of(r.book_id).unwrap_or("已删除的工作簿"),
-                                r.curve.1,
-                                r.id
-                            ))
-                            .small()
-                            .color(pal.weak),
-                        );
-                        ui.label(RichText::new(format!("{} · {}", r.name, f.model.name())).strong());
-                        ui.label(RichText::new(f.model.formula()).monospace().small());
-                        for c in &f.constraints {
-                            ui.label(RichText::new(format!("约束：{c}")).small().color(pal.weak));
-                        }
-                        if !f.converged {
-                            ui.colored_label(
-                                pal.error,
-                                format!(
-                                    "迭代 {} 次后停止，尚未收敛；可调整初值、参数约束或检查数据",
-                                    f.iterations
-                                ),
-                            );
-                        }
-                        for warning in &f.warnings {
-                            ui.colored_label(pal.warn, warning);
-                        }
-                        table_grid(ui, ("nlfit-grid", ri), &nlfit_param_rows(f), pal);
-                        ui.add_space(4.0);
-                        let stats: Vec<Vec<String>> = [vec!["统计量".to_string(), "值".to_string()]]
-                            .into_iter()
-                            .chain(nlfit_stats(f).into_iter().map(|(k, v)| vec![k.to_string(), v]))
-                            .collect();
-                        table_grid(ui, ("nlfit-stats", ri), &stats, pal);
-                        if live.is_some()
-                            && project.nlfit_operation(r).is_ok()
-                            && ui.add(plain("重新编辑拟合设置")).clicked()
-                        {
-                            action = Action::EditNlFit(Box::new(r.clone()));
-                        }
-                        if live.is_none()
-                            && matches!(f.model, scicanvas_core::nlfit::FitFunction::Custom(_))
-                            && ui.add(plain("重新编辑函数")).clicked()
-                        {
-                            let definition = scicanvas_core::nlfit::CustomFitDefinition {
-                                name: f.model.name().into(),
-                                formula: f.model.formula().into(),
-                                parameters: f.model.params().into_iter().map(str::to_owned).collect(),
-                                initial: f.params.clone(),
-                                constraints: f.constraints.join("\n"),
+        window(ctx, "非线性拟合结果")
+            .default_width(520.0)
+            .open(open)
+            .show(ctx, |ui| {
+                egui::ScrollArea::both()
+                    .max_height((ctx.available_rect().height() - 300.0).clamp(100.0, 480.0))
+                    .show(ui, |ui| {
+                        for (ri, r) in reports.iter().enumerate() {
+                            let live = project.nlfit_report(r);
+                            let r = live.unwrap_or(r);
+                            let f = &r.fit;
+                            let status = if live.is_none() {
+                                "结果列已删除，以下为窗口保留的报告快照".into()
+                            } else {
+                                report_status(r)
                             };
-                            action = Action::CustomFitLibrary(Box::new(CustomFitAction::Edit(definition)));
-                        }
+                            ui.label(RichText::new(status).small().color(pal.weak));
+                            ui.label(
+                                RichText::new(format!(
+                                    "{} · 结果列 {} · 报告 #{}",
+                                    project.name_of(r.book_id).unwrap_or("已删除的工作簿"),
+                                    r.curve.1,
+                                    r.id
+                                ))
+                                .small()
+                                .color(pal.weak),
+                            );
+                            ui.label(RichText::new(format!("{} · {}", r.name, f.model.name())).strong());
+                            ui.label(RichText::new(f.model.formula()).monospace().small());
+                            for c in &f.constraints {
+                                ui.label(RichText::new(format!("约束：{c}")).small().color(pal.weak));
+                            }
+                            if !f.converged {
+                                ui.colored_label(
+                                    pal.error,
+                                    format!(
+                                        "迭代 {} 次后停止，尚未收敛；可调整初值、参数约束或检查数据",
+                                        f.iterations
+                                    ),
+                                );
+                            }
+                            for warning in &f.warnings {
+                                ui.colored_label(pal.warn, warning);
+                            }
+                            if live.is_some()
+                                && project.nlfit_operation(r).is_ok()
+                                && ui.add(plain("重新编辑拟合设置")).clicked()
+                            {
+                                action = Action::EditNlFit(Box::new(r.clone()));
+                            }
+                            table_grid(ui, ("nlfit-grid", ri), &nlfit_param_rows(f), pal);
+                            ui.add_space(4.0);
+                            let stats: Vec<Vec<String>> = [vec!["统计量".to_string(), "值".to_string()]]
+                                .into_iter()
+                                .chain(nlfit_stats(f).into_iter().map(|(k, v)| vec![k.to_string(), v]))
+                                .collect();
+                            table_grid(ui, ("nlfit-stats", ri), &stats, pal);
+                            if live.is_none()
+                                && matches!(f.model, scicanvas_core::nlfit::FitFunction::Custom(_))
+                                && ui.add(plain("重新编辑函数")).clicked()
+                            {
+                                let definition = scicanvas_core::nlfit::CustomFitDefinition {
+                                    name: f.model.name().into(),
+                                    formula: f.model.formula().into(),
+                                    parameters: f.model.params().into_iter().map(str::to_owned).collect(),
+                                    initial: f.params.clone(),
+                                    constraints: f.constraints.join("\n"),
+                                };
+                                action = Action::CustomFitLibrary(Box::new(CustomFitAction::Edit(definition)));
+                            }
 
-                        ui.add_space(10.0);
+                            ui.add_space(10.0);
+                        }
+                    });
+                ui.add_space(10.0);
+                ui.separator();
+                ui.add_space(4.0);
+                ui.horizontal_wrapped(|ui| {
+                    center_buttons(ui, 1);
+                    if ui.add(plain("置信/预测带")).clicked() {
+                        action = Action::NlFitBands(reports.clone());
+                    }
+                    ui.label(RichText::new("95%").small().color(pal.weak));
+                });
+                ui.horizontal_wrapped(|ui| {
+                    center_buttons(ui, 2);
+                    if ui.add(plain("残差图")).clicked() {
+                        action = Action::NlResidualPlot(reports.clone(), false);
+                    }
+                    if ui.add(plain("残差 Q-Q")).clicked() {
+                        action = Action::NlResidualPlot(reports.clone(), true);
                     }
                 });
-            ui.add_space(10.0);
-            ui.separator();
-            ui.add_space(4.0);
-            ui.horizontal_wrapped(|ui| {
-                center_buttons(ui, 1);
-                if ui.add(plain("置信/预测带")).on_hover_text("95%").clicked() {
-                    action = Action::NlFitBands(reports.clone());
-                }
+                ui.horizontal_wrapped(|ui| {
+                    center_buttons(ui, 3);
+                    if ui
+                        .add(plain("复制结果"))
+                        .on_hover_text("复制为制表符分隔的文本，可粘贴到 Excel")
+                        .clicked()
+                    {
+                        ui.ctx().copy_text(nlfit_text(reports));
+                    }
+                    if ui.add(plain("保存为 Note")).clicked() {
+                        action = Action::SaveNote("非线性拟合结果".into(), nlfit_markdown(reports));
+                    }
+                    if ui.add(primary(ui, "关闭")).clicked() {
+                        action = Action::Close;
+                    }
+                });
             });
-            ui.horizontal_wrapped(|ui| {
-                center_buttons(ui, 3);
-                if ui
-                    .add(plain("复制结果"))
-                    .on_hover_text("复制为制表符分隔的文本，可粘贴到 Excel")
-                    .clicked()
-                {
-                    ui.ctx().copy_text(nlfit_text(reports));
-                }
-                if ui.add(plain("保存为 Note")).clicked() {
-                    action = Action::SaveNote("非线性拟合结果".into(), nlfit_markdown(reports));
-                }
-                if ui.add(primary(ui, "关闭")).clicked() {
-                    action = Action::Close;
-                }
-            });
-        });
         action
     }
 }
@@ -133,6 +146,10 @@ fn nlfit_stats(f: &scicanvas_core::nlfit::NlFit) -> Vec<(&'static str, String)> 
         "残差平方和"
     };
     let mut stats = vec![
+        ("K（含误差方差）", (f.n - f.dof + 1).to_string()),
+        ("AIC", fmt_num(f.aic())),
+        ("AICc", fmt_num(f.aicc())),
+        ("BIC", fmt_num(f.bic())),
         ("R²", fmt_num(f.r2)),
         ("调整后 R²", fmt_num(f.adj_r2)),
         (rss, fmt_num(f.rss)),

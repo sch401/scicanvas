@@ -331,6 +331,53 @@ pub struct NlFit {
 }
 
 impl NlFit {
+    /// 信息准则的 K 包含误差方差；加权拟合使用 χ²。
+    pub fn aic(&self) -> f64 {
+        self.n as f64 * (self.rss / self.n as f64).ln() + 2.0 * (self.n - self.dof + 1) as f64
+    }
+    pub fn aicc(&self) -> f64 {
+        let k = (self.n - self.dof + 1) as f64;
+        let denominator = self.n as f64 - k - 1.0;
+        if denominator > 0.0 {
+            self.aic() + 2.0 * k * (k + 1.0) / denominator
+        } else {
+            f64::NAN
+        }
+    }
+    pub fn bic(&self) -> f64 {
+        self.n as f64 * (self.rss / self.n as f64).ln() + (self.n - self.dof + 1) as f64 * (self.n as f64).ln()
+    }
+
+    /// 在拟合范围内扫描 400 点，唯一符号变化区间用 Brent–Dekker 求根。
+    pub fn invert(&self, y0: f64) -> Result<f64, InvertError> {
+        if !y0.is_finite() {
+            return Err(InvertError::Outside);
+        }
+        let mut brackets = Vec::new();
+        let mut a = self.x_min;
+        let mut fa = self.eval(a) - y0;
+        for i in 1..400 {
+            let b = self.x_min + (self.x_max - self.x_min) * i as f64 / 399.0;
+            let fb = self.eval(b) - y0;
+            if fa == 0.0 {
+                brackets.push([a, a]);
+            } else if fa.is_finite() && fb.is_finite() && fa.signum() != fb.signum() && fb != 0.0 {
+                brackets.push([a, b]);
+            }
+            if i == 399 && fb == 0.0 {
+                brackets.push([b, b]);
+            }
+            a = b;
+            fa = fb;
+        }
+        match brackets.as_slice() {
+            [] => Err(InvertError::Outside),
+            [[a, b]] if a == b => Ok(*a),
+            [[a, b]] => brent_root(|x| self.eval(x) - y0, *a, *b).ok_or(InvertError::Outside),
+            _ => Err(InvertError::Multiple(brackets)),
+        }
+    }
+
     pub fn eval(&self, x: f64) -> f64 {
         self.model.eval(x, &self.params)
     }
@@ -1823,6 +1870,74 @@ pub fn fit_custom(
         constraints,
     )
 }
+#[derive(Clone, Debug, PartialEq)]
+pub enum InvertError {
+    Outside,
+    Multiple(Vec<[f64; 2]>),
+}
+impl std::fmt::Display for InvertError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Outside => write!(f, "超出标准曲线范围"),
+            Self::Multiple(intervals) => write!(f, "非单调，有多个解：{intervals:?}"),
+        }
+    }
+}
+
+fn brent_root(f: impl Fn(f64) -> f64, mut a: f64, mut b: f64) -> Option<f64> {
+    let (mut fa, mut fb) = (f(a), f(b));
+    if fa.abs() < fb.abs() {
+        std::mem::swap(&mut a, &mut b);
+        std::mem::swap(&mut fa, &mut fb);
+    }
+    let (mut c, mut fc, mut d, mut bisected) = (a, fa, a, true);
+    for _ in 0..100 {
+        let tol = 1e-12 * b.abs().max(1.0);
+        if fb == 0.0 || (b - a).abs() <= tol {
+            return Some(b);
+        }
+        let mut s = if fa != fc && fb != fc {
+            a * fb * fc / ((fa - fb) * (fa - fc))
+                + b * fa * fc / ((fb - fa) * (fb - fc))
+                + c * fa * fb / ((fc - fa) * (fc - fb))
+        } else {
+            b - fb * (b - a) / (fb - fa)
+        };
+        let bound = (3.0 * a + b) / 4.0;
+        if s <= bound.min(b)
+            || s >= bound.max(b)
+            || (bisected && (s - b).abs() >= (b - c).abs() / 2.0)
+            || (!bisected && (s - b).abs() >= (c - d).abs() / 2.0)
+            || (bisected && (b - c).abs() < tol)
+            || (!bisected && (c - d).abs() < tol)
+        {
+            s = (a + b) / 2.0;
+            bisected = true;
+        } else {
+            bisected = false;
+        }
+        let fs = f(s);
+        if !fs.is_finite() {
+            return None;
+        }
+        d = c;
+        c = b;
+        fc = fb;
+        if fa.signum() != fs.signum() {
+            b = s;
+            fb = fs;
+        } else {
+            a = s;
+            fa = fs;
+        }
+        if fa.abs() < fb.abs() {
+            std::mem::swap(&mut a, &mut b);
+            std::mem::swap(&mut fa, &mut fb);
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

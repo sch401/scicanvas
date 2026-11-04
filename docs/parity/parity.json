@@ -2583,11 +2583,32 @@
   "feature": "残差图（残差-自变量、正态概率图）",
   "ref": "Residual Plot Analysis",
   "pri": "P1",
-  "status": "未开始",
-  "how": "",
-  "verify": "与 Origin 比较",
+  "status": "已实现待验收",
+  "how": "线性、多项式和非线性报告均提供残差-X 与残差 Q-Q。残差-X 加 y=0 参考线；非线性残差按需创建，纳入原配方多输出重算，保存并支持撤销重做。",
+  "verify": "SciPy 1.17.1：信息准则手算、F.sf、Hill/Logistic brentq（1e-10）、线性预测区间；残差重算/原行/所有权和保存、Q-Q 以及真实 egui 历史回归。",
   "id": "F139",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/fit_tools.rs::a2_nonlinear_residuals_recalculate_keep_rows_delete_and_legacy_read",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::a2_residual_qq_comparison_and_nonlinear_calibration_follow_real_controls"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/fit_tools.json",
+    "crates/scicanvas-core/tests/reference_scipy.rs"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/fitting.md#F139",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "回归与拟合",
@@ -2723,22 +2744,64 @@
   "feature": "拟合比较（F 检验、AIC、BIC）",
   "ref": "Fit Comparison",
   "pri": "P1",
-  "status": "未开始",
-  "how": "",
-  "verify": "与 Origin 比较",
+  "status": "已实现待验收",
+  "how": "分析 → 拟合比较，选择同工作簿同 Y 列的两份非线性报告；计算 K=自由参数+1、AIC/AICc/BIC、ΔAICc、Akaike 权重及嵌套 F 检验。加权使用 χ²，报告明确嵌套关系由用户判断。",
+  "verify": "SciPy 1.17.1：信息准则手算、F.sf、Hill/Logistic brentq（1e-10）、线性预测区间；残差重算/原行/所有权和保存、Q-Q 以及真实 egui 历史回归。",
   "id": "F145",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/fit_tools.rs::a2_aic_counts_variance_and_comparison_rejects_different_data",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::a2_residual_qq_comparison_and_nonlinear_calibration_follow_real_controls"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/fit_tools.json",
+    "crates/scicanvas-core/tests/reference_scipy.rs"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/fitting.md#F145",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "回归与拟合",
   "feature": "标准曲线反查 X / Y",
   "ref": "Finding Y/X from X/Y Standard Curves",
   "pri": "P1",
-  "status": "部分实现",
-  "how": "分析 → 标准曲线反查：按点选顺序取标准浓度、标准响应、样品响应，线性标准曲线反查浓度并给出 95% 置信区间半宽（Miller & Miller 公式）；由 X 求 Y、非线性标准曲线待做",
-  "verify": "与 numpy.polyfit 和 scipy.stats.t 计算的反查值、标准差、置信区间一致（1e-9）",
+  "status": "已实现待验收",
+  "how": "分析 → 标准曲线反查，选标准 X、标准 Y、样品后设置方向和线性/已有非线性模型。正向给 95% 预测区间；非线性逆向用 400 点扫描及 Brent 唯一根，delta 近似区间，多解/范围外按行记录，外推标注。结果写样品列右侧，支持撤销。",
+  "verify": "SciPy 1.17.1：信息准则手算、F.sf、Hill/Logistic brentq（1e-10）、线性预测区间；残差重算/原行/所有权和保存、Q-Q 以及真实 egui 历史回归。",
   "id": "F146",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/fit_tools.rs::a2_inverse_outside_and_multiple_solutions",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::a2_residual_qq_comparison_and_nonlinear_calibration_follow_real_controls"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/fit_tools.json",
+    "crates/scicanvas-core/tests/reference_scipy.rs"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/fitting.md#F146",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "回归与拟合",

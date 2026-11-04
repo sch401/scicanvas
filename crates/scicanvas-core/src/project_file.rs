@@ -342,7 +342,7 @@ fn validate(project: &Project) -> Result<(), String> {
                         return Err(format!("工作簿 {} 列 {}：拟合与列公式同时占用结果", book.name, col.key));
                     }
                     let mut outputs = BTreeSet::from([col.key.as_str()]);
-                    for key in std::iter::once(&recipe.output_x).chain(recipe.bands.iter().flat_map(|b| &b.columns)) {
+                    for key in recipe.output_keys() {
                         if !outputs.insert(key.as_str())
                             || book.column(key).is_none()
                             || book.column(key).is_some_and(|c| c.formula.is_some() || c.op.is_some())
@@ -949,6 +949,7 @@ fn migrate_fit_state(project: &mut Project) {
                     ..
                 }) => std::iter::once(col.key.clone())
                     .chain(std::iter::once(r.output_x.clone()))
+                    .chain(r.residual.clone())
                     .chain(r.bands.iter().flat_map(|b| b.columns.clone()))
                     .collect(),
                 Some(Operation {

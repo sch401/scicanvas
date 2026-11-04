@@ -3,7 +3,7 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-pub const PROJECT_VERSION: u32 = 29;
+pub const PROJECT_VERSION: u32 = 30;
 pub const GRAPH_TEMPLATE_VERSION: u32 = 1;
 
 /// 列的绘图角色，对应 Origin 里的 X / Y / 忽略。
@@ -982,6 +982,9 @@ impl Project {
                             }
                         } else {
                             recipe.bands.retain(|b| !b.columns.iter().any(|key| keys.contains(key)));
+                            if recipe.residual.as_ref().is_some_and(|k| keys.contains(k)) {
+                                recipe.residual = None;
+                            }
                         }
                     }
                 }
@@ -1262,8 +1265,11 @@ impl Book {
             else {
                 return None;
             };
-            (c.key == key || r.output_x == key || r.bands.iter().any(|b| b.columns.iter().any(|k| k == key)))
-                .then_some(c.key.as_str())
+            (c.key == key
+                || r.output_x == key
+                || r.residual.as_deref() == Some(key)
+                || r.bands.iter().any(|b| b.columns.iter().any(|k| k == key)))
+            .then_some(c.key.as_str())
         })
     }
 }

@@ -12,6 +12,7 @@ mod calculus;
 mod columns;
 mod fft;
 mod fit;
+mod fit_tools;
 mod recalc;
 mod resolve;
 mod smooth;
@@ -22,6 +23,7 @@ mod transpose;
 pub use calculus::AreaReport;
 pub use columns::{ColumnOp, Operand};
 pub use fit::{FitReport, NlFitReport};
+pub use fit_tools::{compare_fits, FitComparison};
 pub use recalc::{FitBands, FitMethod, FitWeight, NonlinearRecipe, OpKind, Operation, RecalcMode};
 pub use resolve::{get_xy, AnalysisColumn, Item, Resolved, Source};
 
@@ -1567,6 +1569,7 @@ mod nonlinear_recalc_tests {
             constraints: String::new(),
             output_x: "D".into(),
             bands: vec![],
+            residual: None,
             weight: FitWeight::None,
             input_digest: None,
             attempted_digest: None,

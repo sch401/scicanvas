@@ -763,3 +763,103 @@ fn two_way_anova_matches_statsmodels_type_ii() {
         }
     }
 }
+
+#[test]
+fn a2_fit_comparison_inverse_and_forward_match_scipy() {
+    use scicanvas_core::{
+        nlfit::{self, FitFunction, Model},
+        ops::Source,
+    };
+    for case in cases("fit_tools") {
+        let name = case["name"].as_str().unwrap();
+        let x = numbers(&case["x"]);
+        let y = numbers(&case["y"]);
+        if name == "inverse" {
+            let model = if case["model"] == "Hill" {
+                Model::Hill
+            } else {
+                Model::Logistic
+            };
+            let fit = nlfit::fit_function_weighted(
+                FitFunction::Builtin(model),
+                &x,
+                &y,
+                None,
+                Some(&numbers(&case["params"])),
+                &[],
+                &[],
+            )
+            .unwrap();
+            for (target, expected) in numbers(&case["targets"]).iter().zip(numbers(&case["roots"])) {
+                assert!((fit.invert(*target).unwrap() - expected).abs() < 1e-10);
+            }
+        } else if name == "comparison" {
+            let mut reports = Vec::new();
+            for row in case["fits"].as_array().unwrap() {
+                let model = if row["model"] == "ExpDec1" {
+                    Model::ExpDec1
+                } else {
+                    Model::ExpDec2
+                };
+                let fit = nlfit::fit_function_weighted(
+                    FitFunction::Builtin(model),
+                    &x,
+                    &y,
+                    None,
+                    Some(&numbers(&row["initial"])),
+                    &[],
+                    &[],
+                )
+                .unwrap();
+                near(fit.rss, &row["rss"], 1e-8, name);
+                near(fit.aic(), &row["aic"], 1e-9, name);
+                near(fit.aicc(), &row["aicc"], 1e-9, name);
+                near(fit.bic(), &row["bic"], 1e-9, name);
+                reports.push(scicanvas_core::ops::NlFitReport {
+                    id: reports.len() as u64,
+                    current: true,
+                    error: None,
+                    name: model.name().into(),
+                    fit,
+                    book_id: 1,
+                    y_key: "B".into(),
+                    curve: ("D".into(), "E".into()),
+                });
+            }
+            let comparison = scicanvas_core::ops::compare_fits(&reports[0], &reports[1]).unwrap();
+            near(comparison.f, &case["f"], 1e-8, name);
+            near(comparison.p, &case["p"], 1e-6, name);
+        } else {
+            let mut p = Project::sample();
+            for (key, values) in [("A", x), ("B", y), ("C", numbers(&case["samples"]))] {
+                p.book_mut(1)
+                    .unwrap()
+                    .columns
+                    .iter_mut()
+                    .find(|c| c.key == key)
+                    .unwrap()
+                    .data = values.iter().map(ToString::to_string).collect();
+            }
+            let keys = p
+                .evaluate_calibration(1, &["A".into(), "B".into(), "C".into()], None, true)
+                .unwrap();
+            array(
+                &p.book(1).unwrap().column(&keys[0]).unwrap().values(),
+                &case["estimates"],
+                1e-7,
+                name,
+            );
+            array(
+                &p.book(1).unwrap().column(&keys[2]).unwrap().values(),
+                &case["half"],
+                1e-7,
+                name,
+            );
+            let _ = Source::Book {
+                id: 1,
+                selected: vec![],
+                rows: None,
+            };
+        }
+    }
+}

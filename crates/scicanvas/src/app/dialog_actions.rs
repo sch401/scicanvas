@@ -134,6 +134,15 @@ impl SciApp {
             dialogs::Action::EditNlFit(report) => self.edit_nlfit_report(*report),
             dialogs::Action::Refit(target, recipe) => return self.refit_report(*target, recipe),
             dialogs::Action::ResidualPlot(reports) => self.apply_residual_plot_action(reports),
+            dialogs::Action::ResidualQQ(reports) => self.apply_residual_qq(reports),
+            dialogs::Action::NlResidualPlot(reports, qq) => self.apply_nl_residual_plot(reports, qq),
+            dialogs::Action::CompareFits(reports) => self.compare_fits(&reports),
+            dialogs::Action::EvaluateCalibration {
+                book,
+                keys,
+                report,
+                forward,
+            } => self.apply_calibration(book, keys, report, forward),
             dialogs::Action::None => {}
             dialogs::Action::Close => self.dialog = None,
             dialogs::Action::ColumnProps(book, edit) => self.apply_column_props_action(ctx, book, edit),
@@ -336,6 +345,42 @@ impl SciApp {
             },
             |app, _| {
                 app.status = "已写入 95% 置信带和预测带，并加到图中".into();
+            },
+        );
+    }
+
+    fn apply_residual_qq(&mut self, reports: Vec<scicanvas_core::ops::FitReport>) {
+        self.edit_with(
+            "残差 Q-Q",
+            |p| p.residual_qq(&reports).map(Some),
+            |app, id| app.show_item(id),
+        );
+    }
+
+    fn apply_nl_residual_plot(&mut self, reports: Vec<scicanvas_core::ops::NlFitReport>, qq: bool) {
+        self.edit_with(
+            if qq { "残差 Q-Q" } else { "残差图" },
+            |p| p.nlfit_residual_plot(&reports, qq).map(Some),
+            |app, id| app.show_item(id),
+        );
+    }
+
+    fn apply_calibration(
+        &mut self,
+        book: u64,
+        keys: [String; 3],
+        report: Option<Box<scicanvas_core::ops::NlFitReport>>,
+        forward: bool,
+    ) {
+        self.edit_with(
+            "标准曲线正反查",
+            |p| {
+                p.evaluate_calibration(book, &keys, report.as_deref(), forward)
+                    .map(Some)
+            },
+            |app, keys| {
+                app.dialog = None;
+                app.status = format!("标准曲线结果在新列 {}", keys.join("、"));
             },
         );
     }
