@@ -890,6 +890,330 @@ pub fn shapiro_wilk(values: &[f64]) -> Result<Normality, String> {
     Ok(Normality { n, w, p })
 }
 
+#[path = "stats/ks.rs"]
+mod ks;
+#[path = "stats/lilliefors_table.rs"]
+mod lilliefors_table;
+pub use ks::{ks_2samp, Ks2};
+
+/// 均值、样本标准差由数据估计的正态 KS 检验（Lilliefors）。
+#[derive(Clone, Debug)]
+pub struct NormalityKs {
+    pub n: usize,
+    pub d: f64,
+    /// 表插值的 p 值，范围为 0.001–0.99。
+    pub p: f64,
+}
+
+fn normal_scores(values: &[f64], minimum: usize) -> Result<Vec<f64>, String> {
+    let mut x: Vec<f64> = values.iter().copied().filter(|v| v.is_finite()).collect();
+    if x.len() < minimum {
+        return Err(format!("检验至少需要 {minimum} 个数值"));
+    }
+    x.sort_by(f64::total_cmp);
+    let n = x.len() as f64;
+    let mean = x.iter().sum::<f64>() / n;
+    let sd = (x.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / (n - 1.0)).sqrt();
+    if sd == 0.0 {
+        return Err("数值全部相同，无法检验".into());
+    }
+    for v in &mut x {
+        *v = (*v - mean) / sd;
+    }
+    Ok(x)
+}
+
+pub fn lilliefors(values: &[f64]) -> Result<NormalityKs, String> {
+    use lilliefors_table::{ALPHA, ASYMPTOTIC, CRITICAL, SIZES};
+    let x = normal_scores(values, 4)?;
+    let n = x.len();
+    let d = x.iter().enumerate().fold(0.0_f64, |d, (i, &z)| {
+        let cdf = norm_cdf(z);
+        d.max((i + 1) as f64 / n as f64 - cdf).max(cdf - i as f64 / n as f64)
+    });
+    let cv: [f64; 14] = if n > SIZES[25] {
+        let logn = (n as f64).ln();
+        ASYMPTOTIC.map(|[a, b, c]| (a + b * logn + c * logn * logn).exp())
+    } else {
+        let hi = SIZES.partition_point(|&size| size < n);
+        let lo = hi.saturating_sub(1);
+        let w = if hi == lo {
+            0.0
+        } else {
+            (n - SIZES[lo]) as f64 / (SIZES[hi] - SIZES[lo]) as f64
+        };
+        std::array::from_fn(|i| CRITICAL[lo][i] + w * (CRITICAL[hi][i] - CRITICAL[lo][i]))
+    };
+    let p = match cv.partition_point(|&v| v < d) {
+        0 => ALPHA[0],
+        14 => ALPHA[13],
+        hi => ALPHA[hi - 1] + (d - cv[hi - 1]) / (cv[hi] - cv[hi - 1]) * (ALPHA[hi] - ALPHA[hi - 1]),
+    };
+    Ok(NormalityKs { n, d, p })
+}
+
+/// Anderson–Darling 正态性检验，包含 Stephens 修正及 SciPy 5% 临界值。
+#[derive(Clone, Debug)]
+pub struct NormalityAd {
+    pub n: usize,
+    pub a2: f64,
+    pub adjusted: f64,
+    pub p: f64,
+    pub critical_5: f64,
+}
+
+fn log_normal_cdf(z: f64) -> f64 {
+    let cdf = norm_cdf(z);
+    if cdf > 0.0 {
+        cdf.ln()
+    } else {
+        // Φ(z) 下溢时使用 Mills 尾部展开；此处分支 |z| > 38。
+        let inv = 1.0 / (z * z);
+        let mut series = 1.0;
+        let mut term = 1.0;
+        for k in 1..=12 {
+            term *= -((2 * k - 1) as f64) * inv;
+            series += term;
+        }
+        -0.5 * z * z - (-z).ln() - 0.5 * (2.0 * std::f64::consts::PI).ln() + series.ln()
+    }
+}
+
+pub fn anderson_normal(values: &[f64]) -> Result<NormalityAd, String> {
+    let x = normal_scores(values, 3)?;
+    let n = x.len();
+    let nf = n as f64;
+    // erfc 保留尾部精度，避免由 1 - Φ(z) 的舍入得到 log(0)。
+    let mut sum = 0.0;
+    let mut correction = 0.0;
+    for (i, &z) in x.iter().enumerate() {
+        let term = (2 * i + 1) as f64 * (log_normal_cdf(z) + log_normal_cdf(-x[n - 1 - i]));
+        let value = term - correction;
+        let next = sum + value;
+        correction = (next - sum) - value;
+        sum = next;
+    }
+    let a2 = -nf - sum / nf;
+    let adjusted = a2 * (1.0 + 0.75 / nf + 2.25 / nf.powi(2));
+    // D'Agostino–Stephens，与 statsmodels.stats._adnorm.normal_ad 相同。
+    let a = adjusted;
+    let p = if a < 0.2 {
+        -(-13.436 + 101.14 * a - 223.73 * a * a).exp_m1()
+    } else if a < 0.34 {
+        -(-8.318 + 42.796 * a - 59.938 * a * a).exp_m1()
+    } else if a < 0.6 {
+        (0.9177 - 4.279 * a - 1.38 * a * a).exp()
+    } else if a <= 13.0 {
+        (1.2937 - 5.709 * a + 0.0186 * a * a).exp()
+    } else {
+        0.0
+    };
+    let critical_5 = (0.752 / (1.0 + 0.75 / nf + 2.25 / nf.powi(2)) * 1000.0).round_ties_even() / 1000.0;
+    Ok(NormalityAd {
+        n,
+        a2,
+        adjusted,
+        p,
+        critical_5,
+    })
+}
+
+/// Rorabacher (1991), Anal. Chem. 63, 139–146, Tables I, II, V, VI.
+/// 各行 n=3..30；列为双侧 α=0.10、0.05、0.01；按 r10/r11/r21/r22 的推荐区间。
+const DIXON_CRITICAL: [[f64; 3]; 28] = [
+    [0.941, 0.970, 0.994],
+    [0.765, 0.829, 0.926],
+    [0.642, 0.710, 0.821],
+    [0.560, 0.625, 0.740],
+    [0.507, 0.568, 0.680],
+    [0.554, 0.615, 0.725],
+    [0.512, 0.570, 0.677],
+    [0.477, 0.534, 0.639],
+    [0.576, 0.625, 0.713],
+    [0.546, 0.592, 0.675],
+    [0.521, 0.565, 0.649],
+    [0.546, 0.590, 0.674],
+    [0.525, 0.568, 0.647],
+    [0.507, 0.548, 0.624],
+    [0.490, 0.531, 0.605],
+    [0.475, 0.516, 0.589],
+    [0.462, 0.503, 0.575],
+    [0.450, 0.491, 0.562],
+    [0.440, 0.480, 0.551],
+    [0.430, 0.470, 0.541],
+    [0.421, 0.461, 0.532],
+    [0.413, 0.452, 0.524],
+    [0.406, 0.445, 0.516],
+    [0.399, 0.438, 0.508],
+    [0.393, 0.432, 0.501],
+    [0.387, 0.426, 0.495],
+    [0.381, 0.419, 0.489],
+    [0.376, 0.414, 0.483],
+];
+
+#[derive(Clone, Debug)]
+pub struct Dixon {
+    pub n: usize,
+    pub index: usize,
+    pub value: f64,
+    pub ratio: &'static str,
+    pub q: f64,
+    pub critical: f64,
+}
+
+pub fn dixon_q(values: &[f64], alpha: f64) -> Result<Dixon, String> {
+    let column = [0.10, 0.05, 0.01]
+        .iter()
+        .position(|&a| a == alpha)
+        .ok_or("Dixon 显著性水平请选择 0.10、0.05 或 0.01")?;
+    let mut pts: Vec<_> = values
+        .iter()
+        .copied()
+        .enumerate()
+        .filter(|(_, v)| v.is_finite())
+        .collect();
+    let n = pts.len();
+    if !(3..=30).contains(&n) {
+        return Err("Dixon 检验需要 3–30 个数值".into());
+    }
+    pts.sort_by(|a, b| a.1.total_cmp(&b.1));
+    let (gap, trim, ratio) = match n {
+        3..=7 => (1, 0, "r10"),
+        8..=10 => (1, 1, "r11"),
+        11..=13 => (2, 1, "r21"),
+        _ => (2, 2, "r22"),
+    };
+    let lo_range = pts[n - 1 - trim].1 - pts[0].1;
+    let hi_range = pts[n - 1].1 - pts[trim].1;
+    if lo_range == 0.0 || hi_range == 0.0 {
+        return Err("Dixon 子区间极差为 0，无法计算 Q".into());
+    }
+    let lo = (pts[gap].1 - pts[0].1) / lo_range;
+    let hi = (pts[n - 1].1 - pts[n - 1 - gap].1) / hi_range;
+    let (index, value, q) = if lo > hi {
+        (pts[0].0, pts[0].1, lo)
+    } else {
+        (pts[n - 1].0, pts[n - 1].1, hi)
+    };
+    Ok(Dixon {
+        n,
+        index,
+        value,
+        ratio,
+        q,
+        critical: DIXON_CRITICAL[n - 3][column],
+    })
+}
+
+#[derive(Clone, Debug)]
+pub struct AnovaRow {
+    pub source: &'static str,
+    pub ss: f64,
+    pub df: usize,
+    pub ms: f64,
+    pub f: f64,
+    pub p: f64,
+}
+
+#[derive(Clone, Debug)]
+pub struct TwoWayAnova {
+    pub n: usize,
+    pub rows: Vec<AnovaRow>,
+}
+
+/// 含交互项的双因素方差分析，Type II 平方和。
+pub fn two_way_anova(a: &[String], b: &[String], y: &[f64]) -> Result<TwoWayAnova, String> {
+    if a.len() != b.len() || a.len() != y.len() {
+        return Err("因子与响应列长度必须相同".into());
+    }
+    let valid: Vec<_> = (0..y.len())
+        .filter(|&i| !a[i].trim().is_empty() && !b[i].trim().is_empty() && y[i].is_finite())
+        .collect();
+    fn levels<'a>(values: &'a [String], valid: &[usize]) -> Vec<&'a str> {
+        let mut levels: Vec<_> = valid.iter().map(|&i| values[i].as_str()).collect();
+        levels.sort_unstable();
+        levels.dedup();
+        levels
+    }
+    let la = levels(a, &valid);
+    let lb = levels(b, &valid);
+    if la.len() < 2 || lb.len() < 2 {
+        return Err("每个因子至少需要两个水平".into());
+    }
+    if la
+        .iter()
+        .any(|va| lb.iter().any(|vb| !valid.iter().any(|&i| a[i] == *va && b[i] == *vb)))
+    {
+        return Err("存在空单元格，交互项不可估计".into());
+    }
+    let n = valid.len();
+    let rank = la.len() * lb.len();
+    if n <= rank {
+        return Err("需要重复观测以估计残差自由度".into());
+    }
+    let response: Vec<_> = valid.iter().map(|&i| y[i]).collect();
+    let rss = |use_a: bool, use_b: bool, interaction: bool| -> Result<f64, String> {
+        let design: Vec<Vec<f64>> = valid
+            .iter()
+            .map(|&i| {
+                let da: Vec<_> = la[1..].iter().map(|v| f64::from(a[i] == *v)).collect();
+                let db: Vec<_> = lb[1..].iter().map(|v| f64::from(b[i] == *v)).collect();
+                let mut row = vec![1.0];
+                if use_a {
+                    row.extend_from_slice(&da);
+                }
+                if use_b {
+                    row.extend_from_slice(&db);
+                }
+                if interaction {
+                    row.extend(da.iter().flat_map(|a| db.iter().map(move |b| a * b)));
+                }
+                row
+            })
+            .collect();
+        crate::linalg::lstsq(&design, &response)
+            .map(|fit| fit.rss)
+            .map_err(|_| "设计矩阵秩不足".into())
+    };
+    let additive = rss(true, true, false)?;
+    let residual = rss(true, true, true)?;
+    let dfe = n - rank;
+    let mse = residual / dfe as f64;
+    let mean = response.iter().sum::<f64>() / n as f64;
+    let total = response.iter().map(|v| (v - mean).powi(2)).sum();
+    let mut rows = Vec::new();
+    for (source, ss, df) in [
+        ("A", rss(false, true, false)? - additive, la.len() - 1),
+        ("B", rss(true, false, false)? - additive, lb.len() - 1),
+        ("A×B", additive - residual, (la.len() - 1) * (lb.len() - 1)),
+        ("残差", residual, dfe),
+        ("总计", total, n - 1),
+    ] {
+        let ss = ss.max(0.0);
+        let ms = ss / df as f64;
+        let tested = rows.len() < 3;
+        let f = if tested { ms / mse } else { f64::NAN };
+        let p = if tested {
+            if f.is_infinite() {
+                0.0
+            } else {
+                f_sf(f, df as f64, dfe as f64)
+            }
+        } else {
+            f64::NAN
+        };
+        rows.push(AnovaRow {
+            source,
+            ss,
+            df,
+            ms,
+            f,
+            p,
+        });
+    }
+    Ok(TwoWayAnova { n, rows })
+}
+
 /// Grubbs 异常值检验（双侧）：离均值最远的点是否为异常值。
 #[derive(Clone, Debug, PartialEq)]
 pub struct Grubbs {

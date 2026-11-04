@@ -182,11 +182,21 @@ pub static TABS: &[Tab] = &[
             },
             Group {
                 label: "假设检验",
-                items: &[Big("stats.ttest"), Big("stats.anova"), Big("stats.correlation")],
+                items: &[
+                    Big("stats.ttest"),
+                    Big("stats.anova"),
+                    Big("stats.anova2"),
+                    Big("stats.correlation"),
+                ],
             },
             Group {
                 label: "数据检验",
-                items: &[Big("stats.normality"), Big("stats.grubbs")],
+                items: &[
+                    Big("stats.normality"),
+                    Big("stats.grubbs"),
+                    Big("stats.dixon"),
+                    Big("stats.ks2"),
+                ],
             },
         ],
     },

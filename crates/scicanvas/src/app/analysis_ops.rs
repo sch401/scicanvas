@@ -610,8 +610,9 @@ impl SciApp {
         }
     }
 
-    /// 点选的各列分别做 Shapiro–Wilk 正态性检验。
+    /// 点选的各列分别做三种正态性检验。
     pub(crate) fn normality(&mut self) {
+        use scicanvas_core::stats;
         let Some(columns) = self.statistical_columns() else {
             return;
         };
@@ -619,39 +620,195 @@ impl SciApp {
             self.status = "请先在工作表里单击选中要检验的列".into();
             return;
         }
-        let mut rows = vec![["列", "N", "W", "p", "α = 0.05"].map(String::from).to_vec()];
-        let mut problems = vec![];
+        let mut rows = vec![["列", "N", "检验", "统计量", "p", "结论（α = 0.05）"]
+            .map(String::from)
+            .to_vec()];
+        let mut notes = vec!["原假设：数据来自正态分布。p < 0.05 时偏离正态。缺失值已跳过。Shapiro–Wilk：3 ≤ N ≤ 5000；Lilliefors：N ≥ 4，p 按表插值并限制在 0.001–0.99；AD：N ≥ 3，p 使用 Stephens 修正。".to_owned()];
         for c in &columns {
-            match scicanvas_core::stats::shapiro_wilk(&c.values.clone()) {
+            let results = [
+                ("Shapiro–Wilk", stats::shapiro_wilk(&c.values).map(|r| (r.n, r.w, r.p))),
+                (
+                    "KS（Lilliefors）",
+                    stats::lilliefors(&c.values).map(|r| (r.n, r.d, r.p)),
+                ),
+                (
+                    "Anderson–Darling",
+                    stats::anderson_normal(&c.values).map(|r| {
+                        notes.push(format!(
+                            "{}：AD 的 SciPy 5% 临界值 = {}。",
+                            c.name,
+                            fmt_num(r.critical_5)
+                        ));
+                        (r.n, r.a2, r.p)
+                    }),
+                ),
+            ];
+            for (test, result) in results {
+                match result {
+                    Ok((n, statistic, p)) => rows.push(vec![
+                        c.name.clone(),
+                        n.to_string(),
+                        test.into(),
+                        fmt_num(round_sig(statistic, 6)),
+                        fmt_num(round_sig(p, 6)),
+                        if p < 0.05 { "偏离正态" } else { "保留正态假设" }.into(),
+                    ]),
+                    Err(error) => notes.push(format!("{}，{test}：{error}", c.name)),
+                }
+            }
+        }
+        self.status = format!("已对 {} 列做正态性检验", columns.len());
+        self.dialog = Some(Dialog::Table {
+            title: "正态性检验".into(),
+            rows,
+            note: notes.join("\n"),
+        });
+    }
+
+    pub(crate) fn dixon(&mut self) {
+        let Some(columns) = self.statistical_columns() else {
+            return;
+        };
+        if columns.is_empty() {
+            self.status = "请选中要检验的列".into();
+            return;
+        }
+        let mut rows = vec![
+            ["列", "N", "比值", "可疑值", "所在行", "Q", "临界值（α = 0.05）", "结论"]
+                .map(String::from)
+                .to_vec(),
+        ];
+        let mut notes = vec!["Dixon 双侧检验，α = 0.05，假设其余数据近似正态。3–7 点用 r10，8–10 点用 r11，11–13 点用 r21，14–30 点用 r22；比较两端后报告 Q 较大的一端。临界值来自 Rorabacher (1991) 表 I、II、V、VI。".to_owned()];
+        for c in columns {
+            let book = self.project.book(c.source.book).unwrap();
+            let (first, last) = c.rows.unwrap_or((0, book.nrows().saturating_sub(1)));
+            let original_rows: Vec<_> = (first..=last)
+                .filter(|&r| !book.uses_visible_rows() || book.row_visible(r))
+                .collect();
+            match scicanvas_core::stats::dixon_q(&c.values, 0.05) {
                 Ok(r) => rows.push(vec![
-                    c.name.as_str().to_owned(),
+                    c.name,
                     r.n.to_string(),
-                    fmt_num(round_sig(r.w, 6)),
-                    fmt_num(round_sig(r.p, 6)),
-                    if r.p < 0.05 {
-                        "偏离正态"
+                    r.ratio.into(),
+                    fmt_num(r.value),
+                    (original_rows[r.index] + 1).to_string(),
+                    fmt_num(round_sig(r.q, 6)),
+                    fmt_num(r.critical),
+                    if r.q > r.critical {
+                        "检出异常值"
                     } else {
-                        "不能拒绝正态"
+                        "保留该值"
                     }
                     .into(),
                 ]),
-                Err(e) => problems.push(format!("{}：{e}", c.name.as_str())),
+                Err(error) => notes.push(format!("{}：{error}", c.name)),
             }
         }
-        if rows.len() == 1 {
-            self.status = problems.join("；");
+        self.dialog = Some(Dialog::Table {
+            title: "Dixon Q 检验".into(),
+            rows,
+            note: notes.join("\n"),
+        });
+    }
+
+    pub(crate) fn ks_2samp(&mut self) {
+        let Some(columns) = self.statistical_columns() else {
+            return;
+        };
+        if columns.len() != 2 {
+            self.status = "请 Ctrl+单击恰好选中两列做 KS 双样本检验".into();
             return;
         }
-        self.status = if problems.is_empty() {
-            format!("已对 {} 列做正态性检验", rows.len() - 1)
-        } else {
-            problems.join("；")
+        match scicanvas_core::stats::ks_2samp(&columns[0].values, &columns[1].values) {
+            Ok(r) => {
+                self.dialog = Some(Dialog::Table {
+                    title:"KS 双样本检验".into(),
+                    rows:vec![ ["样本 A","样本 B","N₁","N₂","D","p","方法","结论（α = 0.05）"].map(String::from).to_vec(),
+                        vec![columns[0].name.clone(),columns[1].name.clone(),r.n1.to_string(),r.n2.to_string(),fmt_num(round_sig(r.d,8)),fmt_num(round_sig(r.p,8)),if r.method == "exact" { "精确" } else { "渐近（有限样本 kstwo）" }.into(),if r.p < 0.05 { "分布存在差异" } else { "保留同分布假设" }.into()]],
+                    note:"原假设：两组独立样本来自同一连续分布。双侧检验，缺失值已跳过；两组均不超过 10000 点时采用精确路径概率，其余采用 SciPy auto 的有限样本 kstwo 渐近规则。有并列值时结果按相同规则计算，连续分布的 p 值解释需结合数据测量精度。".into(),
+                });
+            }
+            Err(error) => self.status = error,
+        }
+    }
+
+    pub(crate) fn open_two_way_anova(&mut self) {
+        let Some(book) = self.active_book_id().and_then(|id| self.project.book(id)) else {
+            return;
         };
-        self.dialog = Some(Dialog::Table {
-            title: "正态性检验（Shapiro–Wilk）".into(),
-            rows,
-            note: "原假设：数据来自正态分布。p < 0.05 时认为偏离正态；缺失值已跳过，3 ≤ N ≤ 5000。".into(),
+        if book.columns.len() < 3 {
+            self.status = "双因素方差分析需要两列因子和一列响应".into();
+            return;
+        }
+        let columns: Vec<_> = book
+            .columns
+            .iter()
+            .map(|c| (c.key.clone(), format!("{}：{}", c.key, c.display_name())))
+            .collect();
+        let picked = self.picked(book.id).0;
+        let keys: Vec<_> = picked.into_iter().filter(|k| book.column(k).is_some()).collect();
+        let keys = if keys.len() >= 3 {
+            keys[..3].to_vec()
+        } else {
+            columns[..3].iter().map(|(k, _)| k.clone()).collect()
+        };
+        self.dialog = Some(Dialog::TwoWayAnova {
+            book: book.id,
+            columns,
+            keys: keys.try_into().unwrap(),
         });
+    }
+
+    pub(super) fn two_way_anova(&mut self, book_id: u64, keys: [String; 3]) {
+        let Some(book) = self.project.book(book_id) else {
+            return;
+        };
+        let Some(a) = book.column(&keys[0]) else {
+            return;
+        };
+        let Some(b) = book.column(&keys[1]) else {
+            return;
+        };
+        let Some(y) = book.column(&keys[2]) else {
+            return;
+        };
+        let raw_y = y.values();
+        let selected = self.picked(book_id).1;
+        let (start, end) = selected.map_or((0, raw_y.len()), |(r0, r1)| (r0, (r1 + 1).min(raw_y.len())));
+        let indices: Vec<_> = (start..end)
+            .filter(|&r| !book.uses_visible_rows() || book.row_visible(r))
+            .collect();
+        let a_values = indices
+            .iter()
+            .map(|&r| a.data.text_at(r).into_owned())
+            .collect::<Vec<_>>();
+        let b_values = indices
+            .iter()
+            .map(|&r| b.data.text_at(r).into_owned())
+            .collect::<Vec<_>>();
+        let response = indices.iter().map(|&r| raw_y[r]).collect::<Vec<_>>();
+        match scicanvas_core::stats::two_way_anova(&a_values, &b_values, &response) {
+            Ok(result) => {
+                let mut rows = vec![["来源", "SS", "df", "MS", "F", "p"].map(String::from).to_vec()];
+                for r in result.rows {
+                    rows.push(vec![
+                        r.source.into(),
+                        fmt_num(round_sig(r.ss, 10)),
+                        r.df.to_string(),
+                        fmt_num(round_sig(r.ms, 10)),
+                        fmt_num(round_sig(r.f, 8)),
+                        fmt_num(round_sig(r.p, 8)),
+                    ]);
+                }
+                let note = format!("因子 A：{}；因子 B：{}；响应：{}；有效 N = {}。Type II 平方和，模型包含 A、B 和交互项。任一字段缺失的行已跳过；按当前行选择和工作表筛选范围取样。三因素和多重比较留待后续。",a.display_name(),b.display_name(),y.display_name(),result.n);
+                self.dialog = Some(Dialog::Table {
+                    title: "双因素方差分析".into(),
+                    rows,
+                    note,
+                });
+            }
+            Err(error) => self.status = error,
+        }
     }
 
     /// 点选的各列分别做 Grubbs 异常值检验（双侧，α = 0.05）。

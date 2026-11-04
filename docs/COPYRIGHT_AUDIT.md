@@ -73,3 +73,22 @@ PNG、PDF 与 SVG 图标现共用 resvg/usvg 0.45.1，rustybuzz 与 fontdb 各�
 更新后的 Windows 完整特性依赖索引中没有 MPL-2.0 包，MPL 源码归档不会打入本版发布包。仓库保留的 0.37 源码和声明是历史版本档案，说明见 MPL_SOURCE.md。发布脚本仅在当前锁定依赖含 MPL 包时才附源码说明和对应完整归档。
 
 图标 loader 保留 egui_extras 0.29.1 的 URI、尺寸提示、缓存和颜色换算行为，原 MIT 声明已随依赖记录；全套图标/缩略图逐像素比对一致。16份图型/科学文字/多面板PNG逐像素与升级前一致；屏幕字形位置和PDF矢量/字体子集回归均通过。
+
+## A1 统计检验算法与表值（2026-11-04）
+
+Lilliefors 正态临界表和渐近参数采用 statsmodels 0.14.6 的 `stats/_lilliefors_critical_values.py`，表插值规则对照 `_lilliefors.py` 和 `tabledist.py`。版权原文保留于 `licenses/supplemental/statsmodels-0.14.6/LICENSE.txt` 并加入分发声明。AD 的 p 值使用 D’Agostino–Stephens 公式，对照 statsmodels `normal_ad`。KS 双样本精确概率及有限样本 kstwo 的 Durbin、Pelz–Good 分支对照 SciPy 1.17.1，沿用仓库保留的 SciPy BSD 许可。参考库仅用于开发机生成测试数据。
+
+Dixon 临界值取自 [Rorabacher 原文](https://community.jmp.com/kvoqx44227/attachments/kvoqx44227/discussions/48839/1/Rorabacher%201991%20-%20Critical%20Values%20of%20Dixon%20Test.pdf)，Analytical Chemistry 63 (1991), 139–146，表 I、II、V、VI 的推荐 n 区间。数值表与算法代码区分，未复制第三方 Dixon 实现。
+
+独立抽查使用 [CRAN outliers 的 qdixon 原始表](https://github.com/cran/outliers/blob/master/R/qdixon.R)。该表为单侧概率，双侧 α 对应 α/2。下列八个值与原文逐项一致，并写入回归测试：
+
+| n | 比值 | 双侧 α | 临界值 |
+|---|---|---|---|
+| 3 | r10 | 0.10 | 0.941 |
+| 5 | r10 | 0.05 | 0.710 |
+| 7 | r10 | 0.01 | 0.680 |
+| 8 | r11 | 0.05 | 0.615 |
+| 11 | r21 | 0.05 | 0.625 |
+| 14 | r22 | 0.01 | 0.674 |
+| 20 | r22 | 0.05 | 0.491 |
+| 30 | r22 | 0.01 | 0.483 |

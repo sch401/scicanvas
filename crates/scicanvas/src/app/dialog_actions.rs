@@ -216,6 +216,7 @@ impl SciApp {
                 self.finish_dialog_input();
                 self.fft(window);
             }
+            dialogs::Action::TwoWayAnova(book, keys) => self.two_way_anova(book, keys),
             dialogs::Action::ColumnMath(op, constant) => {
                 self.finish_dialog_input();
                 self.column_math(op, constant);
