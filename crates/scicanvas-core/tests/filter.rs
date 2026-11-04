@@ -49,7 +49,7 @@ fn filter_project_format_v23_roundtrips_and_reads_v22() {
     let mut old: serde_json::Value = serde_json::from_str(&project_file::to_json(&project).unwrap()).unwrap();
     old["version"] = 22.into();
     let loaded = project_file::from_json(&old.to_string()).unwrap();
-    assert_eq!(loaded.version, 23);
+    assert_eq!(loaded.version, scicanvas_core::model::PROJECT_VERSION);
     assert!(loaded.books[0].filter.is_none());
     let mut filter = Filter::default();
     filter.rules.insert(
@@ -62,7 +62,7 @@ fn filter_project_format_v23_roundtrips_and_reads_v22() {
     project.books[0].filter = Some(filter);
     let loaded = project_file::from_scv(&project_file::to_scv(&project).unwrap()).unwrap();
     assert_eq!(loaded, project);
-    old["version"] = 24.into();
+    old["version"] = (scicanvas_core::model::PROJECT_VERSION + 1).into();
     assert!(project_file::from_json(&old.to_string())
         .unwrap_err()
         .contains("高于当前支持"));

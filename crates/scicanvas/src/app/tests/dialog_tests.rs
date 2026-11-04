@@ -337,6 +337,40 @@ fn nonlinear_fit_opens_a_report_and_undoes_as_one_step() {
 }
 
 #[test]
+fn weighted_fit_checkbox_reaches_the_report_and_reedit() {
+    use scicanvas_core::nlfit::Model;
+    let mut app = app();
+    let book = app.project.book_mut(1).unwrap();
+    let xs: Vec<f64> = (0..41).map(|i| i as f64 * 0.2).collect();
+    book.columns[0].data = xs.iter().map(|x| fmt_num(*x)).collect();
+    book.columns[1].data = xs
+        .iter()
+        .enumerate()
+        .map(|(i, x)| fmt_num(0.3 + 5.0 * (-x / 1.7).exp() + 0.05 * (1.7 * i as f64).sin()))
+        .collect();
+    book.columns[2].role = scicanvas_core::Role::YError;
+    book.columns[2].data = xs.iter().map(|x| fmt_num(0.02 + 0.05 * x)).collect();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["B".into()]);
+    let before = app.project.clone();
+    let ctx = egui::Context::default();
+    assert!(app.apply_dialog_action(
+        &ctx,
+        dialogs::Action::NlFit(Model::ExpDec1, vec![], String::new(), true)
+    ));
+    let Some(Dialog::NlFitReport(reports)) = &app.dialog else {
+        panic!("weighted fit report should open: {}", app.status);
+    };
+    assert!(reports[0].fit.weighted);
+    let report = reports[0].clone();
+    assert_eq!(app.history.undo_label(), Some("非线性拟合"));
+    app.edit_nlfit_report(report);
+    assert!(matches!(app.dialog, Some(Dialog::NlFit { weighted: true, .. })));
+    app.dialog = None;
+    roundtrip(&mut app, &before);
+}
+
+#[test]
 fn custom_fit_dialog_keeps_invalid_input_and_creates_an_undoable_report() {
     let mut app = app();
     let book = app.project.book_mut(1).unwrap();
@@ -989,7 +1023,7 @@ fn invalid_nlfit_action_preserves_input_and_signals_early_return() {
     let ctx = egui::Context::default();
     assert!(!app.apply_dialog_action(
         &ctx,
-        dialogs::Action::NlFit(Model::ExpDec1, vec![], "y0 + A1 = q".into())
+        dialogs::Action::NlFit(Model::ExpDec1, vec![], "y0 + A1 = q".into(), false)
     ));
     assert!(matches!(&app.dialog,Some(Dialog::NlFit {constraints,..}) if constraints=="y0 + A1 = q"));
     assert!(app.status.contains("不是参数名"));

@@ -127,14 +127,23 @@ fn nlfit_se(f: &scicanvas_core::nlfit::NlFit, k: usize) -> String {
 }
 
 fn nlfit_stats(f: &scicanvas_core::nlfit::NlFit) -> Vec<(&'static str, String)> {
-    vec![
+    let rss = if f.weighted {
+        "χ²（加权残差平方和）"
+    } else {
+        "残差平方和"
+    };
+    let mut stats = vec![
         ("R²", fmt_num(f.r2)),
         ("调整后 R²", fmt_num(f.adj_r2)),
-        ("残差平方和", fmt_num(f.rss)),
+        (rss, fmt_num(f.rss)),
         ("约化 χ²", fmt_num(f.reduced_chi2)),
         ("数据点数 N", f.n.to_string()),
         ("迭代次数", f.iterations.to_string()),
-    ]
+    ];
+    if f.weighted {
+        stats.insert(0, ("权重", "Y 误差（1/σ²）".into()));
+    }
+    stats
 }
 
 /// 非线性参数表：参数、值、标准误、t、p（固定参数只写值）。

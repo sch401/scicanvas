@@ -34,6 +34,7 @@ impl SciApp {
             target: None,
             limits: vec![(false, 0.0, false, 0.0, false, 1.0); scicanvas_core::nlfit::Model::Gauss.params().len()],
             constraints: String::new(),
+            weighted: false,
         });
     }
 
@@ -153,16 +154,38 @@ impl SciApp {
         }
     }
 
+    #[cfg(test)]
     pub(super) fn nlfit(
         &mut self,
         model: scicanvas_core::nlfit::Model,
         limits: &[scicanvas_core::nlfit::ParamLimits],
         constraints: &[scicanvas_core::nlfit::LinearConstraint],
     ) {
+        self.nlfit_weighted(model, limits, constraints, scicanvas_core::ops::FitWeight::None);
+    }
+
+    pub(super) fn nlfit_weighted(
+        &mut self,
+        model: scicanvas_core::nlfit::Model,
+        limits: &[scicanvas_core::nlfit::ParamLimits],
+        constraints: &[scicanvas_core::nlfit::LinearConstraint],
+        weight: scicanvas_core::ops::FitWeight,
+    ) {
         let Some(src) = self.analysis_source() else { return };
         self.edit_with(
             "非线性拟合",
-            |project| project.nlfit(&src, model, limits, constraints).map(Some),
+            |project| {
+                project
+                    .nlfit_weighted(
+                        &src,
+                        scicanvas_core::nlfit::FitFunction::Builtin(model),
+                        None,
+                        limits,
+                        constraints,
+                        weight,
+                    )
+                    .map(Some)
+            },
             |app, (gid, reports)| {
                 app.after_analysis(Some(gid));
                 let unconverged = reports.iter().filter(|r| !r.fit.converged).count();
@@ -938,6 +961,7 @@ impl SciApp {
                         .unwrap_or_default(),
                     limits,
                     constraints: recipe.constraints.clone(),
+                    weighted: recipe.weight == scicanvas_core::ops::FitWeight::YError,
                     target,
                 });
             }

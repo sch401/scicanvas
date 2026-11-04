@@ -89,6 +89,25 @@ pub fn get_xy(book: &Book, item: &Item) -> (Vec<f64>, Vec<f64>, Vec<usize>) {
     (xs, ys, idx)
 }
 
+/// Y 列关联的 Y 误差列在给定行上的值（加权拟合用），空单元为 NaN；没有关联的误差列时报错。
+pub(super) fn y_errors(book: &Book, y: &str, rows: &[usize]) -> Result<Vec<f64>, String> {
+    let column = book
+        .columns
+        .iter()
+        .enumerate()
+        .find(|(i, c)| c.role == Role::YError && book.error_source(*i) == Some(y))
+        .map(|(_, c)| c)
+        .ok_or_else(|| {
+            let name = book.column(y).map_or(y, |c| c.display_name());
+            format!("{name} 没有关联的 Y 误差列，无法按误差加权")
+        })?;
+    let values = column.values();
+    Ok(rows
+        .iter()
+        .map(|&i| values.get(i).copied().unwrap_or(f64::NAN))
+        .collect())
+}
+
 /// Y 列对应的 X 列：先看选中的列里有没有 X，再找左边最近的 X，最后取任意 X 列。
 pub(super) fn x_for(book: &Book, y: &Column, among: &[&Column]) -> Option<String> {
     let yi = book.column_index(&y.key).unwrap_or(0);

@@ -179,6 +179,8 @@ pub enum Dialog {
         limits: Vec<(bool, f64, bool, f64, bool, f64)>,
         /// 参数间线性约束，一行一条。
         constraints: String,
+        /// 按与 Y 列关联的 Y 误差列加权（1/σ²）。
+        weighted: bool,
     },
     CustomNlFit(CustomFitEditor),
     /// 非线性拟合结果。
@@ -313,7 +315,8 @@ pub enum Action {
     FftFilter(FilterKind),
     Fill(Sequence, usize),
     SetValues(String, bool),
-    NlFit(Model, Vec<scicanvas_core::nlfit::ParamLimits>, String),
+    /// 内置函数、参数限制、约束文字、是否按 Y 误差加权。
+    NlFit(Model, Vec<scicanvas_core::nlfit::ParamLimits>, String, bool),
     OpenCustomNlFit,
     CustomFitLibrary(Box<CustomFitAction>),
     CustomNlFit {

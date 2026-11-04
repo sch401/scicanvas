@@ -181,7 +181,9 @@ impl SciApp {
                 self.interpolate(method, points, range);
             }
             dialogs::Action::TTest(kind, level) => self.run_ttest(kind, level),
-            dialogs::Action::NlFit(model, limits, text) => return self.apply_nlfit_action(model, limits, text),
+            dialogs::Action::NlFit(model, limits, text, weighted) => {
+                return self.apply_nlfit_action(model, limits, text, weighted);
+            }
             dialogs::Action::OpenCustomNlFit => self.open_custom_nlfit_dialog(),
             dialogs::Action::CustomFitLibrary(action) => return self.apply_custom_fit_library_action(*action),
             dialogs::Action::CustomNlFit {
@@ -471,6 +473,7 @@ impl SciApp {
         model: scicanvas_core::nlfit::Model,
         limits: Vec<scicanvas_core::nlfit::ParamLimits>,
         text: String,
+        weighted: bool,
     ) -> bool {
         let constraints = match scicanvas_core::nlfit::parse_constraints(model, &text) {
             Ok(c) => c,
@@ -482,7 +485,12 @@ impl SciApp {
         };
         self.finish_edit();
         self.dialog = None;
-        self.nlfit(model, &limits, &constraints);
+        self.nlfit_weighted(
+            model,
+            &limits,
+            &constraints,
+            scicanvas_core::ops::FitWeight::from_y_error(weighted),
+        );
         true
     }
 

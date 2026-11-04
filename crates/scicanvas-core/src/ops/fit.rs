@@ -297,12 +297,13 @@ impl Project {
         limits: &[crate::nlfit::ParamLimits],
         constraints: &[crate::nlfit::LinearConstraint],
     ) -> Result<(u64, Vec<NlFitReport>), String> {
-        self.nlfit_function(
+        self.nlfit_weighted(
             src,
             crate::nlfit::FitFunction::Builtin(model),
             None,
             limits,
             constraints,
+            FitWeight::None,
         )
     }
 
@@ -314,22 +315,25 @@ impl Project {
         limits: &[crate::nlfit::ParamLimits],
         constraints: &[crate::nlfit::LinearConstraint],
     ) -> Result<(u64, Vec<NlFitReport>), String> {
-        self.nlfit_function(
+        self.nlfit_weighted(
             src,
             crate::nlfit::FitFunction::Custom(function),
             Some(initial),
             limits,
             constraints,
+            FitWeight::None,
         )
     }
 
-    fn nlfit_function(
+    /// 非线性拟合通用入口：`weight` 为 `FitWeight::YError` 时每条曲线按关联的 Y 误差列加权。
+    pub fn nlfit_weighted(
         &mut self,
         src: &Source,
         function: crate::nlfit::FitFunction,
         initial: Option<&[f64]>,
         limits: &[crate::nlfit::ParamLimits],
         constraints: &[crate::nlfit::LinearConstraint],
+        weight: FitWeight,
     ) -> Result<(u64, Vec<NlFitReport>), String> {
         let r = self.resolve(src)?;
         let mut reports = vec![];
@@ -337,9 +341,23 @@ impl Project {
         let mut problems = vec![];
         for item in &r.items {
             let book = self.book(item.book_id).unwrap();
-            let (xs, ys, _) = get_xy(book, item);
+            let (xs, ys, rows) = get_xy(book, item);
             let name = r.name(book, item);
-            let fit = match crate::nlfit::fit_function(function.clone(), &xs, &ys, initial, limits, constraints) {
+            let sigma = match weight {
+                FitWeight::None => Ok(None),
+                FitWeight::YError => y_errors(book, &item.y, &rows).map(Some),
+            };
+            let fit = match sigma.and_then(|sigma| {
+                crate::nlfit::fit_function_weighted(
+                    function.clone(),
+                    &xs,
+                    &ys,
+                    sigma.as_deref(),
+                    initial,
+                    limits,
+                    constraints,
+                )
+            }) {
                 Ok(f) => f,
                 Err(e) => {
                     problems.push(format!("{name}：{e}"));
@@ -386,6 +404,7 @@ impl Project {
                         .join("\n"),
                     output_x: kx.clone(),
                     bands: Vec::new(),
+                    weight,
                     input_digest: None,
                     attempted_digest: None,
                 })),

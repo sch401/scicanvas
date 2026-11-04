@@ -119,6 +119,32 @@ pub struct FitBands {
     pub level: f64,
 }
 
+/// 非线性拟合的权重方式。
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
+pub enum FitWeight {
+    /// 不加权。
+    #[default]
+    None,
+    /// 按与 Y 列关联的 Y 误差列加权，wᵢ = 1/σᵢ²（Origin 的“仪器”权重）。
+    YError,
+}
+
+impl FitWeight {
+    pub fn is_none(&self) -> bool {
+        *self == Self::None
+    }
+
+    /// 对话框里“按 Y 误差加权”复选框对应的权重方式。
+    pub fn from_y_error(on: bool) -> Self {
+        if on {
+            Self::YError
+        } else {
+            Self::None
+        }
+    }
+}
+
 /// 结果 Y 列拥有一次拟合的定义，X 和带由同一次计算一起更新。
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(
@@ -133,6 +159,9 @@ pub struct NonlinearRecipe {
     pub constraints: String,
     pub output_x: String,
     pub bands: Vec<FitBands>,
+    /// 权重方式；不加权时不写入（v24）。
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "FitWeight::is_none"))]
+    pub weight: FitWeight,
     pub input_digest: Option<u64>,
     /// 相同失败来源在自动编辑收尾时不重复求解，手动重算可重试。
     #[cfg_attr(feature = "serde", serde(default))]
@@ -216,8 +245,20 @@ impl NonlinearRecipe {
             &self.constraints,
             &crate::formula::FILE_LIMITS,
         )?;
-        let (xs, ys, _) = get_xy(book, &item);
-        let fit = crate::nlfit::fit_function(function, &xs, &ys, self.initial.as_deref(), &self.limits, &constraints)?;
+        let (xs, ys, rows) = get_xy(book, &item);
+        let sigma = match self.weight {
+            FitWeight::None => None,
+            FitWeight::YError => Some(y_errors(book, &op.y, &rows)?),
+        };
+        let fit = crate::nlfit::fit_function_weighted(
+            function,
+            &xs,
+            &ys,
+            sigma.as_deref(),
+            self.initial.as_deref(),
+            &self.limits,
+            &constraints,
+        )?;
         if !fit.converged {
             return Err("非线性拟合尚未收敛，已保留上次结果".into());
         }
@@ -734,6 +775,7 @@ impl Operation {
                     && a.constraints == b.constraints
                     && a.output_x == b.output_x
                     && a.bands == b.bands
+                    && a.weight == b.weight
             }
             _ => self.kind == other.kind,
         }
@@ -819,11 +861,24 @@ impl NonlinearRecipe {
                 visible_only: op.visible_only,
             },
         );
+        let sigma = (self.weight == FitWeight::YError).then(|| y_errors(book, &op.y, &rows));
         h.integer(rows.len() as u64);
         for ((x, y), row) in xs.iter().zip(ys).zip(rows) {
             h.integer(row as u64);
             h.integer(x.to_bits());
             h.integer(y.to_bits());
+        }
+        // 不加权时不写入，已保存结果的指纹保持不变。
+        if let Some(sigma) = sigma {
+            h.text("weight:y-error");
+            match sigma {
+                Ok(values) => {
+                    for value in values {
+                        h.integer(value.to_bits());
+                    }
+                }
+                Err(error) => h.text(&error),
+            }
         }
         h.0
     }
