@@ -10,6 +10,8 @@ pub(super) fn draw(
 ) -> bool {
     if super::contains(style.kind, Kind::Bar) {
         let position = crate::presets::recipe(style.kind).position;
+        // 多条直方图在同一区间重叠，半透明以便看到被遮住的柱子。
+        let overlap = position == crate::position::Position::Bin && style.bar_count > 1;
         let color = style.color.rgb();
         for (index, (point, base)) in series.points.iter().zip(&series.bases).enumerate() {
             let color = series
@@ -54,7 +56,7 @@ pub(super) fn draw(
                     y: a[1].min(b[1]),
                     w: (b[0] - a[0]).abs(),
                     h: (a[1] - b[1]).abs(),
-                    fill: Some((color, 1.0)),
+                    fill: Some((color, if overlap { 0.6 } else { 1.0 })),
                     stroke: Some(((0, 0, 0), 0.5)),
                 },
                 true,

@@ -57,6 +57,40 @@ pub(crate) fn apply(series: &mut [Series], transform: Transform) {
     }
 }
 
+/// 直方图：把各数据曲线的 Y 值按共同的等宽区间计数，点改为（区间中点，计数），柱底为 0。
+/// 区间范围取全部曲线有效值的最小、最大值，区间数按点数最多的曲线用 Sturges 规则；分箱与 numpy.histogram 相同。
+pub(crate) fn histogram(series: &mut [Series]) {
+    let pools: Vec<Vec<f64>> = series
+        .iter()
+        .map(|s| {
+            if s.line_only {
+                Vec::new()
+            } else {
+                s.points.iter().map(|p| p[1]).filter(|v| v.is_finite()).collect()
+            }
+        })
+        .collect();
+    let Some(longest) = pools.iter().map(Vec::len).max().filter(|n| *n > 0) else {
+        return;
+    };
+    let lo = pools.iter().flatten().copied().fold(f64::INFINITY, f64::min);
+    let hi = pools.iter().flatten().copied().fold(f64::NEG_INFINITY, f64::max);
+    let bins = crate::stats::sturges_bins(longest);
+    for (s, values) in series.iter_mut().zip(&pools) {
+        if s.line_only {
+            continue;
+        }
+        let Ok(counts) = crate::stats::histogram(values, bins, Some((lo, hi))) else {
+            continue;
+        };
+        s.points = counts.iter().map(|b| [(b.lo + b.hi) / 2.0, b.count as f64]).collect();
+        s.bases = vec![0.0; s.points.len()];
+        s.rows = (0..s.points.len()).collect();
+        s.errors = vec![[None; 2]; s.points.len()];
+        s.point_styles = Vec::new();
+    }
+}
+
 pub(crate) fn row_runs(s: &crate::Series) -> Vec<std::ops::Range<usize>> {
     let mut out = Vec::new();
     let mut start = 0;

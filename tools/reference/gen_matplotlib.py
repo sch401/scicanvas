@@ -114,6 +114,17 @@ def generate(source):
             if layer["rows"] is not None:
                 lo, hi = layer["rows"]
                 valid &= (np.arange(len(x)) >= lo) & (np.arange(len(x)) <= hi)
+            if kind == "Histogram":
+                # 与 SciCanvas 相同：各列共用区间，范围取全部有效值的最小、最大值，区间数按最长一列用 Sturges 规则。
+                pools = [yy[np.isfinite(x) & np.isfinite(yy)] for yy in arrays]
+                pooled = np.concatenate(pools)
+                bins = int(np.ceil(np.log2(max(len(v) for v in pools)))) + 1
+                counts, edges = np.histogram(y[valid], bins=bins, range=(pooled.min(), pooled.max()))
+                patches = target.bar((edges[:-1]+edges[1:])/2, counts, width=np.diff(edges))
+                for patch in patches:
+                    a, b = target.transAxes.inverted().transform(patch.get_data_transform().transform(patch.get_bbox().get_points()))
+                    marks["bars"].append([(a[0]+b[0])/2, min(a[1], b[1]), max(a[1], b[1])])
+                continue
             if kind in ("Bar", "HorizontalBar", "StackedBar", "PercentStackedBar", "FloatingBar"):
                 base = np.zeros(len(x))
                 values = y.copy()

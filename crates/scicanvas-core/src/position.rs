@@ -8,6 +8,8 @@ pub(crate) enum Position {
     Stack,
     PercentStack,
     Interval,
+    /// 直方图：柱子占满整个区间，各曲线在同一区间重叠。
+    Bin,
 }
 
 impl Position {
@@ -27,6 +29,9 @@ impl Position {
         }
     }
     pub(crate) fn span(self, category: f64, spacing: f64, index: usize, count: usize) -> (f64, f64) {
+        if self == Self::Bin {
+            return (category - spacing / 2.0, category + spacing / 2.0);
+        }
         let gw = spacing * 0.7;
         let count = if self.is_stacked() { 1 } else { count.max(1) };
         let index = if self.is_stacked() { 0 } else { index };

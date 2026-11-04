@@ -285,6 +285,17 @@ pub(super) fn decorations(commands: &mut Vec<Command>) {
         )
         .modifies(),
         c(
+            "plot.histogram",
+            "直方图",
+            "bar",
+            "",
+            "绘图",
+            "histogram distribution frequency 直方图 分布 频数",
+            need_data,
+            |a| a.plot(PlotType::Histogram),
+        )
+        .modifies(),
+        c(
             "graph.labels",
             "数据标签",
             "props",
