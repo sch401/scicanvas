@@ -259,6 +259,14 @@ impl Project {
     /// 放在源工作簿所在的文件夹。`min_prominence` 是相对 Y 范围的比例（0.05 即 5%）。
     /// X 需要单调；递减的 X（如红外光谱的波数）会先反转。返回新工作簿编号。
     pub fn find_peaks(&mut self, src: &Source, min_prominence: f64) -> Result<Vec<u64>, String> {
+        self.find_peaks_with_method(src, min_prominence, None)
+    }
+    pub fn find_peaks_with_method(
+        &mut self,
+        src: &Source,
+        min_prominence: f64,
+        window: Option<usize>,
+    ) -> Result<Vec<u64>, String> {
         let r = self.resolve(src)?;
         let mut made = vec![];
         let mut problems = vec![];
@@ -287,7 +295,10 @@ impl Project {
                 .iter()
                 .fold((f64::INFINITY, f64::NEG_INFINITY), |(a, b), y| (a.min(*y), b.max(*y)));
             let threshold = min_prominence * (hi - lo);
-            let peaks = crate::peaks::find_peaks(&xs, &ys, threshold);
+            let peaks = window.map_or_else(
+                || crate::peaks::find_peaks(&xs, &ys, threshold),
+                |window| crate::peaks::find_peaks_derivative(&xs, &ys, window, min_prominence),
+            );
             if peaks.is_empty() {
                 problems.push(format!("{name}：没有突出度达到 {} 的峰", fmt_num(threshold)));
                 continue;
@@ -305,6 +316,10 @@ impl Project {
                 fmt_num(threshold),
                 round_sig(min_prominence * 100.0, 4)
             );
+            let note = match window {
+                Some(w) => format!("{note}；SG 导数法，窗口 {}", w.max(3) | 1),
+                None => note,
+            };
             type Getter = fn(&crate::peaks::Peak, &[f64]) -> f64;
             let columns: [(Role, &str, &str, Getter); 8] = [
                 (Role::X, "峰位", &x_units, |p, _| p.x),

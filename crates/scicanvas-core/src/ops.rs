@@ -17,6 +17,8 @@ mod global_fit;
 mod peak_fit;
 mod recalc;
 mod resolve;
+mod signal_tools;
+pub use signal_tools::MergeDuplicates;
 mod smooth;
 mod stats;
 mod transform;

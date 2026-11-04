@@ -44,9 +44,13 @@ pub enum OpKind {
     Integral,
     Baseline {
         method: crate::baseline::BaselineMethod,
+        #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Vec::is_empty"))]
+        anchors: Vec<f64>,
     },
     BaselineSubtracted {
         method: crate::baseline::BaselineMethod,
+        #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Vec::is_empty"))]
+        anchors: Vec<f64>,
     },
     FftFilter {
         kind: crate::fft::FilterKind,
@@ -422,9 +426,12 @@ impl OpKind {
             OpKind::Derivative => analysis::derivative(xs, ys),
             OpKind::SgDerivative { window, order, deriv } => analysis::sg_derivative(xs, ys, window, order, deriv),
             OpKind::Integral => analysis::cumulative_trapezoid(xs, ys).0,
-            OpKind::Baseline { method } => crate::baseline::baseline(xs, ys, method),
-            OpKind::BaselineSubtracted { method } => {
-                let b = crate::baseline::baseline(xs, ys, method);
+            OpKind::Baseline { method, ref anchors } => {
+                crate::baseline::with_anchors(xs, ys, method, anchors).unwrap_or_else(|_| vec![f64::NAN; ys.len()])
+            }
+            OpKind::BaselineSubtracted { method, ref anchors } => {
+                let b =
+                    crate::baseline::with_anchors(xs, ys, method, anchors).unwrap_or_else(|_| vec![f64::NAN; ys.len()]);
                 ys.iter().zip(&b).map(|(y, b)| y - b).collect()
             }
             OpKind::FftFilter { kind } => {

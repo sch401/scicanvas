@@ -56,6 +56,8 @@ mod scientific_text;
 mod set_values;
 mod sg_diff;
 mod sheet_transform;
+mod signal_tools;
+pub(crate) use signal_tools::{SignalAction, SignalEditor};
 mod smooth;
 mod sort;
 mod t_test;
@@ -177,6 +179,11 @@ pub enum Dialog {
     Areas(Vec<AreaReport>),
     /// 插值：方法、点数，以及是否使用自定义 X 范围（默认是数据的 X 范围）。
     Interpolate {
+        mode: u8,
+        target: Option<scicanvas_core::plotspec::DataRef>,
+        single: f64,
+        result: Vec<(String, f64)>,
+        options: Vec<(scicanvas_core::plotspec::DataRef, String)>,
         method: InterpMethod,
         points: usize,
         custom: bool,
@@ -251,13 +258,26 @@ pub enum Dialog {
         filtered: bool,
     },
     /// 扣除基线：是否用 ALS、log10 λ 与非对称系数 p。
+    Average {
+        merge: bool,
+        mean: bool,
+    },
+    Signal(Box<SignalEditor>),
     Baseline {
+        advanced: u8,
+        count: u16,
+        spline: bool,
+        order: u8,
+        iterations: u16,
+        anchors: String,
         als: bool,
         log_lambda: f64,
         p: f64,
     },
     /// 寻峰：最小突出度（占 Y 范围的百分比）。
     Peaks {
+        derivative: bool,
+        window: usize,
         percent: f64,
     },
     /// FFT：窗函数。
@@ -345,6 +365,7 @@ pub enum Action {
     Normalize(NormalizeMethod),
     ExportPng(u32),
     ExportTiff(u32),
+    SignalTools(Box<SignalAction>),
     Interpolate(InterpMethod, usize, Option<(f64, f64)>),
     TTest(TTestKind, f64),
     TwoWayAnova(u64, [String; 3]),
@@ -421,6 +442,8 @@ impl Dialog {
             Self::Fill { .. } => self.show_fill(ctx, pal, &mut open, esc),
             Self::Table { .. } => self.show_table(ctx, pal, &mut open, esc),
             Self::SetValues { .. } => self.show_set_values(ctx, pal, &mut open, esc),
+            Self::Average { .. } => self.show_average(ctx, &mut open),
+            Self::Signal(edit) => edit.show(ctx, pal, &mut open),
             Self::Baseline { .. } => self.show_baseline(ctx, pal, &mut open, esc),
             Self::Peaks { .. } => self.show_peaks(ctx, pal, &mut open, esc),
             Self::Fft { .. } => self.show_fft(ctx, pal, &mut open, esc),

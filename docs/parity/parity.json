@@ -3280,11 +3280,32 @@
   "feature": "按 X 求 Y 插值",
   "ref": "Interpolate/Extrapolate Y from X",
   "pri": "P1",
-  "status": "部分实现",
-  "how": "interpolate.rs 已可在指定 X 数组计算 Y；桌面插值对话框提供均匀网格及范围。按用户指定 X 列或单点查询的独立入口待做",
-  "verify": "线性/样条/Akima 参考值和外推回归通过；用户 X 列查询入口待实现",
+  "status": "已实现待验收",
+  "how": "插值窗口提供均匀网格、目标 X 列和单点查询。目标原顺序保留、非有限 X 留空，结果在目标列右侧；单点结果留在窗口且不写表或历史，外推沿用原方法。",
+  "verify": "NumPy/SciPy 基线 1e-8、卷积/反卷积 1e-10、无噪 ε=0 复原 1e-9；峰位误差小于半采样间隔；保存重算、目标空值及稳定合并和真实窗口一步撤销。",
   "id": "F159",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/signal_extensions.rs::a6_target_x_order_missing_values_and_single_query_are_read_only",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::a6_anchor_signal_and_merge_real_dialogs_are_single_undo_steps",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::a6_single_interpolation_query_keeps_history_and_target_column_undoes"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/curve_tools.json"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/analysis.md#F159",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "数学运算",
@@ -3394,11 +3415,32 @@
   "feature": "多条曲线平均 / 合并",
   "ref": "Average/Merge Multiple Curves",
   "pri": "P1",
-  "status": "部分实现",
-  "how": "已把多曲线线性插值到共同 X 范围求均值/标准差，输出结果表、Y 误差及线图；通用曲线合并工作流待做",
-  "verify": "平均结果、缺失值、结果输出和一步撤销回归通过；通用合并入口与参考软件验收待做",
+  "status": "已实现待验收",
+  "how": "平均窗口提供插值平均与直接合并。合并按 X 稳定排序，重复 X 可取均值或保留全部，输出新工作簿与线图，原数据保持精度。",
+  "verify": "NumPy/SciPy 基线 1e-8、卷积/反卷积 1e-10、无噪 ε=0 复原 1e-9；峰位误差小于半采样间隔；保存重算、目标空值及稳定合并和真实窗口一步撤销。",
   "id": "F167",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/signal_extensions.rs::a6_merge_stable_order_duplicates_and_original_books",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::a6_anchor_signal_and_merge_real_dialogs_are_single_undo_steps",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::a6_single_interpolation_query_keeps_history_and_target_column_undoes"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/curve_tools.json"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/analysis.md#F167",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "数学运算",
@@ -4089,11 +4131,32 @@
   "feature": "卷积 / 反卷积",
   "ref": "Convolution",
   "pri": "P1",
-  "status": "未开始",
-  "how": "rustfft",
-  "verify": "与 Origin 及 SciPy.signal 结果比较",
+  "status": "已实现待验收",
+  "how": "Full/Same/Valid 与 NumPy 对齐，n·m≤1e6 直接求和，其余复用 FFT；反卷积为频域正则式，ε 默认 1e-3，0 为纯除法；不乘 dx，结果 X 为样本序号，写新列并附图，首版为一次性输出。",
+  "verify": "NumPy/SciPy 基线 1e-8、卷积/反卷积 1e-10、无噪 ε=0 复原 1e-9；峰位误差小于半采样间隔；保存重算、目标空值及稳定合并和真实窗口一步撤销。",
   "id": "F206",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/signal_extensions.rs::a6_discrete_convolution_and_deconvolution_match_numpy",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::a6_anchor_signal_and_merge_real_dialogs_are_single_undo_steps",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::a6_single_interpolation_query_keeps_history_and_target_column_undoes"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/signal_extensions.json"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/analysis.md#F206",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "信号处理",
@@ -4213,11 +4276,32 @@
   "feature": "基线：锚点法、自动基线（ALS、多项式等）",
   "ref": "Peak Analyzer",
   "pri": "P1",
-  "status": "部分实现",
-  "how": "分析 → 信号处理 → 扣除基线：两端连线与 ALS 自动基线（非对称最小二乘，五对角 LDLᵀ 求解）；锚点法、多项式基线待做",
-  "verify": "ALS 与 numpy 稠密求解结果一致（1e-9）",
+  "status": "已实现待验收",
+  "how": "两端连线和 ALS 保留；自动等 X 分段取最小值并含首末点，手动锚点 X 文本输入，线性或自然样条；modpoly 迭代多项式。锚点随基线及扣除后配方保存并重算。",
+  "verify": "NumPy/SciPy 基线 1e-8、卷积/反卷积 1e-10、无噪 ε=0 复原 1e-9；峰位误差小于半采样间隔；保存重算、目标空值及稳定合并和真实窗口一步撤销。",
   "id": "F216",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/signal_extensions.rs::a6_baselines_match_numpy_and_natural_spline",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::a6_anchor_signal_and_merge_real_dialogs_are_single_undo_steps",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::a6_single_interpolation_query_keeps_history_and_target_column_undoes"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/baseline_extensions.json"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/analysis.md#F216",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "峰分析",
@@ -4244,11 +4328,32 @@
   "feature": "寻峰（局部极值、导数法、阈值）",
   "ref": "Peak Analyzer",
   "pri": "P1",
-  "status": "部分实现",
-  "how": "分析 → 信号处理 → 寻峰：局部极大值（平顶取中点）+ 最小突出度阈值（占 Y 范围百分比），算法同 scipy.signal.find_peaks；导数法待做",
-  "verify": "单元测试与 SciPy 1.17.1 find_peaks / peak_prominences 逐值一致（含平顶峰）",
+  "status": "已实现待验收",
+  "how": "保留局部极大+突出度法；新增 SG 一阶导正到负过零、最近采样点和负二阶导筛选，基于 SG 谷底的峰高阈值；复用峰宽、面积和质心。",
+  "verify": "NumPy/SciPy 基线 1e-8、卷积/反卷积 1e-10、无噪 ε=0 复原 1e-9；峰位误差小于半采样间隔；保存重算、目标空值及稳定合并和真实窗口一步撤销。",
   "id": "F218",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/signal_extensions.rs::a6_derivative_peaks_match_scipy_crossings_and_half_sample_positions",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::a6_anchor_signal_and_merge_real_dialogs_are_single_undo_steps",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::a6_single_interpolation_query_keeps_history_and_target_column_undoes"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/derivative_peaks.json"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/analysis.md#F218",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "峰分析",

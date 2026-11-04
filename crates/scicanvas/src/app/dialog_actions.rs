@@ -185,6 +185,7 @@ impl SciApp {
                 self.finish_dialog_input();
                 self.smooth(m, w);
             }
+            dialogs::Action::SignalTools(action) => self.apply_signal_action(*action),
             dialogs::Action::Interpolate(method, points, range) => {
                 self.finish_dialog_input();
                 self.interpolate(method, points, range);

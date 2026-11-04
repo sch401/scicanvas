@@ -226,6 +226,14 @@ fn estimated_bytes(p: &Project) -> usize {
             bytes += c.derived_from.as_ref().map_or(0, String::capacity);
             bytes += c.error_for.as_ref().map_or(0, String::capacity);
             if let Some(crate::ops::Operation {
+                kind:
+                    crate::ops::OpKind::Baseline { anchors, .. } | crate::ops::OpKind::BaselineSubtracted { anchors, .. },
+                ..
+            }) = &c.op
+            {
+                bytes += anchors.capacity() * size_of::<f64>();
+            }
+            if let Some(crate::ops::Operation {
                 kind: crate::ops::OpKind::Nonlinear(recipe),
                 y,
                 x,
@@ -423,6 +431,15 @@ mod tests {
                 bytes += c.fit_report.as_ref().map_or(0, |r| r.estimated_bytes());
                 bytes += c.derived_from.as_ref().map_or(0, String::capacity);
                 bytes += c.error_for.as_ref().map_or(0, String::capacity);
+                if let Some(crate::ops::Operation {
+                    kind:
+                        crate::ops::OpKind::Baseline { anchors, .. }
+                        | crate::ops::OpKind::BaselineSubtracted { anchors, .. },
+                    ..
+                }) = &c.op
+                {
+                    bytes += anchors.capacity() * size_of::<f64>();
+                }
                 if let Some(crate::ops::Operation {
                     kind: crate::ops::OpKind::Nonlinear(recipe),
                     y,

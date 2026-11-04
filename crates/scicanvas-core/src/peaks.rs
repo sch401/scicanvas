@@ -92,6 +92,9 @@ pub fn find_peaks(xs: &[f64], ys: &[f64], min_prominence: f64) -> Vec<Peak> {
         })
         .filter(|f| f.1 >= min_prominence)
         .collect();
+    measure_peaks(xs, ys, &found)
+}
+fn measure_peaks(xs: &[f64], ys: &[f64], found: &[(usize, f64, usize, usize)]) -> Vec<Peak> {
     let lowest = |a: usize, b: usize| (a..=b).min_by(|i, j| ys[*i].total_cmp(&ys[*j])).unwrap();
     let mut out = vec![];
     for (n, &(peak, prom, lb, rb)) in found.iter().enumerate() {
@@ -155,6 +158,38 @@ pub fn find_peaks(xs: &[f64], ys: &[f64], min_prominence: f64) -> Vec<Peak> {
         });
     }
     out
+}
+
+/// SG first derivative zero crossings, nearest sample and negative curvature.
+pub fn find_peaks_derivative(xs: &[f64], ys: &[f64], window: usize, min_height_frac: f64) -> Vec<Peak> {
+    let n = xs.len().min(ys.len());
+    if n < 3 {
+        return Vec::new();
+    }
+    let d = crate::analysis::sg_derivative(xs, ys, window, 2, 1);
+    let second = crate::analysis::sg_derivative(xs, ys, window, 2, 2);
+    let smooth = crate::analysis::sg_derivative(xs, ys, window, 2, 0);
+    let range = ys.iter().copied().fold(f64::NEG_INFINITY, f64::max) - ys.iter().copied().fold(f64::INFINITY, f64::min);
+    let mut found = Vec::new();
+    for i in 0..n - 1 {
+        if d[i] >= 0. && d[i + 1] < 0. {
+            let zero = xs[i] + (xs[i + 1] - xs[i]) * d[i] / (d[i] - d[i + 1]);
+            let k = if (zero - xs[i]).abs() <= (xs[i + 1] - zero).abs() {
+                i
+            } else {
+                i + 1
+            };
+            if second[k] >= 0. {
+                continue;
+            }
+            let (_, left, right) = prominence(&smooth, k);
+            let height = ys[k] - ys[left].max(ys[right]);
+            if height >= min_height_frac * range && found.last().is_none_or(|p: &(usize, f64, usize, usize)| p.0 != k) {
+                found.push((k, height, left, right));
+            }
+        }
+    }
+    measure_peaks(xs, ys, &found)
 }
 
 #[cfg(test)]

@@ -14,6 +14,16 @@ pub(super) fn curve_selection(commands: &mut Vec<Command>) {
 }
 
 pub(super) fn fits(commands: &mut Vec<Command>) {
+    commands.push(c(
+        "signal.convolve",
+        "卷积/反卷积…",
+        "fft",
+        "",
+        "分析",
+        "convolution deconvolution 信号处理",
+        need_data,
+        |a| a.open_signal_dialog(),
+    ));
     commands.extend([
         c("fit.reports", "拟合报告…", "fitpoly", "", "分析", "report 拟合报告 重新编辑", |_| Ok(()), |a| a.open_nlfit_reports()),
         c("fit.compare","拟合比较","fitpoly","","分析","AIC AICc BIC nested F test 拟合比较",|_|Ok(()),|a|a.open_fit_compare()),
@@ -105,7 +115,7 @@ pub(super) fn signal(commands: &mut Vec<Command>) {
             "分析",
             "average curves mean of curves interpolate 曲线平均 多条曲线 平均",
             need_data,
-            |a| a.average_curves(),
+            |a| a.open_average_dialog(),
         )
         .modifies(),
         c(

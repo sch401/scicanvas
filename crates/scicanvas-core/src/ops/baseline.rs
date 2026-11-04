@@ -9,15 +9,39 @@ impl Project {
         src: &Source,
         method: crate::baseline::BaselineMethod,
     ) -> Result<Vec<(String, String)>, String> {
-        let (r, base) = self.per_item_column(src, OpKind::Baseline { method }, |book, item, xs, ys| {
-            let y = book.column(&item.y).unwrap();
-            (
-                crate::baseline::baseline(xs, ys, method),
-                format!("{} 基线", y.display_name()),
-                y.units.clone(),
-                method.label(),
-            )
-        })?;
+        self.subtract_baseline_with_anchors(src, method, &[])
+    }
+    pub fn subtract_baseline_with_anchors(
+        &mut self,
+        src: &Source,
+        method: crate::baseline::BaselineMethod,
+        anchors: &[f64],
+    ) -> Result<Vec<(String, String)>, String> {
+        let resolved = self.resolve(src)?;
+        let mut computed = Vec::new();
+        for item in &resolved.items {
+            let (xs, ys, _) = get_xy(self.book(item.book_id).unwrap(), item);
+            if xs.len() >= 3 {
+                computed.push(crate::baseline::with_anchors(&xs, &ys, method, anchors)?);
+            }
+        }
+        let mut computed = computed.into_iter();
+        let (r, base) = self.per_item_column(
+            src,
+            OpKind::Baseline {
+                method,
+                anchors: anchors.to_vec(),
+            },
+            |book, item, _xs, _ys| {
+                let y = book.column(&item.y).unwrap();
+                (
+                    computed.next().unwrap(),
+                    format!("{} 基线", y.display_name()),
+                    y.units.clone(),
+                    method.label(),
+                )
+            },
+        )?;
         let mut made = vec![];
         for (item, bkey) in &base {
             let book = self.book(item.book_id).unwrap();
@@ -29,7 +53,10 @@ impl Project {
             c.units = y.units.clone();
             c.comment = method.label();
             c.op = Some(Operation {
-                kind: OpKind::BaselineSubtracted { method },
+                kind: OpKind::BaselineSubtracted {
+                    method,
+                    anchors: anchors.to_vec(),
+                },
                 y: item.y.clone(),
                 x: item.x.clone(),
                 rows: item.rows,

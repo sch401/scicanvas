@@ -12,6 +12,7 @@ mod graphics_tools;
 mod notes;
 mod peak_fit;
 mod props;
+mod signal_tools;
 mod tiff_export;
 mod windows;
 mod worksheet;

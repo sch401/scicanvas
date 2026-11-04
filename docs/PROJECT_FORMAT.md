@@ -1,5 +1,9 @@
 # 项目文件格式
 
+## v37 基线锚点与多项式方法
+
+BaselineMethod 新增 Copy 变体 Anchors { count, spline }、Polynomial { order, iterations }。OpKind::Baseline 和 BaselineSubtracted 新增 anchors: Vec<f64>，缺省空且省略。手动 X 列表与自动分段设置在重算时复用，旧两端连线及 ALS 保持原输出。信号、目标插值和合并结果为普通结果列或工作簿。新文件 v37，读取 v0–v36，SCV 容器版本保持 1。
+
 ## v36 函数曲线和图形主题
 
 LayerSpec 新增 functions: [{ expr, points, style }]，缺省空且省略，不写成工作表 CurveMapping。采样点为运行时数据，默认 500，范围随图层或数据，非有限结果断线。Project 新增 graph_themes，缺省空且省略，只保存图形样式。新图默认主题保存在应用 Settings.default_graph_theme，格式剪贴板仅在内存。新文件 v36，读取 v0–v35，SCV 容器版本保持 1。
