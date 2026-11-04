@@ -23,6 +23,9 @@ fn cases() -> Vec<(String, String)> {
         graph.first_layer_mut().spec = PlotSpec::from_selection(&project.books[0], &[], preset.kind)
             .unwrap()
             .into();
+        if matches!(preset.kind, PlotType::PolarLine | PlotType::PolarScatter) {
+            graph.first_layer_mut().projection = scicanvas_core::page::Projection::Polar { degrees: true };
+        }
         cases.push((preset.id.to_owned(), svg::render_page(&graph, &project)));
     }
 

@@ -453,6 +453,9 @@ impl PlotSpec {
             ..Default::default()
         };
         spec.set_plot_type(plot_type)?;
+        if plot_type == PlotType::Pie {
+            spec.y_keys.truncate(1);
+        }
         if plot_type == PlotType::ErrorBand {
             for key in &spec.y_keys {
                 crate::ops::y_errors(book, key, &[])
@@ -688,12 +691,7 @@ impl PlotSpec {
                 .as_ref()
                 .and_then(|x| if x.book == cbook.id { cbook.column(&x.col) } else { None });
             // 统计图只使用 Y 样本，X 列的缺失值和类别不参与取样。
-            let xv = own_x.filter(|_| {
-                !matches!(
-                    self.plot_type,
-                    PlotType::QQ | PlotType::Box | PlotType::Histogram | PlotType::ColumnScatter | PlotType::LineSeries
-                ) || mapping.line_only
-            });
+            let xv = own_x.filter(|_| !self.plot_type.uses_y_samples() || mapping.line_only);
             let n = yv.len().max(xv.as_ref().map_or(0, |v| v.len()));
             let (i0, i1) = match mapping.rows {
                 Some((a, b)) => (a, b.saturating_add(1).min(n)),
@@ -786,7 +784,12 @@ impl PlotSpec {
         }
         if !matches!(
             self.plot_type,
-            PlotType::QQ | PlotType::Box | PlotType::Histogram | PlotType::ColumnScatter | PlotType::LineSeries
+            PlotType::QQ
+                | PlotType::Box
+                | PlotType::Violin
+                | PlotType::Histogram
+                | PlotType::ColumnScatter
+                | PlotType::LineSeries
         ) {
             crate::stat::apply(&mut out, self.transform);
         }

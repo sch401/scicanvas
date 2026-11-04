@@ -39,6 +39,9 @@ fn sample(kind: PlotType, book_name: &str, columns: Vec<Spec>) -> Project {
             data,
         ));
     }
+    if kind == PlotType::Pie {
+        book.columns.truncate(2);
+    }
     p.books.push(book);
     let (graph, _) = p.plot_from_selection(id, &[], kind).unwrap();
     p.rename_project_item(graph, kind.label()).unwrap();
@@ -79,6 +82,7 @@ fn samples() -> Vec<(String, Project)> {
     cases.extend(sample_group_b1());
     cases.extend(sample_group_b2());
     cases.extend(sample_group_b3());
+    cases.extend(sample_group_b4());
     // 提交的示例是 v8 兼容样本，当时默认页面为 89 × 66.75 mm；已保存的项目保留自己的页面尺寸
     cases
         .into_iter()
@@ -886,6 +890,126 @@ fn sample_group_b3() -> Vec<Project> {
 #[ignore = "维护者显式生成 B3 新示例"]
 fn update_b3_samples() {
     for (name, p) in samples().into_iter().skip(26) {
+        fs::write(directory().join(name), project_file::to_scv(&p).unwrap()).unwrap();
+    }
+}
+
+fn sample_group_b4() -> Vec<Project> {
+    vec![
+        sample(
+            PlotType::Pie,
+            "饼图",
+            vec![
+                (
+                    Role::X,
+                    "角度或类别",
+                    "deg",
+                    "饼图类别；极坐标角度",
+                    list(&[0., 45., 90., 135., 180., 225., 270., 315., 360.]),
+                ),
+                (
+                    Role::Y,
+                    "处理 A",
+                    "",
+                    "小提琴样本；半径或权重",
+                    list(&[2., 3., 4., 3., 2., 1., 2., 3., 2.]),
+                ),
+                (
+                    Role::Y,
+                    "处理 B",
+                    "",
+                    "第二组样本",
+                    list(&[1., 2., 3., 4., 5., 4., 3., 2., 1.]),
+                ),
+            ],
+        ),
+        sample(
+            PlotType::Violin,
+            "小提琴图",
+            vec![
+                (
+                    Role::X,
+                    "角度或类别",
+                    "deg",
+                    "饼图类别；极坐标角度",
+                    list(&[0., 45., 90., 135., 180., 225., 270., 315., 360.]),
+                ),
+                (
+                    Role::Y,
+                    "处理 A",
+                    "",
+                    "小提琴样本；半径或权重",
+                    list(&[2., 3., 4., 3., 2., 1., 2., 3., 2.]),
+                ),
+                (
+                    Role::Y,
+                    "处理 B",
+                    "",
+                    "第二组样本",
+                    list(&[1., 2., 3., 4., 5., 4., 3., 2., 1.]),
+                ),
+            ],
+        ),
+        sample(
+            PlotType::PolarLine,
+            "极坐标线图",
+            vec![
+                (
+                    Role::X,
+                    "角度或类别",
+                    "deg",
+                    "饼图类别；极坐标角度",
+                    list(&[0., 45., 90., 135., 180., 225., 270., 315., 360.]),
+                ),
+                (
+                    Role::Y,
+                    "处理 A",
+                    "",
+                    "小提琴样本；半径或权重",
+                    list(&[2., 3., 4., 3., 2., 1., 2., 3., 2.]),
+                ),
+                (
+                    Role::Y,
+                    "处理 B",
+                    "",
+                    "第二组样本",
+                    list(&[1., 2., 3., 4., 5., 4., 3., 2., 1.]),
+                ),
+            ],
+        ),
+        sample(
+            PlotType::PolarScatter,
+            "极坐标散点图",
+            vec![
+                (
+                    Role::X,
+                    "角度或类别",
+                    "deg",
+                    "饼图类别；极坐标角度",
+                    list(&[0., 45., 90., 135., 180., 225., 270., 315., 360.]),
+                ),
+                (
+                    Role::Y,
+                    "处理 A",
+                    "",
+                    "小提琴样本；半径或权重",
+                    list(&[2., 3., 4., 3., 2., 1., 2., 3., 2.]),
+                ),
+                (
+                    Role::Y,
+                    "处理 B",
+                    "",
+                    "第二组样本",
+                    list(&[1., 2., 3., 4., 5., 4., 3., 2., 1.]),
+                ),
+            ],
+        ),
+    ]
+}
+#[test]
+#[ignore = "维护者显式生成 B4 新示例"]
+fn update_b4_samples() {
+    for (name, p) in samples().into_iter().skip(29) {
         fs::write(directory().join(name), project_file::to_scv(&p).unwrap()).unwrap();
     }
 }

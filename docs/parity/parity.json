@@ -5556,11 +5556,35 @@
   "feature": "2D 饼图",
   "ref": "2D Color Pie Chart",
   "pri": "P1",
-  "status": "未开始",
-  "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 Origin 同数据出图目视比较",
+  "status": "已实现待验收",
+  "how": "绘图 → 饼图。仅第一 Y 列，X 文本类别或行号，跳过非正值与缺失值，顶部起顺时针扇区、百分比、按行图例及扇区拾取。",
+  "verify": "原始行拾取、角度正逆映射、KDE 1e-12、保存兼容和真实命令撤销；matplotlib 场景位置参考 1e-6。",
   "id": "F295",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "visual",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/radial_violin.rs::b4_pie_positive_rows_angles_labels_and_pick",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::b4_new_plot_commands_save_and_undo"
+   ],
+   "reference": [
+    "docs/parity/visual/pie/matplotlib.json"
+   ],
+   "visual": [
+    "docs/parity/visual/pie/README.md"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/plotting.md#F295",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "图类型 · 饼图",
@@ -6483,11 +6507,35 @@
   "feature": "小提琴图",
   "ref": "Violin Plot",
   "pri": "P1",
-  "status": "未开始",
-  "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 Origin 同数据出图目视比较",
+  "status": "已实现待验收",
+  "how": "绘图 → 小提琴图。Scott 带宽、样本标准差、100 点 Gaussian KDE，对称半宽 0.25，透明填充、轮廓、中位数白点和四分位粗线。",
+  "verify": "原始行拾取、角度正逆映射、KDE 1e-12、保存兼容和真实命令撤销；matplotlib 场景位置参考 1e-6。",
   "id": "F363",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "visual",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/radial_violin.rs::b4_violin_uses_categories_density_and_box_statistics",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::b4_new_plot_commands_save_and_undo"
+   ],
+   "reference": [
+    "docs/parity/visual/violin/matplotlib.json"
+   ],
+   "visual": [
+    "docs/parity/visual/violin/README.md"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/plotting.md#F363",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "图类型 · 统计图",
@@ -7087,11 +7135,35 @@
   "feature": "极坐标图",
   "ref": "Polar Graph",
   "pri": "P1",
-  "status": "未开始",
-  "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 Origin 同数据出图目视比较",
+  "status": "已实现待验收",
+  "how": "绘图 → 极坐标图。极坐标线图和散点图，度或弧度，零角向东逆时针，径向从零起，128 段同心网格、45°径向线和每数据段 16 次插值；首版仅拾取，缩放平移关闭。",
+  "verify": "原始行拾取、角度正逆映射、KDE 1e-12、保存兼容和真实命令撤销；matplotlib 场景位置参考 1e-6。",
   "id": "F413",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "visual",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/radial_violin.rs::b4_polar_projection_inverse_scene_and_original_row_pick",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::b4_new_plot_commands_save_and_undo"
+   ],
+   "reference": [
+    "docs/parity/visual/polar-line/matplotlib.json"
+   ],
+   "visual": [
+    "docs/parity/visual/polar-line/README.md"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/plotting.md#F413",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "图类型 · 专业图",

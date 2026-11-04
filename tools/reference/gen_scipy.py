@@ -890,11 +890,19 @@ def inhibition_fits():
     write("inhibition_fits",cases)
 
 
+def kde_cases():
+    cases=[]
+    for values in [[-2.,-1.,0.,1.,2.],[1.,1.,1.,2.,3.,8.],[0.1,0.2,0.4,1.,2.,5.,9.]]:
+        at=np.linspace(min(values),max(values),100)
+        cases.append(dict(values=values,at=at,density=stats.gaussian_kde(values)(at)))
+    write("kde",cases)
+
+
 GENERATORS = [
     integrals, normalization, descriptive, column_math, polynomial, statistical_tests, signal_tests,
     interpolation_cases, derivative_cases, peak_cases, constrained_fit_cases, builtin_fit_cases,
     smoothing_cases, percent_bar_cases, fit_report_cases, formula_cases, weighted_fit_cases, qq_cases, box_cases,
-    histogram_option_cases, normality_ks_ad, ks_2samp, two_way_anova, fit_tools, global_fits, extended_fit_cases, inhibition_fits,
+    histogram_option_cases, normality_ks_ad, ks_2samp, two_way_anova, fit_tools, global_fits, extended_fit_cases, inhibition_fits, kde_cases,
 ]
 
 

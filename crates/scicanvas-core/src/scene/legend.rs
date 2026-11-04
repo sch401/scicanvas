@@ -285,3 +285,41 @@ fn symbol_sample(plot: &crate::page::PreparedPlot, x: f64, y: f64, width: f64) -
         .collect();
     Some(Prim::StyledSymbols { symbols })
 }
+
+pub(super) fn draw_row_legend(
+    entries: &[(String, Rgb)],
+    at: [f64; 2],
+    items: &mut Vec<Item>,
+    objects: &mut Vec<ObjectLayout>,
+) {
+    let start = items.len();
+    let width = entries
+        .iter()
+        .map(|(s, _)| text_width(s, LEGEND_FONT))
+        .fold(0., f64::max)
+        + 24.;
+    for (i, (name, color)) in entries.iter().enumerate() {
+        let y = at[1] + i as f64 * 16.;
+        items.push(Item {
+            prim: Prim::Rect {
+                x: at[0],
+                y: y - 4.,
+                w: 12.,
+                h: 8.,
+                fill: Some((*color, 1.)),
+                stroke: None,
+            },
+            clip: None,
+        });
+        items.push(Item {
+            prim: text(at[0] + 18., y, name.clone(), LEGEND_FONT, Anchor::Start),
+            clip: None,
+        });
+    }
+    objects.push(ObjectLayout {
+        target: ObjectTarget::Legend(0),
+        bounds: [at[0], at[1] - 8., width, entries.len() as f64 * 16.],
+        items: start..items.len(),
+        overlay: false,
+    });
+}

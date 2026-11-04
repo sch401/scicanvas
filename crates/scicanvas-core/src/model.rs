@@ -3,7 +3,7 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-pub const PROJECT_VERSION: u32 = 33;
+pub const PROJECT_VERSION: u32 = 34;
 pub const GRAPH_TEMPLATE_VERSION: u32 = 1;
 
 /// 列的绘图角色，对应 Origin 里的 X / Y / 忽略。
@@ -503,10 +503,14 @@ pub enum PlotType {
     OffsetLine,
     Waterfall,
     LineSeries,
+    Pie,
+    Violin,
+    PolarLine,
+    PolarScatter,
 }
 
 impl PlotType {
-    pub const ALL: [PlotType; 29] = [
+    pub const ALL: [PlotType; 33] = [
         PlotType::Line,
         PlotType::Scatter,
         PlotType::LineSymbol,
@@ -536,6 +540,10 @@ impl PlotType {
         PlotType::OffsetLine,
         PlotType::Waterfall,
         PlotType::LineSeries,
+        PlotType::Pie,
+        PlotType::Violin,
+        PlotType::PolarLine,
+        PlotType::PolarScatter,
     ];
 
     pub fn label(self) -> &'static str {
@@ -569,7 +577,18 @@ impl PlotType {
             PlotType::OffsetLine => "偏移堆叠线图",
             PlotType::Waterfall => "二维瀑布图",
             PlotType::LineSeries => "线系列图",
+            PlotType::Pie => "饼图",
+            PlotType::Violin => "小提琴图",
+            PlotType::PolarLine => "极坐标线图",
+            PlotType::PolarScatter => "极坐标散点图",
         }
+    }
+
+    pub(crate) fn uses_y_samples(self) -> bool {
+        matches!(
+            self,
+            Self::QQ | Self::Box | Self::Violin | Self::Histogram | Self::ColumnScatter | Self::LineSeries
+        )
     }
 
     pub fn has_line(self) -> bool {
@@ -865,6 +884,12 @@ impl Project {
             PlotType::Box | PlotType::ColumnScatter | PlotType::LineSeries
         ) {
             graph.first_layer_mut().legend = false;
+        }
+        if matches!(
+            graph.first_layer().plot_type,
+            PlotType::PolarLine | PlotType::PolarScatter
+        ) {
+            graph.first_layer_mut().projection = crate::page::Projection::Polar { degrees: true };
         }
         self.graphs.push(graph);
         self.move_project_item(id, parent)?;

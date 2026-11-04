@@ -19,6 +19,7 @@ pub(crate) enum Kind {
     Symbol,
     Bar,
     Box,
+    Violin,
     Area,
     Drop,
 }

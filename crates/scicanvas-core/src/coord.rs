@@ -79,3 +79,26 @@ impl AxisSet {
         }
     }
 }
+
+pub struct Polar<'a> {
+    pub r: &'a Axis,
+    pub center: [f64; 2],
+    pub radius: f64,
+    pub degrees: bool,
+}
+impl Coord for Polar<'_> {
+    fn project(&self, p: [f64; 2]) -> [f64; 2] {
+        let a = if self.degrees { p[0].to_radians() } else { p[0] };
+        let r = self.r.frac(p[1]) * self.radius;
+        [self.center[0] + r * a.cos(), self.center[1] - r * a.sin()]
+    }
+    fn unproject(&self, p: [f64; 2]) -> [f64; 2] {
+        let x = p[0] - self.center[0];
+        let y = self.center[1] - p[1];
+        let a = y.atan2(x).rem_euclid(std::f64::consts::TAU);
+        [
+            if self.degrees { a.to_degrees() } else { a },
+            self.r.value(x.hypot(y) / self.radius),
+        ]
+    }
+}

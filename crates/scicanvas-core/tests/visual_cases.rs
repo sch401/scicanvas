@@ -43,7 +43,7 @@ fn case(name: &str, kind: PlotType) -> (String, Project, Graph) {
             .unwrap()
             .columns
             .push(column("C", Role::Y, &["1", "-2", "4", "2", "-3"]));
-    } else if kind == PlotType::Box {
+    } else if matches!(kind, PlotType::Box | PlotType::Violin) {
         p.book_mut(1)
             .unwrap()
             .columns
@@ -75,10 +75,17 @@ fn case(name: &str, kind: PlotType) -> (String, Project, Graph) {
             .columns
             .push(column("C", Role::Y, &["1", "2", "3", "4", "5"]));
     }
+    if matches!(kind, PlotType::PolarLine | PlotType::PolarScatter) {
+        p.book_mut(1).unwrap().columns[0].data = ["0", "45", "90", "135", "180"].map(str::to_owned).to_vec().into();
+        p.book_mut(1).unwrap().columns[1].data = ["1", "2", "3", "2", "1"].map(str::to_owned).to_vec().into();
+    }
     let mut g = Graph::new(2, name);
     g.first_layer_mut().spec = PlotSpec::from_selection(p.book(1).unwrap(), &[], kind).unwrap().into();
     if matches!(kind, PlotType::OffsetLine | PlotType::Waterfall) {
         g.first_layer_mut().offset = Some(Default::default());
+    }
+    if matches!(kind, PlotType::PolarLine | PlotType::PolarScatter) {
+        g.first_layer_mut().projection = scicanvas_core::page::Projection::Polar { degrees: true };
     }
     g.first_layer_mut().legend = false;
     if name == "scatter" {
@@ -360,6 +367,9 @@ fn export(p: &Project, g: &Graph) -> (Value, String) {
             .map(|p| p.key.clone())
             .collect();
         let mut entry = json!({"axes":{"x":axis(&view.axes.x),"y":axis(&view.axes.left_y),"right_y":view.axes.right_y.as_ref().map(axis)},"plot":rect,"kind":format!("{:?}",l.plot_type),"connect":format!("{:?}",l.connect),"y_keys":draft.y_keys,"base_by_y":draft.base_by_y,"right_keys":right,"rows":draft.rows,"reference_lines":l.reference_lines.iter().map(|r|json!({"axis":format!("{:?}",r.axis),"value":r.value})).collect::<Vec<_>>(),"marks":{"symbols":symbols,"polylines":lines,"bars":bars,"segments":segments,"area":bounds,"colors":colors}});
+        if let Some(marks) = b4_marks(l, &scene.items, rect) {
+            entry["marks"] = marks;
+        }
         if let Some(offset) = l.offset {
             entry["offset"] = serde_json::to_value(offset).unwrap();
         }
@@ -433,4 +443,76 @@ fn update_visual_cases() {
         .unwrap();
         fs::write(dir.join("scicanvas.svg"), svg).unwrap();
     }
+}
+
+fn b4_marks(layer: &scicanvas_core::page::Layer, items: &[scene::Item], rect: [f64; 4]) -> Option<Value> {
+    let kind = layer.plot_type;
+    if !matches!(
+        kind,
+        PlotType::Pie | PlotType::Violin | PlotType::PolarLine | PlotType::PolarScatter
+    ) {
+        return None;
+    }
+    let center = [rect[0] + rect[2] / 2., rect[1] + rect[3] / 2.];
+    let radius = rect[2].min(rect[3]) * 0.4;
+    let norm = |p: [f64; 2]| [(p[0] - center[0]) / radius, (center[1] - p[1]) / radius];
+    if kind == PlotType::Pie {
+        let ends: Vec<_> = items
+            .iter()
+            .filter_map(|i| {
+                if let Prim::Triangles { pts, .. } = &i.prim {
+                    let p = norm(*pts.last()?);
+                    Some(
+                        (std::f64::consts::FRAC_PI_2 - p[1].atan2(p[0]))
+                            .rem_euclid(std::f64::consts::TAU)
+                            .to_degrees(),
+                    )
+                } else {
+                    None
+                }
+            })
+            .collect();
+        return Some(json!({"ends":ends}));
+    }
+    if kind == PlotType::Violin {
+        let contours: Vec<_> = items
+            .iter()
+            .filter_map(|i| {
+                if let Prim::Polyline { pts, color, .. } = &i.prim {
+                    if *color == scene::INK || pts.len() != 201 {
+                        return None;
+                    }
+                    let mut points: Vec<_> = pts[..200].iter().map(|p| point(*p, rect)).collect();
+                    points.sort_by(|a, b| a[1].total_cmp(&b[1]).then(a[0].total_cmp(&b[0])));
+                    Some(points)
+                } else {
+                    None
+                }
+            })
+            .collect();
+        return Some(json!({"contours":contours}));
+    }
+    let lines: Vec<_> = items
+        .iter()
+        .filter_map(|i| {
+            if let Prim::Polyline { pts, color, .. } = &i.prim {
+                (*color != (217, 217, 217)).then(|| pts.iter().map(|p| norm(*p)).collect::<Vec<_>>())
+            } else {
+                None
+            }
+        })
+        .collect();
+    let symbols: Vec<_> = items
+        .iter()
+        .filter_map(|i| {
+            if let Prim::Symbols { pts, .. } = &i.prim {
+                Some(pts)
+            } else {
+                None
+            }
+        })
+        .flatten()
+        .map(|p| norm(*p))
+        .collect();
+    Some(json!({"lines":lines,"symbols":symbols}))
 }
