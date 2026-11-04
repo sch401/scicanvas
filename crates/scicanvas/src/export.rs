@@ -175,7 +175,7 @@ mod tests {
         let mut cases = Vec::new();
         for preset in scicanvas_core::presets::all() {
             let mut p = Project::default();
-            let book = scicanvas_core::presets::example();
+            let book = scicanvas_core::presets::example_for(preset.kind);
             let mut graph = scicanvas_core::Graph::new(2, preset.name);
             graph.first_layer_mut().spec = scicanvas_core::plotspec::PlotSpec::from_selection(&book, &[], preset.kind)
                 .unwrap()

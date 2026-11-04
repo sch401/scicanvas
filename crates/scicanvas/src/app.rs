@@ -1315,6 +1315,12 @@ impl SciApp {
         self.plot_epoch = self.plot_epoch.wrapping_add(1);
         self.object_editor = self.object_editor.filter(|edit| match edit.target {
             plot::ObjectTarget::Text(id) => project.graph(edit.graph).is_some_and(|g| g.page.text(id).is_some()),
+            plot::ObjectTarget::ColorScale(index) => project.graph(edit.graph).is_some_and(|g| {
+                g.page
+                    .layers()
+                    .get(index)
+                    .is_some_and(|l| !l.color_scale.as_ref().is_some_and(|c| !c.visible))
+            }),
             plot::ObjectTarget::Legend(index) => project.graph(edit.graph).is_some_and(|g| {
                 g.page.layers().get(index).is_some_and(|l| l.legend)
                     && self

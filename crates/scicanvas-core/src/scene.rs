@@ -9,6 +9,7 @@ use crate::model::{Book, Graph, PlotType, Symbol};
 use crate::page::Layer;
 use crate::plotspec::BookLookup;
 use crate::ticks::{axis, Axis, TickLabel};
+mod color_scale;
 mod layout;
 mod legend;
 
@@ -143,6 +144,7 @@ pub struct Scene {
 pub enum ObjectTarget {
     Text(u64),
     Legend(usize),
+    ColorScale(usize),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -180,7 +182,7 @@ pub fn nearest_point<'a>(
     radius: f64,
 ) -> Option<PointHit> {
     let (_, plots) = layer.prepared_plots_in(books(layer.book_id?)?, books);
-    let horizontal = layer.plot_type == PlotType::HorizontalBar;
+    let horizontal = crate::presets::recipe(layer.plot_type).orientation == crate::coord::Orientation::Horizontal;
     let identity = layer.transform == crate::plotspec::Transform::Identity
         && !matches!(layer.plot_type, PlotType::QQ | PlotType::Histogram);
     let categories: Vec<_> = plots
@@ -707,10 +709,15 @@ fn prepare_layer_data(ctx: &LayerContext<'_, '_, '_>) -> LayerData {
         None => (None, Vec::new()),
     };
     // 统计图的横轴由 Y 样本生成，不使用 X 列的日期或类别格式。
-    let x_col = x_col.filter(|_| !matches!(g.plot_type, PlotType::Histogram | PlotType::QQ | PlotType::Box));
+    let x_col = x_col.filter(|_| {
+        !matches!(
+            g.plot_type,
+            PlotType::Histogram | PlotType::QQ | PlotType::Box | PlotType::ColumnScatter
+        )
+    });
     let x_date = !horizontal && !g.x_log && x_col.is_some_and(|c| c.data.kind() == crate::DataKind::DateTime);
     let date_offset = x_col.map_or(0.0, |c| f64::from(c.format.utc_offset) * 60_000.0);
-    let categories = if g.plot_type == PlotType::Box {
+    let categories = if matches!(g.plot_type, PlotType::Box | PlotType::ColumnScatter) {
         Some(
             plots
                 .iter()
@@ -875,7 +882,7 @@ fn axis_ranges(ctx: &LayerContext<'_, '_, '_>, data: &LayerData) -> AxisRanges {
                 .map(|p| (&p.series, &p.style))
                 .filter(|(s, st)| {
                     !s.line_only
-                        && (st.kind.has_symbol() || st.kind == PlotType::Box)
+                        && (st.kind.has_symbol() || matches!(st.kind, PlotType::Box | PlotType::ColumnScatter))
                         && st.y_axis == crate::coord::YAxis::Left
                 })
                 .flat_map(|(s, _)| s.points.iter().copied())
@@ -949,7 +956,7 @@ fn axis_ranges(ctx: &LayerContext<'_, '_, '_>, data: &LayerData) -> AxisRanges {
                 .map(|p| (&p.series, &p.style))
                 .filter(|(s, st)| {
                     !s.line_only
-                        && (st.kind.has_symbol() || st.kind == PlotType::Box)
+                        && (st.kind.has_symbol() || matches!(st.kind, PlotType::Box | PlotType::ColumnScatter))
                         && st.y_axis == crate::coord::YAxis::Right
                 })
                 .flat_map(|(s, _)| s.points.iter().map(|p| p[1]))
@@ -1055,7 +1062,22 @@ fn axis_layout(ctx: &LayerContext<'_, '_, '_>, ranges: AxisRanges) -> AxisLayout
     let bottom = (out + TICK_GAP + tick_height + 5.0 + axis_height + 5.0)
         .round()
         .max(min[3]);
-    let pw = (w - left - right).max(20.0);
+    let color_width = crate::plotspec::color_scale_data(g, &|id| {
+        if book.is_some_and(|b| b.id == id) {
+            book
+        } else {
+            others(id)
+        }
+    })
+    .map_or(0.0, |(_, range)| {
+        0.04 * w
+            + range
+                .iter()
+                .map(|v| text_width(&crate::fmt_num(*v), TICK_FONT))
+                .fold(0.0, f64::max)
+            + 22.0
+    });
+    let pw = (w - left - right - color_width).max(20.0);
     let ph = (h - top - bottom).max(20.0);
     AxisLayout {
         axes: crate::coord::AxisSet {

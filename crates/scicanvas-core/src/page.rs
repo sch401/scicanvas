@@ -169,11 +169,13 @@ impl Page {
         if self.next_text_id == 0 {
             return Err("文字标注编号无效".into());
         }
-        if self
-            .layers
-            .iter()
-            .any(|l| l.legend_position.is_some_and(|p| !valid_position(p)))
-        {
+        if self.layers.iter().any(|l| {
+            l.legend_position.is_some_and(|p| !valid_position(p))
+                || l.color_scale
+                    .as_ref()
+                    .and_then(|c| c.position)
+                    .is_some_and(|p| !valid_position(p))
+        }) {
             return Err("图例位置应为有效的页面比例".into());
         }
         if self.layers.is_empty() || self.columns == 0 || self.columns > self.layers.len() {
@@ -288,6 +290,8 @@ pub struct Layer {
         serde(default, skip_serializing_if = "HistogramOptions::is_default")
     )]
     pub histogram: HistogramOptions,
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Option::is_none"))]
+    pub color_scale: Option<ColorScale>,
     #[cfg_attr(feature = "serde", serde(default))]
     pub error_bars: ErrorBars,
     #[cfg_attr(feature = "serde", serde(default))]
@@ -400,6 +404,22 @@ pub enum SymbolFill {
     Color([u8; 3]),
 }
 
+/// 色阶条位置为页面比例；None 使用坐标框右侧的自动位置。
+#[derive(Clone, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize), serde(default))]
+pub struct ColorScale {
+    pub position: Option<[f64; 2]>,
+    pub visible: bool,
+}
+impl Default for ColorScale {
+    fn default() -> Self {
+        Self {
+            position: None,
+            visible: true,
+        }
+    }
+}
+
 /// 一条曲线的单独样式；None 表示跟随图层设置。
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize), serde(default))]
@@ -427,6 +447,8 @@ pub struct CurveStyle {
     pub symbol_column: Option<String>,
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Option::is_none"))]
     pub size_range: Option<[f32; 2]>,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "is_false"))]
+    pub size_by_area: bool,
 }
 
 impl CurveStyle {
@@ -542,6 +564,7 @@ impl Default for Layer {
             symbol_size: 4.5,
             area_opacity: default_area_opacity(),
             histogram: HistogramOptions::default(),
+            color_scale: None,
             error_bars: Default::default(),
             labels: Default::default(),
             reference_lines: Vec::new(),
@@ -755,7 +778,10 @@ impl Layer {
                                 && !horizontal
                                 && !matches!(
                                     self.plot_type,
-                                    crate::PlotType::Histogram | crate::PlotType::QQ | crate::PlotType::Box
+                                    crate::PlotType::Histogram
+                                        | crate::PlotType::QQ
+                                        | crate::PlotType::Box
+                                        | crate::PlotType::ColumnScatter
                                 )
                         }) {
                             style.kind = kind;
@@ -789,6 +815,21 @@ impl Layer {
             .collect();
         if self.plot_type == crate::PlotType::Box {
             crate::stat::boxes(&mut prepared);
+        }
+        if self.plot_type == crate::PlotType::ColumnScatter {
+            for (i, p) in prepared.iter_mut().filter(|p| !p.series.line_only).enumerate() {
+                let center = (i + 1) as f64;
+                for error in &mut p.series.errors {
+                    error[0] = None;
+                }
+                let mean = p.series.points.iter().map(|p| p[1]).sum::<f64>() / p.series.points.len() as f64;
+                for (j, point) in p.series.points.iter_mut().enumerate() {
+                    point[0] = center + 0.15 * (2.0 * (j as f64 * 0.618034).fract() - 1.0);
+                }
+                if mean.is_finite() {
+                    p.paths.push(vec![[center - 0.2, mean], [center + 0.2, mean]]);
+                }
+            }
         }
         if let Some(histogram) = histogram {
             for (p, path) in prepared.iter_mut().zip(histogram.paths) {
@@ -960,7 +1001,7 @@ impl Layer {
         if !self.x_title.trim().is_empty() {
             return self.x_title.clone();
         }
-        if self.plot_type == crate::PlotType::Box {
+        if matches!(self.plot_type, crate::PlotType::Box | crate::PlotType::ColumnScatter) {
             return String::new();
         }
         if self.plot_type == crate::PlotType::QQ {

@@ -66,6 +66,11 @@ fn entries() -> &'static [(Preset, Recipe)] {
                     "StackedArea" => PlotType::StackedArea,
                     "FillBetween" => PlotType::FillBetween,
 
+                    "ErrorBand" => PlotType::ErrorBand,
+                    "ColumnScatter" => PlotType::ColumnScatter,
+                    "Bubble" => PlotType::Bubble,
+                    "ColorScatter" => PlotType::ColorScatter,
+                    "BubbleColor" => PlotType::BubbleColor,
                     _ => unreachable!("built-in preset type"),
                 };
                 let marks = columns
@@ -130,4 +135,19 @@ pub(crate) fn recipe(kind: PlotType) -> &'static Recipe {
 
 pub fn example() -> Book {
     csv::book_from_table(1, "图库示例", csv::parse_table(include_str!("../presets/example.csv")))
+}
+
+/// 新图型的图库数据；既有图库数据保持原样。
+pub fn example_for(kind: PlotType) -> Book {
+    let mut book = example();
+    if kind == PlotType::ErrorBand {
+        book.columns[2].role = crate::Role::YError;
+        book.columns[2].error_for = Some("B".into());
+    }
+    if kind == PlotType::BubbleColor {
+        let mut c = book.columns[2].clone();
+        c.key = "D".into();
+        book.columns.push(c);
+    }
+    book
 }

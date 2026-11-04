@@ -1119,11 +1119,17 @@ fn point_style_properties(
             );
             ui.end_row();
             if style.size_column.is_some() {
+                ui.label("大小映射");
+                ui.checkbox(&mut style.size_by_area, "面积正比数值");
+                ui.end_row();
                 ui.label("映射尺寸范围");
                 let mut range = style.size_range.unwrap_or([2.0, 12.0]);
                 ui.horizontal_wrapped(|ui| {
                     ui.label("最小");
-                    let response = ui.add(egui::DragValue::new(&mut range[0]).range(1.0..=20.0).speed(0.1));
+                    let response = ui.add_enabled(
+                        !style.size_by_area,
+                        egui::DragValue::new(&mut range[0]).range(1.0..=20.0).speed(0.1),
+                    );
                     edit_group(&response, history_group);
                     ui.label("最大");
                     let response = ui.add(egui::DragValue::new(&mut range[1]).range(1.0..=20.0).speed(0.1));

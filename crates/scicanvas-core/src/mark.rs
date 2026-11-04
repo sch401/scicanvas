@@ -86,6 +86,30 @@ pub(crate) fn draw(ctx: &Context<'_, '_, '_, '_>, plots: &[crate::page::Prepared
             continue;
         }
         let (series, style, paths) = (&plot.series, &plot.style, &plot.paths);
+        if style.kind == PlotType::ErrorBand && ctx.layer.error_bars.visible {
+            let upper: Vec<_> = series
+                .points
+                .iter()
+                .zip(&series.errors)
+                .map(|(p, e)| [p[0], e[1].map_or(f64::NAN, |e| p[1] + e)])
+                .collect();
+            let lower: Vec<_> = series
+                .points
+                .iter()
+                .zip(&series.errors)
+                .map(|(p, e)| [p[0], e[1].map_or(f64::NAN, |e| p[1] - e)])
+                .collect();
+            for range in crate::stat::row_runs(series) {
+                items.push(band::fill_between(
+                    ctx,
+                    &upper[range.clone()],
+                    &lower[range],
+                    style.y_axis,
+                    style.color.rgb(),
+                    0.3,
+                ));
+            }
+        }
         if bars::draw(ctx, series, style, paths, items) {
             continue;
         }
@@ -93,7 +117,7 @@ pub(crate) fn draw(ctx: &Context<'_, '_, '_, '_>, plots: &[crate::page::Prepared
             symbols.push(symbol);
         }
     }
-    if ctx.layer.error_bars.visible {
+    if ctx.layer.error_bars.visible && ctx.layer.plot_type != PlotType::ErrorBand {
         annotations::errors(ctx, plots, items);
     }
     for symbol in symbols {

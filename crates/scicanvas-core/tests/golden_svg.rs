@@ -15,6 +15,10 @@ fn cases() -> Vec<(String, String)> {
     project.books.push(book);
     let mut cases = Vec::new();
     for preset in presets::all() {
+        let mut project = project.clone();
+        if matches!(preset.kind, PlotType::ErrorBand | PlotType::BubbleColor) {
+            project.books[0] = presets::example_for(preset.kind);
+        }
         let mut graph = Graph::new(20, preset.name);
         graph.first_layer_mut().spec = PlotSpec::from_selection(&project.books[0], &[], preset.kind)
             .unwrap()

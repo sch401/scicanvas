@@ -154,4 +154,29 @@ pub const ALL: &[Example] = &[
         "21-两曲线间填充",
         "共同 X 和两个 Y 列，展示两曲线间填充。"
     ),
+    example!(
+        "error_band",
+        ErrorBand,
+        "22-误差带图",
+        "共同 X、Y 与误差或映射列，展示误差带图。"
+    ),
+    example!(
+        "column_scatter",
+        ColumnScatter,
+        "23-列散点图",
+        "共同 X、Y 与误差或映射列，展示列散点图。"
+    ),
+    example!("bubble", Bubble, "24-气泡图", "共同 X、Y 与误差或映射列，展示气泡图。"),
+    example!(
+        "color_scatter",
+        ColorScatter,
+        "25-颜色映射散点图",
+        "共同 X、Y 与误差或映射列，展示颜色映射散点图。"
+    ),
+    example!(
+        "bubble_color",
+        BubbleColor,
+        "26-气泡颜色映射图",
+        "共同 X、Y 与误差或映射列，展示气泡颜色映射图。"
+    ),
 ];

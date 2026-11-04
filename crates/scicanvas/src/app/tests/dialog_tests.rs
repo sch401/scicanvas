@@ -2111,3 +2111,103 @@ fn a2_residual_qq_comparison_and_nonlinear_calibration_follow_real_controls() {
     assert_eq!(app.project.book(1).unwrap().columns.len(), count + 3, "{}", app.status);
     roundtrip(&mut app, &before);
 }
+
+#[test]
+fn b2_commands_mapping_and_color_scale_actions_undo() {
+    for command in [
+        "plot.error_band",
+        "plot.column_scatter",
+        "plot.bubble",
+        "plot.color_scatter",
+        "plot.bubble_color",
+    ] {
+        let mut app = app();
+        app.active = Some(1);
+        let book = app.project.book_mut(1).unwrap();
+        if command == "plot.error_band" {
+            book.columns.iter_mut().find(|c| c.key == "C").unwrap().role = Role::YError;
+        }
+        if command == "plot.bubble_color" {
+            let key = book.push_column(Role::Y);
+            book.columns.iter_mut().find(|c| c.key == key).unwrap().data =
+                ["0", "1", "2", "3"].map(str::to_string).to_vec().into();
+        }
+        let keys = if command == "plot.bubble_color" {
+            vec!["A".into(), "B".into(), "C".into(), "D".into()]
+        } else {
+            vec!["A".into(), "B".into(), "C".into()]
+        };
+        app.selection.insert(1, keys);
+        let before = app.project.clone();
+        app.run_command(command);
+        assert_eq!(
+            app.project.graphs.len(),
+            before.graphs.len() + 1,
+            "{command}: {}",
+            app.status
+        );
+        roundtrip(&mut app, &before);
+        if command == "plot.color_scatter" {
+            let id = app.project.graphs.last().unwrap().id;
+            let before = app.project.clone();
+            app.apply_object_action(
+                id,
+                crate::plot::ObjectAction::Move(crate::plot::ObjectTarget::ColorScale(0), [0.7, 0.2]),
+            );
+            app.finish_edit();
+            assert_eq!(
+                app.project
+                    .graph(id)
+                    .unwrap()
+                    .first_layer()
+                    .color_scale
+                    .as_ref()
+                    .unwrap()
+                    .position,
+                Some([0.7, 0.2])
+            );
+            roundtrip(&mut app, &before);
+        }
+    }
+}
+
+#[test]
+fn b2_color_scale_actual_pointer_drag_is_undoable() {
+    let mut app = app();
+    app.active = Some(2);
+    let spec = scicanvas_core::plotspec::PlotSpec::from_selection(
+        app.project.book(1).unwrap(),
+        &["A".into(), "B".into(), "C".into()],
+        PlotType::ColorScatter,
+    )
+    .unwrap();
+    app.project.graph_mut(2).unwrap().first_layer_mut().spec = spec.into();
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let rect = object_frame(&mut app, &ctx, vec![], false);
+    let sc = scicanvas_core::scene::layout_page(app.project.graph(2).unwrap(), &app.project, &[]);
+    let object = sc
+        .objects
+        .iter()
+        .find(|o| o.target == crate::plot::ObjectTarget::ColorScale(0))
+        .unwrap();
+    let at = egui::pos2(
+        rect.left() + (object.bounds[0] + 4.0) as f32 * rect.width() / sc.w as f32,
+        rect.top() + (object.bounds[1] + 40.0) as f32 * rect.height() / sc.h as f32,
+    );
+    let before = app.project.clone();
+    let end = at + egui::vec2(-40., 30.);
+    object_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(at)], false);
+    object_frame(&mut app, &ctx, vec![object_button(at, true)], false);
+    object_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)], false);
+    object_frame(&mut app, &ctx, vec![object_button(end, false)], false);
+    assert!(app
+        .project
+        .graph(2)
+        .unwrap()
+        .first_layer()
+        .color_scale
+        .as_ref()
+        .is_some_and(|c| c.position.is_some()));
+    roundtrip(&mut app, &before);
+}

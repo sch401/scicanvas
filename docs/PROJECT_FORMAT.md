@@ -1,5 +1,9 @@
 # 项目文件格式
 
+## v31 散点映射与色阶条
+
+新增 ErrorBand、ColumnScatter、Bubble、ColorScatter、BubbleColor 图型。Layer 新增可选 color_scale（position 为页面比例，visible 控制显示），缺省按颜色映射自动显示；CurveStyle 新增 size_by_area，缺省 false 且省略，保留旧半径线性映射。气泡预设为 true，使用最大尺寸乘 sqrt(value/max)，负值和缺失映射跳过。新文件 v31，读取 v0–v30，SCV 容器版本保持 1。
+
 ## v30 非线性拟合残差输出
 
 NonlinearRecipe 新增可选 `residual` 列键，默认 None 且省略。按需创建残差列后，与原拟合曲线、置信带共用多输出重算和所有权。删除残差列清除键；重算使用原数据行，缺失行留空。信息准则只计算，不持久化。新文件 v30，读取 v0–v29，SCV 容器版本保持 1。

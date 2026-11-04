@@ -33,6 +33,7 @@ struct PointStyleColumns {
     color_range: Option<(f64, f64)>,
     size_data_range: Option<(f64, f64)>,
     size_range: [f32; 2],
+    size_by_area: bool,
     color_map: crate::colormap::ColorMap,
 }
 
@@ -59,7 +60,7 @@ impl PointStyleColumns {
             .map(|levels| levels.len());
         let range = |values: &[f64]| {
             values
-                .get(rows.clone())
+                .get(rows.start..rows.end.min(values.len()))
                 .unwrap_or_default()
                 .iter()
                 .enumerate()
@@ -73,12 +74,34 @@ impl PointStyleColumns {
             color_range: color_values.as_deref().and_then(range),
             size_data_range: size_values.as_deref().and_then(range),
             size_range: style.and_then(|style| style.size_range).unwrap_or([2.0, 12.0]),
+            size_by_area: style.is_some_and(|s| s.size_by_area),
             color_values,
             size_values,
             symbol_values,
             color_levels,
             symbol_levels,
             color_map,
+        }
+    }
+
+    fn valid_for(&self, kind: PlotType, row: usize) -> bool {
+        let size = || {
+            self.size_values
+                .as_ref()
+                .and_then(|v| v.get(row))
+                .is_some_and(|v| v.is_finite() && *v >= 0.0)
+        };
+        let color = || {
+            self.color_values
+                .as_ref()
+                .and_then(|v| v.get(row))
+                .is_some_and(|v| v.is_finite())
+        };
+        match kind {
+            PlotType::Bubble => size(),
+            PlotType::ColorScatter => color(),
+            PlotType::BubbleColor => size() && color(),
+            _ => true,
         }
     }
 
@@ -112,6 +135,13 @@ impl PointStyleColumns {
             .and_then(|value| {
                 let (lo, hi) = self.size_data_range?;
                 value.is_finite().then(|| {
+                    if self.size_by_area {
+                        return if hi > 0.0 {
+                            (self.size_range[1] as f64 * (value.max(0.0) / hi).sqrt()).clamp(0.0, 20.0) as f32
+                        } else {
+                            0.0
+                        };
+                    }
                     let t = normalized(value, lo, hi);
                     (self.size_range[0] + (self.size_range[1] - self.size_range[0]) * t as f32).clamp(1.0, 20.0)
                 })
@@ -346,6 +376,42 @@ impl PlotSpec {
     }
 
     pub fn from_selection(book: &Book, selected: &[String], plot_type: PlotType) -> Result<Self, String> {
+        if matches!(
+            plot_type,
+            PlotType::Bubble | PlotType::ColorScatter | PlotType::BubbleColor
+        ) {
+            let keys: Vec<_> = if selected.is_empty() {
+                book.columns
+                    .iter()
+                    .filter(|c| !matches!(c.role, crate::Role::XError | crate::Role::YError))
+                    .map(|c| c.key.clone())
+                    .collect()
+            } else {
+                selected.to_vec()
+            };
+            let count = if plot_type == PlotType::BubbleColor { 4 } else { 3 };
+            if keys.len() != count {
+                return Err(format!(
+                    "{}请依次选择 X、Y、{}，共 {count} 列",
+                    plot_type.label(),
+                    if count == 4 {
+                        "大小、颜色"
+                    } else if plot_type == PlotType::Bubble {
+                        "大小"
+                    } else {
+                        "颜色"
+                    }
+                ));
+            }
+            let mut spec = Self {
+                book_id: Some(book.id),
+                x_key: Some(keys[0].clone()),
+                y_keys: keys[1..].to_vec(),
+                ..Default::default()
+            };
+            spec.set_plot_type(plot_type)?;
+            return Ok(spec);
+        }
         let cols: Vec<&Column> = book
             .columns
             .iter()
@@ -387,6 +453,12 @@ impl PlotSpec {
             ..Default::default()
         };
         spec.set_plot_type(plot_type)?;
+        if plot_type == PlotType::ErrorBand {
+            for key in &spec.y_keys {
+                crate::ops::y_errors(book, key, &[])
+                    .map_err(|_| "误差带需要关联的 Y 误差列，请先设置误差列".to_owned())?;
+            }
+        }
         Ok(spec)
     }
 
@@ -614,7 +686,10 @@ impl PlotSpec {
                 .and_then(|x| if x.book == cbook.id { cbook.column(&x.col) } else { None });
             // 统计图只使用 Y 样本，X 列的缺失值和类别不参与取样。
             let xv = own_x.filter(|_| {
-                !matches!(self.plot_type, PlotType::QQ | PlotType::Box | PlotType::Histogram) || mapping.line_only
+                !matches!(
+                    self.plot_type,
+                    PlotType::QQ | PlotType::Box | PlotType::Histogram | PlotType::ColumnScatter
+                ) || mapping.line_only
             });
             let n = yv.len().max(xv.as_ref().map_or(0, |v| v.len()));
             let (i0, i1) = match mapping.rows {
@@ -661,6 +736,9 @@ impl PlotSpec {
                     (None, Some(v)) => v.f64_at(i).unwrap_or(f64::NAN),
                     (None, None) => (i + 1) as f64,
                 };
+                if !point_style_columns.valid_for(self.plot_type, i) {
+                    continue;
+                }
                 let y = yv.f64_at(i).unwrap_or(f64::NAN);
                 let base = base_values.as_ref().map_or(0.0, |v| v.f64_at(i).unwrap_or(f64::NAN));
                 if x.is_finite() && y.is_finite() && base.is_finite() {
@@ -703,11 +781,49 @@ impl PlotSpec {
                     .map(|source| DataRef::new(cbook.id, source).key(self.book_id)),
             });
         }
-        if !matches!(self.plot_type, PlotType::QQ | PlotType::Box | PlotType::Histogram) {
+        if !matches!(
+            self.plot_type,
+            PlotType::QQ | PlotType::Box | PlotType::Histogram | PlotType::ColumnScatter
+        ) {
             crate::stat::apply(&mut out, self.transform);
         }
         crate::presets::recipe(self.plot_type).position.apply(&mut out);
 
         (xcol, out)
     }
+}
+
+/// 色阶条复用逐点映射所用的取样范围和类别数。
+pub(crate) fn color_scale_data(layer: &crate::page::Layer, books: BookLookup<'_, '_>) -> Option<(String, [f64; 2])> {
+    if layer.color_scale.as_ref().is_some_and(|c| !c.visible) {
+        return None;
+    }
+    for plot in layer.plots(books) {
+        let Some(style) = plot.style.as_ref() else {
+            continue;
+        };
+        let Some(key) = &style.color_column else {
+            continue;
+        };
+        let book = books(plot.mapping.y.book)?;
+        let column = book.column(key)?;
+        let y = book.column(&plot.mapping.y.col)?;
+        let n = y.data.len().max(
+            plot.mapping
+                .x
+                .as_ref()
+                .and_then(|x| book.column(&x.col))
+                .map_or(0, |c| c.data.len()),
+        );
+        let (lo, hi) = plot.mapping.rows.map_or((0, n), |(lo, hi)| (lo, (hi + 1).min(n)));
+        let mask = if layer.visible_only && !y.independent_rows {
+            book.visible_mask()
+        } else {
+            None
+        };
+        let columns = PointStyleColumns::new(Some(style), book, lo..hi, layer.color_map, mask.as_deref());
+        let (min, max) = columns.color_levels.map(|n| (1.0, n as f64)).or(columns.color_range)?;
+        return Some((column.display_name().to_owned(), [min, max]));
+    }
+    None
 }

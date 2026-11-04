@@ -42,6 +42,29 @@ fn case(name: &str, kind: PlotType) -> (String, Project, Graph) {
     if matches!(kind, PlotType::Spline | PlotType::SplineSymbol) || name == "bspline-bezier" {
         p.book_mut(1).unwrap().columns[1].data = ["-2", "3", "1", "5", "-1"].map(str::to_owned).to_vec().into();
     }
+    if matches!(kind, PlotType::Bubble | PlotType::ColorScatter | PlotType::BubbleColor) {
+        p.book_mut(1)
+            .unwrap()
+            .columns
+            .push(column("C", Role::Y, &["1", "4", "9", "16", "25"]));
+        if kind == PlotType::BubbleColor {
+            p.book_mut(1)
+                .unwrap()
+                .columns
+                .push(column("D", Role::Y, &["0", "0.25", "0.5", "0.75", "1"]));
+        }
+    }
+    if kind == PlotType::ErrorBand {
+        let mut c = column("C", Role::YError, &["0.5", "1", "0.3", "0.7", "0.5"]);
+        c.error_for = Some("B".into());
+        p.book_mut(1).unwrap().columns.push(c);
+    }
+    if kind == PlotType::ColumnScatter {
+        p.book_mut(1)
+            .unwrap()
+            .columns
+            .push(column("C", Role::Y, &["1", "2", "3", "4", "5"]));
+    }
     let mut g = Graph::new(2, name);
     g.first_layer_mut().spec = PlotSpec::from_selection(p.book(1).unwrap(), &[], kind).unwrap().into();
     g.first_layer_mut().legend = false;
@@ -168,6 +191,10 @@ fn cases() -> Vec<(String, Project, Graph)> {
             ..Default::default()
         }),
     );
+    g.first_layer_mut().color_scale = Some(scicanvas_core::page::ColorScale {
+        visible: false,
+        position: None,
+    });
     cases.push(("color-size-shape-map".into(), p, g));
     let (_, p, mut g) = case("bspline-bezier", PlotType::Line);
     g.first_layer_mut().connect = Connect::BSpline;
@@ -251,6 +278,7 @@ fn export(p: &Project, g: &Graph) -> (Value, String) {
         let mut segments = Vec::new();
         let mut area = Vec::new();
         let mut colors = Vec::new();
+        let mut radii = Vec::new();
         for item in &scene.items {
             let clipped = item.clip == Some(rect);
             let inside = |pts: &[[f64; 2]]| {
@@ -267,6 +295,7 @@ fn export(p: &Project, g: &Graph) -> (Value, String) {
                 Prim::StyledSymbols { symbols: marks } if inside(&marks.iter().map(|m| m.at).collect::<Vec<_>>()) => {
                     symbols.extend(marks.iter().map(|m| point(m.at, rect)));
                     colors.extend(marks.iter().map(|m| json!(m.fill.map(|(r, g, b)| [r, g, b]))));
+                    radii.extend(marks.iter().map(|m| m.radius));
                 }
                 Prim::Polyline { pts, .. } if clipped => {
                     lines.push(pts.iter().map(|p| point(*p, rect)).collect::<Vec<_>>())
@@ -320,6 +349,34 @@ fn export(p: &Project, g: &Graph) -> (Value, String) {
         let mut entry = json!({"axes":{"x":axis(&view.axes.x),"y":axis(&view.axes.left_y),"right_y":view.axes.right_y.as_ref().map(axis)},"plot":rect,"kind":format!("{:?}",l.plot_type),"connect":format!("{:?}",l.connect),"y_keys":draft.y_keys,"base_by_y":draft.base_by_y,"right_keys":right,"rows":draft.rows,"reference_lines":l.reference_lines.iter().map(|r|json!({"axis":format!("{:?}",r.axis),"value":r.value})).collect::<Vec<_>>(),"marks":{"symbols":symbols,"polylines":lines,"bars":bars,"segments":segments,"area":bounds,"colors":colors}});
         if !l.histogram.is_default() {
             entry["histogram"] = serde_json::to_value(l.histogram).unwrap();
+        }
+        if matches!(l.plot_type, PlotType::Bubble | PlotType::BubbleColor) {
+            let max = radii.iter().copied().fold(0.0, f64::max);
+            entry["marks"]["size_ratios"] = json!(radii.iter().map(|r| r / max).collect::<Vec<_>>());
+        }
+        if matches!(l.plot_type, PlotType::ColorScatter | PlotType::BubbleColor) {
+            if let Some(object) = scene
+                .objects
+                .iter()
+                .find(|o| o.target == scene::ObjectTarget::ColorScale(index))
+            {
+                let mut scale_colors = Vec::new();
+                let mut ticks = Vec::new();
+                for item in &scene.items[object.items.clone()] {
+                    match &item.prim {
+                        Prim::Rect {
+                            fill: Some((color, _)), ..
+                        } => scale_colors.push(*color),
+                        Prim::Text { text, .. } => {
+                            if let Ok(v) = text.parse::<f64>() {
+                                ticks.push(v);
+                            }
+                        }
+                        _ => {}
+                    }
+                }
+                entry["color_scale"] = json!({"colors":scale_colors,"ticks":ticks});
+            }
         }
         layers.push(entry);
     }

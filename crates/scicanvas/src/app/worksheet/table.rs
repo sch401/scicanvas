@@ -575,6 +575,11 @@ impl SheetFrame {
             ("plot.percent_stacked_horizontal_bar", "百分比堆叠条形图"),
             ("plot.stacked_area", "堆叠面积图"),
             ("plot.fill_between", "两曲线间填充"),
+            ("plot.error_band", "误差带图"),
+            ("plot.column_scatter", "列散点图"),
+            ("plot.bubble", "气泡图"),
+            ("plot.color_scatter", "颜色映射散点图"),
+            ("plot.bubble_color", "气泡颜色映射图"),
         ] {
             if cid.is_empty() {
                 ui.separator();

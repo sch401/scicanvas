@@ -482,10 +482,12 @@ fn presets_have_example_data_and_use_the_shared_scene() {
     let mut project = Project::default();
     project.books.push(book.clone());
     let presets = scicanvas_core::presets::all();
-    assert_eq!(presets.len(), 21);
+    assert_eq!(presets.len(), 26);
     let mut ids = std::collections::BTreeSet::new();
     for preset in presets {
         assert!(ids.insert(preset.id));
+        let book = scicanvas_core::presets::example_for(preset.kind);
+        project.books[0] = book.clone();
         let spec = PlotSpec::from_selection(&book, &[], preset.kind).unwrap();
         let mut graph = Graph::new(20, preset.name);
         graph.first_layer_mut().spec = spec.into();
@@ -614,7 +616,7 @@ fn coordinate_inverse_and_palette_boundaries() {
 }
 
 fn example_graph(kind: PlotType) -> (Project, Graph) {
-    let book = scicanvas_core::presets::example();
+    let book = scicanvas_core::presets::example_for(kind);
     let mut project = Project::default();
     project.books.push(book.clone());
     let mut graph = Graph::new(20, "示例");

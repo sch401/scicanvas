@@ -250,6 +250,7 @@ pub(super) fn basic(commands: &mut Vec<Command>) {
 }
 
 pub(super) fn decorations(commands: &mut Vec<Command>) {
+    scatter_variants(commands);
     commands.extend([
         c(
             "plot.spline",
@@ -520,4 +521,64 @@ pub(super) fn examples(commands: &mut Vec<Command>) {
         )
         .modifies()
     }));
+}
+
+fn scatter_variants(commands: &mut Vec<Command>) {
+    commands.extend([
+        c(
+            "plot.error_band",
+            "误差带图",
+            "scatter",
+            "",
+            "绘图",
+            "误差带图",
+            need_data,
+            |a| a.plot(PlotType::ErrorBand),
+        )
+        .modifies(),
+        c(
+            "plot.column_scatter",
+            "列散点图",
+            "scatter",
+            "",
+            "绘图",
+            "列散点图",
+            need_data,
+            |a| a.plot(PlotType::ColumnScatter),
+        )
+        .modifies(),
+        c(
+            "plot.bubble",
+            "气泡图",
+            "scatter",
+            "",
+            "绘图",
+            "气泡图",
+            need_data,
+            |a| a.plot(PlotType::Bubble),
+        )
+        .modifies(),
+        c(
+            "plot.color_scatter",
+            "颜色映射散点图",
+            "scatter",
+            "",
+            "绘图",
+            "颜色映射散点图",
+            need_data,
+            |a| a.plot(PlotType::ColorScatter),
+        )
+        .modifies(),
+        c(
+            "plot.bubble_color",
+            "气泡颜色映射图",
+            "scatter",
+            "",
+            "绘图",
+            "气泡颜色映射图",
+            need_data,
+            |a| a.plot(PlotType::BubbleColor),
+        )
+        .modifies(),
+    ]);
 }

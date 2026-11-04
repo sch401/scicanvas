@@ -160,6 +160,38 @@ impl LayerSpec {
             color_map: spec.color_map,
             plots,
         };
+        if styles.is_empty()
+            && matches!(
+                result.plot_type,
+                crate::PlotType::Bubble | crate::PlotType::ColorScatter | crate::PlotType::BubbleColor
+            )
+        {
+            let keys: Vec<_> = result
+                .plots
+                .iter()
+                .filter(|p| p.active)
+                .map(|p| p.source.col.clone())
+                .collect();
+            let needed = if result.plot_type == crate::PlotType::BubbleColor {
+                3
+            } else {
+                2
+            };
+            if keys.len() >= needed {
+                let kind = result.plot_type;
+                let plot = result.plots.iter_mut().find(|p| p.active).unwrap();
+                let style = plot.style.get_or_insert_with(Default::default);
+                if kind != crate::PlotType::ColorScatter {
+                    style.size_column = Some(keys[1].clone());
+                    style.size_by_area = true;
+                }
+                if kind != crate::PlotType::Bubble {
+                    style.color_column = Some(keys[needed - 1].clone());
+                }
+                let y = plot.source.clone();
+                result.plots.retain(|p| !p.active || p.source == y);
+            }
+        }
         result.normalize();
         result
     }
@@ -305,6 +337,16 @@ impl LayerSpec {
     pub fn validate_in<'a>(&self, book: &'a crate::Book, others: BookLookup<'a, '_>) -> Result<(), String> {
         self.draft().validate_in(book, others)?;
         for plot in self.plots.iter().filter(|plot| plot.active) {
+            let size = plot.style.as_ref().and_then(|s| s.size_column.as_ref());
+            let color = plot.style.as_ref().and_then(|s| s.color_column.as_ref());
+            if (matches!(self.plot_type, crate::PlotType::Bubble | crate::PlotType::BubbleColor) && size.is_none())
+                || (matches!(
+                    self.plot_type,
+                    crate::PlotType::ColorScatter | crate::PlotType::BubbleColor
+                ) && color.is_none())
+            {
+                return Err("请设置该预设需要的大小或颜色映射列".into());
+            }
             let Some(style) = &plot.style else { continue };
             if style
                 .symbol_border_width

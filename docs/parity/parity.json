@@ -1827,11 +1827,37 @@
   "feature": "色阶条（Color Scale）",
   "ref": "Color Scales",
   "pri": "P1",
-  "status": "未开始",
-  "how": "",
-  "verify": "目视检查",
+  "status": "已实现待验收",
+  "how": "绘图 → 色阶条。有颜色映射列时自动显示；范围和颜色表复用 PointStyleColumns，64 段色块与刻度，可拖动、隐藏和恢复自动位置。",
+  "verify": "核心尺寸/颜色范围、误差关联、类别抖动和文件保存；真实绘图命令和色阶条指针拖动的一步撤销重做；新增 matplotlib 位置、半径比及色阶刻度/色块对照。",
   "id": "F101",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "visual",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/scatter_variants.rs::b2_area_sizes_color_scale_and_column_jitter",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::b2_commands_mapping_and_color_scale_actions_undo",
+    "crates/scicanvas-core/tests/scatter_variants.rs::b2_color_scale_position_visibility_and_format_roundtrip",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::b2_color_scale_actual_pointer_drag_is_undoable"
+   ],
+   "reference": [
+    "docs/parity/visual/color-scatter/matplotlib.json"
+   ],
+   "visual": [
+    "docs/parity/visual/color-scatter/README.md"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/plotting.md#F101",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "绘图基础",
@@ -4719,11 +4745,35 @@
   "feature": "列散点图",
   "ref": "Column Scatter",
   "pri": "P1",
-  "status": "未开始",
-  "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 Origin 同数据出图目视比较",
+  "status": "已实现待验收",
+  "how": "绘图 → 列散点图。每个 Y 列一个类别，黄金分割序列确定性抖动，叠加均值短线，拾取保留原行号。",
+  "verify": "核心尺寸/颜色范围、误差关联、类别抖动和文件保存；真实绘图命令和色阶条指针拖动的一步撤销重做；新增 matplotlib 位置、半径比及色阶刻度/色块对照。",
   "id": "F263",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "visual",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/scatter_variants.rs::b2_area_sizes_color_scale_and_column_jitter",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::b2_commands_mapping_and_color_scale_actions_undo"
+   ],
+   "reference": [
+    "docs/parity/visual/column-scatter/matplotlib.json"
+   ],
+   "visual": [
+    "docs/parity/visual/column-scatter/README.md"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/plotting.md#F263",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "图类型 · 2D 散点图",
@@ -4813,44 +4863,140 @@
   "feature": "气泡图",
   "ref": "Indexed Size Bubble Graph",
   "pri": "P1",
-  "status": "未开始",
-  "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 Origin 同数据出图目视比较",
+  "status": "已实现待验收",
+  "how": "绘图 → 气泡图。依次选择 X、Y、大小三列，单条散点系列，气泡面积正比非负数值。",
+  "verify": "核心尺寸/颜色范围、误差关联、类别抖动和文件保存；真实绘图命令和色阶条指针拖动的一步撤销重做；新增 matplotlib 位置、半径比及色阶刻度/色块对照。",
   "id": "F268",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "visual",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/scatter_variants.rs::b2_area_sizes_color_scale_and_column_jitter",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::b2_commands_mapping_and_color_scale_actions_undo"
+   ],
+   "reference": [
+    "docs/parity/visual/bubble/matplotlib.json"
+   ],
+   "visual": [
+    "docs/parity/visual/bubble/README.md"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/plotting.md#F268",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "图类型 · 2D 散点图",
   "feature": "颜色映射散点图",
   "ref": "Color Mapped Graph",
   "pri": "P1",
-  "status": "未开始",
-  "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 Origin 同数据出图目视比较",
+  "status": "已实现待验收",
+  "how": "绘图 → 颜色映射散点图。依次选择 X、Y、颜色三列，单条颜色映射散点系列，自动显示色阶条。",
+  "verify": "核心尺寸/颜色范围、误差关联、类别抖动和文件保存；真实绘图命令和色阶条指针拖动的一步撤销重做；新增 matplotlib 位置、半径比及色阶刻度/色块对照。",
   "id": "F269",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "visual",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/scatter_variants.rs::b2_area_sizes_color_scale_and_column_jitter",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::b2_commands_mapping_and_color_scale_actions_undo"
+   ],
+   "reference": [
+    "docs/parity/visual/color-scatter/matplotlib.json"
+   ],
+   "visual": [
+    "docs/parity/visual/color-scatter/README.md"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/plotting.md#F269",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "图类型 · 2D 散点图",
   "feature": "气泡 + 颜色映射图",
   "ref": "Indexed Size (Bubble) and Color Map Graph",
   "pri": "P1",
-  "status": "未开始",
-  "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 Origin 同数据出图目视比较",
+  "status": "已实现待验收",
+  "how": "绘图 → 气泡颜色映射图。依次选择 X、Y、大小、颜色四列，单条面积与颜色映射散点系列，自动显示色阶条。",
+  "verify": "核心尺寸/颜色范围、误差关联、类别抖动和文件保存；真实绘图命令和色阶条指针拖动的一步撤销重做；新增 matplotlib 位置、半径比及色阶刻度/色块对照。",
   "id": "F270",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "visual",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/scatter_variants.rs::b2_area_sizes_color_scale_and_column_jitter",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::b2_commands_mapping_and_color_scale_actions_undo"
+   ],
+   "reference": [
+    "docs/parity/visual/bubble-color/matplotlib.json"
+   ],
+   "visual": [
+    "docs/parity/visual/bubble-color/README.md"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/plotting.md#F270",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "图类型 · 2D 散点图",
   "feature": "误差带图",
   "ref": "Error Band Graph",
   "pri": "P1",
-  "status": "未开始",
-  "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 Origin 同数据出图目视比较",
+  "status": "已实现待验收",
+  "how": "绘图 → 误差带图。要求关联的 Y 误差列，填充 y±e（不透明度 0.3），再画中心线；复用原误差列解析和 band 填充。",
+  "verify": "核心尺寸/颜色范围、误差关联、类别抖动和文件保存；真实绘图命令和色阶条指针拖动的一步撤销重做；新增 matplotlib 位置、半径比及色阶刻度/色块对照。",
   "id": "F271",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "visual",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/scatter_variants.rs::b2_error_band_requires_error_column_and_draws_fill_without_caps",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::b2_commands_mapping_and_color_scale_actions_undo"
+   ],
+   "reference": [
+    "docs/parity/visual/error-band/matplotlib.json"
+   ],
+   "visual": [
+    "docs/parity/visual/error-band/README.md"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/plotting.md#F271",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "图类型 · 2D 散点图",

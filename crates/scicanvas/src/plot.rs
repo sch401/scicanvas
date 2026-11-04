@@ -277,6 +277,11 @@ fn object_position(g: &Graph, target: ObjectTarget) -> Option<Option<[f64; 2]>> 
     match target {
         ObjectTarget::Text(id) => g.page.text(id).map(|t| Some(t.position)),
         ObjectTarget::Legend(i) => g.page.layers().get(i).map(|l| l.legend_position),
+        ObjectTarget::ColorScale(i) => g
+            .page
+            .layers()
+            .get(i)
+            .map(|l| l.color_scale.as_ref().and_then(|c| c.position)),
     }
 }
 fn interact_objects(
@@ -957,6 +962,7 @@ mod tests {
             match target {
                 ObjectTarget::Text(id) => p.graphs[0].page.text_mut(id).unwrap().position = position,
                 ObjectTarget::Legend(i) => p.graphs[0].page.layers_mut()[i].legend_position = Some(position),
+                ObjectTarget::ColorScale(_) => unreachable!(),
             }
             frame(&ctx, &p, vec![button(end, false)]);
             assert!(!frame(&ctx, &p, vec![]).zoomed);

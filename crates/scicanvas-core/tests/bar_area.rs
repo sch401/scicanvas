@@ -305,6 +305,10 @@ fn mapped_area_keeps_source_colors_through_sorting_gaps_and_zero_crossings() {
         ["1", "0", "", "0", "0", "1"].into_iter().map(str::to_owned).collect();
     let fallback = (201, 17, 131);
     let layer = p.graph_mut(id).unwrap().first_layer_mut();
+    layer.color_scale = Some(scicanvas_core::page::ColorScale {
+        position: None,
+        visible: false,
+    });
     layer.area_opacity = 0.4;
     layer.legend = false;
     layer.set_plot_style(

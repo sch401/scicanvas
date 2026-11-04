@@ -90,7 +90,7 @@ pub fn get_xy(book: &Book, item: &Item) -> (Vec<f64>, Vec<f64>, Vec<usize>) {
 }
 
 /// Y 列关联的 Y 误差列在给定行上的值（加权拟合用），空单元为 NaN；没有关联的误差列时报错。
-pub(super) fn y_errors(book: &Book, y: &str, rows: &[usize]) -> Result<Vec<f64>, String> {
+pub(crate) fn y_errors(book: &Book, y: &str, rows: &[usize]) -> Result<Vec<f64>, String> {
     let column = book
         .columns
         .iter()
