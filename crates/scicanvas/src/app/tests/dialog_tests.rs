@@ -2312,3 +2312,51 @@ fn b4_new_plot_commands_save_and_undo() {
         roundtrip(&mut app, &before);
     }
 }
+
+#[test]
+fn a5_peak_fit_real_preview_fit_report_reedit_and_undo() {
+    use scicanvas_core::nlfit::{Model, PeakBaseline, PeakSum};
+    let mut app = app();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["B".into()]);
+    let peak = PeakSum::new(Model::Gauss, 2, PeakBaseline::Constant).unwrap();
+    let x: Vec<_> = (0..201).map(|i| -5. + i as f64 * 0.05).collect();
+    let y: Vec<_> = x
+        .iter()
+        .map(|x| peak.eval(*x, &[-1.5, 1.2, 3., 1.5, 1.4, 4., 0.3]))
+        .collect();
+    for (key, values) in [("A", x), ("B", y)] {
+        app.project
+            .book_mut(1)
+            .unwrap()
+            .columns
+            .iter_mut()
+            .find(|c| c.key == key)
+            .unwrap()
+            .data = values.iter().map(ToString::to_string).collect();
+    }
+    let before = app.project.clone();
+    app.run_command("fit.peaks");
+    assert!(matches!(&app.dialog, Some(Dialog::PeakFit(_))));
+    press_dialog_button(&mut app, "预览初值");
+    assert!(matches!(&app.dialog,Some(Dialog::PeakFit(edit)) if edit.preview.is_some()));
+    press_dialog_button(&mut app, "拟合");
+    let Some(Dialog::NlFitReport(reports)) = &app.dialog else {
+        panic!("{}", app.status)
+    };
+    assert!(reports[0].fit.converged);
+    assert_eq!(reports[0].peak_rows().len(), 3);
+    let keys = reports[0].curve.clone();
+    assert_eq!(
+        app.project.book(1).unwrap().columns.len(),
+        before.book(1).unwrap().columns.len() + 4
+    );
+    roundtrip(&mut app, &before);
+    press_dialog_button(&mut app, "重新编辑拟合设置");
+    assert!(matches!(&app.dialog,Some(Dialog::PeakFit(edit)) if edit.target.is_some()&&edit.count==2));
+    press_dialog_button(&mut app, "拟合");
+    let Some(Dialog::NlFitReport(reports)) = &app.dialog else {
+        panic!("{}", app.status)
+    };
+    assert_eq!(reports[0].curve, keys);
+}

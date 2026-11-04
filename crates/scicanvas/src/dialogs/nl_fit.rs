@@ -17,7 +17,7 @@ pub struct FitEditTarget {
 }
 
 impl FitEditTarget {
-    fn recipe(
+    pub(super) fn recipe(
         &self,
         function: scicanvas_core::ops::FitMethod,
         initial: Option<Vec<f64>>,

@@ -1209,6 +1209,13 @@ impl SciApp {
         } else {
             recipe.function.clone()
         };
+        if let scicanvas_core::ops::FitMethod::PeakSum { shape, count, baseline } = editing_function {
+            match scicanvas_core::nlfit::PeakSum::new(shape, count, baseline) {
+                Ok(peak) => self.edit_peak_fit(report, op, peak),
+                Err(error) => self.status = error,
+            }
+            return;
+        }
         match &editing_function {
             scicanvas_core::ops::FitMethod::Builtin(model) => {
                 let mut limits = vec![(false, 0.0, false, 0.0, false, 1.0); model.params().len()];
@@ -1235,6 +1242,7 @@ impl SciApp {
                     target,
                 });
             }
+            scicanvas_core::ops::FitMethod::PeakSum { .. } => unreachable!("多峰已分派"),
             scicanvas_core::ops::FitMethod::SineDamp { .. } => unreachable!("阻尼模型已归入内置编辑器"),
             scicanvas_core::ops::FitMethod::Custom {
                 name,

@@ -898,11 +898,28 @@ def kde_cases():
     write("kde",cases)
 
 
+def peak_sum_cases():
+    cases=[]
+    for shape,count,baseline,truth in [("Gauss",3,"Linear",[-2.,1.8,3.,.5,1.6,2.5,3.,1.7,3.2,.4,.02]),("Lorentz",2,"Constant",[-1.5,1.7,3.,1.8,1.5,4.,.3])]:
+        x=np.linspace(-10,10,401);truth=np.asarray(truth)
+        def function(x,*p):
+            y=np.full_like(x,p[3*count])
+            if baseline=="Linear":y+=p[3*count+1]*x
+            for i in range(count):
+                center,width,area=p[3*i:3*i+3]
+                y+=area/(width*np.sqrt(np.pi/2))*np.exp(-2*((x-center)/width)**2) if shape=="Gauss" else 2*area/np.pi*width/(4*(x-center)**2+width**2)
+            return y
+        y=function(x,*truth)+.002*np.sin(np.arange(len(x))*1.7)
+        params,cov=optimize.curve_fit(function,x,y,p0=truth*1.1,method="lm",ftol=1e-13,xtol=1e-13,gtol=1e-13,maxfev=100000)
+        cases.append(dict(shape=shape,count=count,baseline=baseline,x=x,y=y,initial=truth*1.1,params=params,se=np.sqrt(np.diag(cov))))
+    write("peak_sums",cases)
+
+
 GENERATORS = [
     integrals, normalization, descriptive, column_math, polynomial, statistical_tests, signal_tests,
     interpolation_cases, derivative_cases, peak_cases, constrained_fit_cases, builtin_fit_cases,
     smoothing_cases, percent_bar_cases, fit_report_cases, formula_cases, weighted_fit_cases, qq_cases, box_cases,
-    histogram_option_cases, normality_ks_ad, ks_2samp, two_way_anova, fit_tools, global_fits, extended_fit_cases, inhibition_fits, kde_cases,
+    histogram_option_cases, normality_ks_ad, ks_2samp, two_way_anova, fit_tools, global_fits, extended_fit_cases, inhibition_fits, kde_cases, peak_sum_cases,
 ]
 
 

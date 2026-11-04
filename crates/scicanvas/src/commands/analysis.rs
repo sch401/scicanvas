@@ -18,6 +18,7 @@ pub(super) fn fits(commands: &mut Vec<Command>) {
         c("fit.reports", "拟合报告…", "fitpoly", "", "分析", "report 拟合报告 重新编辑", |_| Ok(()), |a| a.open_nlfit_reports()),
         c("fit.compare","拟合比较","fitpoly","","分析","AIC AICc BIC nested F test 拟合比较",|_|Ok(()),|a|a.open_fit_compare()),
         c("fit.global","全局拟合","fitpoly","","分析","global shared parameters 全局拟合 共享参数",need_data,|a|a.open_global_fit()),
+        c("fit.peaks","多峰拟合","fitpoly","","分析","multi peak deconvolution Gauss Lorentz Voigt",need_data,|a|a.open_peak_fit()),
         // 分析
         c(
             "fit.linear",

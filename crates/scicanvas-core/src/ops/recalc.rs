@@ -72,6 +72,11 @@ pub enum OpKind {
 )]
 pub enum FitMethod {
     Builtin(crate::nlfit::Model),
+    PeakSum {
+        shape: crate::nlfit::Model,
+        count: u8,
+        baseline: crate::nlfit::PeakBaseline,
+    },
     SineDamp {
         origin: f64,
     },
@@ -86,6 +91,11 @@ impl FitMethod {
     pub fn from_function(function: &crate::nlfit::FitFunction) -> Self {
         match function {
             crate::nlfit::FitFunction::Builtin(model) => Self::Builtin(*model),
+            crate::nlfit::FitFunction::PeakSum(peak) => Self::PeakSum {
+                shape: peak.shape,
+                count: peak.count,
+                baseline: peak.baseline,
+            },
             crate::nlfit::FitFunction::SineDamp { origin } => Self::SineDamp { origin: *origin },
             crate::nlfit::FitFunction::Indexed(_) => unreachable!("全局索引模型只生成一次性报告"),
             _ => Self::Custom {
@@ -99,6 +109,9 @@ impl FitMethod {
     pub fn resolve(&self) -> Result<crate::nlfit::FitFunction, String> {
         Ok(match self {
             Self::Builtin(model) => crate::nlfit::FitFunction::Builtin(*model),
+            Self::PeakSum { shape, count, baseline } => {
+                crate::nlfit::FitFunction::PeakSum(crate::nlfit::PeakSum::new(*shape, *count, *baseline)?)
+            }
             Self::SineDamp { origin } => {
                 if !origin.is_finite() {
                     return Err("阻尼正弦时间原点必须是有限数".into());
@@ -172,6 +185,8 @@ pub struct NonlinearRecipe {
     pub bands: Vec<FitBands>,
     #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Option::is_none"))]
     pub residual: Option<String>,
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Vec::is_empty"))]
+    pub components: Vec<String>,
     /// 权重方式；不加权时不写入（v24）。
     #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "FitWeight::is_none"))]
     pub weight: FitWeight,
@@ -185,6 +200,7 @@ impl NonlinearRecipe {
     pub(crate) fn output_keys(&self) -> impl Iterator<Item = &String> {
         std::iter::once(&self.output_x)
             .chain(self.residual.iter())
+            .chain(self.components.iter())
             .chain(self.bands.iter().flat_map(|b| &b.columns))
     }
 
@@ -211,6 +227,12 @@ impl NonlinearRecipe {
             }
         }
         crate::nlfit::parse_constraints_for_function_with(&function, &self.constraints, &crate::formula::FILE_LIMITS)?;
+        if self.components.iter().any(String::is_empty)
+            || (!self.components.is_empty()
+                && !matches!(&function,crate::nlfit::FitFunction::PeakSum(peak) if usize::from(peak.count)==self.components.len()))
+        {
+            return Err("多峰分量输出数量不符".into());
+        }
         if self.residual.as_ref().is_some_and(String::is_empty)
             || self.output_x.is_empty()
             || self.bands.iter().any(|b| {
@@ -338,6 +360,12 @@ impl NonlinearRecipe {
             }
             result.push((key.clone(), data(&residual)));
         }
+        if let crate::nlfit::FitFunction::PeakSum(peak) = &fit.model {
+            for (i, key) in self.components.iter().enumerate() {
+                let values: Vec<_> = grid.iter().map(|x| peak.component(*x, &fit.params, i)).collect();
+                result.push((key.clone(), data(&values)));
+            }
+        }
         // Y 的键由拥有此记录的列提供。
         result.push((String::new(), data(&values)));
         Ok((result, fit))
@@ -346,7 +374,7 @@ impl NonlinearRecipe {
     pub(crate) fn estimated_bytes(&self) -> usize {
         use std::mem::size_of;
         let function = match &self.function {
-            FitMethod::Builtin(_) | FitMethod::SineDamp { .. } => 0,
+            FitMethod::Builtin(_) | FitMethod::SineDamp { .. } | FitMethod::PeakSum { .. } => 0,
             FitMethod::Custom {
                 name,
                 formula,
@@ -365,6 +393,8 @@ impl NonlinearRecipe {
             + self.constraints.capacity()
             + self.output_x.capacity()
             + self.residual.as_ref().map_or(0, String::capacity)
+            + self.components.capacity() * size_of::<String>()
+            + self.components.iter().map(String::capacity).sum::<usize>()
             + self.bands.capacity() * size_of::<FitBands>()
             + self
                 .bands
@@ -811,6 +841,7 @@ impl Operation {
                     && a.constraints == b.constraints
                     && a.output_x == b.output_x
                     && a.residual == b.residual
+                    && a.components == b.components
                     && a.bands == b.bands
                     && a.weight == b.weight
             }
@@ -846,6 +877,12 @@ impl NonlinearRecipe {
         let mut h = Digest(0xcbf29ce484222325);
         h.text("SciCanvas-fit-v21");
         match &self.function {
+            FitMethod::PeakSum { shape, count, baseline } => {
+                h.integer(3);
+                h.text(shape.name());
+                h.integer(u64::from(*count));
+                h.integer(*baseline as u64);
+            }
             FitMethod::SineDamp { origin } => {
                 h.integer(2);
                 h.number(Some(*origin));
