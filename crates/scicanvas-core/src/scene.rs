@@ -183,7 +183,8 @@ pub fn nearest_point<'a>(
 ) -> Option<PointHit> {
     let (_, plots) = layer.prepared_plots_in(books(layer.book_id?)?, books);
     let horizontal = crate::presets::recipe(layer.plot_type).orientation == crate::coord::Orientation::Horizontal;
-    let identity = layer.transform == crate::plotspec::Transform::Identity
+    let identity = (layer.transform == crate::plotspec::Transform::Identity
+        || matches!(layer.plot_type, PlotType::ColumnScatter | PlotType::LineSeries))
         && !matches!(layer.plot_type, PlotType::QQ | PlotType::Histogram);
     let categories: Vec<_> = plots
         .iter()
@@ -211,15 +212,16 @@ pub fn nearest_point<'a>(
             }
             let d = (at[0] - x).hypot(at[1] - y);
             if d <= radius && best.as_ref().is_none_or(|(b, _)| d < *b) {
-                let value =
-                    point[usize::from(!horizontal)] - if layer.plot_type.is_stacked() { s.bases[i] } else { 0.0 };
+                let value = point[usize::from(!horizontal)]
+                    - plot.offset[usize::from(!horizontal)]
+                    - if layer.plot_type.is_stacked() { s.bases[i] } else { 0.0 };
                 best = Some((
                     d,
                     PointHit {
                         series: s.name.clone(),
                         key: plot.plot.key.clone(),
                         row: identity.then_some(s.rows[i]),
-                        x: point[usize::from(horizontal)],
+                        x: point[usize::from(horizontal)] - plot.offset[usize::from(horizontal)],
                         y: value,
                         at,
                     },
@@ -712,12 +714,15 @@ fn prepare_layer_data(ctx: &LayerContext<'_, '_, '_>) -> LayerData {
     let x_col = x_col.filter(|_| {
         !matches!(
             g.plot_type,
-            PlotType::Histogram | PlotType::QQ | PlotType::Box | PlotType::ColumnScatter
+            PlotType::Histogram | PlotType::QQ | PlotType::Box | PlotType::ColumnScatter | PlotType::LineSeries
         )
     });
     let x_date = !horizontal && !g.x_log && x_col.is_some_and(|c| c.data.kind() == crate::DataKind::DateTime);
     let date_offset = x_col.map_or(0.0, |c| f64::from(c.format.utc_offset) * 60_000.0);
-    let categories = if matches!(g.plot_type, PlotType::Box | PlotType::ColumnScatter) {
+    let categories = if matches!(
+        g.plot_type,
+        PlotType::Box | PlotType::ColumnScatter | PlotType::LineSeries
+    ) {
         Some(
             plots
                 .iter()
@@ -882,7 +887,8 @@ fn axis_ranges(ctx: &LayerContext<'_, '_, '_>, data: &LayerData) -> AxisRanges {
                 .map(|p| (&p.series, &p.style))
                 .filter(|(s, st)| {
                     !s.line_only
-                        && (st.kind.has_symbol() || matches!(st.kind, PlotType::Box | PlotType::ColumnScatter))
+                        && (st.kind.has_symbol()
+                            || matches!(st.kind, PlotType::Box | PlotType::ColumnScatter | PlotType::LineSeries))
                         && st.y_axis == crate::coord::YAxis::Left
                 })
                 .flat_map(|(s, _)| s.points.iter().copied())
@@ -956,7 +962,8 @@ fn axis_ranges(ctx: &LayerContext<'_, '_, '_>, data: &LayerData) -> AxisRanges {
                 .map(|p| (&p.series, &p.style))
                 .filter(|(s, st)| {
                     !s.line_only
-                        && (st.kind.has_symbol() || matches!(st.kind, PlotType::Box | PlotType::ColumnScatter))
+                        && (st.kind.has_symbol()
+                            || matches!(st.kind, PlotType::Box | PlotType::ColumnScatter | PlotType::LineSeries))
                         && st.y_axis == crate::coord::YAxis::Right
                 })
                 .flat_map(|(s, _)| s.points.iter().map(|p| p[1]))

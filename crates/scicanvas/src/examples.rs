@@ -179,4 +179,22 @@ pub const ALL: &[Example] = &[
         "26-气泡颜色映射图",
         "共同 X、Y 与误差或映射列，展示气泡颜色映射图。"
     ),
+    example!(
+        "offset_line",
+        OffsetLine,
+        "27-偏移堆叠线图",
+        "偏移堆叠线图：共同数据列，保留原始行和源数据连接。"
+    ),
+    example!(
+        "waterfall",
+        Waterfall,
+        "28-二维瀑布图",
+        "二维瀑布图：共同数据列，保留原始行和源数据连接。"
+    ),
+    example!(
+        "line_series",
+        LineSeries,
+        "29-线系列图",
+        "线系列图：共同数据列，保留原始行和源数据连接。"
+    ),
 ];

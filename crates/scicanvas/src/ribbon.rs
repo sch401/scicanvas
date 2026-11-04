@@ -67,6 +67,9 @@ const PLOT_TYPES: &[&str] = &[
     "plot.bubble",
     "plot.color_scatter",
     "plot.bubble_color",
+    "plot.offset_line",
+    "plot.waterfall",
+    "plot.line_series",
 ];
 
 pub static TABS: &[Tab] = &[

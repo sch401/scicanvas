@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 97 项，P1 146 项，P2 259 项，不做 12 项。
-状态：已完成 82 项，已实现待验收 75 项，部分实现 13 项，未开始 332 项，不做 12 项。
+状态：已完成 82 项，已实现待验收 78 项，部分实现 13 项，未开始 329 项，不做 12 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -361,7 +361,7 @@
 | F254 | 折线图 | Line Graph | P0 | 已完成 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收） | — |
 | F255 | 水平阶梯图 | Horizontal Step Graph | P1 | 已完成 | 水平阶梯：先横后竖，共享折线图元与 SVG | 拐点几何、拟合线、保存与撤销回归已通过；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）；2026-11 验收：自动测试 + 视觉对照 | — |
 | F256 | 垂直阶梯图 | Vertical Step Graph | P1 | 已完成 | 垂直阶梯：先竖后横，共享折线图元与 SVG | 拐点几何、拟合线、保存与撤销回归已通过；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）；2026-11 验收：自动测试 + 视觉对照 | — |
-| F257 | Y 偏移堆叠线图 | Stacked Lines by Y Offsets Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F257 | Y 偏移堆叠线图 | Stacked Lines by Y Offsets Graph | P1 | 已实现待验收 | 绘图 → Y 偏移堆叠线图。自动 dy 为各曲线最大 Y 跨度，支持手动 dx/dy，偏移跟随源数据更新；派生拟合线跟随原曲线，拾取和标签显示原值。 | 核心偏移、派生路径、原值拾取、源行连接与 v32 保存兼容；真实命令一步撤销；新增 NumPy/matplotlib 位置对照。 | — |
 | F258 | 棒棒糖图 | Lollipop Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F259 | 颜色映射线系列 | Colormapped Line Series | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F260 | 样条曲线图 | Spline Graph | P1 | 已完成 | 自然三次样条、缺失/重复 X 分段、自动范围与共享折线图元 | 解析值和 SciPy 1.17.1 自然边界对照、分段及 SVG 回归已通过；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）；已核对自然样条直接测试、参考数据和视觉对照。 | — |
@@ -389,7 +389,7 @@
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
 |---|---|---|---|---|---|---|---|
 | F274 | 点线图 | Line+Symbol Graph | P0 | 已完成 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收） | — |
-| F275 | 线系列图 | Line Series Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F275 | 线系列图 | Line Series Graph | P1 | 已实现待验收 | 绘图 → 线系列图。按 Origin 官方定义，每个原始行跨所选 Y 列连接为一条点线，X 为列位置和列名；至少两列，无隐藏工作表，保留原始行/列及实时源数据连接，缺失列处断开。 | 核心偏移、派生路径、原值拾取、源行连接与 v32 保存兼容；真实命令一步撤销；新增 NumPy/matplotlib 位置对照。 | — |
 | F276 | 两点线段图 | 2 Point Segment Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F277 | 三点线段图 | 3 Point Segment Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F278 | 样条连接点线图 | Spline Connected Graph | P1 | 已完成 | 自然三次样条连接，符号与误差保持原始点；派生线独立绘制 | SciPy 数值、符号数、分段、自动范围及撤销回归已通过；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）；已核对自然样条直接测试、参考数据和视觉对照。 | — |
@@ -470,7 +470,7 @@
 
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
 |---|---|---|---|---|---|---|---|
-| F331 | 2D 瀑布图 | 2D Waterfall Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F331 | 2D 瀑布图 | 2D Waterfall Graph | P1 | 已实现待验收 | 绘图 → 二维瀑布图。自动 dy 为各曲线最大 Y 跨度，支持手动 dx/dy，偏移跟随源数据更新；派生拟合线跟随原曲线，拾取和标签显示原值。自动 dx 为全部 X 跨度的 5%。首版不做前景遮挡填充。 | 核心偏移、派生路径、原值拾取、源行连接与 v32 保存兼容；真实命令一步撤销；新增 NumPy/matplotlib 位置对照。 | — |
 | F332 | 2D 瀑布图（Y 颜色映射） | 2D Waterfall Y Color Mapping | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F333 | 2D 瀑布图（Z 颜色映射） | 2D Waterfall Z Color Mapping | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F334 | 3D 瀑布图 | 3D Waterfall Graph | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |

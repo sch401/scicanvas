@@ -987,6 +987,9 @@ impl SciApp {
                 ColAction::Plot(PlotType::Bubble) => "plot.bubble",
                 ColAction::Plot(PlotType::ColorScatter) => "plot.color_scatter",
                 ColAction::Plot(PlotType::BubbleColor) => "plot.bubble_color",
+                ColAction::Plot(PlotType::OffsetLine) => "plot.offset_line",
+                ColAction::Plot(PlotType::Waterfall) => "plot.waterfall",
+                ColAction::Plot(PlotType::LineSeries) => "plot.line_series",
 
                 ColAction::AddToGraph(_) => unreachable!(),
             };

@@ -1,5 +1,9 @@
 # 项目文件格式
 
+## v32 曲线偏移与按行系列
+
+新增 OffsetLine、Waterfall、LineSeries 图型。Layer 新增可选 offset：dx、dy 为数据坐标偏移，auto 控制自动规则；缺省 None 不写入，普通旧图没有偏移。实际每曲线偏移仅保存在 PreparedPlot 运行时数据中，拾取和标签还原原值。LineSeries 仍引用原始列，不生成隐藏数据表。新文件 v32，读取 v0–v31，SCV 容器版本保持 1。
+
 ## v31 散点映射与色阶条
 
 新增 ErrorBand、ColumnScatter、Bubble、ColorScatter、BubbleColor 图型。Layer 新增可选 color_scale（position 为页面比例，visible 控制显示），缺省按颜色映射自动显示；CurveStyle 新增 size_by_area，缺省 false 且省略，保留旧半径线性映射。气泡预设为 true，使用最大尺寸乘 sqrt(value/max)，负值和缺失映射跳过。新文件 v31，读取 v0–v30，SCV 容器版本保持 1。

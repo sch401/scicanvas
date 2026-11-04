@@ -121,6 +121,7 @@ fn autoscale_svg_and_all_basic_chart_types_share_error_segments() {
                 | PlotType::Box
                 | PlotType::ErrorBand
                 | PlotType::ColumnScatter
+                | PlotType::LineSeries
                 | PlotType::Bubble
                 | PlotType::ColorScatter
                 | PlotType::BubbleColor

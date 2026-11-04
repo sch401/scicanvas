@@ -78,6 +78,7 @@ fn samples() -> Vec<(String, Project)> {
     cases.extend(sample_group_4());
     cases.extend(sample_group_b1());
     cases.extend(sample_group_b2());
+    cases.extend(sample_group_b3());
     // 提交的示例是 v8 兼容样本，当时默认页面为 89 × 66.75 mm；已保存的项目保留自己的页面尺寸
     cases
         .into_iter()
@@ -810,6 +811,81 @@ fn sample_group_b2() -> Vec<Project> {
 #[ignore = "维护者显式生成 B2 新示例"]
 fn update_b2_samples() {
     for (name, p) in samples().into_iter().skip(21) {
+        fs::write(directory().join(name), project_file::to_scv(&p).unwrap()).unwrap();
+    }
+}
+
+fn sample_group_b3() -> Vec<Project> {
+    vec![
+        sample(
+            PlotType::OffsetLine,
+            "偏移堆叠线图",
+            vec![
+                (Role::X, "时间", "s", "共同 X；线系列图使用选列位置", numbers(6)),
+                (
+                    Role::Y,
+                    "处理 A",
+                    "mg/L",
+                    "Y 数据第一组",
+                    list(&[2., 4., 3., 6., 4., 5.]),
+                ),
+                (
+                    Role::Y,
+                    "处理 B",
+                    "mg/L",
+                    "Y 数据第二组",
+                    list(&[1., 2., 5., 3., 6., 2.]),
+                ),
+            ],
+        ),
+        sample(
+            PlotType::Waterfall,
+            "二维瀑布图",
+            vec![
+                (Role::X, "时间", "s", "共同 X；线系列图使用选列位置", numbers(6)),
+                (
+                    Role::Y,
+                    "处理 A",
+                    "mg/L",
+                    "Y 数据第一组",
+                    list(&[2., 4., 3., 6., 4., 5.]),
+                ),
+                (
+                    Role::Y,
+                    "处理 B",
+                    "mg/L",
+                    "Y 数据第二组",
+                    list(&[1., 2., 5., 3., 6., 2.]),
+                ),
+            ],
+        ),
+        sample(
+            PlotType::LineSeries,
+            "线系列图",
+            vec![
+                (Role::X, "时间", "s", "共同 X；线系列图使用选列位置", numbers(6)),
+                (
+                    Role::Y,
+                    "处理 A",
+                    "mg/L",
+                    "Y 数据第一组",
+                    list(&[2., 4., 3., 6., 4., 5.]),
+                ),
+                (
+                    Role::Y,
+                    "处理 B",
+                    "mg/L",
+                    "Y 数据第二组",
+                    list(&[1., 2., 5., 3., 6., 2.]),
+                ),
+            ],
+        ),
+    ]
+}
+#[test]
+#[ignore = "维护者显式生成 B3 新示例"]
+fn update_b3_samples() {
+    for (name, p) in samples().into_iter().skip(26) {
         fs::write(directory().join(name), project_file::to_scv(&p).unwrap()).unwrap();
     }
 }

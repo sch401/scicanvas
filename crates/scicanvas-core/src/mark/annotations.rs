@@ -68,10 +68,10 @@ pub(super) fn errors(ctx: &Context<'_, '_, '_, '_>, plots: &[PreparedPlot], item
 
 pub(super) fn labels(ctx: &Context<'_, '_, '_, '_>, plots: &[PreparedPlot], items: &mut Vec<crate::scene::Item>) {
     use crate::page::LabelSource;
-    for (series, style) in plots
+    for (series, style, data_offset) in plots
         .iter()
-        .map(|p| (&p.series, &p.style))
-        .filter(|(series, _)| !series.line_only)
+        .map(|p| (&p.series, &p.style, p.offset))
+        .filter(|(series, _, _)| !series.line_only)
     {
         let offset = ctx.offset(style);
         for (i, point) in series.points.iter().enumerate() {
@@ -83,13 +83,9 @@ pub(super) fn labels(ctx: &Context<'_, '_, '_, '_>, plots: &[PreparedPlot], item
             if !ctx.inside_x(ctx.px(x)) || !ctx.inside_y(ctx.py(y, style.y_axis)) {
                 continue;
             }
-            let value = if ctx.horizontal {
-                point[0]
-            } else if style.kind.is_stacked() {
-                point[1] - series.bases[i]
-            } else {
-                point[1]
-            };
+            let dimension = usize::from(!ctx.horizontal);
+            let value =
+                point[dimension] - data_offset[dimension] - if style.kind.is_stacked() { series.bases[i] } else { 0.0 };
             let value_text = format!(
                 "{}{}",
                 crate::fmt_num(value),
@@ -103,7 +99,7 @@ pub(super) fn labels(ctx: &Context<'_, '_, '_, '_>, plots: &[PreparedPlot], item
                 LabelSource::Value => value_text,
                 LabelSource::XY => format!(
                     "({}, {})",
-                    crate::fmt_num(if ctx.horizontal { point[1] } else { point[0] }),
+                    crate::fmt_num(point[usize::from(ctx.horizontal)] - data_offset[usize::from(ctx.horizontal)]),
                     value_text
                 ),
                 LabelSource::Row if ctx.layer.transform == crate::plotspec::Transform::Identity => {

@@ -11,6 +11,7 @@ pub(crate) mod band;
 pub(crate) mod bars;
 pub(crate) mod box_plot;
 pub(crate) mod path;
+mod row_lines;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub(crate) enum Kind {
@@ -81,6 +82,9 @@ impl Context<'_, '_, '_, '_> {
 
 pub(crate) fn draw(ctx: &Context<'_, '_, '_, '_>, plots: &[crate::page::PreparedPlot], items: &mut Vec<Item>) {
     let mut symbols = Vec::new();
+    if ctx.layer.plot_type == PlotType::LineSeries {
+        row_lines::draw(ctx, plots, items);
+    }
     for plot in plots {
         if box_plot::draw(ctx, plot, items) {
             continue;

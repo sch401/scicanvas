@@ -26,6 +26,7 @@ pub const PAGE_HINT_WEAK: Color32 = Color32::from_gray(140);
 struct Saved {
     view: View,
     key: [f64; 8],
+    offset: Option<scicanvas_core::page::CurveOffset>,
     spec: scicanvas_core::page::LayerSpec,
 }
 
@@ -561,6 +562,7 @@ fn update_saved_view(
                 saved[index] = Some(Saved {
                     view,
                     key: axis_key(layer),
+                    offset: layer.offset,
                     spec: layer.spec.clone(),
                 });
             }
@@ -593,7 +595,7 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize, ob
     for (state, layer) in saved.iter_mut().zip(g.page.layers()) {
         if state
             .as_ref()
-            .is_some_and(|s| s.key != axis_key(layer) || !s.spec.same_mapping(&layer.spec))
+            .is_some_and(|s| s.key != axis_key(layer) || s.offset != layer.offset || !s.spec.same_mapping(&layer.spec))
         {
             *state = None;
         }
@@ -1398,6 +1400,7 @@ mod tests {
         };
         let state = Saved {
             view,
+            offset: None,
             key: axis_key(layer),
             spec: layer.spec.clone(),
         };
