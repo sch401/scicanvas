@@ -18,6 +18,7 @@ impl SciApp {
         let project = &mut self.project;
 
         let mut open = true;
+        let mut function_edit = None;
         dialogs::window(ctx, &title)
             .id(egui::Id::new("scicanvas-props"))
             .open(&mut open)
@@ -70,6 +71,7 @@ impl SciApp {
                         reference_lines(ui, g, gid, history_group);
                     });
                 curve_style(ui, g, gid, props_layer, &cols, &options, history_group);
+                function_edit = function_properties(ui, g, history_group);
             });
         if self.project.graph(gid).unwrap() != &graph_before {
             ctx.request_repaint();
@@ -77,6 +79,9 @@ impl SciApp {
             self.edit_grouped("绘图属性", self.history_group, |project| {
                 *project.graph_mut(gid).unwrap() = after;
             });
+        }
+        if let Some(index) = function_edit {
+            self.edit_function_plot(gid, props_layer, index);
         }
         if props_layer != self.layer_index(gid) {
             self.select_layer(gid, props_layer);
@@ -384,7 +389,7 @@ fn data_source(
                     .on_hover_text(valid.as_ref().err().map_or(t.label(), String::as_str))
                     .clicked()
                 {
-                    g.spec = next;
+                    let _ = g.set_plot_type(t);
                 }
             }
         });
@@ -975,6 +980,7 @@ fn curve_style(
                         }
                     });
                 ui.data_mut(|d| d.insert_temp(pick_id, key.clone()));
+                source_rows(ui, g, &key, history_group);
                 let mut style = g.source_style(&key).cloned().unwrap_or_default();
                 let mapping = options.mapping_columns.get(&key.book).cloned().unwrap_or_default();
                 egui::Grid::new(("props-curve-grid", gid, props_layer))
@@ -1193,6 +1199,75 @@ fn mapped_column_combo(
         })
         .response;
     edit_group(&response, history_group);
+}
+
+fn source_rows(
+    ui: &mut egui::Ui,
+    g: &mut scicanvas_core::page::Layer,
+    key: &DataRef,
+    history_group: &mut Option<egui::Id>,
+) {
+    let draft = g.draft();
+    let raw = key.key(g.book_id);
+    let before = draft
+        .row_by_y
+        .get(&raw)
+        .copied()
+        .unwrap_or(if Some(key.book) == g.book_id { g.rows } else { None });
+    let mut all = before.is_none();
+    let (mut start, mut end) = before.map(|(a, b)| (a + 1, b + 1)).unwrap_or((1, 100));
+    ui.horizontal(|ui| {
+        ui.label("行范围");
+        ui.checkbox(&mut all, "全部");
+        ui.add_enabled_ui(!all, |ui| {
+            ui.label("从");
+            edit_group(
+                &ui.add(egui::DragValue::new(&mut start).range(1..=1_000_000_000)),
+                history_group,
+            );
+            ui.label("到");
+            edit_group(
+                &ui.add(egui::DragValue::new(&mut end).range(1..=1_000_000_000)),
+                history_group,
+            );
+        });
+    });
+    let after = if all { None } else { Some((start - 1, end - 1)) };
+    if before != after {
+        if let Err(error) = g.set_source_rows(key, after) {
+            ui.colored_label(ui.visuals().error_fg_color, error);
+        }
+    }
+}
+fn function_properties(
+    ui: &mut egui::Ui,
+    g: &mut scicanvas_core::page::Layer,
+    history_group: &mut Option<egui::Id>,
+) -> Option<usize> {
+    let mut edit = None;
+    let mut remove = None;
+    let width = g.line_width;
+    for (i, function) in g.functions.iter_mut().enumerate() {
+        ui.horizontal(|ui| {
+            ui.label(format!("y = {}", function.expr));
+            if ui.button(format!("编辑函数 {}", i + 1)).clicked() {
+                edit = Some(i);
+            }
+            let mut line_width = function.style.line_width.unwrap_or(width);
+            let response = ui.add(egui::DragValue::new(&mut line_width).range(0.1..=20.));
+            if response.changed() {
+                function.style.line_width = Some(line_width);
+            }
+            edit_group(&response, history_group);
+            if ui.button(format!("删除函数 {}", i + 1)).clicked() {
+                remove = Some(i);
+            }
+        });
+    }
+    if let Some(index) = remove {
+        g.functions.remove(index);
+    }
+    edit
 }
 
 #[cfg(test)]

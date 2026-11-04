@@ -715,7 +715,11 @@ fn prepare_layer_data(ctx: &LayerContext<'_, '_, '_>) -> LayerData {
     let horizontal = recipe.orientation == crate::coord::Orientation::Horizontal;
     let (x_col, mut plots) = match book {
         Some(b) => g.prepared_plots_in(b, others),
-        None => (None, Vec::new()),
+        None => {
+            let mut plots = Vec::new();
+            g.append_functions(&mut plots);
+            (None, plots)
+        }
     };
     // 统计图的横轴由 Y 样本生成，不使用 X 列的日期或类别格式。
     let x_col = x_col.filter(|_| {

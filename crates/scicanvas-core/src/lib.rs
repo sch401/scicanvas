@@ -14,6 +14,7 @@ pub mod fft;
 pub mod filter;
 pub mod format;
 pub mod formula;
+pub mod graph_theme;
 pub mod history;
 pub mod interpolate;
 pub mod linalg;

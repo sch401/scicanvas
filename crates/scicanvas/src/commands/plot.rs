@@ -253,6 +253,7 @@ pub(super) fn decorations(commands: &mut Vec<Command>) {
     scatter_variants(commands);
     offset_series(commands);
     radial_plots(commands);
+    graphics_tools(commands);
     commands.extend([
         c(
             "plot.spline",
@@ -676,4 +677,50 @@ fn radial_plots(commands: &mut Vec<Command>) {
         )
         .modifies(),
     );
+}
+
+fn graphics_tools(commands: &mut Vec<Command>) {
+    commands.extend([
+        c(
+            "plot.function",
+            "函数图…",
+            "line",
+            "",
+            "绘图",
+            "function expression 函数",
+            |_| Ok(()),
+            |a| a.open_function_plot(),
+        ),
+        c(
+            "graph.themes",
+            "图形主题与选项…",
+            "graph",
+            "",
+            "图形",
+            "theme Nature import export 新图使用主题",
+            |_| Ok(()),
+            |a| a.open_graph_themes(),
+        ),
+        c(
+            "graph.style.copy",
+            "复制格式",
+            "copy",
+            "Ctrl+Shift+C",
+            "图形",
+            "copy format style",
+            need_graph,
+            |a| a.copy_style(),
+        ),
+        c(
+            "graph.style.paste",
+            "粘贴格式",
+            "paste",
+            "Ctrl+Shift+V",
+            "图形",
+            "paste format style",
+            need_graph,
+            |a| a.paste_style(),
+        )
+        .modifies(),
+    ]);
 }

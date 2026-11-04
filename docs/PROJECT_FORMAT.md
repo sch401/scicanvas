@@ -1,5 +1,9 @@
 # 项目文件格式
 
+## v36 函数曲线和图形主题
+
+LayerSpec 新增 functions: [{ expr, points, style }]，缺省空且省略，不写成工作表 CurveMapping。采样点为运行时数据，默认 500，范围随图层或数据，非有限结果断线。Project 新增 graph_themes，缺省空且省略，只保存图形样式。新图默认主题保存在应用 Settings.default_graph_theme，格式剪贴板仅在内存。新文件 v36，读取 v0–v35，SCV 容器版本保持 1。
+
 ## v35 多峰定义与分量输出
 
 FitMethod 新增 PeakSum { shape, count, baseline }，baseline 为 None/Constant/Linear。参数先按峰写入去掉 y0 的内置形状参数，再追加 y0/B。最多 10 峰，Voigt/PsdVoigt1 加线性基线最多 42 参数，普通模型仍为 12。NonlinearRecipe 新增 components 列键数组，缺省为空且省略，共用总曲线的重算和输出保护。删除一个分量会清除整组分量重算绑定以保留峰索引，剩余列为快照。新文件 v35，读取 v0–v34，SCV 容器版本保持 1。

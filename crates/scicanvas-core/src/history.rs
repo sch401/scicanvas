@@ -199,6 +199,8 @@ fn estimated_bytes(p: &Project) -> usize {
             .iter()
             .map(|f| f.name.capacity() + f.items.capacity() * size_of::<u64>())
             .sum::<usize>();
+    bytes += p.graph_themes.capacity() * size_of::<crate::graph_theme::GraphTheme>()
+        + p.graph_themes.iter().map(|t| t.name.capacity()).sum::<usize>();
     bytes += p.fit_functions.capacity() * size_of::<crate::nlfit::SavedFitFunction>()
         + p.fit_functions
             .iter()
@@ -395,6 +397,8 @@ mod tests {
                 .iter()
                 .map(|f| f.name.capacity() + f.items.capacity() * size_of::<u64>())
                 .sum::<usize>();
+        bytes += p.graph_themes.capacity() * size_of::<crate::graph_theme::GraphTheme>()
+            + p.graph_themes.iter().map(|t| t.name.capacity()).sum::<usize>();
         bytes += p.fit_functions.capacity() * size_of::<crate::nlfit::SavedFitFunction>()
             + p.fit_functions
                 .iter()
@@ -433,6 +437,20 @@ mod tests {
         for g in &p.graphs {
             bytes += g.name.capacity() + std::mem::size_of_val(g.page.layers());
             for layer in g.page.layers() {
+                bytes += layer.functions.capacity() * size_of::<crate::page::FunctionCurve>();
+                for function in &layer.functions {
+                    bytes += function.expr.capacity() + function.style.legend_label.capacity();
+                    for column in [
+                        &function.style.color_column,
+                        &function.style.size_column,
+                        &function.style.symbol_column,
+                    ]
+                    .into_iter()
+                    .flatten()
+                    {
+                        bytes += column.capacity();
+                    }
+                }
                 bytes += layer.spec.plots.capacity() * size_of::<crate::page::plots::Plot>();
                 for plot in &layer.spec.plots {
                     bytes += plot.source.col.capacity();
@@ -460,10 +478,16 @@ mod tests {
         let mut p = Project::sample();
         p.books.reserve(3);
         p.graphs.reserve(2);
+        let mut theme = crate::graph_theme::GraphTheme::nature();
+        theme.name = reserved("Science", 512);
+        p.graph_themes.push(theme);
         let layer = p.graphs[0].first_layer_mut();
         if unbound {
             layer.book_id = None;
         }
+        let mut function = crate::page::FunctionCurve::new(reserved("sin(x)", 4096));
+        function.style.legend_label = reserved("function", 128);
+        layer.functions.push(function);
         layer.edit_draft(|draft| {
             draft.y_keys.push(reserved("中文列@2", 96));
             draft.line_only.push(reserved("派生线@2", 128));

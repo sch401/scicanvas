@@ -196,6 +196,8 @@ impl SciApp {
             dialogs::Action::OpenCustomNlFit => self.open_custom_nlfit_dialog(),
             dialogs::Action::GlobalFit(edit) => self.run_global_fit(*edit),
             dialogs::Action::PeakFit(request) => self.run_peak_fit(*request),
+            dialogs::Action::FunctionPlot(edit) => self.run_function_plot(*edit),
+            dialogs::Action::GraphTheme(action) => self.apply_graph_theme_action(action),
             dialogs::Action::CustomFitLibrary(action) => return self.apply_custom_fit_library_action(*action),
             dialogs::Action::CustomNlFit {
                 name,

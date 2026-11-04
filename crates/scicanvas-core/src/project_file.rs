@@ -269,6 +269,7 @@ fn project_value(project: &Project) -> Result<Value, String> {
 }
 
 fn validate(project: &Project) -> Result<(), String> {
+    project.validate_graph_themes()?;
     if project.version > CURRENT_VERSION {
         return Err("项目来自更新的文件格式，请更新 SciCanvas 后保存".into());
     }
@@ -978,6 +979,7 @@ pub mod session {
         pub recent: Vec<std::path::PathBuf>,
         pub last_dir: Option<std::path::PathBuf>,
         pub theme: String,
+        pub default_graph_theme: Option<crate::graph_theme::GraphTheme>,
     }
     impl Settings {
         pub fn remember(&mut self, path: &Path) {
@@ -1173,6 +1175,9 @@ pub mod session {
     }
     impl Settings {
         pub fn normalize(&mut self) {
+            if self.default_graph_theme.as_ref().is_some_and(|t| t.validate().is_err()) {
+                self.default_graph_theme = None;
+            }
             let mut recent: Vec<std::path::PathBuf> = Vec::new();
             for path in std::mem::take(&mut self.recent) {
                 let path = normalize_path(&path);

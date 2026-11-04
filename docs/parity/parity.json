@@ -1523,11 +1523,31 @@
   "feature": "函数绘图（y = f(x)）",
   "ref": "Plotting Mathematical Functions",
   "pri": "P1",
-  "status": "未开始",
-  "how": "复用公式解析器",
-  "verify": "与解析值比较",
+  "status": "已实现待验收",
+  "how": "独立 FunctionCurve 无工作表映射或隐藏数据表；标量表达式仅变量 x，默认 500 点；自动数据 X 范围或手动范围、对数几何取样，非有限值断线。函数窗口可新建、附加、编辑表达式，属性可调整线宽及删除。",
+  "verify": "核心函数、范围和主题幂等/保存回归；NumPy 三表达式参考；真实函数窗口、格式目标映射和新图主题撤销重做。",
   "id": "F085",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "manual",
+   "reference"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/graphics_tools.rs::b5_function_numpy_samples_poles_save_and_range_changes",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::b5_style_paste_preserves_target_mapping_and_theme_defaults_are_undoable"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/plotting.md#F085",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   },
+   "reference": [
+    "crates/scicanvas-core/tests/reference/function_plots.json"
+   ]
+  }
  },
  {
   "module": "绘图基础",
@@ -1619,22 +1639,54 @@
   "feature": "格式复制粘贴",
   "ref": "Copying and Pasting Formats",
   "pri": "P1",
-  "status": "未开始",
-  "how": "",
-  "verify": "手动操作",
+  "status": "已实现待验收",
+  "how": "图层/曲线右键复制粘贴格式，Ctrl+Shift+C/V；剪贴板不持久化，清除源图例文字及映射列，粘贴保留目标图例与映射；一次历史。",
+  "verify": "核心函数、范围和主题幂等/保存回归；NumPy 三表达式参考；真实函数窗口、格式目标映射和新图主题撤销重做。",
   "id": "F090",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/graphics_tools.rs::b5_curve_style_clip_excludes_source_labels_and_mappings",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::b5_style_paste_preserves_target_mapping_and_theme_defaults_are_undoable"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/plotting.md#F090",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "绘图基础",
   "feature": "主题（图形样式主题）",
   "ref": "Graph Formats and Themes",
   "pri": "P1",
-  "status": "未开始",
-  "how": "已有 Nature 默认配色与版式；图形主题的保存、切换和应用入口待做，默认样式单独计入现有绘图能力",
-  "verify": "目视检查",
+  "status": "已实现待验收",
+  "how": "只捕获/应用现有样式，不改数据映射、坐标范围和标题。项目自定义主题、不可删除的默认 Nature、.sctheme 导入导出，设置分组含新图默认主题偏好；单次历史。",
+  "verify": "核心函数、范围和主题幂等/保存回归；NumPy 三表达式参考；真实函数窗口、格式目标映射和新图主题撤销重做。",
   "id": "F091",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/graphics_tools.rs::b5_themes_are_style_only_idempotent_and_roundtrip",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::b5_style_paste_preserves_target_mapping_and_theme_defaults_are_undoable"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/plotting.md#F091",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "绘图基础",
@@ -2090,11 +2142,27 @@
   "feature": "显示范围（只画部分行）",
   "ref": "Editing the Plots Display Range",
   "pri": "P1",
-  "status": "部分实现",
-  "how": "从工作表选区创建并保存部分行绘图已实现；图形中的独立行范围编辑入口待做",
-  "verify": "PlotSpec.rows 截取/保存回归已通过；补齐独立编辑入口后验收",
+  "status": "已实现待验收",
+  "how": "曲线属性按 1 起始行号设置全部或从/到，拒绝反向范围，复用 CurveMapping.rows 和连续历史。",
+  "verify": "核心函数、范围和主题幂等/保存回归；NumPy 三表达式参考；真实函数窗口、格式目标映射和新图主题撤销重做。",
   "id": "F114",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/graphics_tools.rs::b5_row_range_atomicity_and_raw_data",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::b5_style_paste_preserves_target_mapping_and_theme_defaults_are_undoable"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/plotting.md#F114",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "绘图基础",
