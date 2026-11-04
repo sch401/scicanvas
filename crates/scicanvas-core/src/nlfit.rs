@@ -389,9 +389,12 @@ fn rss(model: &FitFunction, xs: &[f64], ys: &[f64], w: &[f64], p: &[f64]) -> f64
     }
 }
 
+/// 有效点的 X、Y 和每点 √wᵢ，三个数组等长。
+type WeightedPoints = (Vec<f64>, Vec<f64>, Vec<f64>);
+
 /// 取 X、Y（加权时还有 σ）都有效的点并按 X 排序，返回 X、Y 和每点 √wᵢ = 1/σᵢ（不加权时为 1）。
 /// σ 为缺失值（NaN）的点跳过；0、负数或无穷大的 σ 报错。
-fn weighted_points(xs: &[f64], ys: &[f64], sigma: Option<&[f64]>) -> Result<(Vec<f64>, Vec<f64>, Vec<f64>), String> {
+fn weighted_points(xs: &[f64], ys: &[f64], sigma: Option<&[f64]>) -> Result<WeightedPoints, String> {
     if sigma.is_some_and(|s| s.len() != xs.len() || s.len() != ys.len()) {
         return Err("Y 误差的个数与数据点个数不一致".into());
     }
@@ -2545,7 +2548,7 @@ mod tests {
         .unwrap();
         let model = FitFunction::Custom(function);
         let ys: Vec<_> = xs.iter().map(|&x| model.eval(x, &p)).collect();
-        let session = FitSession::new(model, &xs, &ys, Some(&p), &[], &[]).unwrap();
+        let session = FitSession::new(model, &xs, &ys, None, Some(&p), &[], &[]).unwrap();
         let derivatives = jacobian(&session.model, &xs, &p, &session.free);
         let refined = session.refinement_jacobian(&p);
         for (i, &x) in xs.iter().enumerate() {
@@ -2650,6 +2653,7 @@ mod tests {
             function,
             &[0.0, 1.0, 2.0, 3.0],
             &[2.0, 4.0, 6.0, 8.0],
+            None,
             Some(&[1.0, 0.1]),
             &[],
             &constraints,
@@ -2785,6 +2789,7 @@ mod tests {
             FitFunction::Builtin(Model::Rational12),
             &xs,
             &ys,
+            None,
             Some(&[1., 1., 0., 0.]),
             &[],
             &[],
