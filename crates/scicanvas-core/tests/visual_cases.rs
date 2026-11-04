@@ -33,6 +33,11 @@ fn case(name: &str, kind: PlotType) -> (String, Project, Graph) {
             .unwrap()
             .columns
             .push(column("C", Role::Y, &["1", "-2", "4", "2", "-3"]));
+    } else if kind == PlotType::Box {
+        p.book_mut(1)
+            .unwrap()
+            .columns
+            .push(column("C", Role::Y, &["1", "2", "3", "4", "40"]));
     }
     if matches!(kind, PlotType::Spline | PlotType::SplineSymbol) || name == "bspline-bezier" {
         p.book_mut(1).unwrap().columns[1].data = ["-2", "3", "1", "5", "-1"].map(str::to_owned).to_vec().into();

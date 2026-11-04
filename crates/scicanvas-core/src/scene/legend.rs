@@ -142,7 +142,7 @@ fn fill_or_line_sample(plot: &crate::page::PreparedPlot, area_opacity: f32, x: f
     let varying = mapped
         .first()
         .is_some_and(|first| mapped.iter().any(|value| value != first));
-    if style.kind.is_bar() || style.kind == PlotType::Area {
+    if style.kind.is_bar() || matches!(style.kind, PlotType::Area | PlotType::Box) {
         if varying {
             let count = mapped.len().min(3);
             return (0..count)

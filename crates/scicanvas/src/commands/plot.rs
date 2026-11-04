@@ -307,6 +307,17 @@ pub(super) fn decorations(commands: &mut Vec<Command>) {
         )
         .modifies(),
         c(
+            "plot.box",
+            "箱线图",
+            "bar",
+            "",
+            "绘图",
+            "box plot whisker quartile 箱线图 四分位数 离群点",
+            need_data,
+            |a| a.plot(PlotType::Box),
+        )
+        .modifies(),
+        c(
             "graph.labels",
             "数据标签",
             "props",

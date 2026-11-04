@@ -136,6 +136,19 @@ pub(crate) fn qq_reference(s: &Series) -> Option<Vec<[f64; 2]>> {
     Some(vec![[first, fit.eval(first)], [last, fit.eval(last)]])
 }
 
+/// 各 Y 列占一个类别位置，统计量独立于 Series 的原始样本。
+pub(crate) fn boxes(plots: &mut [crate::page::PreparedPlot]) {
+    for (index, p) in plots.iter_mut().filter(|p| !p.series.line_only).enumerate() {
+        let values: Vec<_> = p.series.points.iter().map(|p| p[1]).collect();
+        p.box_stats = crate::stats::box_stats(&values);
+        for point in &mut p.series.points {
+            point[0] = index as f64 + 1.0;
+        }
+        p.series.errors.fill([None, None]);
+        p.series.point_styles.clear();
+    }
+}
+
 pub(crate) fn row_runs(s: &crate::Series) -> Vec<std::ops::Range<usize>> {
     let mut out = Vec::new();
     let mut start = 0;

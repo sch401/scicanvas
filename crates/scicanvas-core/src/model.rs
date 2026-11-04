@@ -3,7 +3,7 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-pub const PROJECT_VERSION: u32 = 26;
+pub const PROJECT_VERSION: u32 = 27;
 pub const GRAPH_TEMPLATE_VERSION: u32 = 1;
 
 /// 列的绘图角色，对应 Origin 里的 X / Y / 忽略。
@@ -490,10 +490,11 @@ pub enum PlotType {
     VerticalDrop,
     Histogram,
     QQ,
+    Box,
 }
 
 impl PlotType {
-    pub const ALL: [PlotType; 16] = [
+    pub const ALL: [PlotType; 17] = [
         PlotType::Line,
         PlotType::Scatter,
         PlotType::LineSymbol,
@@ -510,6 +511,7 @@ impl PlotType {
         PlotType::VerticalDrop,
         PlotType::Histogram,
         PlotType::QQ,
+        PlotType::Box,
     ];
 
     pub fn label(self) -> &'static str {
@@ -530,6 +532,7 @@ impl PlotType {
             PlotType::VerticalDrop => "垂线图",
             PlotType::Histogram => "直方图",
             PlotType::QQ => "Q-Q 图",
+            PlotType::Box => "箱线图",
         }
     }
 
@@ -815,6 +818,9 @@ impl Project {
         let id = self.alloc_id();
         let mut graph = Graph::new(id, self.unique_name("Graph"));
         graph.first_layer_mut().spec = spec.into();
+        if graph.first_layer().plot_type == PlotType::Box {
+            graph.first_layer_mut().legend = false;
+        }
         self.graphs.push(graph);
         self.move_project_item(id, parent)?;
         Ok(id)

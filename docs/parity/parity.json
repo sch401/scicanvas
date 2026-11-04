@@ -5661,11 +5661,41 @@
   "feature": "箱线图",
   "ref": "Box Chart Graph",
   "pri": "P1",
-  "status": "未开始",
-  "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 Origin 同数据出图目视比较",
+  "status": "已实现待验收",
+  "how": "绘图 → 箱线图：每个 Y 列一个箱子，按列顺序排列，横轴标签为列名，不需要 X 列。剔除非有限值，四分位数用线性插值，须线按 1.5 IQR，与 matplotlib boxplot_stats 默认口径一致。半透明箱体显示中位数，离群点单独画符号，空心菱形表示均值。箱宽为类别间距的 0.6，图例默认关闭并可手动打开。提供命令、图库、列标题菜单、三组处理示例和项目保存（v27）",
+  "verify": "matplotlib 3.11.2 boxplot_stats 的正常、缺失、常数、单点、空样本、离群点和插值须线边界按 1e-12 对照；类别标签、轴范围、箱宽、空心均值、X 独立性、误差清除、图例和 v27 保存/v26 读取；matplotlib 箱体、线段与符号位置对照，命令撤销与示例回归；Windows 人工验收待做",
   "id": "F341",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "visual",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/reference_scipy.rs::box_statistics_match_matplotlib_boxplot_stats",
+    "crates/scicanvas-core/tests/box_plot.rs::boxes_use_column_names_on_a_category_axis_and_hide_the_legend_by_default",
+    "crates/scicanvas-core/tests/box_plot.rs::boxes_ignore_x_mean_transforms_curve_types_and_measurement_errors",
+    "crates/scicanvas-core/tests/box_plot.rs::boxes_draw_full_width_bodies_outliers_and_hollow_means",
+    "crates/scicanvas-core/tests/box_plot.rs::empty_constant_and_single_value_boxes_render_without_panicking",
+    "crates/scicanvas-core/tests/box_plot.rs::boxes_roundtrip_in_v27_and_read_v26_projects",
+    "crates/scicanvas/src/app/tests/history.rs::commands_restore_columns_graphs_fits_and_sorting",
+    "crates/scicanvas/src/app/tests/graph.rs::embedded_plot_examples_preserve_current_project_and_undo_as_one_step"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/box.json"
+   ],
+   "visual": [
+    "docs/parity/visual/box/README.md"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/plotting.md#F341",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "图类型 · 统计图",
