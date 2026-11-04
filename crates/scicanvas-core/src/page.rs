@@ -668,6 +668,8 @@ impl Layer {
         recipe.orientation.apply(&mut series);
         if self.plot_type == crate::PlotType::Histogram {
             crate::stat::histogram(&mut series);
+        } else if self.plot_type == crate::PlotType::QQ {
+            crate::stat::qq(&mut series);
         }
         crate::stat::prepare(self, &mut series);
         // 样式：默认按图层递增，再用逐曲线设置覆盖（图型、颜色、符号、线宽、符号大小、右侧 Y 轴）
@@ -699,9 +701,11 @@ impl Layer {
                         crate::coord::YAxis::Left
                     };
                     if !series.line_only {
-                        // 直方图按整层分箱，不接受逐曲线图型。
+                        // 统计图按整层处理，不接受逐曲线图型。
                         if let Some(kind) = c.kind.filter(|_| {
-                            !self.plot_type.is_stacked() && !horizontal && self.plot_type != crate::PlotType::Histogram
+                            !self.plot_type.is_stacked()
+                                && !horizontal
+                                && !matches!(self.plot_type, crate::PlotType::Histogram | crate::PlotType::QQ)
                         }) {
                             style.kind = kind;
                         }
@@ -728,6 +732,9 @@ impl Layer {
             })
             .collect();
         for p in &mut prepared {
+            if self.plot_type == crate::PlotType::QQ {
+                p.paths = crate::stat::qq_reference(&p.series).into_iter().collect();
+            }
             if let Some(label) = p.plot.style.as_ref().map(|s| &s.legend_label).filter(|s| !s.is_empty()) {
                 p.series.name = label.clone();
             }
@@ -873,6 +880,9 @@ impl Layer {
     pub fn x_axis_title_in<'a>(&self, book: Option<&'a Book>, others: crate::plotspec::BookLookup<'a, '_>) -> String {
         if !self.x_title.trim().is_empty() {
             return self.x_title.clone();
+        }
+        if self.plot_type == crate::PlotType::QQ {
+            return "理论分位数".into();
         }
         if matches!(
             self.plot_type,

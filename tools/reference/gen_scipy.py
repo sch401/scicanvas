@@ -610,10 +610,25 @@ def formula_cases():
     write("formulas",cases)
 
 
+def qq_cases():
+    cases = []
+    for name, values in [
+        ("normal", 3.0 + 0.7 * stats.norm.ppf(np.linspace(.02, .98, 40))),
+        ("missing", [3., np.nan, 1., 8., np.inf, 4., -np.inf, 2.]),
+        ("n3", [1., 4., 2.]),
+        ("ties", [2., 2., 3., 3., 3., 7.]),
+        ("constant", [5., 5., 5., 5.]),
+    ]:
+        raw = np.asarray(values, dtype=float)
+        (osm, osr), (slope, intercept, _) = stats.probplot(raw[np.isfinite(raw)], dist="norm")
+        cases.append(dict(name=name, input=raw, osm=osm, osr=osr, slope=slope, intercept=intercept))
+    write("qq", cases)
+
+
 GENERATORS = [
     integrals, normalization, descriptive, column_math, polynomial, statistical_tests, signal_tests,
     interpolation_cases, derivative_cases, peak_cases, constrained_fit_cases, builtin_fit_cases,
-    smoothing_cases, percent_bar_cases, fit_report_cases, formula_cases, weighted_fit_cases,
+    smoothing_cases, percent_bar_cases, fit_report_cases, formula_cases, weighted_fit_cases, qq_cases,
 ]
 
 

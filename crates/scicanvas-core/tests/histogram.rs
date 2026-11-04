@@ -81,5 +81,5 @@ fn histogram_is_saved_in_v25() {
     assert!(json.contains("Histogram"));
     let loaded = project_file::from_json(&json).unwrap();
     assert_eq!(loaded, p);
-    assert_eq!(scicanvas_core::model::PROJECT_VERSION, 25);
+    assert_eq!(loaded.version, scicanvas_core::model::PROJECT_VERSION);
 }

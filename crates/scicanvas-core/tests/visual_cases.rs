@@ -28,7 +28,7 @@ fn case(name: &str, kind: PlotType) -> (String, Project, Graph) {
         column("A", Role::X, &["0", "1", "2", "3", "4"]),
         column("B", Role::Y, &["-2", "3", "", "5", "-1"]),
     ];
-    if kind.is_bar() {
+    if kind.is_bar() || kind == PlotType::QQ {
         p.book_mut(1)
             .unwrap()
             .columns

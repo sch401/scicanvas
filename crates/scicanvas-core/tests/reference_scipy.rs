@@ -19,6 +19,39 @@ fn cases(name: &str) -> Vec<Value> {
     data["cases"].as_array().unwrap().clone()
 }
 
+#[test]
+fn qq_points_and_reference_lines_match_scipy_probplot() {
+    use scicanvas_core::{Book, PlotType};
+    for case in cases("qq") {
+        let name = case["name"].as_str().unwrap();
+        let mut p = Project::default();
+        let id = p.alloc_id();
+        let mut book = Book::new(id, name);
+        book.columns.push(column("A", Role::Y, &case["input"]));
+        p.books.push(book);
+        p.plot_from_selection(id, &[], PlotType::QQ).unwrap();
+        let (_, plots) = p.graphs[0].first_layer().prepared_plots_in(&p.books[0], &|_| None);
+        let plot = &plots[0];
+        array(
+            &plot.series.points.iter().map(|p| p[0]).collect::<Vec<_>>(),
+            &case["osm"],
+            1e-12,
+            name,
+        );
+        array(
+            &plot.series.points.iter().map(|p| p[1]).collect::<Vec<_>>(),
+            &case["osr"],
+            1e-12,
+            name,
+        );
+        let line = &plot.paths[0];
+        let slope = (line[1][1] - line[0][1]) / (line[1][0] - line[0][0]);
+        let intercept = line[0][1] - slope * line[0][0];
+        near(slope, &case["slope"], 1e-12, name);
+        near(intercept, &case["intercept"], 1e-12, name);
+    }
+}
+
 fn numbers(value: &Value) -> Vec<f64> {
     value
         .as_array()

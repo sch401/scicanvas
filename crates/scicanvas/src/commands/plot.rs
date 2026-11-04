@@ -296,6 +296,17 @@ pub(super) fn decorations(commands: &mut Vec<Command>) {
         )
         .modifies(),
         c(
+            "plot.qq",
+            "Q-Q 图",
+            "scatter",
+            "",
+            "绘图",
+            "qq normal probability 正态 分位数 Q-Q 图",
+            need_data,
+            |a| a.plot(PlotType::QQ),
+        )
+        .modifies(),
+        c(
             "graph.labels",
             "数据标签",
             "props",

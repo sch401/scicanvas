@@ -16,6 +16,7 @@ from matplotlib import dates, colors
 import numpy as np
 import scipy
 from scipy.interpolate import BSpline, BPoly, CubicSpline
+from scipy import stats
 
 matplotlib.rcParams.update({"font.family": ["Arial", "Microsoft YaHei"], "font.size": 7,
                            "axes.linewidth": .6, "lines.linewidth": 1, "savefig.dpi": 300,
@@ -110,10 +111,22 @@ def generate(source):
             totals[1] += np.where(np.isfinite(y) & (y < 0), -y, 0)
         for si, (key, y) in enumerate(zip(keys, arrays)):
             target = right if key in layer["right_keys"] else ax
-            valid = np.isfinite(x) & np.isfinite(y)
+            valid = np.isfinite(y)
+            if kind != "QQ":
+                valid &= np.isfinite(x)
             if layer["rows"] is not None:
                 lo, hi = layer["rows"]
                 valid &= (np.arange(len(x)) >= lo) & (np.arange(len(x)) <= hi)
+            if kind == "QQ":
+                if np.count_nonzero(valid) < 3:
+                    continue
+                (osm, osr), (slope, intercept, _) = stats.probplot(y[valid], dist="norm")
+                dots, = target.plot(osm, osr, linestyle="none", marker="o")
+                marks["symbols"].extend(artist_points(dots, target).tolist())
+                ends = np.array([osm[0], osm[-1]])
+                line, = target.plot(ends, intercept + slope * ends, color=dots.get_color())
+                marks["polylines"].append(artist_points(line, target).tolist())
+                continue
             if kind == "Histogram":
                 # 与 SciCanvas 相同：各列共用区间，范围取全部有效值的最小、最大值，区间数按最长一列用 Sturges 规则。
                 pools = [yy[np.isfinite(x) & np.isfinite(yy)] for yy in arrays]

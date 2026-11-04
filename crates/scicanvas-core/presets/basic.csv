@@ -14,3 +14,4 @@ vertical-drop,垂线图,VerticalDrop,Drop+Symbol,Identity,Vertical,Straight
 step-horizontal,水平阶梯图,StepHorizontal,Line,Identity,Vertical,StepHorizontal
 step-vertical,垂直阶梯图,StepVertical,Line,Identity,Vertical,StepVertical
 histogram,直方图,Histogram,Bar,Bin,Vertical,Straight
+qq,Q-Q 图,QQ,Symbol,Identity,Vertical,Straight
