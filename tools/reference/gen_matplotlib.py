@@ -104,6 +104,8 @@ def generate(source):
         horizontal = kind == "HorizontalBar"
         keys = layer["y_keys"]
         arrays = [raw(k) for k in keys]
+        if kind == "Box":
+            ax.set_xticks(np.arange(1, len(keys) + 1), keys)
         sums = np.zeros((2, len(x)))
         totals = np.zeros((2, len(x)))
         for y in arrays:
@@ -112,11 +114,30 @@ def generate(source):
         for si, (key, y) in enumerate(zip(keys, arrays)):
             target = right if key in layer["right_keys"] else ax
             valid = np.isfinite(y)
-            if kind != "QQ":
+            if kind not in ("QQ", "Box"):
                 valid &= np.isfinite(x)
             if layer["rows"] is not None:
                 lo, hi = layer["rows"]
                 valid &= (np.arange(len(x)) >= lo) & (np.arange(len(x)) <= hi)
+            if kind == "Box":
+                if not np.any(valid):
+                    continue
+                artists = target.boxplot(y[valid], positions=[si + 1], widths=.6, whis=1.5,
+                    patch_artist=True, showmeans=True, manage_ticks=False,
+                    meanprops=dict(marker="D", markerfacecolor="none"))
+                box = artist_points(artists["boxes"][0], target)
+                marks["bars"].append([(box[:,0].min()+box[:,0].max())/2, box[:,1].min(), box[:,1].max()])
+                for artist in artists["medians"] + artists["whiskers"] + artists["caps"]:
+                    ends = artist_points(artist, target).tolist()
+                    if ends[0] != ends[1]:
+                        marks["segments"].append(sorted(ends))
+                for artist in artists["fliers"]:
+                    marks["symbols"].extend(artist_points(artist, target).tolist())
+                for artist in artists["means"]:
+                    points = artist_points(artist, target).tolist()
+                    marks["symbols"].extend(points)
+                    marks["colors"].extend([None] * len(points))
+                continue
             if kind == "QQ":
                 if np.count_nonzero(valid) < 3:
                     continue

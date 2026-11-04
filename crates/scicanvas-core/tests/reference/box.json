@@ -1,0 +1,138 @@
+{
+  "generator": "tools/reference/gen_scipy.py",
+  "versions": {
+    "Python": "3.14.3",
+    "NumPy": "2.4.4",
+    "SciPy": "1.17.1",
+    "matplotlib": "3.11.2"
+  },
+  "cases": [
+    {
+      "name": "normal",
+      "input": [
+        2.0,
+        5.0,
+        1.0,
+        4.0,
+        3.0,
+        6.0,
+        7.0
+      ],
+      "q1": 2.5,
+      "med": 4.0,
+      "q3": 5.5,
+      "whislo": 1.0,
+      "whishi": 7.0,
+      "mean": 4.0,
+      "fliers": []
+    },
+    {
+      "name": "missing",
+      "input": [
+        2.0,
+        null,
+        5.0,
+        1.0,
+        null,
+        4.0,
+        3.0
+      ],
+      "q1": 2.0,
+      "med": 3.0,
+      "q3": 4.0,
+      "whislo": 1.0,
+      "whishi": 5.0,
+      "mean": 3.0,
+      "fliers": []
+    },
+    {
+      "name": "constant",
+      "input": [
+        5.0,
+        5.0,
+        5.0,
+        5.0
+      ],
+      "q1": 5.0,
+      "med": 5.0,
+      "q3": 5.0,
+      "whislo": 5.0,
+      "whishi": 5.0,
+      "mean": 5.0,
+      "fliers": []
+    },
+    {
+      "name": "single",
+      "input": [
+        3.0
+      ],
+      "q1": 3.0,
+      "med": 3.0,
+      "q3": 3.0,
+      "whislo": 3.0,
+      "whishi": 3.0,
+      "mean": 3.0,
+      "fliers": []
+    },
+    {
+      "name": "outliers",
+      "input": [
+        100.0,
+        -10.0,
+        2.0,
+        3.0,
+        4.0,
+        3.0,
+        2.0,
+        4.0,
+        3.0,
+        101.0,
+        -20.0
+      ],
+      "q1": 2.0,
+      "med": 3.0,
+      "q3": 4.0,
+      "whislo": 2.0,
+      "whishi": 4.0,
+      "mean": 17.454545454545453,
+      "fliers": [
+        -10.0,
+        -20.0,
+        100.0,
+        101.0
+      ]
+    },
+    {
+      "name": "interpolated-whisker",
+      "input": [
+        0.0,
+        1.0,
+        1.0,
+        1.0
+      ],
+      "q1": 0.75,
+      "med": 1.0,
+      "q3": 1.0,
+      "whislo": 0.75,
+      "whishi": 1.0,
+      "mean": 0.75,
+      "fliers": [
+        0.0
+      ]
+    },
+    {
+      "name": "empty",
+      "input": [
+        null,
+        null
+      ],
+      "q1": null,
+      "med": null,
+      "q3": null,
+      "whislo": null,
+      "whishi": null,
+      "mean": null,
+      "fliers": []
+    }
+  ]
+}

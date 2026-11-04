@@ -977,6 +977,7 @@ impl SciApp {
                 ColAction::Plot(PlotType::StepVertical) => "plot.step_vertical",
                 ColAction::Plot(PlotType::Histogram) => "plot.histogram",
                 ColAction::Plot(PlotType::QQ) => "plot.qq",
+                ColAction::Plot(PlotType::Box) => "plot.box",
                 ColAction::AddToGraph(_) => unreachable!(),
             };
             self.run_command(command);

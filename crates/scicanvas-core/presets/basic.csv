@@ -15,3 +15,4 @@ step-horizontal,水平阶梯图,StepHorizontal,Line,Identity,Vertical,StepHorizo
 step-vertical,垂直阶梯图,StepVertical,Line,Identity,Vertical,StepVertical
 histogram,直方图,Histogram,Bar,Bin,Vertical,Straight
 qq,Q-Q 图,QQ,Symbol,Identity,Vertical,Straight
+box,箱线图,Box,Box,Identity,Vertical,Straight

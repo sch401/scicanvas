@@ -711,10 +711,20 @@ fn prepare_layer_data(ctx: &LayerContext<'_, '_, '_>) -> LayerData {
         None => (None, Vec::new()),
     };
     // 统计图的横轴由 Y 样本生成，不使用 X 列的日期或类别格式。
-    let x_col = x_col.filter(|_| !matches!(g.plot_type, PlotType::Histogram | PlotType::QQ));
+    let x_col = x_col.filter(|_| !matches!(g.plot_type, PlotType::Histogram | PlotType::QQ | PlotType::Box));
     let x_date = !horizontal && !g.x_log && x_col.is_some_and(|c| c.data.kind() == crate::DataKind::DateTime);
     let date_offset = x_col.map_or(0.0, |c| f64::from(c.format.utc_offset) * 60_000.0);
-    let categories = x_col.and_then(|c| c.data.plot_category_levels());
+    let categories = if g.plot_type == PlotType::Box {
+        Some(
+            plots
+                .iter()
+                .filter(|p| !p.series.line_only)
+                .map(|p| p.series.name.clone())
+                .collect(),
+        )
+    } else {
+        x_col.and_then(|c| c.data.plot_category_levels())
+    };
     for plot in &mut plots {
         if plot.style.kind.is_spline() && !plot.series.line_only {
             plot.paths = crate::stat::spline_paths(&plot.series);
@@ -855,7 +865,11 @@ fn axis_ranges(ctx: &LayerContext<'_, '_, '_>, data: &LayerData) -> AxisRanges {
             let marks: Vec<[f64; 2]> = plots
                 .iter()
                 .map(|p| (&p.series, &p.style))
-                .filter(|(s, st)| !s.line_only && st.kind.has_symbol() && st.y_axis == crate::coord::YAxis::Left)
+                .filter(|(s, st)| {
+                    !s.line_only
+                        && (st.kind.has_symbol() || st.kind == PlotType::Box)
+                        && st.y_axis == crate::coord::YAxis::Left
+                })
                 .flat_map(|(s, _)| s.points.iter().copied())
                 .collect();
             if !marks.is_empty() {
@@ -925,7 +939,11 @@ fn axis_ranges(ctx: &LayerContext<'_, '_, '_>, data: &LayerData) -> AxisRanges {
             let marks: Vec<f64> = plots
                 .iter()
                 .map(|p| (&p.series, &p.style))
-                .filter(|(s, st)| !s.line_only && st.kind.has_symbol() && st.y_axis == crate::coord::YAxis::Right)
+                .filter(|(s, st)| {
+                    !s.line_only
+                        && (st.kind.has_symbol() || st.kind == PlotType::Box)
+                        && st.y_axis == crate::coord::YAxis::Right
+                })
                 .flat_map(|(s, _)| s.points.iter().map(|p| p[1]))
                 .collect();
             pad_ends(&mut a, marks.into_iter());

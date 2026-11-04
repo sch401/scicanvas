@@ -36,9 +36,9 @@ def clean(value):
     return value
 
 
-def write(name, cases):
+def write(name, cases, extra_versions=None):
     OUT.mkdir(parents=True, exist_ok=True)
-    data = dict(generator="tools/reference/gen_scipy.py", versions=VERSIONS, cases=cases)
+    data = dict(generator="tools/reference/gen_scipy.py", versions=VERSIONS | (extra_versions or {}), cases=cases)
     (OUT / f"{name}.json").write_text(json.dumps(clean(data), ensure_ascii=False, indent=2, allow_nan=False) + "\n", encoding="utf-8", newline="\n")
 
 
@@ -625,10 +625,29 @@ def qq_cases():
     write("qq", cases)
 
 
+def box_cases():
+    import matplotlib
+    from matplotlib.cbook import boxplot_stats
+    cases = []
+    for name, raw in [
+        ("normal", [2., 5., 1., 4., 3., 6., 7.]),
+        ("missing", [2., np.nan, 5., 1., np.inf, 4., 3.]),
+        ("constant", [5., 5., 5., 5.]),
+        ("single", [3.]),
+        ("outliers", [100., -10., 2., 3., 4., 3., 2., 4., 3., 101., -20.]),
+        ("interpolated-whisker", [0., 1., 1., 1.]),
+        ("empty", [np.nan, np.inf]),
+    ]:
+        values = np.asarray(raw, dtype=float)
+        result = boxplot_stats(values[np.isfinite(values)], whis=1.5)[0]
+        cases.append(dict(name=name, input=raw, **{key: result[key] for key in ["q1", "med", "q3", "whislo", "whishi", "mean", "fliers"]}))
+    write("box", cases, {"matplotlib": matplotlib.__version__})
+
+
 GENERATORS = [
     integrals, normalization, descriptive, column_math, polynomial, statistical_tests, signal_tests,
     interpolation_cases, derivative_cases, peak_cases, constrained_fit_cases, builtin_fit_cases,
-    smoothing_cases, percent_bar_cases, fit_report_cases, formula_cases, weighted_fit_cases, qq_cases,
+    smoothing_cases, percent_bar_cases, fit_report_cases, formula_cases, weighted_fit_cases, qq_cases, box_cases,
 ]
 
 

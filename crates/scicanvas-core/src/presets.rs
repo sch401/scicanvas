@@ -60,6 +60,7 @@ fn entries() -> &'static [(Preset, Recipe)] {
                     "StepVertical" => PlotType::StepVertical,
                     "Histogram" => PlotType::Histogram,
                     "QQ" => PlotType::QQ,
+                    "Box" => PlotType::Box,
                     _ => unreachable!("built-in preset type"),
                 };
                 let marks = columns
@@ -70,6 +71,7 @@ fn entries() -> &'static [(Preset, Recipe)] {
                         "Line" => Kind::Line,
                         "Symbol" => Kind::Symbol,
                         "Bar" => Kind::Bar,
+                        "Box" => Kind::Box,
                         "Area" => Kind::Area,
                         "Drop" => Kind::Drop,
                         _ => unreachable!("built-in mark"),

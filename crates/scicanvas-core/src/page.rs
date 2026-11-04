@@ -645,6 +645,7 @@ pub struct PreparedPlot {
     pub series: crate::Series,
     pub style: crate::SeriesStyle,
     pub paths: Vec<Vec<[f64; 2]>>,
+    pub box_stats: Option<crate::stats::BoxStats>,
 }
 
 impl Layer {
@@ -705,7 +706,10 @@ impl Layer {
                         if let Some(kind) = c.kind.filter(|_| {
                             !self.plot_type.is_stacked()
                                 && !horizontal
-                                && !matches!(self.plot_type, crate::PlotType::Histogram | crate::PlotType::QQ)
+                                && !matches!(
+                                    self.plot_type,
+                                    crate::PlotType::Histogram | crate::PlotType::QQ | crate::PlotType::Box
+                                )
                         }) {
                             style.kind = kind;
                         }
@@ -728,9 +732,13 @@ impl Layer {
                     series,
                     style,
                     paths: Vec::new(),
+                    box_stats: None,
                 }
             })
             .collect();
+        if self.plot_type == crate::PlotType::Box {
+            crate::stat::boxes(&mut prepared);
+        }
         for p in &mut prepared {
             if self.plot_type == crate::PlotType::QQ {
                 p.paths = crate::stat::qq_reference(&p.series).into_iter().collect();
@@ -880,6 +888,9 @@ impl Layer {
     pub fn x_axis_title_in<'a>(&self, book: Option<&'a Book>, others: crate::plotspec::BookLookup<'a, '_>) -> String {
         if !self.x_title.trim().is_empty() {
             return self.x_title.clone();
+        }
+        if self.plot_type == crate::PlotType::Box {
+            return String::new();
         }
         if self.plot_type == crate::PlotType::QQ {
             return "理论分位数".into();

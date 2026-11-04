@@ -8,6 +8,7 @@ use crate::ticks::Axis;
 
 pub(crate) mod annotations;
 pub(crate) mod bars;
+pub(crate) mod box_plot;
 pub(crate) mod path;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -15,6 +16,7 @@ pub(crate) enum Kind {
     Line,
     Symbol,
     Bar,
+    Box,
     Area,
     Drop,
 }
@@ -79,6 +81,9 @@ impl Context<'_, '_, '_, '_> {
 pub(crate) fn draw(ctx: &Context<'_, '_, '_, '_>, plots: &[crate::page::PreparedPlot], items: &mut Vec<Item>) {
     let mut symbols = Vec::new();
     for plot in plots {
+        if box_plot::draw(ctx, plot, items) {
+            continue;
+        }
         let (series, style, paths) = (&plot.series, &plot.style, &plot.paths);
         if bars::draw(ctx, series, style, items) {
             continue;

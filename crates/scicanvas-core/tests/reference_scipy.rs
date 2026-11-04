@@ -16,6 +16,9 @@ fn cases(name: &str) -> Vec<Value> {
     assert_eq!(data["generator"], "tools/reference/gen_scipy.py");
     assert_eq!(data["versions"]["NumPy"], "2.4.4");
     assert_eq!(data["versions"]["SciPy"], "1.17.1");
+    if name == "box" {
+        assert_eq!(data["versions"]["matplotlib"], "3.11.2");
+    }
     data["cases"].as_array().unwrap().clone()
 }
 
@@ -49,6 +52,28 @@ fn qq_points_and_reference_lines_match_scipy_probplot() {
         let intercept = line[0][1] - slope * line[0][0];
         near(slope, &case["slope"], 1e-12, name);
         near(intercept, &case["intercept"], 1e-12, name);
+    }
+}
+
+#[test]
+fn box_statistics_match_matplotlib_boxplot_stats() {
+    for case in cases("box") {
+        let name = case["name"].as_str().unwrap();
+        let Some(actual) = scicanvas_core::stats::box_stats(&numbers(&case["input"])) else {
+            assert!(case["q1"].is_null(), "{name}");
+            continue;
+        };
+        for (key, value) in [
+            ("q1", actual.q1),
+            ("med", actual.median),
+            ("q3", actual.q3),
+            ("whislo", actual.whisker_lo),
+            ("whishi", actual.whisker_hi),
+            ("mean", actual.mean),
+        ] {
+            near(value, &case[key], 1e-12, name);
+        }
+        array(&actual.outliers, &case["fliers"], 1e-12, name);
     }
 }
 

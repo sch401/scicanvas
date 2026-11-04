@@ -57,6 +57,7 @@ const PLOT_TYPES: &[&str] = &[
     "plot.step_vertical",
     "plot.histogram",
     "plot.qq",
+    "plot.box",
 ];
 
 pub static TABS: &[Tab] = &[

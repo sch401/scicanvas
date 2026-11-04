@@ -2,6 +2,57 @@
 //! t 分布用正则化不完全 Beta 函数计算，结果与 SciPy `ttest_1samp` / `ttest_ind` / `ttest_rel` 一致。
 //! 算法引用、数值对照与源码来源核对见 docs/COPYRIGHT_AUDIT.md；第三方声明保留在 THIRD_PARTY_NOTICES.md。
 
+/// 箱线图统计量，与 matplotlib boxplot_stats(whis=1.5) 一致。
+#[derive(Clone, Debug, PartialEq)]
+pub struct BoxStats {
+    pub q1: f64,
+    pub median: f64,
+    pub q3: f64,
+    pub whisker_lo: f64,
+    pub whisker_hi: f64,
+    pub mean: f64,
+    pub outliers: Vec<f64>,
+}
+
+/// 剔除非有限值，使用线性插值分位数和 1.5 IQR 须线；空样本返回 None。
+pub fn box_stats(values: &[f64]) -> Option<BoxStats> {
+    let values: Vec<_> = values.iter().copied().filter(|v| v.is_finite()).collect();
+    if values.is_empty() {
+        return None;
+    }
+    let mut sorted = values.clone();
+    sorted.sort_by(f64::total_cmp);
+    let q1 = crate::analysis::quantile(&sorted, 0.25);
+    let median = crate::analysis::quantile(&sorted, 0.5);
+    let q3 = crate::analysis::quantile(&sorted, 0.75);
+    let iqr = q3 - q1;
+    let whisker_lo = values
+        .iter()
+        .copied()
+        .filter(|v| *v >= q1 - 1.5 * iqr)
+        .fold(q1, f64::min);
+    let whisker_hi = values
+        .iter()
+        .copied()
+        .filter(|v| *v <= q3 + 1.5 * iqr)
+        .fold(q3, f64::max);
+    let outliers = values
+        .iter()
+        .filter(|v| **v < whisker_lo)
+        .chain(values.iter().filter(|v| **v > whisker_hi))
+        .copied()
+        .collect();
+    Some(BoxStats {
+        q1,
+        median,
+        q3,
+        whisker_lo,
+        whisker_hi,
+        mean: values.iter().sum::<f64>() / values.len() as f64,
+        outliers,
+    })
+}
+
 /// ln Γ(x)，Lanczos 近似（g = 7，9 项），x > 0。
 pub fn ln_gamma(x: f64) -> f64 {
     const G: [f64; 9] = [

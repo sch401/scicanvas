@@ -113,10 +113,10 @@ fn insertion_fit_deletion_and_key_reuse_preserve_ownership() {
 #[test]
 fn autoscale_svg_and_all_basic_chart_types_share_error_segments() {
     let (mut p, gid) = project();
-    // Q-Q 图的横轴是理论分位数，测量误差由 tests/qq.rs 单独核对清除。
+    // 统计图不保留原始测量误差，由对应图型的测试单独核对清除。
     for kind in PlotType::ALL
         .into_iter()
-        .filter(|k| *k != PlotType::QQ && (!k.is_bar() || *k == PlotType::Bar))
+        .filter(|k| !matches!(k, PlotType::QQ | PlotType::Box) && (!k.is_bar() || *k == PlotType::Bar))
     {
         p.graph_mut(gid).unwrap().first_layer_mut().plot_type = kind;
         let g = p.graph(gid).unwrap();

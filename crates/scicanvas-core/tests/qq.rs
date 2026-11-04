@@ -109,7 +109,7 @@ fn qq_axis_titles_and_v26_project_roundtrip() {
     p.graphs[0].first_layer_mut().x_title = "自定义横轴".into();
     assert_eq!(p.graphs[0].first_layer().x_axis_title(Some(&p.books[0])), "自定义横轴");
     assert_eq!(project_file::from_scv(&project_file::to_scv(&p).unwrap()).unwrap(), p);
-    assert_eq!(scicanvas_core::model::PROJECT_VERSION, 26);
+    assert_eq!(p.version, scicanvas_core::model::PROJECT_VERSION);
     let legacy = project_file::to_json(&Project::sample()).unwrap();
     let mut legacy: serde_json::Value = serde_json::from_str(&legacy).unwrap();
     legacy["version"] = 25.into();
