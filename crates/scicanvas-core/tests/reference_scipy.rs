@@ -425,6 +425,38 @@ fn builtin_models_match_generated_scipy_reference() {
 }
 
 #[test]
+fn weighted_fits_match_generated_scipy_reference() {
+    use scicanvas_core::nlfit::{self, FitFunction, Model};
+    for case in cases("weighted_fits") {
+        let name = case["name"].as_str().unwrap();
+        let model_name = case["model"].as_str().unwrap();
+        let model = Model::ALL
+            .iter()
+            .copied()
+            .find(|model| model.name() == model_name)
+            .unwrap();
+        let sigma = numbers(&case["sigma"]);
+        let fit = nlfit::fit_function_weighted(
+            FitFunction::Builtin(model),
+            &numbers(&case["x"]),
+            &numbers(&case["y"]),
+            Some(&sigma),
+            None,
+            &[],
+            &[],
+        )
+        .unwrap_or_else(|error| panic!("{name}: {error}"));
+        assert!(fit.converged && fit.weighted, "{name}");
+        array(&fit.params, &case["params"], 1e-5, name);
+        array(&fit.se, &case["se"], 1e-3, name);
+        near(fit.rss, &case["chi2"], 1e-7, name);
+        if !case["r2"].is_null() {
+            near(fit.r2, &case["r2"], 1e-7, name);
+        }
+    }
+}
+
+#[test]
 fn smoothing_matches_generated_numpy_scipy_reference() {
     use scicanvas_core::analysis::SmoothMethod;
     for case in cases("smoothing") {
