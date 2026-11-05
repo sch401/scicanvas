@@ -230,6 +230,7 @@ pub(super) fn calculus(commands: &mut Vec<Command>) {
 }
 
 pub(super) fn statistics(commands: &mut Vec<Command>) {
+    statistical_reports(commands);
     commands.extend([
         c(
             "stats.frequency",
@@ -361,6 +362,42 @@ pub(super) fn statistics(commands: &mut Vec<Command>) {
             "descriptive statistics mean sd",
             need_data,
             |a| a.stats_on_columns(),
+        )
+        .modifies(),
+    ]);
+}
+
+fn statistical_reports(commands: &mut Vec<Command>) {
+    commands.extend([
+        c(
+            "stats.whole",
+            "整表统计",
+            "stats",
+            "",
+            "统计",
+            "whole sheet pooled statistics",
+            need_book,
+            |a| a.whole_table_statistics(),
+        ),
+        c(
+            "stats.compare",
+            "并排统计比较…",
+            "stats",
+            "",
+            "统计",
+            "side by side descriptive comparison",
+            need_data,
+            |a| a.open_statistics_compare(),
+        ),
+        c(
+            "stats.summary",
+            "图形摘要报告",
+            "stats",
+            "",
+            "统计",
+            "graphical summary histogram box QQ",
+            need_data,
+            |a| a.graphical_summary(),
         )
         .modifies(),
     ]);

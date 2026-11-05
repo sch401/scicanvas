@@ -57,7 +57,9 @@ mod set_values;
 mod sg_diff;
 mod sheet_transform;
 mod signal_tools;
+mod statistical_reports;
 pub(crate) use signal_tools::{SignalAction, SignalEditor};
+pub(crate) use statistical_reports::StatisticsAction;
 mod smooth;
 mod sort;
 mod t_test;
@@ -258,6 +260,11 @@ pub enum Dialog {
         filtered: bool,
     },
     /// 扣除基线：是否用 ALS、log10 λ 与非对称系数 p。
+    StatisticsCompare {
+        source: scicanvas_core::ops::Source,
+        names: Vec<String>,
+        boxes: bool,
+    },
     Average {
         merge: bool,
         mean: bool,
@@ -366,6 +373,7 @@ pub enum Action {
     ExportPng(u32),
     ExportTiff(u32),
     SignalTools(Box<SignalAction>),
+    Statistics(Box<StatisticsAction>),
     Interpolate(InterpMethod, usize, Option<(f64, f64)>),
     TTest(TTestKind, f64),
     TwoWayAnova(u64, [String; 3]),
@@ -442,6 +450,7 @@ impl Dialog {
             Self::Fill { .. } => self.show_fill(ctx, pal, &mut open, esc),
             Self::Table { .. } => self.show_table(ctx, pal, &mut open, esc),
             Self::SetValues { .. } => self.show_set_values(ctx, pal, &mut open, esc),
+            Self::StatisticsCompare { .. } => self.show_statistics_compare(ctx, &mut open),
             Self::Average { .. } => self.show_average(ctx, &mut open),
             Self::Signal(edit) => edit.show(ctx, pal, &mut open),
             Self::Baseline { .. } => self.show_baseline(ctx, pal, &mut open, esc),

@@ -32,7 +32,7 @@ impl Dialog {
             ui.separator();
             ui.add_space(4.0);
             ui.horizontal_wrapped(|ui| {
-                center_buttons(ui, 3);
+                center_buttons(ui, 4);
                 if ui
                     .add(plain("复制结果"))
                     .on_hover_text("复制为制表符分隔的文本，可粘贴到 Excel")
@@ -40,6 +40,9 @@ impl Dialog {
                 {
                     let text: Vec<String> = rows.iter().map(|r| r.join("\t")).collect();
                     ui.ctx().copy_text(text.join("\n"));
+                }
+                if ui.add(plain("写入新表")).clicked() {
+                    action = Action::Statistics(Box::new(StatisticsAction::WriteTable(title.clone(), rows.clone())));
                 }
                 if ui.add(plain("保存为 Note")).clicked() {
                     let text = format!("## {title}\n\n{}\n{note}", md_table(rows));

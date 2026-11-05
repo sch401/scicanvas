@@ -1,0 +1,132 @@
+{
+  "generator": "tools/reference/gen_scipy.py",
+  "versions": {
+    "Python": "3.14.3",
+    "NumPy": "2.4.4",
+    "SciPy": "1.17.1"
+  },
+  "cases": [
+    {
+      "kind": "groups",
+      "groups": [
+        {
+          "name": "组1",
+          "values": [
+            1.0,
+            2.0,
+            4.0,
+            5.0,
+            8.0
+          ],
+          "stats": {
+            "n": 5,
+            "mean": 4.0,
+            "sd": 2.7386127875258306,
+            "se": 1.224744871391589,
+            "min": 1.0,
+            "q1": 2.0,
+            "median": 4.0,
+            "q3": 5.0,
+            "max": 8.0,
+            "missing": 0,
+            "sum": 20.0
+          }
+        },
+        {
+          "name": "组2",
+          "values": [
+            2.0,
+            null,
+            6.0,
+            8.0,
+            12.0
+          ],
+          "stats": {
+            "n": 4,
+            "mean": 7.0,
+            "sd": 4.163331998932265,
+            "se": 2.0816659994661326,
+            "min": 2.0,
+            "q1": 5.0,
+            "median": 7.0,
+            "q3": 9.0,
+            "max": 12.0,
+            "missing": 1,
+            "sum": 28.0
+          }
+        },
+        {
+          "name": "空组",
+          "values": [
+            null,
+            null
+          ],
+          "stats": {
+            "n": 0,
+            "mean": null,
+            "sd": null,
+            "se": null,
+            "min": null,
+            "q1": null,
+            "median": null,
+            "q3": null,
+            "max": null,
+            "missing": 2,
+            "sum": 0.0
+          }
+        },
+        {
+          "name": "单点",
+          "values": [
+            3.0
+          ],
+          "stats": {
+            "n": 1,
+            "mean": 3.0,
+            "sd": null,
+            "se": null,
+            "min": 3.0,
+            "q1": 3.0,
+            "median": 3.0,
+            "q3": 3.0,
+            "max": 3.0,
+            "missing": 0,
+            "sum": 3.0
+          }
+        }
+      ]
+    },
+    {
+      "kind": "whole",
+      "stats": {
+        "n": 15,
+        "mean": 4.066666666666666,
+        "sd": 3.2616093018777153,
+        "se": 0.8421439005338394,
+        "min": 0.0,
+        "q1": 2.0,
+        "median": 3.0,
+        "q3": 5.5,
+        "max": 12.0,
+        "missing": 10,
+        "sum": 61.0
+      }
+    },
+    {
+      "kind": "selection",
+      "stats": {
+        "n": 5,
+        "mean": 5.0,
+        "sd": 2.23606797749979,
+        "se": 1.0,
+        "min": 2.0,
+        "q1": 4.0,
+        "median": 5.0,
+        "q3": 6.0,
+        "max": 8.0,
+        "missing": 1,
+        "sum": 25.0
+      }
+    }
+  ]
+}

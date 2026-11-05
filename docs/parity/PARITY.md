@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 97 项，P1 146 项，P2 259 项，不做 12 项。
-状态：已完成 82 项，已实现待验收 95 项，部分实现 7 项，未开始 318 项，不做 12 项。
+状态：已完成 82 项，已实现待验收 98 项，部分实现 7 项，未开始 315 项，不做 12 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -246,7 +246,7 @@
 |---|---|---|---|---|---|---|---|
 | F174 | 列统计（均值、标准差、中位数、分位数等） | Statistics on Columns | P0 | 已完成 | 已接入 N、均值、样本标准差、标准误、中位数、线性插值分位数、极值与总和，生成结果工作簿 | 描述统计与结果表回归已通过；可复现 NumPy/SciPy 多组参考见 tests/reference 与 tools/reference/README.md（六阶容差原因单列），Windows 人工结果另记；2026-11 验收：自动测试 + 参考值 | — |
 | F175 | 行统计 | Statistics on Rows | P1 | 已完成 | 统计 → 行统计：对点选的各列逐行求均值、标准差、标准误、N，写在最后一列右边；标准差设为 Y 误差列，可直接画误差棒 | 单元测试覆盖缺失值、单值行与列属性 | — |
-| F176 | 整表统计 | Statistics on Whole Sheet | P1 | 未开始 | statrs 分布函数 + 自写检验 | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
+| F176 | 整表统计 | Statistics on Whole Sheet | P1 | 已实现待验收 | 统计 → 整表统计。选区内的数值列合并为样本；无选区时取整表数值单元格，含矩形范围内缺失。标准差 n−1，分位数线性插值；结果窗口提供写入新表。 | NumPy mean/std(ddof=1)/percentile(method=linear) 对照 1e-12；空组和单点统计、选区缺失、表/箱线图/Note 的真实窗口一步撤销和保存往返；摘要组合图独立 matplotlib 参考。 | — |
 | F177 | 频数统计 / 分箱 | Frequency Counts | P0 | 已完成 | 统计 → 频数统计：等宽分箱（Sturges 或指定区间数、可选范围），每列生成区间、频数、累积与相对频率表，一步撤销 | 与 numpy.histogram 的边界与计数一致；2026-11：可复现 SciPy 参考数据和直接测试通过。 | — |
 | F178 | 二维频数统计 | 2D Frequency Counts/Binning | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
 | F179 | 正态性检验（Shapiro-Wilk、KS、Anderson-Darling 等） | Normality Test | P1 | 已实现待验收 | 统计 → 正态性检验：每列三行，Shapiro–Wilk、KS（Lilliefors）和 Anderson–Darling；结果表可复制或保存 Note。Lilliefors 按 statsmodels 表插值，AD 显示 SciPy 5% 临界值。 | SciPy 1.17.1 / statsmodels 0.14.6：统计量 1e-12；p 1e-6；正态、偏态、均匀、重复值、小样本、缺失值、表插值与大样本。浅色/深色 egui 回归。 | 列明的正态性方法：已完成 0/3，待验收 3，部分实现 0；三种检验均已接入，待 Windows 人工验收。 |
@@ -271,10 +271,10 @@
 | F198 | 机器学习（分类、回归） | Machine Learning (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
 | F199 | 功效与样本量计算 | Power and Sample Size (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
 | F200 | ROC 曲线 | ROC Curve (Pro Only) | P2 | 未开始 | statrs / linfa | 与 Origin 及 SciPy / R 结果比较（统计量、p 值） | — |
-| F505 | 图形摘要报告 | Statistics / Graphical Summary | P1 | 未开始 | 描述统计与分布图组合报告 | 参考统计值与图形、报告往返 | — |
-| F506 | 并排统计比较 | Statistics / Side-by-Side Statistics | P1 | 未开始 | 多组数据统计与并列结果 | SciPy/R 数值对照与缺失值处理 | — |
+| F505 | 图形摘要报告 | Statistics / Graphical Summary | P1 | 已实现待验收 | 统计 → 图形摘要报告。一列生成 Histogram、Box、QQ 三层与右下象限描述统计、Shapiro–Wilk/AD p 值，同时生成 Note。复用 Page 图层，不增加数据列；统计文字为生成时快照，源变化后重新生成。 | NumPy mean/std(ddof=1)/percentile(method=linear) 对照 1e-12；空组和单点统计、选区缺失、表/箱线图/Note 的真实窗口一步撤销和保存往返；摘要组合图独立 matplotlib 参考。 | — |
+| F506 | 并排统计比较 | Statistics / Side-by-Side Statistics | P1 | 已实现待验收 | 统计 → 并排统计比较。多列的 N、均值、样本 SD、SE、极值、Q1/中位数/Q3 和缺失数并排输出工作簿，可同时生成引用原始列的箱线图；表与图共用一次历史。 | NumPy mean/std(ddof=1)/percentile(method=linear) 对照 1e-12；空组和单点统计、选区缺失、表/箱线图/Note 的真实窗口一步撤销和保存往返；摘要组合图独立 matplotlib 参考。 | — |
 | F507 | 双样本 Kolmogorov–Smirnov 检验 | Statistics / Two-Sample KS Test | P1 | 已实现待验收 | 统计 → KS 双样本检验，恰好选两列，显示 D、双侧 p、有效样本数与精确/渐近方法；两组均 ≤10000 点时精确路径概率，其余为有限样本 kstwo 渐近规则。 | SciPy 1.17.1 ks_2samp(auto)：等长、不等长、并列、完全相同、分离样本、小尾概率和渐近分支；D 精确相等，p 绝对容差 1e-10。 | — |
-| F508 | 滑动窗口非参数检验 | Statistics / Running Nonparametric Tests | P1 | 未开始 | A8 窗口范围、方法选择和结果列 | 窗口边界、缺失值、SciPy/R 对照 | — |
+| F508 | 滑动窗口非参数检验 | Statistics / Running Nonparametric Tests | P1 | 未开始 | 按方法卡暂缓，需用户确认具体检验统计量、分组及窗口规则。清单 ref 为 Running Nonparametric Tests；Origin 官方 Randomness Tests App 提供序列随机性的 Runs Test，Moving Average 帮助提供移动窗口统计。来源：https://www.originlab.com/fileExchange/details.aspx?fid=377；https://www.originlab.com/videos/details.aspx?id=257 | 需要用户确认定义后，补窗口边界、缺失值及所选检验的独立参考；状态保持未开始。 | — |
 
 ## 信号处理
 

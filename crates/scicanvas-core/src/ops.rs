@@ -20,6 +20,8 @@ mod resolve;
 mod signal_tools;
 pub use signal_tools::MergeDuplicates;
 mod smooth;
+mod statistical_reports;
+pub use statistical_reports::{descriptive_table, graphical_summary_text};
 mod stats;
 mod transform;
 mod transpose;

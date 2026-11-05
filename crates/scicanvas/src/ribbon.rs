@@ -193,7 +193,12 @@ pub static TABS: &[Tab] = &[
         groups: &[
             Group {
                 label: "描述统计",
-                items: &[Big("stats.columns"), Big("stats.rows"), Big("stats.frequency")],
+                items: &[
+                    Big("stats.columns"),
+                    Big("stats.rows"),
+                    Big("stats.frequency"),
+                    Smalls(&["stats.whole", "stats.compare", "stats.summary"]),
+                ],
             },
             Group {
                 label: "假设检验",

@@ -7,6 +7,7 @@ pub struct AnalysisColumn {
     pub name: String,
     pub values: Vec<f64>,
     pub rows: Option<(usize, usize)>,
+    pub visible_only: bool,
 }
 
 /// 分析的输入来自哪里。
@@ -296,7 +297,11 @@ impl Project {
                 let book = self.book(item.book_id).ok_or("找不到工作簿")?;
                 let col = book.column(&item.y).ok_or("找不到数据列")?;
                 let mut values = col.values();
-                if item.visible_only {
+                if let Some((_, last)) = item.rows {
+                    values.resize(values.len().max(last.saturating_add(1).min(book.nrows())), f64::NAN);
+                }
+                let visible_only = item.visible_only && !col.independent_rows;
+                if visible_only {
                     let mask = book.visible_mask();
                     values = values
                         .into_iter()
@@ -319,6 +324,7 @@ impl Project {
                     },
                     values,
                     rows: item.rows,
+                    visible_only,
                 })
             })
             .collect()
