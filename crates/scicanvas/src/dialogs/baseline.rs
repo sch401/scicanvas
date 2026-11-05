@@ -21,6 +21,7 @@ impl Dialog {
             .default_width(crate::theme::dialog::MEDIUM)
             .open(open)
             .show(ctx, |ui| {
+                data_hint(ui);
                 let mut parsed = Ok(Vec::new());
                 form(ui, "baseline-form", |f| {
                     f.row("方法", |ui| {

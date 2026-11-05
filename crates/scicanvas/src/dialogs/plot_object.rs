@@ -34,33 +34,44 @@ impl PlotObjectEditor {
     ) -> (bool, Option<crate::plot::ObjectAction>) {
         use crate::plot::{self, ObjectTarget as T};
         let edit = self;
-        let title = if matches!(edit.target, T::Shape(_)) {
-            "绘图对象"
-        } else if matches!(edit.target, T::Text(_)) {
-            "文字标注"
-        } else if matches!(edit.target, T::ColorScale(_)) {
-            "色阶条"
-        } else {
-            "图例"
-        };
+        let title = object_title(edit.target);
         let mut open = true;
         let mut action = None;
-        window(ctx, title).open(&mut open).show(ctx, |ui| {
+        window(ctx, title).centered().open(&mut open).show(ctx, |ui| {
             ui.push_id((edit.graph, edit.target), |ui| {
                 ui.label(&g.name);
                 match edit.target {
                     T::Shape(id) => shape_properties(ui, g.page.shape_mut(id).unwrap(), history_group),
                     T::Text(id) => {
                         egui::ComboBox::from_id_salt("text-object")
-                            .selected_text(format!("文字 {id}"))
+                            .selected_text(g.page.annotations.iter().position(|t| t.id == id).map_or(
+                                String::new(),
+                                |i| {
+                                    format!(
+                                        "文字 {}/{} · {}",
+                                        i + 1,
+                                        g.page.annotations.len(),
+                                        scicanvas_core::text::plain_text(
+                                            &g.page.annotations[i].text,
+                                            g.page.annotations[i].rich
+                                        )
+                                        .chars()
+                                        .take(24)
+                                        .collect::<String>()
+                                    )
+                                },
+                            ))
                             .show_ui(ui, |ui| {
-                                for text in &g.page.annotations {
+                                for (position, text) in g.page.annotations.iter().enumerate() {
                                     let name: String = scicanvas_core::text::plain_text(&text.text, text.rich)
                                         .chars()
                                         .take(24)
                                         .collect();
                                     if ui
-                                        .selectable_label(text.id == id, format!("{} · {}", text.id, name))
+                                        .selectable_label(
+                                            text.id == id,
+                                            format!("文字 {}/{} · {}", position + 1, g.page.annotations.len(), name),
+                                        )
                                         .clicked()
                                     {
                                         edit.target = T::Text(text.id);
@@ -123,12 +134,20 @@ impl PlotObjectEditor {
                         if let Some(position) = &mut layer.legend_position {
                             page_position_editor(ui, position, history_group);
                         }
-                        if ui.button("恢复自动避让").clicked() {
+                        if ui.button("恢复自动位置").clicked() {
                             action = Some(plot::ObjectAction::AutoLegend(index));
                         }
                         ui.checkbox(&mut layer.rich_text, "启用科学文字格式");
                         for key in layer.plot_keys(true) {
-                            ui.label(format!("曲线 {key}"));
+                            let name = ctx
+                                .data(|d| {
+                                    d.get_temp::<std::collections::HashMap<(usize, String), String>>(egui::Id::new(
+                                        "object-curve-names",
+                                    ))
+                                })
+                                .and_then(|names| names.get(&(index, key.clone())).cloned())
+                                .unwrap_or_else(|| key.clone());
+                            ui.label(name);
                             let mut style = layer.plot_style(&key).cloned().unwrap_or_default();
                             let r =
                                 scientific_text(ui, &mut style.legend_label, &mut layer.rich_text, "自动：数据列名称");
@@ -141,9 +160,21 @@ impl PlotObjectEditor {
                         }
                     }
                 }
+                live_hint(ui);
                 ui.separator();
                 ui.horizontal(|ui| {
-                    if ui.add(plain("删除")).clicked() {
+                    let label = match edit.target {
+                        T::Legend(_) => "隐藏图例",
+                        T::ColorScale(_) => "隐藏色阶条",
+                        _ => "删除",
+                    };
+                    if ui
+                        .add(
+                            egui::Button::new(RichText::new(label).color(crate::theme::palette_for(ctx).on_accent))
+                                .fill(crate::theme::palette_for(ctx).danger),
+                        )
+                        .clicked()
+                    {
                         action = Some(plot::ObjectAction::Delete(edit.target));
                     }
                 });
@@ -225,7 +256,16 @@ fn shape_properties(ui: &mut egui::Ui, shape: &mut scicanvas_core::page::ShapeOb
     match candidate.validate() {
         Ok(()) => *shape = candidate,
         Err(error) => {
-            ui.colored_label(ui.visuals().error_fg_color, error);
+            field_error(ui, &error);
         }
+    }
+}
+
+fn object_title(target: crate::plot::ObjectTarget) -> &'static str {
+    match target {
+        crate::plot::ObjectTarget::Shape(_) => "编辑绘图对象",
+        crate::plot::ObjectTarget::Text(_) => "编辑文字",
+        crate::plot::ObjectTarget::ColorScale(_) => "编辑色阶条",
+        crate::plot::ObjectTarget::Legend(_) => "编辑图例",
     }
 }

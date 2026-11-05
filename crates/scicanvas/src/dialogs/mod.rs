@@ -60,12 +60,14 @@ mod signal_tools;
 mod statistical_reports;
 pub(crate) use signal_tools::{SignalAction, SignalEditor};
 pub(crate) use statistical_reports::StatisticsAction;
+mod results;
 mod smooth;
 mod sort;
 mod t_test;
 mod t_test_report;
 mod table;
 mod tables;
+use results::{result_actions, text_rows};
 mod two_way_anova;
 mod widgets;
 mod window;
@@ -86,8 +88,9 @@ pub(crate) use scientific_text::{scientific_text, scientific_text_multiline};
 pub(crate) use tables::md_table;
 use tables::{md_cell, md_pairs, table_grid};
 pub(crate) use widgets::{
-    actions, axis_scale_options, begin_keyboard_frame, center_buttons, edit_group, field_error, form, hint,
-    mark_multiline, multiline, multiline_editor, parameter_bounds, plain, primary, ActionKind, Keys, BUTTON,
+    actions, axis_scale_options, begin_keyboard_frame, center_buttons, edit_group, field_error, form, hint, live_hint,
+    mark_multiline, multiline, multiline_editor, odd_window, parameter_bounds, parameter_table, plain, primary,
+    weighted_checkbox, ActionKind, Keys, BUTTON, CONSTRAINT_HINT,
 };
 use widgets::{buttons, data_hint};
 pub(crate) use window::{floating_bounds, window};
@@ -312,6 +315,7 @@ pub enum Dialog {
     },
     /// t 检验设置：`columns` 是参与检验的列名（按点选顺序）。
     TTest {
+        swapped: bool,
         columns: Vec<String>,
         kind: usize,
         mu: f64,
@@ -336,6 +340,8 @@ pub enum Dialog {
 
 /// 对话框里用户做出的选择，由 app.rs 执行。
 pub enum Action {
+    CopyResult(String, usize),
+    ImportTemplate(bool),
     BatchExport(Vec<u64>, BatchFormat, u32),
     BatchPlot(u64, Vec<u64>),
     SetFilter(u64, String, Option<scicanvas_core::filter::FilterRule>, bool),
@@ -379,6 +385,7 @@ pub enum Action {
     Statistics(Box<StatisticsAction>),
     Interpolate(InterpMethod, usize, Option<(f64, f64)>),
     TTest(TTestKind, f64),
+    TTestSwapped(TTestKind, f64),
     TwoWayAnova(u64, [String; 3]),
     Frequency(Option<usize>, Option<(f64, f64)>),
     Fft(FftWindow),
@@ -443,7 +450,7 @@ impl Dialog {
             Self::TwoWayAnova { .. } => self.show_two_way_anova(ctx, &mut open),
             Self::Anova { .. } => self.show_anova(ctx, pal, &mut open),
             Self::Correlations(..) => self.show_correlations(ctx, pal, &mut open),
-            Self::NlFit { .. } => self.show_nl_fit(ctx, pal, &mut open),
+            Self::NlFit { .. } => self.show_nl_fit(ctx, pal, &mut open, project),
             Self::GlobalFit(editor) => editor.show(ctx, pal, &mut open),
             Self::PeakFit(edit) => edit.show(ctx, pal, &mut open),
             Self::FunctionPlot(edit) => edit.show(ctx, pal, &mut open),

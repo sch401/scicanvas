@@ -458,3 +458,71 @@ fn capture_u6_menus() {
         }
     }
 }
+
+#[test]
+#[ignore = "Explicit round18 dialog and properties screenshots"]
+fn capture_u7_details() {
+    let directory = std::path::PathBuf::from(std::env::var("SCICANVAS_UI_CAPTURE_DIR").unwrap());
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut capture = Capture::new();
+    for theme in [egui::Theme::Light, egui::Theme::Dark] {
+        for name in [
+            "props-page",
+            "props-axes",
+            "builtin-fit",
+            "custom-fit",
+            "global-fit",
+            "peak-fit",
+            "result",
+        ] {
+            let ctx = egui::Context::default();
+            crate::theme::install(&ctx);
+            crate::fonts::setup(&ctx);
+            crate::icons::install_loaders(&ctx);
+            ctx.set_theme(theme);
+            let mut app = SciApp::initial(crate::theme::palette(theme));
+            app.active = Some(1);
+            app.selection.insert(
+                1,
+                if name == "global-fit" || name == "result" {
+                    vec!["B".into(), "C".into()]
+                } else {
+                    vec!["B".into()]
+                },
+            );
+            match name {
+                "props-page" | "props-axes" => {
+                    app.active = Some(2);
+                    app.props_for = Some(2);
+                }
+                "builtin-fit" => app.run_command("fit.nonlinear"),
+                "custom-fit" => app.open_custom_nlfit_dialog(),
+                "global-fit" => app.run_command("fit.global"),
+                "peak-fit" => app.run_command("fit.peaks"),
+                _ => app.run_command("stats.anova"),
+            }
+            for _ in 0..8 {
+                capture.app_frame(&ctx, &mut app, vec![]);
+            }
+            let labels = match name {
+                "props-page" => vec!["数据", "坐标轴", "页面与图层"],
+                "props-axes" => vec!["数据"],
+                "peak-fit" => vec!["参数限制"],
+                _ => vec![],
+            };
+            for label in labels {
+                let out = capture.app_frame(&ctx, &mut app, vec![]);
+                let at = crate::test_ui::text_rect(&out, label)
+                    .unwrap_or_else(|| panic!("{name}: {label}"))
+                    .center();
+                capture.app_frame(
+                    &ctx,
+                    &mut app,
+                    vec![egui::Event::PointerMoved(at), crate::test_ui::button(at, true)],
+                );
+                capture.app_frame(&ctx, &mut app, vec![crate::test_ui::button(at, false)]);
+            }
+            capture.app_capture(&ctx, &mut app, &directory.join(format!("u7-{name}-{theme:?}.png")));
+        }
+    }
+}

@@ -100,25 +100,12 @@ impl GlobalFitEditor {
                 ui.label(format!("数据集：{}", self.labels.join("、")));
                 self.model_controls(ui);
                 egui::ScrollArea::both().max_height(300.0).show(ui, |ui| {
-                    egui::Grid::new("global-parameters").striped(true).show(ui, |ui| {
-                        for label in ["参数", "固定", "下限", "上限"] {
-                            ui.label(label);
-                        }
-                        ui.end_row();
-                        for (name, limit) in self.names.iter().zip(&mut self.limits) {
-                            ui.label(name);
-                            for field in [&mut limit.fixed, &mut limit.lower, &mut limit.upper] {
-                                ui.horizontal(|ui| {
-                                    let mut enabled = field.is_some();
-                                    let mut value = field.unwrap_or(0.0);
-                                    ui.checkbox(&mut enabled, "");
-                                    ui.add_enabled(enabled, egui::DragValue::new(&mut value).speed(0.1));
-                                    *field = enabled.then_some(value);
-                                });
-                            }
-                            ui.end_row();
-                        }
-                    });
+                    parameter_table(
+                        ui,
+                        "global-parameters",
+                        &self.names.iter().map(String::as_str).collect::<Vec<_>>(),
+                        &mut self.limits,
+                    );
                 });
                 if matches!(
                     self.model,
@@ -133,13 +120,18 @@ impl GlobalFitEditor {
                 {
                     ui.colored_label(pal.warn, "请把 I 设为独立参数，并逐组固定为该组抑制剂浓度。");
                 }
-                ui.checkbox(&mut self.weighted, "按各组关联的 Y 误差加权（1/σ²）");
+                weighted_checkbox(
+                    ui,
+                    &mut self.weighted,
+                    "按各组关联的 Y 误差加权（1/σ²）",
+                    self.errors_available,
+                );
                 if self.weighted && !self.errors_available {
                     self.error = Some("全局拟合中各组需同时提供或同时不提供 Y 误差".into());
                 }
                 form(ui, "global-constraints", |f| {
                     f.row("线性约束", |ui| {
-                        multiline(ui, &mut self.constraints).on_hover_text("展开参数名可用于等式或不等式。");
+                        multiline(ui, &mut self.constraints).on_hover_text(CONSTRAINT_HINT);
                     });
                 });
                 hint(ui, "结果不随源数据自动更新。");

@@ -6,7 +6,7 @@ impl Dialog {
             unreachable!()
         };
         let mut action = Action::None;
-        window(ctx, "转换为文本列？").centered().open(open).show(ctx, |ui| {
+        window(ctx, "转换为文本列").centered().open(open).show(ctx, |ui| {
             ui.vertical_centered(|ui| {
                 ui.add_space(4.0);
                 ui.label(RichText::new(format!("列 {key} 第 {} 行的输入与当前列类型不符", *row + 1)).strong());

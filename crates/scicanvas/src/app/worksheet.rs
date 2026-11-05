@@ -624,7 +624,6 @@ impl SciApp {
                 },
             )
         });
-        let has_paste = ui.input(|i| i.events.iter().any(|e| matches!(e, egui::Event::Paste(_))));
         let numeric_editor = st.edit.as_ref().is_some_and(|edit| {
             self.project
                 .book(id)
@@ -639,7 +638,7 @@ impl SciApp {
                 )
             });
         if active
-            && (self.dialog.is_none() || has_paste)
+            && !self.modal_active()
             && self.ui.palette.is_none()
             && ((st.edit.is_none() && ui.memory(|m| m.has_focus(focus_id))) || paste_in_editor)
         {

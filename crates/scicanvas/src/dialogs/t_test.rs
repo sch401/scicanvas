@@ -4,6 +4,7 @@ impl Dialog {
     pub(super) fn show_t_test(&mut self, ctx: &egui::Context, _pal: &Palette, open: &mut bool) -> Action {
         let Self::TTest {
             columns,
+            swapped,
             kind,
             mu,
             equal_var,
@@ -16,6 +17,10 @@ impl Dialog {
         window(ctx, "t 检验").centered().open(open).show(ctx, |ui| {
             const KINDS: [&str; 3] = ["单样本", "双样本（独立）", "配对"];
             ui.label(format!("参与检验的列：{}", columns.join("、")));
+            if columns.len() >= 2 && ui.button("交换 A/B").clicked() {
+                columns.swap(0, 1);
+                *swapped = !*swapped;
+            }
             ui.horizontal_wrapped(|ui| {
                 for (i, label) in KINDS.iter().enumerate() {
                     ui.radio_value(kind, i, *label);
@@ -71,7 +76,11 @@ impl Dialog {
                     1 => TTestKind::TwoSample { equal_var: *equal_var },
                     _ => TTestKind::Paired,
                 };
-                action = Action::TTest(k, *level);
+                action = if *swapped {
+                    Action::TTestSwapped(k, *level)
+                } else {
+                    Action::TTest(k, *level)
+                };
             } else if cancel {
                 action = Action::Close;
             }

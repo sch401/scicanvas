@@ -47,7 +47,8 @@ pub struct CustomFitEditor {
     loaded_definition: Option<CustomFitDefinition>,
     pub target: Option<Box<FitEditTarget>>,
     pub limits: Vec<scicanvas_core::nlfit::ParamLimits>,
-    limit_values: Vec<[f64; 3]>,
+    pub weighted: bool,
+    confirm_new: bool,
     pub name: String,
     pub formula: String,
     pub parameters: String,
@@ -62,7 +63,8 @@ impl Default for CustomFitEditor {
             target: None,
             loaded_definition: None,
             limits: Vec::new(),
-            limit_values: Vec::new(),
+            weighted: false,
+            confirm_new: false,
             name: "自定义函数".into(),
             formula: "y = a*exp(-b*x)+c".into(),
             parameters: "a, b, c".into(),
@@ -74,6 +76,55 @@ impl Default for CustomFitEditor {
 }
 
 impl CustomFitEditor {
+    fn library_picker(&mut self, ui: &mut egui::Ui, project: &scicanvas_core::Project) {
+        let edit = self;
+        ui.horizontal_wrapped(|ui| {
+            ui.label("项目函数");
+            let before = edit.before.as_ref().map(|entry| entry.id);
+            let mut picked = before;
+            let mut load = None;
+            let selected = project
+                .fit_functions
+                .iter()
+                .find(|entry| Some(entry.id) == before)
+                .map_or("新函数", |entry| entry.definition.name.as_str());
+            egui::ComboBox::from_id_salt("custom-fit-library")
+                .selected_text(selected)
+                .show_ui(ui, |ui| {
+                    for entry in &project.fit_functions {
+                        if ui
+                            .selectable_value(&mut picked, Some(entry.id), &entry.definition.name)
+                            .clicked()
+                        {
+                            load = Some(entry.clone());
+                        }
+                    }
+                });
+            if let Some(entry) = load {
+                *edit = CustomFitEditor::saved(&entry);
+            }
+            if ui.button("新建").clicked() {
+                let clean = edit
+                    .loaded_definition
+                    .clone()
+                    .or_else(|| CustomFitEditor::default().definition().ok());
+                if edit.definition().ok() == clean {
+                    *edit = CustomFitEditor::default();
+                } else {
+                    edit.confirm_new = true;
+                }
+            }
+            if edit.confirm_new {
+                ui.label("放弃未保存的函数编辑？");
+                if ui.button("确认新建").clicked() {
+                    *edit = CustomFitEditor::default();
+                }
+                if ui.button("取消新建").clicked() {
+                    edit.confirm_new = false;
+                }
+            }
+        });
+    }
     fn show_limits(&mut self, ui: &mut egui::Ui) {
         let names: Vec<_> = self
             .parameters
@@ -83,39 +134,15 @@ impl CustomFitEditor {
             .collect();
         self.limits
             .resize(names.len().min(scicanvas_core::nlfit::MAX_PARAMS), Default::default());
-        self.limit_values.resize(self.limits.len(), [0.0; 3]);
-        // 设置窗口已提供限高滚动；参数共用同一滚动区，窄窗口也可到达末行。
-        for ((name, limit), remembered) in names.iter().zip(&mut self.limits).zip(&mut self.limit_values) {
-            ui.strong(*name);
-            for ((label, value), remembered) in [
-                ("固定", &mut limit.fixed),
-                ("下限", &mut limit.lower),
-                ("上限", &mut limit.upper),
-            ]
-            .into_iter()
-            .zip(remembered.iter_mut())
-            {
-                ui.horizontal(|ui| {
-                    if let Some(value) = value {
-                        *remembered = *value;
-                    }
-                    let mut on = value.is_some();
-                    if ui.checkbox(&mut on, label).changed() {
-                        *value = on.then_some(*remembered);
-                    }
-                    if let Some(value) = value {
-                        ui.add(egui::DragValue::new(value).speed(0.01));
-                    }
-                });
-            }
-        }
+        parameter_table(ui, "custom-limits", &names, &mut self.limits);
     }
     pub fn from_definition(definition: &CustomFitDefinition) -> Self {
         Self {
             target: None,
             loaded_definition: Some(definition.clone()),
             limits: Vec::new(),
-            limit_values: Vec::new(),
+            weighted: false,
+            confirm_new: false,
             name: definition.name.clone(),
             formula: definition.formula.clone(),
             parameters: definition.parameters.join(", "),
@@ -177,7 +204,13 @@ impl CustomFitEditor {
 }
 
 impl Dialog {
-    pub(super) fn show_nl_fit(&mut self, ctx: &egui::Context, pal: &Palette, open: &mut bool) -> Action {
+    pub(super) fn show_nl_fit(
+        &mut self,
+        ctx: &egui::Context,
+        pal: &Palette,
+        open: &mut bool,
+        project: &scicanvas_core::Project,
+    ) -> Action {
         let Self::NlFit {
             model,
             initial,
@@ -203,48 +236,53 @@ impl Dialog {
             }
             if let Some(target) = target {
                 ui.label(format!(
-                    "更新 Book {} 的结果列 {}",
-                    target.report.book_id, target.report.curve.1
+                    "更新工作簿“{}”的结果列 {}",
+                    project.name_of(target.report.book_id).unwrap_or("已删除的工作簿"),
+                    target.report.curve.1
                 ));
                 ui.label("初始值（留空为自动估计）");
                 ui.text_edit_singleline(initial);
             }
             ui.add_space(4.0);
             limits.resize(model.params().len(), (false, 0.0, false, 0.0, false, 1.0));
-            egui::ScrollArea::vertical()
-                .id_salt("builtin-fit-parameters")
-                .max_height(300.0)
-                .show(ui, |ui| {
-                    for (name, (fix, fv, has_lo, lo, has_hi, hi)) in model.params().iter().zip(limits.iter_mut()) {
-                        ui.strong(*name);
-                        let free = !*fix;
-                        form(ui, ("nlfit-limits", name), |ui| {
-                            for (label, on, value, enabled) in [
-                                ("固定", fix, fv, true),
-                                ("下限", has_lo, lo, free),
-                                ("上限", has_hi, hi, free),
-                            ] {
-                                ui.add_enabled_ui(enabled, |ui| {
-                                    ui.checkbox(on, label);
-                                });
-                                ui.add_enabled(enabled && *on, egui::DragValue::new(value).speed(0.01));
-                                ui.end_row();
-                            }
-                        });
-                    }
-                });
+            let mut table: Vec<_> = limits
+                .iter()
+                .map(
+                    |&(fix, fv, has_lo, lo, has_hi, hi)| scicanvas_core::nlfit::ParamLimits {
+                        fixed: fix.then_some(fv),
+                        lower: has_lo.then_some(lo),
+                        upper: has_hi.then_some(hi),
+                    },
+                )
+                .collect();
+            egui::ScrollArea::both().max_height(250.).show(ui, |ui| {
+                parameter_table(ui, "builtin-fit-parameters", model.params(), &mut table)
+            });
+            for (raw, limit) in limits.iter_mut().zip(table) {
+                raw.0 = limit.fixed.is_some();
+                raw.1 = limit.fixed.unwrap_or(raw.1);
+                raw.2 = limit.lower.is_some();
+                raw.3 = limit.lower.unwrap_or(raw.3);
+                raw.4 = limit.upper.is_some();
+                raw.5 = limit.upper.unwrap_or(raw.5);
+            }
             ui.add_space(4.0);
-            ui.label(RichText::new("参数约束").color(pal.weak));
+            ui.label(RichText::new("线性约束").color(pal.weak));
             multiline_editor(
                 ui,
                 egui::TextEdit::multiline(constraints)
                     .desired_rows(2)
                     .desired_width(f32::INFINITY)
                     .font(egui::TextStyle::Monospace)
-                    .hint_text("每行一条，如 A1 + A2 = 1、t2 >= t1"),
+                    .hint_text(CONSTRAINT_HINT),
             );
-            ui.checkbox(weighted, "按 Y 误差加权（1/σ²）")
-                .on_hover_text("使用与 Y 列关联的 Y 误差列：误差为空的点跳过，误差为 0 或负数时报错");
+            weighted_checkbox(
+                ui,
+                weighted,
+                "按 Y 误差加权（1/σ²）",
+                ctx.data(|d| d.get_temp::<bool>(egui::Id::new("analysis-errors-available")))
+                    .unwrap_or(false),
+            );
             if target.is_none() && ui.button("自定义函数…").clicked() {
                 action = Action::OpenCustomNlFit;
             }
@@ -255,8 +293,8 @@ impl Dialog {
                 .map(
                     |(_, &(fix, fv, has_lo, lo, has_hi, hi))| scicanvas_core::nlfit::ParamLimits {
                         fixed: fix.then_some(fv),
-                        lower: (!fix && has_lo).then_some(lo),
-                        upper: (!fix && has_hi).then_some(hi),
+                        lower: has_lo.then_some(lo),
+                        upper: has_hi.then_some(hi),
                     },
                 )
                 .collect();
@@ -333,71 +371,55 @@ impl Dialog {
         edit.sync_saved(&project.fit_functions);
         let mut action = Action::None;
         window(ctx, "自定义非线性拟合").centered().open(open).show(ctx, |ui| {
+            data_hint(ui);
             if edit.target.is_none() {
-                ui.horizontal_wrapped(|ui| {
-                    ui.label("项目函数");
-                    let before = edit.before.as_ref().map(|entry| entry.id);
-                    let mut picked = before;
-                    let mut load = None;
-                    let selected = project
-                        .fit_functions
-                        .iter()
-                        .find(|entry| Some(entry.id) == before)
-                        .map_or("新函数", |entry| entry.definition.name.as_str());
-                    egui::ComboBox::from_id_salt("custom-fit-library")
-                        .selected_text(selected)
-                        .show_ui(ui, |ui| {
-                            for entry in &project.fit_functions {
-                                if ui
-                                    .selectable_value(&mut picked, Some(entry.id), &entry.definition.name)
-                                    .clicked()
-                                {
-                                    load = Some(entry.clone());
-                                }
-                            }
-                        });
-                    if let Some(entry) = load {
-                        *edit = CustomFitEditor::saved(&entry);
-                    }
-                    if ui.button("新建").clicked() {
-                        *edit = CustomFitEditor::default();
-                    }
-                });
+                edit.library_picker(ui, project);
             }
+
             hint(ui, "表达式使用 x 和参数名。");
             if let Some(target) = &edit.target {
                 ui.label(format!(
-                    "更新 Book {} 的结果列 {}",
-                    target.report.book_id, target.report.curve.1
+                    "更新工作簿“{}”的结果列 {}",
+                    project.name_of(target.report.book_id).unwrap_or("已删除的工作簿"),
+                    target.report.curve.1
                 ));
             }
-            ui.label("函数名");
-            ui.text_edit_singleline(&mut edit.name);
-            ui.label("表达式");
-            multiline_editor(
+            form(ui, "custom-fit-form", |f| {
+                f.row("函数名", |ui| {
+                    ui.text_edit_singleline(&mut edit.name);
+                });
+                f.row("表达式", |ui| {
+                    multiline_editor(
+                        ui,
+                        egui::TextEdit::multiline(&mut edit.formula)
+                            .desired_rows(2)
+                            .font(egui::TextStyle::Monospace)
+                            .hint_text("y = a*exp(-b*x)+c"),
+                    );
+                });
+                f.row("参数名", |ui| {
+                    ui.text_edit_singleline(&mut edit.parameters);
+                });
+                f.row("初始值", |ui| {
+                    ui.text_edit_singleline(&mut edit.initial);
+                });
+                f.row("线性约束", |ui| {
+                    multiline_editor(
+                        ui,
+                        egui::TextEdit::multiline(&mut edit.constraints)
+                            .desired_rows(2)
+                            .hint_text(CONSTRAINT_HINT),
+                    );
+                });
+            });
+            edit.show_limits(ui);
+            weighted_checkbox(
                 ui,
-                egui::TextEdit::multiline(&mut edit.formula)
-                    .desired_rows(2)
-                    .desired_width(f32::INFINITY)
-                    .font(egui::TextStyle::Monospace)
-                    .hint_text("y = a*exp(-b*x)+c"),
+                &mut edit.weighted,
+                "按 Y 误差加权（1/σ²）",
+                ctx.data(|d| d.get_temp::<bool>(egui::Id::new("analysis-errors-available")))
+                    .unwrap_or(false),
             );
-            ui.label("参数名");
-            ui.text_edit_singleline(&mut edit.parameters);
-            ui.label("初始值");
-            ui.text_edit_singleline(&mut edit.initial);
-            ui.label("参数约束");
-            multiline_editor(
-                ui,
-                egui::TextEdit::multiline(&mut edit.constraints)
-                    .desired_rows(2)
-                    .desired_width(f32::INFINITY)
-                    .font(egui::TextStyle::Monospace)
-                    .hint_text("每行一条，如 a >= 0"),
-            );
-            if edit.target.is_some() {
-                edit.show_limits(ui);
-            }
             if edit.target.is_none() {
                 ui.horizontal_wrapped(|ui| {
                     if ui
@@ -431,16 +453,21 @@ impl Dialog {
             if ok {
                 if let Some(target) = &edit.target {
                     let recipe = edit.definition().and_then(|definition| {
-                        target.recipe(
-                            scicanvas_core::ops::FitMethod::Custom {
-                                name: definition.name,
-                                formula: definition.formula,
-                                parameters: definition.parameters,
-                            },
-                            Some(definition.initial),
-                            edit.limits.clone(),
-                            edit.constraints.clone(),
-                        )
+                        target
+                            .recipe(
+                                scicanvas_core::ops::FitMethod::Custom {
+                                    name: definition.name,
+                                    formula: definition.formula,
+                                    parameters: definition.parameters,
+                                },
+                                Some(definition.initial),
+                                edit.limits.clone(),
+                                edit.constraints.clone(),
+                            )
+                            .map(|mut recipe| {
+                                recipe.weight = scicanvas_core::ops::FitWeight::from_y_error(edit.weighted);
+                                recipe
+                            })
                     });
                     action = Action::Refit(
                         Box::new(FitEditTarget {

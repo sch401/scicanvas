@@ -46,9 +46,22 @@ impl Dialog {
                 );
             }
             if let Some(error) = error {
-                ui.colored_label(ui.visuals().error_fg_color, error.as_str());
+                field_error(ui, error.as_str());
             }
-            let (ok, cancel) = buttons(ui, "排序", Ok(()));
+            let selected_keys: Vec<_> = keys.iter().filter_map(|(key, _)| *key).collect();
+            let valid: Result<(), String> = if selected_keys
+                .iter()
+                .enumerate()
+                .any(|(i, k)| selected_keys[..i].contains(k))
+            {
+                Err("排序关键字不能重复".into())
+            } else {
+                Ok(())
+            };
+            if let Err(error) = &valid {
+                field_error(ui, error);
+            }
+            let (ok, cancel) = buttons(ui, "排序", valid);
             if ok {
                 let keys: Vec<(String, bool)> = keys
                     .iter()

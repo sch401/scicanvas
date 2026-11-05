@@ -6,7 +6,7 @@ impl Dialog {
             unreachable!()
         };
         let mut action = Action::None;
-        window(ctx, "拟合比较").open(open).show(ctx, |ui| {
+        window(ctx, "拟合比较").centered().open(open).show(ctx, |ui| {
             let mut target = (reports[*first].book_id, reports[*first].y_key.clone());
             for (label, index) in [("模型 1", &mut *first), ("模型 2", &mut *second)] {
                 if label == "模型 2" && (reports[*index].book_id, reports[*index].y_key.clone()) != target {

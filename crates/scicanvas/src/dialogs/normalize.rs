@@ -7,6 +7,7 @@ impl Dialog {
         };
         let mut action = Action::None;
         window(ctx, "归一化").centered().open(open).show(ctx, |ui| {
+            data_hint(ui);
             for m in NormalizeMethod::ALL {
                 ui.radio_value(method, m, m.label());
             }

@@ -25,6 +25,13 @@ impl SciApp {
             .default_width(360.0)
             .default_height(ctx.screen_rect().height() * 0.75)
             .show(ctx, |ui| {
+                let actual = crate::plot::cached_layout(
+                    ui,
+                    egui::Id::new(("props-ranges", gid)),
+                    &graph_before,
+                    project,
+                    vec![],
+                );
                 let books = &project.books;
                 let lookup = |id| books.iter().find(|book| book.id == id);
                 let Some(graph) = project.graphs.iter_mut().find(|graph| graph.id == gid) else {
@@ -65,8 +72,8 @@ impl SciApp {
                 });
                 props_section(ui, "axes", "坐标轴", true, |ui| {
                     titles(ui, g, history_group);
-                    axes(ui, g, history_group);
-                    ui.label("框线");
+                    axes(ui, g, history_group, &actual.layers[props_layer].axes);
+                    ui.label("网格与边框");
                     ui.horizontal_wrapped(|ui| {
                         ui.checkbox(&mut g.grid, "网格线");
                         ui.checkbox(&mut g.frame, "四边框");
@@ -116,7 +123,11 @@ impl SciApp {
                     error_bars(ui, g, history_group);
                     reference_lines(ui, g, gid, history_group);
                 });
-                function_edit = function_properties(ui, g, history_group);
+                if !g.functions.is_empty() {
+                    props_section(ui, "functions", "函数曲线", false, |ui| {
+                        function_edit = function_properties(ui, g, history_group);
+                    });
+                }
             });
         if self.project.graph(gid).unwrap() != &graph_before {
             ctx.request_repaint();
@@ -181,16 +192,23 @@ fn color_mapping(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, group: 
         if ui.radio_value(&mut manual, true, "手动").changed() {
             scale.position = Some([0.8, 0.15]);
         }
-        if manual && ui.small_button("重置为自动").clicked() {
-            scale.position = None;
-        }
     });
     ui.end_row();
     if let Some(pos) = &mut scale.position {
         ui.label("位置 X / Y");
         ui.horizontal(|ui| {
             for value in pos {
-                edit_group(&ui.add(egui::DragValue::new(value).range(0.0..=1.0).speed(0.01)), group);
+                let mut percent = *value * 100.;
+                let response = ui.add(
+                    egui::DragValue::new(&mut percent)
+                        .range(0.0..=100.0)
+                        .speed(0.1)
+                        .suffix("%"),
+                );
+                if response.changed() {
+                    *value = percent / 100.;
+                }
+                edit_group(&response, group);
             }
         });
         ui.end_row();
@@ -298,171 +316,123 @@ fn source_options(project: &Project) -> SourceOptions {
     }
 }
 
-fn page(ui: &mut egui::Ui, graph: &mut scicanvas_core::Graph, history_group: &mut Option<egui::Id>) {
+fn page(ui: &mut egui::Ui, graph: &mut scicanvas_core::Graph, group: &mut Option<egui::Id>) {
+    ui.label("页面尺寸");
     ui.horizontal_wrapped(|ui| {
-        ui.label("页面 mm");
-        edit_group(
-            &ui.add(
-                egui::DragValue::new(&mut graph.page.width_mm)
-                    .range(1.0..=1000.0)
-                    .speed(0.5),
-            ),
-            history_group,
-        );
-        ui.label("×");
-        edit_group(
-            &ui.add(
-                egui::DragValue::new(&mut graph.page.height_mm)
-                    .range(1.0..=1000.0)
-                    .speed(0.5),
-            ),
-            history_group,
-        );
-    });
-    ui.horizontal_wrapped(|ui| {
-        ui.label("页边距 mm");
-        let page = &mut graph.page;
-        for (i, side) in ["左", "上", "右", "下"].into_iter().enumerate() {
-            // 对边之和留出至少 1 mm 给图层
-            let span = if i % 2 == 0 { page.width_mm } else { page.height_mm };
-            let max = (span - page.margin_mm[(i + 2) % 4] - 1.0).max(0.0);
-            ui.label(side);
+        for value in [&mut graph.page.width_mm, &mut graph.page.height_mm] {
             edit_group(
-                &ui.add(egui::DragValue::new(&mut page.margin_mm[i]).range(0.0..=max).speed(0.5)),
-                history_group,
+                &ui.add(egui::DragValue::new(value).range(1.0..=1000.0).speed(0.5).suffix(" mm")),
+                group,
             );
         }
     });
+    ui.end_row();
+    ui.label("页边距");
     ui.horizontal_wrapped(|ui| {
-        ui.label("页面背景");
+        let page = &mut graph.page;
+        for (i, side) in ["左", "上", "右", "下"].into_iter().enumerate() {
+            let span = if i % 2 == 0 { page.width_mm } else { page.height_mm };
+            let max = (span - page.margin_mm[(i + 2) % 4] - 1.).max(0.);
+            ui.label(side);
+            edit_group(
+                &ui.add(
+                    egui::DragValue::new(&mut page.margin_mm[i])
+                        .range(0.0..=max)
+                        .speed(0.5)
+                        .suffix(" mm"),
+                ),
+                group,
+            );
+        }
+    });
+    ui.end_row();
+    ui.label("页面背景");
+    ui.horizontal(|ui| {
         let mut rgb = graph.page.background.unwrap_or([255, 255, 255]);
         let response = ui.color_edit_button_srgb(&mut rgb);
         if response.changed() {
             graph.page.background = (rgb != [255, 255, 255]).then_some(rgb);
         }
-        edit_group(&response, history_group);
+        edit_group(&response, group);
         if graph.page.background.is_some() && ui.small_button("白色").clicked() {
             graph.page.background = None;
         }
     });
+    ui.end_row();
 }
-
 fn page_layout(
     ui: &mut egui::Ui,
     graph: &mut scicanvas_core::Graph,
-    mut props_layer: usize,
-    history_group: &mut Option<egui::Id>,
+    mut selected: usize,
+    group: &mut Option<egui::Id>,
 ) -> usize {
-    ui.horizontal_wrapped(|ui| {
-        ui.label("排版列数");
-        let n = graph.page.layers().len();
-        edit_group(
-            &ui.add(egui::DragValue::new(&mut graph.page.columns).range(1..=n)),
-            history_group,
-        );
-        egui::ComboBox::from_id_salt("props-layer")
-            .selected_text(format!("图层 {}", props_layer + 1))
-            .show_ui(ui, |ui| {
-                for i in 0..graph.page.layers().len() {
-                    ui.selectable_value(&mut props_layer, i, format!("图层 {}", i + 1));
-                }
-            });
-        ui.label("间距 mm");
-        for gap in graph.page.gap_mm.iter_mut() {
+    ui.label("排版列数");
+    let count = graph.page.layers().len();
+    edit_group(
+        &ui.add(egui::DragValue::new(&mut graph.page.columns).range(1..=count)),
+        group,
+    );
+    ui.end_row();
+    ui.label("当前图层");
+    egui::ComboBox::from_id_salt("props-layer")
+        .selected_text(format!("图层 {}", selected + 1))
+        .show_ui(ui, |ui| {
+            for i in 0..count {
+                ui.selectable_value(&mut selected, i, format!("图层 {}", i + 1));
+            }
+        });
+    ui.end_row();
+    ui.label("层间距");
+    ui.horizontal(|ui| {
+        for gap in &mut graph.page.gap_mm {
             edit_group(
-                &ui.add(egui::DragValue::new(gap).range(0.0..=100.0).speed(0.5)),
-                history_group,
+                &ui.add(egui::DragValue::new(gap).range(0.0..=100.0).speed(0.5).suffix(" mm")),
+                group,
             );
         }
     });
-    props_layer
+    ui.end_row();
+    selected
 }
-
-fn layer(
-    ui: &mut egui::Ui,
-    graph: &mut scicanvas_core::Graph,
-    gid: u64,
-    props_layer: usize,
-    history_group: &mut Option<egui::Id>,
-) {
-    let layer_count = graph.page.layers().len();
-    if layer_count > 1 {
-        let g = &mut graph.page.layers_mut()[props_layer];
-        ui.horizontal_wrapped(|ui| {
-            for (label, link, salt) in [
-                ("联动 X 轴", &mut g.link_x, "props-link-x"),
-                ("联动 Y 轴", &mut g.link_y, "props-link-y"),
-            ] {
-                ui.label(label);
-                let text = link.map_or("无".to_string(), |j| format!("图层 {}", j + 1));
-                egui::ComboBox::from_id_salt(salt)
-                    .selected_text(text)
-                    .show_ui(ui, |ui| {
-                        ui.selectable_value(link, None, "无");
-                        for j in (0..layer_count).filter(|&j| j != props_layer) {
-                            ui.selectable_value(link, Some(j), format!("图层 {}", j + 1));
-                        }
-                    });
-            }
+fn layer(ui: &mut egui::Ui, graph: &mut scicanvas_core::Graph, _gid: u64, index: usize, group: &mut Option<egui::Id>) {
+    let count = graph.page.layers().len();
+    let g = &mut graph.page.layers_mut()[index];
+    for (label, link) in [("联动 X 轴", &mut g.link_x), ("联动 Y 轴", &mut g.link_y)] {
+        ui.label(label);
+        ui.add_enabled_ui(count > 1, |ui| {
+            egui::ComboBox::from_id_salt(label)
+                .selected_text(link.map_or("无".into(), |j| format!("图层 {}", j + 1)))
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(link, None, "无");
+                    for j in (0..count).filter(|j| *j != index) {
+                        ui.selectable_value(link, Some(j), format!("图层 {}", j + 1));
+                    }
+                });
         });
+        ui.end_row();
     }
-    let g = &mut graph.page.layers_mut()[props_layer];
-    ui.horizontal_wrapped(|ui| {
-        let mut custom = g.placement.is_some();
-        if ui.checkbox(&mut custom, "自定义图层位置").changed() {
-            g.placement = custom.then(scicanvas_core::page::LayerRect::default);
-        }
-        ui.checkbox(&mut g.transparent, "透明图层背景");
-    });
+    ui.label("图层位置");
+    let mut custom = g.placement.is_some();
+    if ui.checkbox(&mut custom, "自定义图层位置").changed() {
+        g.placement = custom.then(scicanvas_core::page::LayerRect::default);
+    }
+    ui.end_row();
     if let Some(rect) = &mut g.placement {
-        ui.label("位置和尺寸（页面比例，0–1）");
-        egui::Grid::new(("layer-rectangle", gid, props_layer))
-            .num_columns(2)
-            .show(ui, |ui| {
-                let min_width = f64::MIN_POSITIVE.min(rect.width);
-                let min_height = f64::MIN_POSITIVE.min(rect.height);
-                ui.label("X");
-                edit_group(
-                    &ui.add(
-                        egui::DragValue::new(&mut rect.x)
-                            .range(0.0..=1.0 - rect.width)
-                            .speed(0.01),
-                    ),
-                    history_group,
-                );
-                ui.end_row();
-                ui.label("Y");
-                edit_group(
-                    &ui.add(
-                        egui::DragValue::new(&mut rect.y)
-                            .range(0.0..=1.0 - rect.height)
-                            .speed(0.01),
-                    ),
-                    history_group,
-                );
-                ui.end_row();
-                ui.label("宽");
-                edit_group(
-                    &ui.add(
-                        egui::DragValue::new(&mut rect.width)
-                            .range(min_width..=1.0 - rect.x)
-                            .speed(0.01),
-                    ),
-                    history_group,
-                );
-                ui.end_row();
-                ui.label("高");
-                edit_group(
-                    &ui.add(
-                        egui::DragValue::new(&mut rect.height)
-                            .range(min_height..=1.0 - rect.y)
-                            .speed(0.01),
-                    ),
-                    history_group,
-                );
-                ui.end_row();
-            });
+        let (x, y, width, height) = (rect.x, rect.y, rect.width, rect.height);
+        for (label, value, max) in [
+            ("X", &mut rect.x, 1. - width),
+            ("Y", &mut rect.y, 1. - height),
+            ("宽", &mut rect.width, 1. - x),
+            ("高", &mut rect.height, 1. - y),
+        ] {
+            ui.label(label);
+            edit_group(&ui.add(egui::DragValue::new(value).range(0.0..=max).speed(0.01)), group);
+            ui.end_row();
+        }
     }
+    ui.label("透明背景");
+    ui.checkbox(&mut g.transparent, "透明图层背景");
+    ui.end_row();
 }
 
 fn data_source(
@@ -653,31 +623,86 @@ fn titles(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_group:
     ui.end_row();
 }
 
-fn axes(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_group: &mut Option<egui::Id>) {
+fn number_format(
+    ui: &mut egui::Ui,
+    label: &str,
+    id: &str,
+    value: &mut scicanvas_core::format::NumberFormat,
+    group: &mut Option<egui::Id>,
+) {
     use scicanvas_core::format::NumberFormat;
-    // 刻度格式：日期列做 X 时自动用日期刻度，这里只设数字格式
-    for (label, format, salt) in [
-        ("X 刻度格式", &mut g.x_format, "props-x-format"),
-        ("左 Y 刻度格式", &mut g.y_format, "props-y-format"),
-    ] {
-        ui.label(label);
-        ui.horizontal_wrapped(|ui| {
-            let mut kind = format.index();
-            let mut places = format.places();
-            egui::ComboBox::from_id_salt(salt)
-                .selected_text(NumberFormat::KINDS[kind])
-                .show_ui(ui, |ui| {
-                    for (i, name) in NumberFormat::KINDS.iter().enumerate() {
-                        ui.selectable_value(&mut kind, i, *name);
-                    }
-                });
-            if kind != 0 {
-                ui.label("小数位");
-                ui.add(egui::DragValue::new(&mut places).range(0..=10));
+    ui.label(label);
+    ui.horizontal_wrapped(|ui| {
+        let mut kind = value.index();
+        let mut places = value.places();
+        let response = egui::ComboBox::from_id_salt(id)
+            .selected_text(NumberFormat::KINDS[kind])
+            .show_ui(ui, |ui| {
+                for (i, name) in NumberFormat::KINDS.iter().enumerate() {
+                    ui.selectable_value(&mut kind, i, *name);
+                }
+            })
+            .response;
+        edit_group(&response, group);
+        if kind != 0 {
+            ui.label("小数位");
+            edit_group(&ui.add(egui::DragValue::new(&mut places).range(0..=10)), group);
+        }
+        *value = NumberFormat::from_index(kind, places);
+    });
+    ui.end_row();
+}
+fn range_controls(
+    ui: &mut egui::Ui,
+    auto: &mut bool,
+    min: &mut f64,
+    max: &mut f64,
+    current: [f64; 2],
+    group: &mut Option<egui::Id>,
+) {
+    ui.horizontal_wrapped(|ui| {
+        ui.checkbox(auto, "自动");
+        let step = ((if *auto { current[1] - current[0] } else { *max - *min }).abs() / 200.).max(f64::MIN_POSITIVE);
+        if *auto {
+            let mut values = current;
+            for value in &mut values {
+                ui.add_enabled(false, egui::DragValue::new(value).speed(step));
             }
-            *format = NumberFormat::from_index(kind, places);
-        });
-        ui.end_row();
+        } else {
+            edit_group(&ui.add(egui::DragValue::new(min).speed(step)), group);
+            ui.label("到");
+            edit_group(&ui.add(egui::DragValue::new(max).speed(step)), group);
+        }
+    });
+    ui.end_row();
+}
+fn axes(
+    ui: &mut egui::Ui,
+    g: &mut scicanvas_core::page::Layer,
+    group: &mut Option<egui::Id>,
+    actual: &scicanvas_core::coord::AxisSet,
+) {
+    use scicanvas_core::format::NumberFormat;
+    let history_group = &mut *group;
+    for x in [true, false] {
+        axis_controls(ui, g, x, history_group, actual);
+        if x {
+            number_format(ui, "X 刻度格式", "props-x-format", &mut g.x_format, history_group);
+        } else {
+            number_format(ui, "左 Y 刻度格式", "props-y-format", &mut g.y_format, history_group);
+        }
+    }
+    if g.has_right_axis_style() {
+        let axis = actual.right_y.as_ref().unwrap_or(&actual.left_y);
+        ui.label("右 Y 范围");
+        range_controls(
+            ui,
+            &mut g.y2_auto,
+            &mut g.y2_min,
+            &mut g.y2_max,
+            [axis.lo, axis.hi],
+            history_group,
+        );
     }
     if g.has_right_axis_style() {
         let y2_format = g.y2_format;
@@ -709,22 +734,12 @@ fn axes(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_group: &
         ui.end_row();
     }
 
-    axis_controls(ui, g, true, history_group);
-    axis_controls(ui, g, false, history_group);
     if g.has_right_axis_style() {
-        ui.label("右 Y 范围");
-        ui.horizontal_wrapped(|ui| {
-            ui.checkbox(&mut g.y2_auto, "自动");
-            edit_group(
-                &ui.add_enabled(!g.y2_auto, egui::DragValue::new(&mut g.y2_min).speed(0.1)),
-                history_group,
-            );
-            ui.label("到");
-            edit_group(
-                &ui.add_enabled(!g.y2_auto, egui::DragValue::new(&mut g.y2_max).speed(0.1)),
-                history_group,
-            );
-        });
+        ui.label("右轴标题");
+        edit_group(
+            &dialogs::scientific_text(ui, &mut g.y2_title, &mut g.rich_text, "自动：长名称 (单位)"),
+            history_group,
+        );
         ui.end_row();
     }
 }
@@ -733,33 +748,32 @@ fn axis_controls(
     ui: &mut egui::Ui,
     g: &mut scicanvas_core::page::Layer,
     x: bool,
-    history_group: &mut Option<egui::Id>,
+    group: &mut Option<egui::Id>,
+    actual: &scicanvas_core::coord::AxisSet,
 ) {
-    ui.label(if x { "X 类型" } else { "Y 类型" });
-    ui.vertical(|ui| {
-        ui.set_max_width(160.);
-        scale_selector(ui, g, x, history_group);
-    });
+    ui.label(if x { "X 刻度类型" } else { "Y 刻度类型" });
+    scale_selector(ui, g, x, group);
     ui.end_row();
     ui.label(if x { "X 范围" } else { "左 Y 范围" });
-    let (auto, min, max) = if x {
-        (&mut g.x_auto, &mut g.x_min, &mut g.x_max)
+    if x {
+        range_controls(
+            ui,
+            &mut g.x_auto,
+            &mut g.x_min,
+            &mut g.x_max,
+            [actual.x.lo, actual.x.hi],
+            group,
+        );
     } else {
-        (&mut g.y_auto, &mut g.y_min, &mut g.y_max)
-    };
-    ui.horizontal_wrapped(|ui| {
-        ui.checkbox(auto, "自动");
-        edit_group(
-            &ui.add_enabled(!*auto, egui::DragValue::new(min).speed(0.1)),
-            history_group,
+        range_controls(
+            ui,
+            &mut g.y_auto,
+            &mut g.y_min,
+            &mut g.y_max,
+            [actual.left_y.lo, actual.left_y.hi],
+            group,
         );
-        ui.label("到");
-        edit_group(
-            &ui.add_enabled(!*auto, egui::DragValue::new(max).speed(0.1)),
-            history_group,
-        );
-    });
-    ui.end_row();
+    }
 }
 
 fn curve_offset_options(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_group: &mut Option<egui::Id>) {
@@ -788,9 +802,6 @@ fn histogram_options(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, his
         return;
     }
     let mut options = g.histogram;
-    ui.label(egui::RichText::new("直方图").strong());
-    ui.label("等宽分箱");
-    ui.end_row();
     ui.label("区间方式");
     let mut mode = match options.bins {
         HistogramBins::Auto => 0,
@@ -880,18 +891,31 @@ fn histogram_options(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, his
 
 fn layer_style(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_group: &mut Option<egui::Id>) {
     ui.label("线宽");
-    edit_group(&ui.add(egui::Slider::new(&mut g.line_width, 0.5..=6.0)), history_group);
+    edit_group(
+        &ui.add(
+            egui::DragValue::new(&mut g.line_width)
+                .range(0.5..=6.0)
+                .speed(0.1)
+                .suffix(" pt"),
+        ),
+        history_group,
+    );
     ui.end_row();
     ui.label("符号大小");
     edit_group(
-        &ui.add(egui::Slider::new(&mut g.symbol_size, 2.0..=20.0)),
+        &ui.add(
+            egui::DragValue::new(&mut g.symbol_size)
+                .range(2.0..=20.0)
+                .speed(0.1)
+                .suffix(" pt"),
+        ),
         history_group,
     );
     ui.end_row();
     if g.plot_type == PlotType::Area {
         ui.label("填充透明度");
         edit_group(
-            &ui.add(egui::Slider::new(&mut g.area_opacity, 0.0..=1.0).text("面积填充")),
+            &ui.add(egui::Slider::new(&mut g.area_opacity, 0.0..=1.0)),
             history_group,
         );
         ui.end_row();
@@ -949,13 +973,23 @@ fn labels(
         }
         ui.label("标签字号");
         edit_group(
-            &ui.add(egui::Slider::new(&mut g.labels.size, 6.0..=32.0)),
+            &ui.add(
+                egui::DragValue::new(&mut g.labels.size)
+                    .range(6.0..=32.0)
+                    .speed(0.1)
+                    .suffix(" pt"),
+            ),
             history_group,
         );
         ui.end_row();
         ui.label("标签偏移");
         edit_group(
-            &ui.add(egui::Slider::new(&mut g.labels.offset, 0.0..=40.0)),
+            &ui.add(
+                egui::DragValue::new(&mut g.labels.offset)
+                    .range(0.0..=40.0)
+                    .speed(0.1)
+                    .suffix(" pt"),
+            ),
             history_group,
         );
         ui.end_row();
@@ -968,13 +1002,23 @@ fn error_bars(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_gr
     ui.end_row();
     ui.label("误差端帽");
     edit_group(
-        &ui.add(egui::Slider::new(&mut g.error_bars.cap, 0.0..=20.0)),
+        &ui.add(
+            egui::DragValue::new(&mut g.error_bars.cap)
+                .range(0.0..=20.0)
+                .speed(0.1)
+                .suffix(" pt"),
+        ),
         history_group,
     );
     ui.end_row();
     ui.label("误差线宽");
     edit_group(
-        &ui.add(egui::Slider::new(&mut g.error_bars.width, 0.5..=6.0)),
+        &ui.add(
+            egui::DragValue::new(&mut g.error_bars.width)
+                .range(0.5..=6.0)
+                .speed(0.1)
+                .suffix(" pt"),
+        ),
         history_group,
     );
     ui.end_row();
@@ -1028,7 +1072,13 @@ fn reference_lines(
                 edit_group(&value, history_group);
                 let color = ui.color_edit_button_srgb(&mut line.color);
                 edit_group(&color, history_group);
-                let width = ui.add(egui::DragValue::new(&mut line.width).range(0.2..=8.0).speed(0.1));
+                let width = ui.add(
+                    egui::DragValue::new(&mut line.width)
+                        .range(0.2..=8.0)
+                        .speed(0.1)
+                        .prefix("线宽 ")
+                        .suffix(" pt"),
+                );
                 edit_group(&width, history_group);
                 let dashed = ui.checkbox(&mut line.dashed, "虚线");
                 edit_group(&dashed, history_group);
@@ -1058,124 +1108,111 @@ fn curve_style(
     // 逐曲线样式：选一条数据曲线，单独设图型、颜色、符号、线宽、符号大小和右侧 Y 轴
     let curve_keys = g.plot_sources(false);
     if !curve_keys.is_empty() {
-        egui::CollapsingHeader::new("曲线样式")
-            .id_salt("props-curves")
-            .show(ui, |ui| {
-                use scicanvas_core::page::CurveStyle;
-                let pick_id = egui::Id::new(("props-curve-pick", gid, props_layer));
-                let mut key = ui
-                    .data(|d| d.get_temp::<DataRef>(pick_id))
-                    .filter(|k| curve_keys.contains(k))
-                    .unwrap_or_else(|| curve_keys[0].clone());
-                let name_of = |source: &DataRef| {
-                    cols.iter()
-                        .find(|(c, _)| Some(source.book) == g.book_id && c == &source.col)
-                        .map(|(_, n)| n.clone())
-                        .or_else(|| options.curve_names.get(source).cloned())
-                        .unwrap_or_else(|| {
-                            if source.book == 0 {
-                                source.col.clone()
-                            } else {
-                                source.key(g.book_id)
+        props_section(ui, "curves", "曲线样式", false, |ui| {
+            use scicanvas_core::page::CurveStyle;
+            let pick_id = egui::Id::new(("props-curve-pick", gid, props_layer));
+            let mut key = ui
+                .data(|d| d.get_temp::<DataRef>(pick_id))
+                .filter(|k| curve_keys.contains(k))
+                .unwrap_or_else(|| curve_keys[0].clone());
+            let name_of = |source: &DataRef| {
+                cols.iter()
+                    .find(|(c, _)| Some(source.book) == g.book_id && c == &source.col)
+                    .map(|(_, n)| n.clone())
+                    .or_else(|| options.curve_names.get(source).cloned())
+                    .unwrap_or_else(|| {
+                        if source.book == 0 {
+                            source.col.clone()
+                        } else {
+                            source.key(g.book_id)
+                        }
+                    })
+            };
+            ui.label("曲线");
+            egui::ComboBox::from_id_salt(("props-curve", gid))
+                .selected_text(name_of(&key))
+                .show_ui(ui, |ui| {
+                    for k in &curve_keys {
+                        ui.selectable_value(&mut key, k.clone(), name_of(k));
+                    }
+                });
+            ui.data_mut(|d| d.insert_temp(pick_id, key.clone()));
+            ui.end_row();
+            let mut style = g.source_style(&key).cloned().unwrap_or_default();
+            let mapping = options.mapping_columns.get(&key.book).cloned().unwrap_or_default();
+
+            ui.label("图例文字");
+            edit_group(
+                &dialogs::scientific_text(ui, &mut style.legend_label, &mut g.rich_text, "自动：曲线名称"),
+                history_group,
+            );
+            ui.end_row();
+            ui.label("图型");
+            let text = style.kind.map_or("跟随图层", |k| k.label());
+            ui.add_enabled_ui(
+                !g.plot_type.is_stacked() && g.plot_type != PlotType::HorizontalBar,
+                |ui| {
+                    egui::ComboBox::from_id_salt(("props-curve-kind", gid))
+                        .selected_text(text)
+                        .show_ui(ui, |ui| {
+                            ui.selectable_value(&mut style.kind, None, "跟随图层");
+                            for k in CurveStyle::KINDS {
+                                ui.selectable_value(&mut style.kind, Some(k), k.label());
                             }
-                        })
-                };
-                egui::ComboBox::from_id_salt(("props-curve", gid))
-                    .selected_text(name_of(&key))
-                    .show_ui(ui, |ui| {
-                        for k in &curve_keys {
-                            ui.selectable_value(&mut key, k.clone(), name_of(k));
-                        }
-                    });
-                ui.data_mut(|d| d.insert_temp(pick_id, key.clone()));
-                let mut style = g.source_style(&key).cloned().unwrap_or_default();
-                let mapping = options.mapping_columns.get(&key.book).cloned().unwrap_or_default();
-                egui::Grid::new(("props-curve-grid", gid, props_layer))
-                    .num_columns(2)
-                    .spacing([10.0, 6.0])
-                    .show(ui, |ui| {
-                        ui.label("图例文字");
-                        edit_group(
-                            &dialogs::scientific_text(ui, &mut style.legend_label, &mut g.rich_text, "自动：曲线名称"),
-                            history_group,
-                        );
-                        ui.end_row();
-                        ui.label("图型");
-                        let text = style.kind.map_or("跟随图层", |k| k.label());
-                        ui.add_enabled_ui(
-                            !g.plot_type.is_stacked() && g.plot_type != PlotType::HorizontalBar,
-                            |ui| {
-                                egui::ComboBox::from_id_salt(("props-curve-kind", gid))
-                                    .selected_text(text)
-                                    .show_ui(ui, |ui| {
-                                        ui.selectable_value(&mut style.kind, None, "跟随图层");
-                                        for k in CurveStyle::KINDS {
-                                            ui.selectable_value(&mut style.kind, Some(k), k.label());
-                                        }
-                                    });
-                            },
-                        );
-                        ui.end_row();
-                        ui.label("颜色");
-                        ui.horizontal_wrapped(|ui| {
-                            let mut own = style.color.is_some();
-                            ui.checkbox(&mut own, "自定");
-                            let mut rgb = style.color.unwrap_or([15, 77, 146]);
-                            let r = ui.add_enabled_ui(own, |ui| ui.color_edit_button_srgb(&mut rgb)).inner;
-                            edit_group(&r, history_group);
-                            style.color = own.then_some(rgb);
                         });
-                        ui.end_row();
-                        ui.label("符号");
-                        const NAMES: [&str; 8] =
-                            ["圆", "方块", "上三角", "下三角", "菱形", "左三角", "右三角", "六边形"];
-                        let label = |sym: scicanvas_core::Symbol| {
-                            scicanvas_core::SYMBOLS
-                                .iter()
-                                .position(|s| *s == sym)
-                                .map_or("", |i| NAMES[i])
-                        };
-                        egui::ComboBox::from_id_salt(("props-curve-symbol", gid))
-                            .selected_text(style.symbol.map_or("跟随图层", label))
-                            .show_ui(ui, |ui| {
-                                ui.selectable_value(&mut style.symbol, None, "跟随图层");
-                                for sym in scicanvas_core::SYMBOLS {
-                                    ui.selectable_value(&mut style.symbol, Some(sym), label(sym));
-                                }
-                            });
-                        ui.end_row();
-                        for (name, value, default, range) in [
-                            ("线宽", &mut style.line_width, g.line_width, 0.2..=8.0),
-                            ("符号大小", &mut style.symbol_size, g.symbol_size, 1.0..=20.0),
-                        ] {
-                            ui.label(name);
-                            ui.horizontal_wrapped(|ui| {
-                                let mut own = value.is_some();
-                                ui.checkbox(&mut own, "自定");
-                                let mut v = value.unwrap_or(default);
-                                let r = ui.add_enabled(own, egui::DragValue::new(&mut v).range(range).speed(0.1));
-                                edit_group(&r, history_group);
-                                *value = own.then_some(v);
-                            });
-                            ui.end_row();
-                        }
-                        pattern_properties(ui, &mut style, history_group);
-                        ui.label("坐标轴");
-                        ui.checkbox(&mut style.right_axis, "右侧 Y 轴");
-                        ui.end_row();
-                    });
-                point_style_properties(ui, gid, &key, &mut style, &mapping, history_group);
-                g.set_source_style(&key, (!style.is_default()).then_some(style));
-                if g.has_right_axis_style() {
-                    ui.horizontal_wrapped(|ui| {
-                        ui.label("右轴标题");
-                        edit_group(
-                            &dialogs::scientific_text(ui, &mut g.y2_title, &mut g.rich_text, "自动：长名称 (单位)"),
-                            history_group,
-                        );
-                    });
-                }
+                },
+            );
+            ui.end_row();
+            ui.label("颜色");
+            ui.horizontal_wrapped(|ui| {
+                let mut own = style.color.is_some();
+                ui.checkbox(&mut own, "自定义");
+                let mut rgb = style.color.unwrap_or([15, 77, 146]);
+                let r = ui.add_enabled_ui(own, |ui| ui.color_edit_button_srgb(&mut rgb)).inner;
+                edit_group(&r, history_group);
+                style.color = own.then_some(rgb);
             });
+            ui.end_row();
+            ui.label("符号");
+            const NAMES: [&str; 8] = ["圆", "方块", "上三角", "下三角", "菱形", "左三角", "右三角", "六边形"];
+            let label = |sym: scicanvas_core::Symbol| {
+                scicanvas_core::SYMBOLS
+                    .iter()
+                    .position(|s| *s == sym)
+                    .map_or("", |i| NAMES[i])
+            };
+            egui::ComboBox::from_id_salt(("props-curve-symbol", gid))
+                .selected_text(style.symbol.map_or("跟随图层", label))
+                .show_ui(ui, |ui| {
+                    ui.selectable_value(&mut style.symbol, None, "跟随图层");
+                    for sym in scicanvas_core::SYMBOLS {
+                        ui.selectable_value(&mut style.symbol, Some(sym), label(sym));
+                    }
+                });
+            ui.end_row();
+            for (name, value, default, range) in [
+                ("线宽", &mut style.line_width, g.line_width, 0.2..=8.0),
+                ("符号大小", &mut style.symbol_size, g.symbol_size, 1.0..=20.0),
+            ] {
+                ui.label(name);
+                ui.horizontal_wrapped(|ui| {
+                    let mut own = value.is_some();
+                    ui.checkbox(&mut own, "自定义");
+                    let mut v = value.unwrap_or(default);
+                    let r = ui.add_enabled(own, egui::DragValue::new(&mut v).range(range).speed(0.1).suffix(" pt"));
+                    edit_group(&r, history_group);
+                    *value = own.then_some(v);
+                });
+                ui.end_row();
+            }
+            pattern_properties(ui, &mut style, history_group);
+            ui.label("坐标轴");
+            ui.checkbox(&mut style.right_axis, "右侧 Y 轴");
+            ui.end_row();
+
+            point_style_properties(ui, gid, &key, &mut style, &mapping, history_group);
+            g.set_source_style(&key, (!style.is_default()).then_some(style));
+        });
     }
 }
 
@@ -1224,7 +1261,7 @@ fn pattern_properties(ui: &mut egui::Ui, style: &mut scicanvas_core::page::Curve
         ui.label("图案颜色");
         ui.horizontal_wrapped(|ui| {
             let mut own = pattern.color.is_some();
-            ui.checkbox(&mut own, "自定");
+            ui.checkbox(&mut own, "自定义");
             let mut color = pattern.color.unwrap_or([0, 0, 0]);
             if own {
                 edit_group(&ui.color_edit_button_srgb(&mut color), group);
@@ -1251,105 +1288,116 @@ fn point_style_properties(
 ) {
     use scicanvas_core::page::SymbolFill;
     ui.label(RichText::new("符号边框、填充与逐点映射").strong());
-    egui::Grid::new(("props-point-style-grid", gid, key.clone()))
-        .num_columns(2)
-        .spacing([10.0, 6.0])
-        .show(ui, |ui| {
-            ui.label("符号填充");
-            let mut fill = style.symbol_fill.unwrap_or_default();
-            let fill_label = match fill {
-                SymbolFill::MatchCurve => "跟随曲线颜色",
-                SymbolFill::Hollow => "空心",
-                SymbolFill::Color(_) => "自定义颜色",
-            };
-            let response = egui::ComboBox::from_id_salt(("props-symbol-fill", gid, key.clone()))
-                .selected_text(fill_label)
-                .show_ui(ui, |ui| {
-                    ui.selectable_value(&mut fill, SymbolFill::MatchCurve, "跟随曲线颜色");
-                    ui.selectable_value(&mut fill, SymbolFill::Hollow, "空心");
-                    ui.selectable_value(&mut fill, SymbolFill::Color([15, 77, 146]), "自定义颜色");
-                })
-                .response;
+    ui.label("");
+    ui.end_row();
+
+    ui.label("符号填充");
+    let mut fill = style.symbol_fill.unwrap_or_default();
+    let fill_label = match fill {
+        SymbolFill::MatchCurve => "跟随曲线颜色",
+        SymbolFill::Hollow => "空心",
+        SymbolFill::Color(_) => "自定义颜色",
+    };
+    let response = egui::ComboBox::from_id_salt(("props-symbol-fill", gid, key.clone()))
+        .selected_text(fill_label)
+        .show_ui(ui, |ui| {
+            ui.selectable_value(&mut fill, SymbolFill::MatchCurve, "跟随曲线颜色");
+            ui.selectable_value(&mut fill, SymbolFill::Hollow, "空心");
+            ui.selectable_value(&mut fill, SymbolFill::Color([15, 77, 146]), "自定义颜色");
+        })
+        .response;
+    edit_group(&response, history_group);
+    if let SymbolFill::Color(mut color) = fill {
+        let response = ui.color_edit_button_srgb(&mut color);
+        edit_group(&response, history_group);
+        fill = SymbolFill::Color(color);
+    }
+    style.symbol_fill = (fill != SymbolFill::MatchCurve).then_some(fill);
+    ui.end_row();
+
+    ui.label("边框");
+    ui.horizontal_wrapped(|ui| {
+        let mut enabled = style.symbol_border_color.is_some() || style.symbol_border_width.is_some();
+        let response = ui.checkbox(&mut enabled, "启用");
+        edit_group(&response, history_group);
+        if enabled {
+            let mut color = style.symbol_border_color.unwrap_or([0, 0, 0]);
+            let response = ui.color_edit_button_srgb(&mut color);
             edit_group(&response, history_group);
-            if let SymbolFill::Color(mut color) = fill {
-                let response = ui.color_edit_button_srgb(&mut color);
-                edit_group(&response, history_group);
-                fill = SymbolFill::Color(color);
-            }
-            style.symbol_fill = (fill != SymbolFill::MatchCurve).then_some(fill);
-            ui.end_row();
+            style.symbol_border_color = Some(color);
+            let mut width = style.symbol_border_width.unwrap_or(0.6);
+            let response = ui.add(
+                egui::DragValue::new(&mut width)
+                    .range(0.0..=8.0)
+                    .speed(0.1)
+                    .suffix(" pt"),
+            );
+            edit_group(&response, history_group);
+            style.symbol_border_width = Some(width);
+        } else {
+            style.symbol_border_color = None;
+            style.symbol_border_width = None;
+        }
+    });
+    ui.end_row();
 
-            ui.label("边框");
-            ui.horizontal_wrapped(|ui| {
-                let mut enabled = style.symbol_border_color.is_some() || style.symbol_border_width.is_some();
-                let response = ui.checkbox(&mut enabled, "启用");
-                edit_group(&response, history_group);
-                if enabled {
-                    let mut color = style.symbol_border_color.unwrap_or([0, 0, 0]);
-                    let response = ui.color_edit_button_srgb(&mut color);
-                    edit_group(&response, history_group);
-                    style.symbol_border_color = Some(color);
-                    let mut width = style.symbol_border_width.unwrap_or(0.6);
-                    let response = ui.add(egui::DragValue::new(&mut width).range(0.0..=8.0).speed(0.1));
-                    edit_group(&response, history_group);
-                    style.symbol_border_width = Some(width);
-                } else {
-                    style.symbol_border_color = None;
-                    style.symbol_border_width = None;
-                }
-            });
-            ui.end_row();
-
-            ui.label("颜色映射列");
-            mapped_column_combo(
-                ui,
-                ("props-color-map", gid, key.clone()),
-                &mut style.color_column,
-                &mapping.color,
-                history_group,
+    ui.label("颜色映射列");
+    mapped_column_combo(
+        ui,
+        ("props-color-map", gid, key.clone()),
+        &mut style.color_column,
+        &mapping.color,
+        history_group,
+    );
+    ui.end_row();
+    ui.label("大小映射列");
+    mapped_column_combo(
+        ui,
+        ("props-size-map", gid, key.clone()),
+        &mut style.size_column,
+        &mapping.size,
+        history_group,
+    );
+    ui.end_row();
+    if style.size_column.is_some() {
+        ui.label("大小映射");
+        ui.checkbox(&mut style.size_by_area, "面积正比数值");
+        ui.end_row();
+        ui.label("映射尺寸范围");
+        let mut range = style.size_range.unwrap_or([2.0, 12.0]);
+        ui.horizontal_wrapped(|ui| {
+            ui.label("最小");
+            let response = ui.add_enabled(
+                !style.size_by_area,
+                egui::DragValue::new(&mut range[0])
+                    .range(1.0..=20.0)
+                    .speed(0.1)
+                    .suffix(" pt"),
             );
-            ui.end_row();
-            ui.label("大小映射列");
-            mapped_column_combo(
-                ui,
-                ("props-size-map", gid, key.clone()),
-                &mut style.size_column,
-                &mapping.size,
-                history_group,
+            edit_group(&response, history_group);
+            ui.label("最大");
+            let response = ui.add(
+                egui::DragValue::new(&mut range[1])
+                    .range(1.0..=20.0)
+                    .speed(0.1)
+                    .suffix(" pt"),
             );
-            ui.end_row();
-            if style.size_column.is_some() {
-                ui.label("大小映射");
-                ui.checkbox(&mut style.size_by_area, "面积正比数值");
-                ui.end_row();
-                ui.label("映射尺寸范围");
-                let mut range = style.size_range.unwrap_or([2.0, 12.0]);
-                ui.horizontal_wrapped(|ui| {
-                    ui.label("最小");
-                    let response = ui.add_enabled(
-                        !style.size_by_area,
-                        egui::DragValue::new(&mut range[0]).range(1.0..=20.0).speed(0.1),
-                    );
-                    edit_group(&response, history_group);
-                    ui.label("最大");
-                    let response = ui.add(egui::DragValue::new(&mut range[1]).range(1.0..=20.0).speed(0.1));
-                    edit_group(&response, history_group);
-                });
-                style.size_range = Some(range);
-                ui.end_row();
-            } else {
-                style.size_range = None;
-            }
-            ui.label("形状映射列");
-            mapped_column_combo(
-                ui,
-                ("props-symbol-map", gid, key.clone()),
-                &mut style.symbol_column,
-                &mapping.symbol,
-                history_group,
-            );
-            ui.end_row();
+            edit_group(&response, history_group);
         });
+        style.size_range = Some(range);
+        ui.end_row();
+    } else {
+        style.size_range = None;
+    }
+    ui.label("形状映射列");
+    mapped_column_combo(
+        ui,
+        ("props-symbol-map", gid, key.clone()),
+        &mut style.symbol_column,
+        &mapping.symbol,
+        history_group,
+    );
+    ui.end_row();
 }
 
 fn mapped_column_combo(
@@ -1360,7 +1408,12 @@ fn mapped_column_combo(
     history_group: &mut Option<egui::Id>,
 ) {
     let response = egui::ComboBox::from_id_salt(id)
-        .selected_text(value.as_deref().unwrap_or("无"))
+        .selected_text(
+            value
+                .as_ref()
+                .and_then(|key| columns.iter().find(|(k, _)| k == key))
+                .map_or("无", |(_, name)| name.as_str()),
+        )
         .show_ui(ui, |ui| {
             ui.selectable_value(value, None, "无");
             for (key, label) in columns {
@@ -1411,30 +1464,36 @@ fn source_rows(
 fn function_properties(
     ui: &mut egui::Ui,
     g: &mut scicanvas_core::page::Layer,
-    history_group: &mut Option<egui::Id>,
+    group: &mut Option<egui::Id>,
 ) -> Option<usize> {
-    let mut edit = None;
-    let mut remove = None;
-    let width = g.line_width;
+    let (mut edit, mut remove) = (None, None);
+    let default = g.line_width;
     for (i, function) in g.functions.iter_mut().enumerate() {
+        ui.label(format!("y = {}", function.expr));
         ui.horizontal(|ui| {
-            ui.label(format!("y = {}", function.expr));
-            if ui.button(format!("编辑函数 {}", i + 1)).clicked() {
+            ui.label("线宽");
+            let mut width = function.style.line_width.unwrap_or(default);
+            let response = ui.add(
+                egui::DragValue::new(&mut width)
+                    .range(0.1..=20.)
+                    .speed(0.1)
+                    .suffix(" pt"),
+            );
+            if response.changed() {
+                function.style.line_width = Some(width);
+            }
+            edit_group(&response, group);
+            if ui.button("编辑…").clicked() {
                 edit = Some(i);
             }
-            let mut line_width = function.style.line_width.unwrap_or(width);
-            let response = ui.add(egui::DragValue::new(&mut line_width).range(0.1..=20.));
-            if response.changed() {
-                function.style.line_width = Some(line_width);
-            }
-            edit_group(&response, history_group);
-            if ui.button(format!("删除函数 {}", i + 1)).clicked() {
+            if ui.button("删除").clicked() {
                 remove = Some(i);
             }
         });
+        ui.end_row();
     }
-    if let Some(index) = remove {
-        g.functions.remove(index);
+    if let Some(i) = remove {
+        g.functions.remove(i);
     }
     edit
 }
@@ -1645,8 +1704,8 @@ mod review_tests {
             assert!(crate::test_ui::find_text(&out, "刻度数字格式").is_none());
             h.click_text(&mut app, &out, "手动");
             let out = h.frame(&mut app, vec![]);
-            let at = crate::test_ui::text_rect(&out, "0.80")
-                .or_else(|| crate::test_ui::text_rect(&out, "0.8"))
+            let at = crate::test_ui::text_rect(&out, "80.0%")
+                .or_else(|| crate::test_ui::text_rect(&out, "80%"))
                 .unwrap()
                 .center();
             h.click(&mut app, at);
@@ -1660,7 +1719,7 @@ mod review_tests {
                     modifiers: egui::Modifiers::CTRL,
                 }],
             );
-            h.frame(&mut app, vec![egui::Event::Text("2".into())]);
+            h.frame(&mut app, vec![egui::Event::Text("200".into())]);
             h.key(egui::Key::Enter, |c| app.props_window(c));
             let pos = app
                 .project
@@ -1674,5 +1733,34 @@ mod review_tests {
                 .unwrap();
             assert!(pos.into_iter().all(|p| (0.0..=1.0).contains(&p)));
         }
+    }
+}
+
+#[cfg(test)]
+mod detail_tests {
+    use super::*;
+    #[test]
+    fn h2_page_rows_are_vertically_ordered() {
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        ctx.style_mut(|s| s.animation_time = 0.);
+        let mut app = SciApp::initial(crate::theme::palette(egui::Theme::Light));
+        app.props_for = Some(2);
+        let mut h = crate::test_ui::Harness::new(
+            ctx,
+            Some(egui::vec2(1500., 2000.)),
+            |a: &mut SciApp, c: &egui::Context| a.props_window(c),
+        );
+        for _ in 0..4 {
+            h.frame(&mut app, vec![]);
+        }
+        let out = h.frame(&mut app, vec![]);
+        h.click_text(&mut app, &out, "页面与图层");
+        let out = h.frame(&mut app, vec![]);
+        let ys: Vec<_> = ["页面尺寸", "页边距", "页面背景", "排版列数"]
+            .into_iter()
+            .map(|label| crate::test_ui::text_rect(&out, label).unwrap().center().y)
+            .collect();
+        assert!(ys.windows(2).all(|v| v[0] < v[1]));
     }
 }

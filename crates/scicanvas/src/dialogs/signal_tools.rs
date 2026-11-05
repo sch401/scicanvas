@@ -11,9 +11,11 @@ pub(crate) enum SignalAction {
     Query(InterpMethod, f64),
     Merge(Option<MergeDuplicates>),
     Signal(Source, SignalOperation),
+    SignalSwapped(Source, SignalOperation),
 }
 pub(crate) struct SignalEditor {
     pub source: Source,
+    pub swapped: bool,
     pub labels: Vec<String>,
     pub inverse: bool,
     pub mode: ConvolutionMode,
@@ -22,8 +24,12 @@ pub(crate) struct SignalEditor {
 impl SignalEditor {
     pub fn show(&mut self, ctx: &egui::Context, _pal: &Palette, open: &mut bool) -> Action {
         let mut action = Action::None;
-        window(ctx, "卷积与反卷积").centered().open(open).show(ctx, |ui| {
+        window(ctx, "卷积/反卷积").centered().open(open).show(ctx, |ui| {
             ui.label(format!("依次为信号、卷积核：{}", self.labels.join("、")));
+            if ui.button("交换信号/卷积核").clicked() {
+                self.labels.swap(0, 1);
+                self.swapped = !self.swapped;
+            }
             form(ui, "signal-form", |f| {
                 f.row("操作", |ui| {
                     ui.horizontal(|ui| {
@@ -64,14 +70,16 @@ impl SignalEditor {
                 },
             );
             if ok {
-                action = Action::SignalTools(Box::new(SignalAction::Signal(
-                    self.source.clone(),
-                    if self.inverse {
-                        SignalOperation::Deconvolve { epsilon: self.epsilon }
-                    } else {
-                        SignalOperation::Convolve(self.mode)
-                    },
-                )));
+                let operation = if self.inverse {
+                    SignalOperation::Deconvolve { epsilon: self.epsilon }
+                } else {
+                    SignalOperation::Convolve(self.mode)
+                };
+                action = Action::SignalTools(Box::new(if self.swapped {
+                    SignalAction::SignalSwapped(self.source.clone(), operation)
+                } else {
+                    SignalAction::Signal(self.source.clone(), operation)
+                }));
             } else if cancel {
                 action = Action::Close;
             }
@@ -86,6 +94,8 @@ impl Dialog {
         };
         let mut action = Action::None;
         window(ctx, "曲线平均与合并").centered().open(open).show(ctx, |ui| {
+            data_hint(ui);
+            data_hint(ui);
             ui.horizontal(|ui| {
                 ui.radio_value(merge, false, "插值平均");
                 ui.radio_value(merge, true, "直接合并");

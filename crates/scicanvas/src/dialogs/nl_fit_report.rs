@@ -14,6 +14,7 @@ impl Dialog {
         };
         let mut action = Action::None;
         window(ctx, "非线性拟合结果")
+            .centered()
             .default_width(crate::theme::dialog::MEDIUM)
             .open(open)
             .show(ctx, |ui| {
@@ -95,37 +96,22 @@ impl Dialog {
                 ui.separator();
                 ui.add_space(4.0);
                 ui.horizontal_wrapped(|ui| {
-                    center_buttons(ui, 1);
-                    if ui.add(plain("置信/预测带")).clicked() {
-                        action = Action::NlFitBands(reports.clone());
-                    }
-                    hint(ui, "95%");
-                });
-                ui.horizontal_wrapped(|ui| {
-                    center_buttons(ui, 2);
                     if ui.add(plain("残差图")).clicked() {
                         action = Action::NlResidualPlot(reports.clone(), false);
                     }
                     if ui.add(plain("残差 Q-Q")).clicked() {
                         action = Action::NlResidualPlot(reports.clone(), true);
                     }
-                });
-                ui.horizontal_wrapped(|ui| {
-                    center_buttons(ui, 3);
-                    if ui
-                        .add(plain("复制结果"))
-                        .on_hover_text("复制为制表符分隔的文本，可粘贴到 Excel")
-                        .clicked()
-                    {
-                        ui.ctx().copy_text(nlfit_text(reports));
-                    }
-                    if ui.add(plain("保存为 Note")).clicked() {
-                        action = Action::SaveNote("非线性拟合结果".into(), nlfit_markdown(reports));
-                    }
-                    if ui.add(primary(ui, "关闭")).clicked() {
-                        action = Action::Close;
+                    if ui.add(plain("置信/预测带（95%）")).clicked() {
+                        action = Action::NlFitBands(reports.clone());
                     }
                 });
+                let text = nlfit_text(reports);
+                let rows = text_rows(&text);
+                let result = result_actions(ui, "非线性拟合结果", &rows, nlfit_markdown(reports), text);
+                if !matches!(result, Action::None) {
+                    action = result;
+                }
             });
         action
     }

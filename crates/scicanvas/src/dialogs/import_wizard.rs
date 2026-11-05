@@ -8,7 +8,7 @@ pub(crate) struct ImportWizard {
     bytes: Vec<u8>,
     text: String,
     encoding: u8,
-    options: ImportOptions,
+    pub(crate) options: ImportOptions,
     pub(crate) error: Option<String>,
 }
 
@@ -27,9 +27,10 @@ impl ImportWizard {
         }
     }
 
-    pub(super) fn show(&mut self, ctx: &egui::Context, pal: &Palette, open: &mut bool) -> Action {
+    pub(super) fn show(&mut self, ctx: &egui::Context, _pal: &Palette, open: &mut bool) -> Action {
         let mut action = Action::None;
         window(ctx, "导入向导")
+            .centered()
             .open(open)
             .default_width(crate::theme::dialog::LARGE)
             .show(ctx, |ui| {
@@ -107,29 +108,14 @@ impl ImportWizard {
                     });
                 });
                 if let Some(error) = &self.error {
-                    ui.colored_label(pal.danger, error);
+                    field_error(ui, error);
                 }
                 ui.horizontal(|ui| {
                     if ui.button("保存模板…").clicked() {
-                        if let Some(path) = rfd::FileDialog::new().add_filter("导入模板", &["scit"]).save_file() {
-                            self.error = csv::import_template_json(&self.options)
-                                .and_then(|s| std::fs::write(path, s).map_err(|e| e.to_string()))
-                                .err();
-                        }
+                        action = Action::ImportTemplate(true);
                     }
                     if ui.button("加载模板…").clicked() {
-                        if let Some(path) = rfd::FileDialog::new().add_filter("导入模板", &["scit"]).pick_file() {
-                            match std::fs::read_to_string(path)
-                                .map_err(|e| e.to_string())
-                                .and_then(|s| csv::import_template_from_json(&s))
-                            {
-                                Ok(options) => {
-                                    self.options = options;
-                                    self.error = None;
-                                }
-                                Err(e) => self.error = Some(e),
-                            }
-                        }
+                        action = Action::ImportTemplate(false);
                     }
                 });
                 let (ok, cancel) = buttons(ui, "导入", Ok(()));

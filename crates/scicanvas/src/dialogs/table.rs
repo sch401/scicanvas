@@ -6,7 +6,7 @@ impl Dialog {
             unreachable!()
         };
         let mut action = Action::None;
-        window(ctx, title).open(open).show(ctx, |ui| {
+        window(ctx, title).centered().open(open).show(ctx, |ui| {
             egui::ScrollArea::both().max_height(420.0).show(ui, |ui| {
                 egui::Grid::new("result-table")
                     .striped(true)
@@ -31,27 +31,14 @@ impl Dialog {
             ui.add_space(10.0);
             ui.separator();
             ui.add_space(4.0);
-            ui.horizontal_wrapped(|ui| {
-                center_buttons(ui, 4);
-                if ui
-                    .add(plain("复制结果"))
-                    .on_hover_text("复制为制表符分隔的文本，可粘贴到 Excel")
-                    .clicked()
-                {
-                    let text: Vec<String> = rows.iter().map(|r| r.join("\t")).collect();
-                    ui.ctx().copy_text(text.join("\n"));
-                }
-                if ui.add(plain("写入新表")).clicked() {
-                    action = Action::Statistics(Box::new(StatisticsAction::WriteTable(title.clone(), rows.clone())));
-                }
-                if ui.add(plain("保存为 Note")).clicked() {
-                    let text = format!("## {title}\n\n{}\n{note}", md_table(rows));
-                    action = Action::SaveNote(title.clone(), text.trim_end().to_string());
-                }
-                if ui.add(primary(ui, "关闭")).clicked() {
-                    action = Action::Close;
-                }
-            });
+            let text = rows.iter().map(|r| r.join("\t")).collect::<Vec<_>>().join("\n");
+            action = result_actions(
+                ui,
+                title,
+                rows,
+                format!("## {title}\n\n{}\n{note}", md_table(rows)),
+                text,
+            );
         });
         action
     }

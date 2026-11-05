@@ -23,6 +23,7 @@ impl Dialog {
             .default_width(crate::theme::dialog::MEDIUM)
             .open(open)
             .show(ctx, |ui| {
+                data_hint(ui);
                 ui.horizontal_wrapped(|ui| {
                     ui.label("输出 X");
                     ui.radio_value(mode, 0, "均匀网格");

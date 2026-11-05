@@ -68,6 +68,7 @@ impl SciApp {
             })
             .unwrap_or_else(GraphTheme::nature);
         self.dialog = Some(Dialog::GraphThemes(Box::new(dialogs::GraphThemeEditor {
+            pending_remove: None,
             default: self.settings.default_graph_theme.as_ref().is_some_and(|t| {
                 let mut current = theme.clone();
                 current.name = t.name.clone();

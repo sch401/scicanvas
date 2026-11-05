@@ -18,11 +18,21 @@ impl FilterEditor {
                     } else {
                         text.trim()
                             .parse::<f64>()
+                            .ok()
+                            .filter(|v| v.is_finite())
                             .map(Some)
-                            .map_err(|_| "请输入有效数值".to_string())
+                            .ok_or_else(|| "请输入有限数值".to_string())
                     }
                 };
-                parse(min).and_then(|min| parse(max).map(|max| Some(FilterRule::Number { min, max })))
+                parse(min).and_then(|min| {
+                    parse(max).and_then(|max| {
+                        if min.zip(max).is_some_and(|(a, b)| a > b) {
+                            Err("最小值应小于或等于最大值".into())
+                        } else {
+                            Ok(Some(FilterRule::Number { min, max }))
+                        }
+                    })
+                })
             }
             // 空文本匹配所有行，等于不筛选
             FilterEditor::Text { contains } if contains.is_empty() => Ok(None),
@@ -57,7 +67,7 @@ pub struct FilterDialog {
 impl FilterDialog {
     pub(super) fn show(&mut self, ctx: &egui::Context, open: &mut bool) -> Action {
         let mut action = Action::None;
-        window(ctx, "筛选列").open(open).show(ctx, |ui| {
+        window(ctx, "筛选列").centered().open(open).show(ctx, |ui| {
             ui.label(&self.title);
             match &mut self.editor {
                 FilterEditor::Number { min, max } => {
@@ -86,9 +96,13 @@ impl FilterDialog {
             }
             ui.checkbox(&mut self.visible_only, "绘图和分析只使用可见行");
             if let Some(error) = &self.error {
-                ui.colored_label(ui.visuals().error_fg_color, error);
+                field_error(ui, error);
             }
-            let (ok, cancel) = buttons(ui, "应用", Ok(()));
+            let valid = self.editor.rule().map(|_| ());
+            if let Err(error) = &valid {
+                field_error(ui, error);
+            }
+            let (ok, cancel) = buttons(ui, "应用", valid);
             if ok {
                 match self.editor.rule() {
                     Ok(rule) => {

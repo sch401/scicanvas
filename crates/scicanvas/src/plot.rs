@@ -108,7 +108,7 @@ fn data_fingerprint(g: &Graph, project: &Project) -> u64 {
 }
 
 /// 取场景：与缓存的图形、视图、数据指纹都相同时复用，否则重新排版并更新缓存。
-fn cached_layout(
+pub(crate) fn cached_layout(
     ui: &egui::Ui,
     id: egui::Id,
     g: &Graph,

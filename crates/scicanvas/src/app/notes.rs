@@ -22,7 +22,8 @@ impl SciApp {
         let Some(note) = self.active.and_then(|id| self.project.note(id)) else {
             return;
         };
-        if let Some(path) = rfd::FileDialog::new()
+        if let Some(path) = self
+            .file_dialog()
             .set_file_name(format!("{}.md", note.name))
             .add_filter("Markdown", &["md"])
             .add_filter("UTF-8 文本", &["txt"])
