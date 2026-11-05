@@ -196,6 +196,12 @@ pub(super) fn compose<'a>(
                 object.bounds = object.bounds.map(|v| v * k);
                 object.bounds[0] += dx;
                 object.bounds[1] += dy;
+                if let Some(line) = &mut object.hit_segment {
+                    for p in line {
+                        p[0] = p[0] * k + dx;
+                        p[1] = p[1] * k + dy;
+                    }
+                }
             }
             if let Some(position) = layer.legend_position {
                 if let Some(mut object) = scene.objects.pop() {
@@ -291,6 +297,7 @@ fn compose_page(
             }
         }
     }
+    super::shapes::append(&mut page, g);
     for annotation in &g.page.annotations {
         let size = annotation.size_pt * 96.0 / 72.0;
         let text =
@@ -320,6 +327,7 @@ fn compose_page(
             bounds: [x, y, width, height],
             items: start..page.items.len(),
             overlay: true,
+            hit_segment: None,
         });
     }
     page

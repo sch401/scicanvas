@@ -78,6 +78,7 @@ pub(super) fn append(page: &mut Scene, g: &Graph, books: BookLookup<'_, '_>) {
             bounds: [x, y - 18.0 * scale, width + 50.0 * scale, height + 18.0 * scale],
             items: start..page.items.len(),
             overlay: true,
+            hit_segment: None,
         });
     }
 }

@@ -1057,6 +1057,7 @@ fn curve_style(
                             });
                             ui.end_row();
                         }
+                        pattern_properties(ui, &mut style, history_group);
                         ui.label("坐标轴");
                         ui.checkbox(&mut style.right_axis, "右侧 Y 轴");
                         ui.end_row();
@@ -1073,6 +1074,68 @@ fn curve_style(
                     });
                 }
             });
+    }
+}
+
+fn pattern_properties(ui: &mut egui::Ui, style: &mut scicanvas_core::page::CurveStyle, group: &mut Option<egui::Id>) {
+    use scicanvas_core::page::PatternKind;
+    let mut kind = style.pattern.map(|p| p.kind);
+    ui.label("填充图案");
+    egui::ComboBox::from_id_salt("curve-fill-pattern")
+        .width(110.)
+        .selected_text(kind.map_or("无", |p| p.label()))
+        .show_ui(ui, |ui| {
+            ui.selectable_value(&mut kind, None, "无");
+            for pattern in PatternKind::ALL {
+                ui.selectable_value(&mut kind, Some(pattern), pattern.label());
+            }
+        });
+    ui.end_row();
+    let mut candidate = kind.map(|kind| {
+        let mut pattern = style.pattern.unwrap_or_default();
+        pattern.kind = kind;
+        pattern
+    });
+    if let Some(pattern) = &mut candidate {
+        ui.label("图案间距");
+        edit_group(
+            &ui.add(
+                egui::DragValue::new(&mut pattern.spacing_pt)
+                    .range(0.5..=96.)
+                    .speed(0.5)
+                    .suffix(" pt"),
+            ),
+            group,
+        );
+        ui.end_row();
+        ui.label("图案线宽/点径");
+        edit_group(
+            &ui.add(
+                egui::DragValue::new(&mut pattern.width_pt)
+                    .range(0.1..=8.)
+                    .speed(0.1)
+                    .suffix(" pt"),
+            ),
+            group,
+        );
+        ui.end_row();
+        ui.label("图案颜色");
+        ui.horizontal_wrapped(|ui| {
+            let mut own = pattern.color.is_some();
+            ui.checkbox(&mut own, "自定");
+            let mut color = pattern.color.unwrap_or([0, 0, 0]);
+            if own {
+                edit_group(&ui.color_edit_button_srgb(&mut color), group);
+            }
+            pattern.color = own.then_some(color);
+        });
+        ui.end_row();
+    }
+    if let Some(error) = candidate.as_ref().and_then(|p| p.validate().err()) {
+        ui.colored_label(ui.visuals().error_fg_color, error);
+        ui.end_row();
+    } else {
+        style.pattern = candidate;
     }
 }
 
@@ -1321,6 +1384,34 @@ fn scale_selector(
 
 #[cfg(test)]
 mod histogram_tests {
+    #[test]
+    fn b7_pattern_dropdown_real_controls() {
+        use scicanvas_core::page::{CurveStyle, PatternKind};
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        ctx.style_mut(|s| s.animation_time = 0.);
+        let mut state = (CurveStyle::default(), None);
+        let mut harness = crate::test_ui::Harness::new(
+            ctx,
+            Some(egui::vec2(700., 500.)),
+            |state: &mut (CurveStyle, Option<egui::Id>), ctx: &egui::Context| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    egui::Grid::new("pattern-controls")
+                        .num_columns(2)
+                        .show(ui, |ui| super::pattern_properties(ui, &mut state.0, &mut state.1));
+                });
+            },
+        );
+        for _ in 0..3 {
+            harness.frame(&mut state, vec![]);
+        }
+        let out = harness.frame(&mut state, vec![]);
+        harness.click_text(&mut state, &out, "无");
+        let out = harness.frame(&mut state, vec![]);
+        harness.click_text(&mut state, &out, "交叉线");
+        assert_eq!(state.0.pattern.unwrap().kind, PatternKind::Cross);
+    }
+
     use super::*;
     use scicanvas_core::{page::HistogramBins, project_file, scene};
 

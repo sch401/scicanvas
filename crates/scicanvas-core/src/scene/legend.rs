@@ -111,6 +111,7 @@ pub(super) fn draw_layer_legend(
             bounds: [lx, ly, lw, lhh],
             items: start..items.len(),
             overlay: false,
+            hit_segment: None,
         });
     }
 
@@ -119,6 +120,11 @@ pub(super) fn draw_layer_legend(
 
 fn curve_sample(plot: &crate::page::PreparedPlot, area_opacity: f32, x: f64, y: f64, width: f64) -> Vec<Prim> {
     let mut items = fill_or_line_sample(plot, area_opacity, x, y, width);
+    if let Some(pattern) = plot.plot.style.as_ref().and_then(|s| s.pattern.as_ref()) {
+        let mut patches: Vec<_> = items.into_iter().map(|prim| Item { prim, clip: None }).collect();
+        super::hatch::overlay(&mut patches, 0, pattern);
+        items = patches.into_iter().map(|item| item.prim).collect();
+    }
     if let Some(symbol) = symbol_sample(plot, x, y, width) {
         items.push(symbol);
     }
@@ -321,5 +327,6 @@ pub(super) fn draw_row_legend(
         bounds: [at[0], at[1] - 8., width, entries.len() as f64 * 16.],
         items: start..items.len(),
         overlay: false,
+        hit_segment: None,
     });
 }

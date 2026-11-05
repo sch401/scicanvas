@@ -228,6 +228,7 @@ impl SciApp {
             self.show_item(id);
             self.explorer_focus = false;
             self.adding_text = Some(id);
+            self.shape_tool = None;
             self.object_editor = None;
             self.status = "单击页面放置文字，Esc 取消".into();
         }
@@ -261,6 +262,7 @@ impl SciApp {
         match action {
             A::CancelAdd => {
                 self.adding_text = None;
+                self.shape_tool = None;
                 return;
             }
             A::Edit(target) => {
@@ -280,10 +282,47 @@ impl SciApp {
             A::Delete(..) => "删除图形对象",
             _ => "图例自动避让",
         };
+        if let A::AddShape(kind, a, b) = action {
+            self.edit_with(
+                "添加绘图对象",
+                |project| project.graph_mut(graph).unwrap().page.add_shape(kind, a, b).map(Some),
+                |app, id| {
+                    app.shape_tool = None;
+                    app.object_editor = Some(ObjectEditor {
+                        graph,
+                        target: T::Shape(id),
+                        focus: false,
+                    });
+                },
+            );
+            return;
+        }
+        if let A::ResizeShape(id, a, b) = action {
+            if self
+                .project
+                .graph(graph)
+                .unwrap()
+                .page
+                .shape(id)
+                .is_some_and(|s| s.a != a || s.b != b)
+            {
+                self.edit_grouped(
+                    "调整图形端点",
+                    Some(egui::Id::new(("object-drag", graph))),
+                    |project| {
+                        let shape = project.graph_mut(graph).unwrap().page.shape_mut(id).unwrap();
+                        shape.a = a;
+                        shape.b = b;
+                    },
+                );
+            }
+            return;
+        }
         if let A::Move(target, position) = action {
             let page = &self.project.graph(graph).unwrap().page;
             let changed = match target {
                 T::Text(id) => page.text(id).is_some_and(|t| t.position != position),
+                T::Shape(id) => page.shape(id).is_some_and(|s| s.origin() != position),
                 T::ColorScale(index) => page
                     .layers()
                     .get(index)
@@ -298,6 +337,7 @@ impl SciApp {
                     let page = &mut project.graph_mut(graph).unwrap().page;
                     match target {
                         T::Text(id) => page.text_mut(id).unwrap().position = position,
+                        T::Shape(id) => page.shape_mut(id).unwrap().move_to(position),
                         T::Legend(index) => page.layers_mut()[index].legend_position = Some(position),
                         T::ColorScale(index) => {
                             page.layers_mut()[index]
@@ -315,6 +355,7 @@ impl SciApp {
             let text=match action {
                 A::AddText(position)=>Some(page.add_text(position)?),
                 A::Delete(T::Text(id))=>{page.annotations.retain(|t|t.id!=id);None},
+                A::Delete(T::Shape(id))=>{page.remove_shape(id);None},
                 A::Delete(T::Legend(index))=>{if let Some(l)=page.layers_mut().get_mut(index){l.legend=false;}None},
                 A::Delete(T::ColorScale(index))=>{if let Some(l)=page.layers_mut().get_mut(index){l.color_scale.get_or_insert_with(Default::default).visible=false;}None},
                 A::AutoLegend(index)=>{if let Some(l)=page.layers_mut().get_mut(index){l.legend=true;l.legend_position=None;}None},
@@ -348,6 +389,14 @@ impl SciApp {
                 self.layer_index(id),
                 plot::ObjectUi {
                     adding: self.adding_text == Some(id),
+                    adding_shape: self.shape_tool.filter(|(graph, _)| *graph == id).map(|(_, kind)| kind),
+                    selected_shape: self.object_editor.filter(|e| e.graph == id).and_then(|e| {
+                        if let plot::ObjectTarget::Shape(id) = e.target {
+                            Some(id)
+                        } else {
+                            None
+                        }
+                    }),
                     epoch: self.plot_epoch,
                     keyboard: self.active == Some(id) && !self.explorer_focus,
                 },
@@ -484,7 +533,14 @@ impl SciApp {
             });
             ui.separator();
             if let Some(target) = menu_object {
-                if ui.button("编辑文字/图例…").clicked() {
+                if ui
+                    .button(if matches!(target, plot::ObjectTarget::Shape(_)) {
+                        "编辑图形…"
+                    } else {
+                        "编辑文字/图例…"
+                    })
+                    .clicked()
+                {
                     object_action = Some(plot::ObjectAction::Edit(target));
                     ui.close_menu();
                 }
@@ -586,6 +642,7 @@ impl SciApp {
         };
         let valid = match edit.target {
             T::Text(id) => before.page.text(id).is_some(),
+            T::Shape(id) => before.page.shape(id).is_some(),
             T::Legend(i) => before.page.layers().get(i).is_some_and(|l| l.legend),
             T::ColorScale(i) => before
                 .page
@@ -679,5 +736,16 @@ impl SciApp {
             Some(false) => self.confirm_delete = None,
             None => {}
         }
+    }
+}
+
+impl SciApp {
+    pub(crate) fn start_shape_tool(&mut self, kind: scicanvas_core::page::ShapeKind) {
+        let Some(graph) = self.active_graph_id() else { return };
+        self.finish_edit();
+        self.adding_text = None;
+        self.shape_tool = Some((graph, kind));
+        self.object_editor = None;
+        self.status = format!("在页面按下拖动画{}；Esc 取消", kind.label());
     }
 }

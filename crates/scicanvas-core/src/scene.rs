@@ -10,8 +10,11 @@ use crate::page::Layer;
 use crate::plotspec::BookLookup;
 use crate::ticks::{axis, axis_scaled, Axis, AxisScale, TickLabel};
 mod color_scale;
+pub mod hatch;
 mod layout;
 mod legend;
+mod shapes;
+pub use shapes::shape_primitives;
 mod radial;
 
 pub type Rgb = (u8, u8, u8);
@@ -146,6 +149,7 @@ pub enum ObjectTarget {
     Text(u64),
     Legend(usize),
     ColorScale(usize),
+    Shape(u64),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -154,6 +158,7 @@ pub struct ObjectLayout {
     pub bounds: [f64; 4],
     pub items: std::ops::Range<usize>,
     pub overlay: bool,
+    pub hit_segment: Option<[[f64; 2]; 2]>,
 }
 fn contains(rect: [f64; 4], x: f64, y: f64) -> bool {
     let [l, t, w, h] = rect;
@@ -271,11 +276,26 @@ impl LayerView {
 
 impl Scene {
     pub fn object_at(&self, x: f64, y: f64) -> Option<ObjectTarget> {
+        self.object_at_tolerance(x, y, 4.)
+    }
+    pub fn object_at_tolerance(&self, x: f64, y: f64, tolerance: f64) -> Option<ObjectTarget> {
         self.objects
             .iter()
             .rev()
             .find(|object| {
-                if !contains(object.bounds, x, y) {
+                if let Some([a, b]) = object.hit_segment {
+                    let dx = b[0] - a[0];
+                    let dy = b[1] - a[1];
+                    let length = dx * dx + dy * dy;
+                    let t = if length > 0. {
+                        (((x - a[0]) * dx + (y - a[1]) * dy) / length).clamp(0., 1.)
+                    } else {
+                        0.
+                    };
+                    if (x - a[0] - t * dx).hypot(y - a[1] - t * dy) > tolerance {
+                        return false;
+                    }
+                } else if !contains(object.bounds, x, y) {
                     return false;
                 }
                 if let ObjectTarget::Legend(index) = object.target {

@@ -1,6 +1,6 @@
 # SVG 回归基线
 
-33 种图库预设（含横向堆叠、堆叠面积和两曲线间填充），以及 X/Y 误差棒、X/Y 数据标签、透明插图、双面板和注释图例，共 38 份 SVG。
+33 种图库预设（含横向堆叠、堆叠面积和两曲线间填充），以及 X/Y 误差棒、X/Y 数据标签、透明插图、双面板和注释图例，共 41 份 SVG。
 数据包含负值、缺失行，组合案例包含特殊字符标题。所有案例调用屏幕与导出共用的
 `svg::render_page` / `scene::layout_page`，按文件字节比较；正常测试只读基线。
 
@@ -12,3 +12,5 @@ cargo test -p scicanvas-core --test golden_svg update_svg_baselines -- --ignored
 
 更新后逐份审阅 SVG 差异，再提交基线。重构保持输出时不运行更新命令。
 这些文件记录当前实现的回归基准；Origin 目视对照和真实字体排版仍按路线另行验收。
+
+B7 新增 `shape-objects.svg`、`hatch-bars.svg` 和 `hatch-area.svg`，覆盖四种绘图对象、六种图案、正负面积与图例色块。已有基线保持原字节。

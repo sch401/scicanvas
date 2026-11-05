@@ -1990,11 +1990,36 @@
   "feature": "绘图对象（直线、箭头、矩形、圆）",
   "ref": "Creating and Editing Drawing Objects",
   "pri": "P1",
-  "status": "未开始",
-  "how": "",
-  "verify": "手动操作",
+  "status": "已实现待验收",
+  "how": "绘图对象：直线、箭头、矩形和椭圆使用页面比例坐标。拖动创建、移动、端点或角点缩放、样式编辑、删除和撤销重做，保存稳定对象标识。线和箭头按屏幕距离拾取。数据坐标锚定 F494 留在后续范围。",
+  "verify": "NumPy/Matplotlib 独立几何参考、保存往返、真实界面拖动和控件、撤销重做、PNG/PDF/SVG 导出及 SVG 字节基线。",
   "id": "F104",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "visual",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/shapes_patterns.rs::b7_shapes_geometry_precise_hit_and_stable_save_ids",
+    "crates/scicanvas-core/tests/shapes_patterns.rs::b7_drawing_geometry_matches_independent_numpy_and_matplotlib",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::b7_actual_shape_create_move_resize_delete_undo"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/drawing_geometry.json"
+   ],
+   "visual": [
+    "crates/scicanvas-core/tests/golden/shape-objects.svg"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/plotting.md#F104",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "绘图基础",
@@ -8397,10 +8422,35 @@
   "feature": "曲线填充图案",
   "ref": "Plot Details / Pattern",
   "pri": "P1",
-  "status": "未开始",
-  "how": "A3 共用填充图元，区分实色与图案",
-  "verify": "屏幕与 SVG 图案一致、保存和撤销",
-  "milestone": "M2 论文全流程"
+  "status": "已实现待验收",
+  "how": "填充图案：六种斜线、交叉线、横线、竖线和点阵，支持间距、线宽和颜色。柱形、面积及图例色块复用裁剪几何，屏幕与矢量导出一致。默认 None 保持原 SVG 字节。",
+  "verify": "NumPy/Matplotlib 独立几何参考、保存往返、真实界面拖动和控件、撤销重做、PNG/PDF/SVG 导出及 SVG 字节基线。",
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "visual",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/shapes_patterns.rs::b7_hatches_even_odd_clipping_and_dot_grid",
+    "crates/scicanvas-core/tests/shapes_patterns.rs::b7_pattern_geometry_is_bounded_when_zoomed_and_none_is_byte_identical",
+    "crates/scicanvas/src/app/props.rs::b7_pattern_dropdown_real_controls"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/drawing_geometry.json"
+   ],
+   "visual": [
+    "crates/scicanvas-core/tests/golden/hatch-bars.svg"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/plotting.md#F496",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "id": "F497",

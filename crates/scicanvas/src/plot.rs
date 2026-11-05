@@ -4,6 +4,8 @@
 //! 操作：滚轮缩放（以鼠标位置为中心），Shift+滚轮只缩放 X，Alt+滚轮只缩放 Y，
 //! 左键拖动平移，双击恢复原始范围。
 
+mod shapes;
+
 use std::f32::consts::FRAC_PI_2;
 
 use eframe::egui::{self, pos2, vec2, Color32, Pos2, Rect, Sense, Shape, Stroke};
@@ -239,6 +241,8 @@ pub struct PlotOutput {
 
 #[derive(Clone, Copy)]
 pub struct ObjectUi {
+    pub adding_shape: Option<scicanvas_core::page::ShapeKind>,
+    pub selected_shape: Option<u64>,
     pub adding: bool,
     pub epoch: u64,
     pub keyboard: bool,
@@ -247,6 +251,8 @@ impl Default for ObjectUi {
     fn default() -> Self {
         Self {
             adding: false,
+            adding_shape: None,
+            selected_shape: None,
             epoch: 0,
             keyboard: true,
         }
@@ -255,6 +261,8 @@ impl Default for ObjectUi {
 #[derive(Clone, Copy, Debug)]
 pub enum ObjectAction {
     AddText([f64; 2]),
+    AddShape(scicanvas_core::page::ShapeKind, [f64; 2], [f64; 2]),
+    ResizeShape(u64, [f64; 2], [f64; 2]),
     Move(ObjectTarget, [f64; 2]),
     Edit(ObjectTarget),
     Delete(ObjectTarget),
@@ -266,6 +274,7 @@ struct ObjectDrag {
     target: ObjectTarget,
     grab: [f64; 2],
     expected: Option<[f64; 2]>,
+    resize: Option<(scicanvas_core::page::ShapeObject, usize)>,
 }
 struct ObjectInteraction {
     hover: Option<ObjectTarget>,
@@ -277,6 +286,7 @@ struct ObjectInteraction {
 fn object_position(g: &Graph, target: ObjectTarget) -> Option<Option<[f64; 2]>> {
     match target {
         ObjectTarget::Text(id) => g.page.text(id).map(|t| Some(t.position)),
+        ObjectTarget::Shape(id) => g.page.shape(id).map(|s| Some(s.origin())),
         ObjectTarget::Legend(i) => g.page.layers().get(i).map(|l| l.legend_position),
         ObjectTarget::ColorScale(i) => g
             .page
@@ -285,6 +295,26 @@ fn object_position(g: &Graph, target: ObjectTarget) -> Option<Option<[f64; 2]>> 
             .map(|l| l.color_scale.as_ref().and_then(|c| c.position)),
     }
 }
+fn drag_object(d: &mut ObjectDrag, p: Pos2, g: &Graph, sc: &Scene) -> Option<ObjectAction> {
+    if let Some((shape, handle)) = &d.resize {
+        let (a, b) = shapes::resized(shape, *handle, [p.x as f64 / sc.w, p.y as f64 / sc.h]);
+        d.expected = Some([a[0].min(b[0]), a[1].min(b[1])]);
+        return Some(ObjectAction::ResizeShape(shape.id, a, b));
+    }
+    let object = sc.objects.iter().find(|o| o.target == d.target)?;
+    let mut position = [
+        (p.x as f64 - d.grab[0]).clamp(0., (sc.w - object.bounds[2]).max(0.)) / sc.w,
+        (p.y as f64 - d.grab[1]).clamp(0., (sc.h - object.bounds[3]).max(0.)) / sc.h,
+    ];
+    if let ObjectTarget::Shape(id) = d.target {
+        position = g.page.shape(id)?.clamp_origin(position);
+    }
+    let action =
+        (object_position(g, d.target) != Some(Some(position))).then_some(ObjectAction::Move(d.target, position));
+    d.expected = Some(position);
+    action
+}
+
 fn interact_objects(
     ui: &mut egui::Ui,
     response: &egui::Response,
@@ -293,8 +323,20 @@ fn interact_objects(
     transform: egui::emath::TSTransform,
     config: ObjectUi,
 ) -> ObjectInteraction {
+    if config.adding_shape.is_some() {
+        return shapes::create(ui, response, g, sc, transform, config);
+    }
     let id = view_id(g.id).with(("objects", config.epoch));
     let mut selected = ui.data(|d| d.get_temp::<ObjectTarget>(id));
+    let hint = id.with("shape-hint");
+    if let Some(shape) = config.selected_shape {
+        if ui.data(|d| d.get_temp::<u64>(hint)) != Some(shape) {
+            selected = Some(ObjectTarget::Shape(shape));
+            ui.data_mut(|d| d.insert_temp(hint, shape));
+        }
+    } else {
+        ui.data_mut(|d| d.remove::<u64>(hint));
+    }
     if selected.is_some_and(|t| !sc.objects.iter().any(|o| o.target == t)) {
         selected = None;
     }
@@ -306,8 +348,15 @@ fn interact_objects(
         drag = None;
     }
     let point = ui.input(|i| i.pointer.interact_pos()).map(|p| transform.inverse() * p);
+    let handle = if response.contains_pointer() {
+        shapes::handle_at(g, selected, point, sc, transform)
+    } else {
+        None
+    };
     let hover = if response.contains_pointer() {
-        point.and_then(|p| sc.object_at(p.x as f64, p.y as f64))
+        handle.map(|(shape, _)| ObjectTarget::Shape(shape.id)).or_else(|| {
+            point.and_then(|p| sc.object_at_tolerance(p.x as f64, p.y as f64, 4. / f64::from(transform.scaling)))
+        })
     } else {
         None
     };
@@ -322,6 +371,7 @@ fn interact_objects(
                     target,
                     grab: [p.x as f64 - object.bounds[0], p.y as f64 - object.bounds[1]],
                     expected: object_position(g, target).flatten(),
+                    resize: handle,
                 });
             }
         }
@@ -367,19 +417,11 @@ fn interact_objects(
         || response.drag_stopped_by(egui::PointerButton::Primary)
     {
         if let (Some(d), Some(p)) = (&mut drag, point) {
-            if let Some(object) = sc.objects.iter().find(|o| o.target == d.target) {
-                let position = [
-                    (p.x as f64 - d.grab[0]).clamp(0.0, (sc.w - object.bounds[2]).max(0.0)) / sc.w,
-                    (p.y as f64 - d.grab[1]).clamp(0.0, (sc.h - object.bounds[3]).max(0.0)) / sc.h,
-                ];
-                if object_position(g, d.target) != Some(Some(position)) {
-                    action = Some(ObjectAction::Move(d.target, position));
-                }
-                d.expected = Some(position);
-                dragging = response.dragged_by(egui::PointerButton::Primary);
-            }
+            action = drag_object(d, p, g, sc);
+            dragging = response.dragged_by(egui::PointerButton::Primary);
         }
     }
+
     if config.keyboard && response.has_focus() && ui.input(|i| i.key_pressed(egui::Key::Delete)) {
         action = selected.map(ObjectAction::Delete);
     }
@@ -563,6 +605,7 @@ fn update_saved_view(
 }
 
 pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize, objects: ObjectUi) -> PlotOutput {
+    let adding = objects.adding || objects.adding_shape.is_some();
     let id = view_id(g.id);
     let available = ui.available_size().max(vec2(120.0, 90.0));
     let (canvas, _) = ui.allocate_exact_size(available, Sense::hover());
@@ -597,7 +640,7 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize, ob
     let selected_layer =
         if let Some(ObjectTarget::Legend(i)) = object.hover.filter(|_| ui.input(|i| i.pointer.any_pressed())) {
             Some(i)
-        } else if object.hover.is_some() || objects.adding {
+        } else if object.hover.is_some() || adding {
             None
         } else if response.contains_pointer() && ui.input(|i| i.pointer.any_pressed()) {
             response.interact_pointer_pos().and_then(|p| {
@@ -651,7 +694,7 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize, ob
         );
     }
     let hover = hovered
-        .filter(|_| object.hover.is_none() && !object.dragging && !objects.adding)
+        .filter(|_| object.hover.is_none() && !object.dragging && !adding)
         .and_then(|index| {
             response.hover_pos().map(|p| {
                 let (x, y) = local(p);
@@ -660,9 +703,7 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize, ob
         });
     // 数据点提示：屏幕上 8 像素以内吸附到最近的数据点
     let point = match (hovered, response.hover_pos()) {
-        (Some(index), Some(p))
-            if dragging.is_none() && !object.dragging && object.hover.is_none() && !objects.adding =>
-        {
+        (Some(index), Some(p)) if dragging.is_none() && !object.dragging && object.hover.is_none() && !adding => {
             let (x, y) = local(p);
             let layer = &g.page.layers()[index];
             scene::nearest_point(
@@ -699,9 +740,10 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize, ob
         response.dragged(),
         dragging.is_some(),
         object.dragging,
-        objects.adding,
+        adding,
         object.hover.is_some(),
     );
+    shapes::draw_overlay(ui, g, object.selected, &sc, transform, objects.adding_shape.is_some());
     let zoomed = saved.iter().any(Option::is_some);
     ui.data_mut(|d| d.insert_temp(id, saved));
     PlotOutput {
@@ -745,9 +787,12 @@ pub fn paint(ui: &egui::Ui, rect: Rect, sc: &Scene) {
 
 fn paint_with_painter(free: egui::Painter, rect: Rect, sc: &Scene) {
     let transform = page_transform(rect, [sc.w, sc.h]);
+    paint_items(free, transform, &sc.items);
+}
+fn paint_items(free: egui::Painter, transform: egui::emath::TSTransform, items: &[scene::Item]) {
     let scale = transform.scaling;
     let at = |x: f64, y: f64| transform * pos2(x as f32, y as f32);
-    for it in &sc.items {
+    for it in items {
         let p = match it.clip {
             Some([x, y, w, h]) => free.with_clip_rect(
                 Rect::from_min_size(at(x, y), vec2(w as f32, h as f32) * scale).intersect(free.clip_rect()),
@@ -977,7 +1022,7 @@ mod tests {
             match target {
                 ObjectTarget::Text(id) => p.graphs[0].page.text_mut(id).unwrap().position = position,
                 ObjectTarget::Legend(i) => p.graphs[0].page.layers_mut()[i].legend_position = Some(position),
-                ObjectTarget::ColorScale(_) => unreachable!(),
+                ObjectTarget::ColorScale(_) | ObjectTarget::Shape(_) => unreachable!(),
             }
             frame(&ctx, &p, vec![button(end, false)]);
             assert!(!frame(&ctx, &p, vec![]).zoomed);

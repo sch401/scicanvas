@@ -300,7 +300,11 @@ pub static TABS: &[Tab] = &[
             },
             Group {
                 label: "标注",
-                items: &[Smalls(&["graph.text.add", "graph.text.manage", "graph.legend.auto"])],
+                items: &[
+                    Smalls(&["graph.text.add", "graph.text.manage", "graph.legend.auto"]),
+                    Smalls(&["graph.shape.line", "graph.shape.arrow"]),
+                    Smalls(&["graph.shape.rect", "graph.shape.ellipse"]),
+                ],
             },
             Group {
                 label: "设置",

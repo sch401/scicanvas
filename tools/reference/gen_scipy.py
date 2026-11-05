@@ -1010,11 +1010,33 @@ def statistical_report_cases():
     write("statistical_reports",cases)
 
 
+def drawing_geometry_cases():
+    import matplotlib
+    from matplotlib.path import Path as PlotPath
+    cases=[];a=np.array([.1,.15]);b=np.array([.65,.55]);size=np.array([800.,600.]);aa=a*size;bb=b*size
+    for kind in ["Line","Arrow","Rect","Ellipse"]:
+        case=dict(type="shape",kind=kind,a=a,b=b,w=800.,h=600.,head_pt=6.)
+        if kind=="Rect":case["bounds"]=np.r_[np.minimum(aa,bb),abs(bb-aa)]
+        elif kind=="Ellipse":
+            angle=2*np.pi*np.arange(97)/96;center=(aa+bb)/2;radius=abs(bb-aa)/2;case["points"]=center+np.column_stack([np.cos(angle),np.sin(angle)])*radius
+        else:
+            case["points"]=np.stack([aa,bb])
+            if kind=="Arrow":
+                u=(bb-aa)/np.linalg.norm(bb-aa);normal=np.array([-u[1],u[0]]);head=6*96/72;base=bb-head*u;case["head"]=np.stack([bb,base+.45*head*normal,base-.45*head*normal])
+        cases.append(case)
+    poly=np.array([[0.,0.],[40.,0.],[40.,24.],[24.,24.],[24.,8.],[16.,8.],[16.,24.],[0.,24.]])
+    grid=np.array([[x,y] for y in np.arange(4.,24.,8.) for x in np.arange(4.,40.,8.)]);dots=grid[PlotPath(poly).contains_points(grid)]
+    cases.append(dict(type="dots",poly=poly,spacing_pt=6.,points=dots))
+    cases.append(dict(type="hatch-rect",kind="Horizontal",rect=[2.,3.,40.,24.],spacing_pt=6.,segments=[[2.,y,42.,y] for y in [8.,16.,24.]]))
+    cases.append(dict(type="hatch-rect",kind="Vertical",rect=[2.,3.,40.,24.],spacing_pt=6.,segments=[[x,3.,x,27.] for x in [8.,16.,24.,32.,40.]]))
+    write("drawing_geometry",cases,{"matplotlib":matplotlib.__version__})
+
+
 GENERATORS = [
     integrals, normalization, descriptive, column_math, polynomial, statistical_tests, signal_tests,
     interpolation_cases, derivative_cases, peak_cases, constrained_fit_cases, builtin_fit_cases,
     smoothing_cases, percent_bar_cases, fit_report_cases, formula_cases, weighted_fit_cases, qq_cases, box_cases,
-    histogram_option_cases, normality_ks_ad, ks_2samp, two_way_anova, fit_tools, global_fits, extended_fit_cases, inhibition_fits, kde_cases, peak_sum_cases, function_plot_cases, baseline_extension_cases, derivative_peak_cases, signal_extension_cases, curve_tool_cases, axis_scale_cases, statistical_report_cases,
+    histogram_option_cases, normality_ks_ad, ks_2samp, two_way_anova, fit_tools, global_fits, extended_fit_cases, inhibition_fits, kde_cases, peak_sum_cases, function_plot_cases, baseline_extension_cases, derivative_peak_cases, signal_extension_cases, curve_tool_cases, axis_scale_cases, statistical_report_cases, drawing_geometry_cases,
 ]
 
 
