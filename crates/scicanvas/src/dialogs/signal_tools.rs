@@ -20,36 +20,49 @@ pub(crate) struct SignalEditor {
     pub epsilon: f64,
 }
 impl SignalEditor {
-    pub fn show(&mut self, ctx: &egui::Context, pal: &Palette, open: &mut bool) -> Action {
+    pub fn show(&mut self, ctx: &egui::Context, _pal: &Palette, open: &mut bool) -> Action {
         let mut action = Action::None;
-        window(ctx, "卷积与反卷积").open(open).show(ctx, |ui| {
+        window(ctx, "卷积与反卷积").centered().open(open).show(ctx, |ui| {
             ui.label(format!("依次为信号、卷积核：{}", self.labels.join("、")));
-            ui.horizontal(|ui| {
-                ui.radio_value(&mut self.inverse, false, "卷积");
-                ui.radio_value(&mut self.inverse, true, "反卷积");
+            form(ui, "signal-form", |f| {
+                f.row("操作", |ui| {
+                    ui.horizontal(|ui| {
+                        ui.radio_value(&mut self.inverse, false, "卷积");
+                        ui.radio_value(&mut self.inverse, true, "反卷积");
+                    });
+                });
+                if self.inverse {
+                    f.row("正则系数 ε", |ui| {
+                        ui.add(egui::DragValue::new(&mut self.epsilon).speed(0.0001).range(0.0..=1.))
+                            .on_hover_text("ε 越大越平滑，0 表示纯除法。");
+                    });
+                } else {
+                    f.row("结果长度", |ui| {
+                        ui.horizontal_wrapped(|ui| {
+                            for (mode, label) in [
+                                (ConvolutionMode::Full, "Full（全长）"),
+                                (ConvolutionMode::Same, "Same（同长）"),
+                                (ConvolutionMode::Valid, "Valid（有效）"),
+                            ] {
+                                ui.radio_value(&mut self.mode, mode, label);
+                            }
+                        });
+                    });
+                }
             });
-            if self.inverse {
-                ui.horizontal(|ui| {
-                    ui.label("正则系数 ε");
-                    ui.add(egui::DragValue::new(&mut self.epsilon).speed(0.0001).range(0.0..=1.));
-                });
-                ui.label("反卷积是病态问题，ε 越大越平滑；ε=0 为纯除法。");
-            } else {
-                ui.horizontal(|ui| {
-                    for (mode, label) in [
-                        (ConvolutionMode::Full, "Full（全长）"),
-                        (ConvolutionMode::Same, "Same（同长）"),
-                        (ConvolutionMode::Valid, "Valid（有效）"),
-                    ] {
-                        ui.radio_value(&mut self.mode, mode, label);
-                    }
-                });
+            hint(ui, "结果不乘采样间隔，写入新列并附图。");
+            if self.inverse && (!self.epsilon.is_finite() || self.epsilon < 0.) {
+                field_error(ui, "ε 应为有限非负数");
             }
-            ui.label("结果不乘采样间隔，写入新列并附图。");
-            if self.inverse && !self.epsilon.is_finite() {
-                ui.colored_label(pal.error, "ε 应为有限非负数");
-            }
-            let (ok, cancel) = buttons(ui, "计算");
+            let (ok, cancel) = buttons(
+                ui,
+                "计算",
+                if !self.inverse || (self.epsilon.is_finite() && self.epsilon >= 0.) {
+                    Ok(())
+                } else {
+                    Err("ε 应为有限非负数".into())
+                },
+            );
             if ok {
                 action = Action::SignalTools(Box::new(SignalAction::Signal(
                     self.source.clone(),
@@ -72,7 +85,7 @@ impl Dialog {
             unreachable!()
         };
         let mut action = Action::None;
-        window(ctx, "曲线平均与合并").open(open).show(ctx, |ui| {
+        window(ctx, "曲线平均与合并").centered().open(open).show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.radio_value(merge, false, "插值平均");
                 ui.radio_value(merge, true, "直接合并");
@@ -89,7 +102,7 @@ impl Dialog {
             } else {
                 "在线性插值的共同 X 区间上求平均，并输出标准差。"
             });
-            let (ok, cancel) = buttons(ui, "计算");
+            let (ok, cancel) = buttons(ui, "计算", Ok(()));
             if ok {
                 action = Action::SignalTools(Box::new(SignalAction::Merge(if *merge {
                     Some(if *mean {

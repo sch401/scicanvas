@@ -1,13 +1,7 @@
 use super::*;
 
 impl Dialog {
-    pub(super) fn show_analysis_curves(
-        &mut self,
-        ctx: &egui::Context,
-        _pal: &Palette,
-        open: &mut bool,
-        _esc: bool,
-    ) -> Action {
+    pub(super) fn show_analysis_curves(&mut self, ctx: &egui::Context, _pal: &Palette, open: &mut bool) -> Action {
         let Self::AnalysisCurves { curves, .. } = self else {
             unreachable!()
         };

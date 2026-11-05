@@ -41,8 +41,8 @@ impl Dialog {
                     target = (reports[*index].book_id, reports[*index].y_key.clone());
                 }
             }
-            ui.label("F 检验只适用于嵌套模型。");
-            let (ok, cancel) = buttons(ui, "比较");
+            hint(ui, "F 检验只适用于嵌套模型。");
+            let (ok, cancel) = buttons(ui, "比较", Ok(()));
             if ok {
                 action = Action::CompareFits(Box::new([reports[*first].clone(), reports[*second].clone()]));
             } else if cancel {

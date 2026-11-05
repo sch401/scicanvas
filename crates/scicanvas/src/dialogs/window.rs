@@ -6,9 +6,15 @@ pub(super) const PANEL_MARGIN: f32 = 8.0;
 pub(crate) struct SettingsWindow<'open> {
     window: egui::Window<'open>,
     id: egui::Id,
+    centered: bool,
 }
 
 impl<'open> SettingsWindow<'open> {
+    pub(super) fn centered(mut self) -> Self {
+        self.centered = true;
+        self
+    }
+
     pub(crate) fn id(mut self, id: egui::Id) -> Self {
         self.id = id;
         self.window = self.window.id(id);
@@ -35,6 +41,7 @@ impl<'open> SettingsWindow<'open> {
         ctx: &egui::Context,
         contents: impl FnOnce(&mut egui::Ui) -> R,
     ) -> Option<egui::InnerResponse<Option<R>>> {
+        let first_open = self.centered && ctx.memory(|memory| memory.area_rect(self.id).is_none());
         let mut state = docks(ctx);
         if !state.panels.iter().any(|p| p.id == self.id) {
             state.panels.push(DockPanel {
@@ -72,7 +79,7 @@ impl<'open> SettingsWindow<'open> {
         store_docks(ctx, state);
         let id = self.id;
         let out = self.window.show(ctx, |ui| {
-            ui.spacing_mut().item_spacing = egui::vec2(6.0, 4.0);
+            ui.spacing_mut().item_spacing = egui::vec2(crate::theme::space::CONTROL_GAP, crate::theme::space::XS);
             ui.spacing_mut().slider_width = 100.0;
             ui.spacing_mut().text_edit_width = 200.0;
             if let Some(size) = dock_size {
@@ -85,6 +92,14 @@ impl<'open> SettingsWindow<'open> {
         });
         if let Some(out) = &out {
             Self::window_header(ctx, id, out, docked, dock_size);
+            if first_open && docked.is_none() {
+                let mut state = docks(ctx);
+                if let Some(panel) = state.panels.iter_mut().find(|panel| panel.id == id) {
+                    panel.float_pos = Some(ctx.available_rect().center() - out.response.rect.size() / 2.);
+                }
+                store_docks(ctx, state);
+                ctx.request_repaint();
+            }
         }
         out
     }
@@ -244,6 +259,7 @@ pub(crate) fn window<'open>(ctx: &egui::Context, title: &str) -> SettingsWindow<
     let id = egui::Id::new(("scicanvas-dialog", title));
     SettingsWindow {
         id,
+        centered: false,
         window: egui::Window::new(RichText::new(title).strong())
             .id(id)
             .constrain_to(floating_bounds(ctx))
@@ -254,7 +270,7 @@ pub(crate) fn window<'open>(ctx: &egui::Context, title: &str) -> SettingsWindow<
                 ctx.screen_rect().center().x - 190.0,
                 ctx.screen_rect().top() + 60.0,
             ))
-            .default_width(360.0)
+            .default_width(crate::theme::dialog::SMALL)
             .min_width(280.0)
             .default_height(ctx.screen_rect().height() * 0.75)
             .max_height((ctx.available_rect().height() - 64.0).max(100.0))

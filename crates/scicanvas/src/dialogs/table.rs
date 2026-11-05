@@ -1,7 +1,7 @@
 use super::*;
 
 impl Dialog {
-    pub(super) fn show_table(&mut self, ctx: &egui::Context, pal: &Palette, open: &mut bool, _esc: bool) -> Action {
+    pub(super) fn show_table(&mut self, ctx: &egui::Context, pal: &Palette, open: &mut bool) -> Action {
         let Self::Table { title, rows, note } = self else {
             unreachable!()
         };

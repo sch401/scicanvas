@@ -86,7 +86,8 @@ pub(crate) use scientific_text::{scientific_text, scientific_text_multiline};
 pub(crate) use tables::md_table;
 use tables::{md_cell, md_pairs, table_grid};
 pub(crate) use widgets::{
-    actions, axis_scale_options, center_buttons, edit_group, plain, primary, ActionKind, Keys, BUTTON,
+    actions, axis_scale_options, center_buttons, edit_group, field_error, form, hint, mark_multiline, multiline,
+    multiline_editor, parameter_bounds, plain, primary, ActionKind, Keys, BUTTON,
 };
 use widgets::{buttons, data_hint};
 pub(crate) use window::{floating_bounds, window};
@@ -412,6 +413,7 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
 
 impl Dialog {
     fn show(&mut self, ctx: &egui::Context, pal: &Palette, project: &scicanvas_core::Project) -> Action {
+        widgets::prepare_submission(ctx);
         let mut open = true;
         let esc = ctx.input(|i| i.key_pressed(egui::Key::Escape)) && ctx.memory(|m| m.focused().is_none());
         let mut action = match self {
@@ -422,47 +424,47 @@ impl Dialog {
             Self::BatchPlot(state) => state.show(ctx, &mut open),
             Self::Filter(state) => state.show(ctx, &mut open),
             Self::ImportWizard(wizard) => wizard.show(ctx, pal, &mut open),
-            Self::AnalysisCurves { .. } => self.show_analysis_curves(ctx, pal, &mut open, esc),
-            Self::ColumnProps { .. } => self.show_column_props(ctx, pal, &mut open, esc),
+            Self::AnalysisCurves { .. } => self.show_analysis_curves(ctx, pal, &mut open),
+            Self::ColumnProps { .. } => self.show_column_props(ctx, pal, &mut open),
             Self::ConvertText { .. } => self.show_convert_text(ctx, pal, &mut open, esc),
-            Self::Poly { .. } => self.show_poly(ctx, pal, &mut open, esc),
-            Self::Smooth { .. } => self.show_smooth(ctx, pal, &mut open, esc),
-            Self::CategoryOrder { .. } => self.show_category_order(ctx, pal, &mut open, esc),
-            Self::Sort { .. } => self.show_sort(ctx, pal, &mut open, esc),
+            Self::Poly { .. } => self.show_poly(ctx, pal, &mut open),
+            Self::Smooth { .. } => self.show_smooth(ctx, pal, &mut open),
+            Self::CategoryOrder { .. } => self.show_category_order(ctx, pal, &mut open),
+            Self::Sort { .. } => self.show_sort(ctx, pal, &mut open),
             Self::SheetTransform(state) => state.show(ctx, &mut open),
-            Self::Ifft { .. } => self.show_ifft(ctx, pal, &mut open, esc),
-            Self::SgDiff { .. } => self.show_sg_diff(ctx, pal, &mut open, esc),
-            Self::Normalize { .. } => self.show_normalize(ctx, pal, &mut open, esc),
+            Self::Ifft { .. } => self.show_ifft(ctx, pal, &mut open),
+            Self::SgDiff { .. } => self.show_sg_diff(ctx, pal, &mut open),
+            Self::Normalize { .. } => self.show_normalize(ctx, pal, &mut open),
             Self::FitCompare { .. } => self.show_fit_compare(ctx, &mut open),
             Self::Calibration { .. } => self.show_calibration(ctx, &mut open),
-            Self::FitReport(..) => self.show_fit_report(ctx, pal, &mut open, esc),
-            Self::Areas(..) => self.show_areas(ctx, pal, &mut open, esc),
-            Self::Interpolate { .. } => self.show_interpolate(ctx, pal, &mut open, esc),
+            Self::FitReport(..) => self.show_fit_report(ctx, pal, &mut open),
+            Self::Areas(..) => self.show_areas(ctx, pal, &mut open),
+            Self::Interpolate { .. } => self.show_interpolate(ctx, pal, &mut open),
             Self::TwoWayAnova { .. } => self.show_two_way_anova(ctx, &mut open),
-            Self::Anova { .. } => self.show_anova(ctx, pal, &mut open, esc),
-            Self::Correlations(..) => self.show_correlations(ctx, pal, &mut open, esc),
-            Self::NlFit { .. } => self.show_nl_fit(ctx, pal, &mut open, esc),
+            Self::Anova { .. } => self.show_anova(ctx, pal, &mut open),
+            Self::Correlations(..) => self.show_correlations(ctx, pal, &mut open),
+            Self::NlFit { .. } => self.show_nl_fit(ctx, pal, &mut open),
             Self::GlobalFit(editor) => editor.show(ctx, pal, &mut open),
             Self::PeakFit(edit) => edit.show(ctx, pal, &mut open),
             Self::FunctionPlot(edit) => edit.show(ctx, pal, &mut open),
             Self::GraphThemes(edit) => edit.show(ctx, pal, &mut open, project),
-            Self::CustomNlFit(..) => self.show_custom_nl_fit(ctx, pal, &mut open, esc, project),
-            Self::NlFitReport(..) => self.show_nl_fit_report(ctx, pal, &mut open, esc, project),
-            Self::FftFilter { .. } => self.show_fft_filter(ctx, pal, &mut open, esc),
-            Self::Fill { .. } => self.show_fill(ctx, pal, &mut open, esc),
-            Self::Table { .. } => self.show_table(ctx, pal, &mut open, esc),
-            Self::SetValues { .. } => self.show_set_values(ctx, pal, &mut open, esc),
+            Self::CustomNlFit(..) => self.show_custom_nl_fit(ctx, pal, &mut open, project),
+            Self::NlFitReport(..) => self.show_nl_fit_report(ctx, pal, &mut open, project),
+            Self::FftFilter { .. } => self.show_fft_filter(ctx, pal, &mut open),
+            Self::Fill { .. } => self.show_fill(ctx, pal, &mut open),
+            Self::Table { .. } => self.show_table(ctx, pal, &mut open),
+            Self::SetValues { .. } => self.show_set_values(ctx, pal, &mut open),
             Self::StatisticsCompare { .. } => self.show_statistics_compare(ctx, &mut open),
             Self::Average { .. } => self.show_average(ctx, &mut open),
             Self::Signal(edit) => edit.show(ctx, pal, &mut open),
-            Self::Baseline { .. } => self.show_baseline(ctx, pal, &mut open, esc),
-            Self::Peaks { .. } => self.show_peaks(ctx, pal, &mut open, esc),
-            Self::Fft { .. } => self.show_fft(ctx, pal, &mut open, esc),
-            Self::ColumnMath { .. } => self.show_column_math(ctx, pal, &mut open, esc),
-            Self::Frequency { .. } => self.show_frequency(ctx, pal, &mut open, esc),
-            Self::TTest { .. } => self.show_t_test(ctx, pal, &mut open, esc),
-            Self::TTestReport { .. } => self.show_t_test_report(ctx, pal, &mut open, esc),
-            Self::Png { .. } | Self::Tiff { .. } => self.show_png(ctx, pal, &mut open, esc),
+            Self::Baseline { .. } => self.show_baseline(ctx, pal, &mut open),
+            Self::Peaks { .. } => self.show_peaks(ctx, pal, &mut open),
+            Self::Fft { .. } => self.show_fft(ctx, pal, &mut open),
+            Self::ColumnMath { .. } => self.show_column_math(ctx, pal, &mut open),
+            Self::Frequency { .. } => self.show_frequency(ctx, pal, &mut open),
+            Self::TTest { .. } => self.show_t_test(ctx, pal, &mut open),
+            Self::TTestReport { .. } => self.show_t_test_report(ctx, pal, &mut open),
+            Self::Png { .. } | Self::Tiff { .. } => self.show_png(ctx, pal, &mut open),
         };
         if !open || (esc && matches!(action, Action::None)) {
             action = Action::Close;

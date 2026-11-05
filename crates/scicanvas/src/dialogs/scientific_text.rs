@@ -21,6 +21,9 @@ fn scientific_text_editor(
             egui::TextEdit::singleline(text)
         };
         let mut edit = widget.hint_text(hint).desired_width(f32::INFINITY).show(ui);
+        if multiline {
+            mark_multiline(&edit.response);
+        }
         let mut action = None;
         ui.horizontal(|ui| {
             for (label, tip, command) in [

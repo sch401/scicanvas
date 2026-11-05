@@ -177,7 +177,7 @@ impl CustomFitEditor {
 }
 
 impl Dialog {
-    pub(super) fn show_nl_fit(&mut self, ctx: &egui::Context, pal: &Palette, open: &mut bool, _esc: bool) -> Action {
+    pub(super) fn show_nl_fit(&mut self, ctx: &egui::Context, pal: &Palette, open: &mut bool) -> Action {
         let Self::NlFit {
             model,
             initial,
@@ -190,7 +190,7 @@ impl Dialog {
             unreachable!()
         };
         let mut action = Action::None;
-        window(ctx, "非线性拟合").open(open).show(ctx, |ui| {
+        window(ctx, "非线性拟合").centered().open(open).show(ctx, |ui| {
             data_hint(ui);
             model_picker(ui, model);
             parameter_hint(ui, *model, pal);
@@ -218,27 +218,25 @@ impl Dialog {
                     for (name, (fix, fv, has_lo, lo, has_hi, hi)) in model.params().iter().zip(limits.iter_mut()) {
                         ui.strong(*name);
                         let free = !*fix;
-                        egui::Grid::new(("nlfit-limits", name))
-                            .num_columns(2)
-                            .spacing([8.0, 4.0])
-                            .show(ui, |ui| {
-                                for (label, on, value, enabled) in [
-                                    ("固定", fix, fv, true),
-                                    ("下限", has_lo, lo, free),
-                                    ("上限", has_hi, hi, free),
-                                ] {
-                                    ui.add_enabled_ui(enabled, |ui| {
-                                        ui.checkbox(on, label);
-                                    });
-                                    ui.add_enabled(enabled && *on, egui::DragValue::new(value).speed(0.01));
-                                    ui.end_row();
-                                }
-                            });
+                        form(ui, ("nlfit-limits", name), |ui| {
+                            for (label, on, value, enabled) in [
+                                ("固定", fix, fv, true),
+                                ("下限", has_lo, lo, free),
+                                ("上限", has_hi, hi, free),
+                            ] {
+                                ui.add_enabled_ui(enabled, |ui| {
+                                    ui.checkbox(on, label);
+                                });
+                                ui.add_enabled(enabled && *on, egui::DragValue::new(value).speed(0.01));
+                                ui.end_row();
+                            }
+                        });
                     }
                 });
             ui.add_space(4.0);
             ui.label(RichText::new("参数约束").color(pal.weak));
-            ui.add(
+            multiline_editor(
+                ui,
                 egui::TextEdit::multiline(constraints)
                     .desired_rows(2)
                     .desired_width(f32::INFINITY)
@@ -250,20 +248,37 @@ impl Dialog {
             if target.is_none() && ui.button("自定义函数…").clicked() {
                 action = Action::OpenCustomNlFit;
             }
-            let (ok, cancel) = buttons(ui, "拟合");
+            let held: Vec<_> = model
+                .params()
+                .iter()
+                .zip(limits.iter())
+                .map(
+                    |(_, &(fix, fv, has_lo, lo, has_hi, hi))| scicanvas_core::nlfit::ParamLimits {
+                        fixed: fix.then_some(fv),
+                        lower: (!fix && has_lo).then_some(lo),
+                        upper: (!fix && has_hi).then_some(hi),
+                    },
+                )
+                .collect();
+            let valid = parameter_bounds(&held)
+                .and_then(|_| scicanvas_core::nlfit::parse_constraints(*model, constraints).map(|_| ()))
+                .and_then(|_| {
+                    if target.is_some() && !initial.trim().is_empty() {
+                        let values = initial
+                            .split([',', '，'])
+                            .map(|v| v.trim().parse::<f64>())
+                            .collect::<Result<Vec<_>, _>>();
+                        if !values.is_ok_and(|v| v.len() == model.params().len() && v.iter().all(|x| x.is_finite())) {
+                            return Err("初值数量应与参数一致，且均为有限数".into());
+                        }
+                    }
+                    Ok(())
+                });
+            if let Err(error) = &valid {
+                field_error(ui, error);
+            }
+            let (ok, cancel) = buttons(ui, "拟合", valid);
             if ok && !matches!(action, Action::OpenCustomNlFit) {
-                let held: Vec<_> = model
-                    .params()
-                    .iter()
-                    .zip(limits.iter())
-                    .map(
-                        |(_, &(fix, fv, has_lo, lo, has_hi, hi))| scicanvas_core::nlfit::ParamLimits {
-                            fixed: fix.then_some(fv),
-                            lower: (!fix && has_lo).then_some(lo),
-                            upper: (!fix && has_hi).then_some(hi),
-                        },
-                    )
-                    .collect();
                 action = if let Some(target) = target {
                     let values = if initial.trim().is_empty() {
                         Ok(None)
@@ -310,15 +325,14 @@ impl Dialog {
     pub(super) fn show_custom_nl_fit(
         &mut self,
         ctx: &egui::Context,
-        pal: &Palette,
+        _pal: &Palette,
         open: &mut bool,
-        _esc: bool,
         project: &scicanvas_core::Project,
     ) -> Action {
         let Self::CustomNlFit(edit) = self else { unreachable!() };
         edit.sync_saved(&project.fit_functions);
         let mut action = Action::None;
-        window(ctx, "自定义非线性拟合").open(open).show(ctx, |ui| {
+        window(ctx, "自定义非线性拟合").centered().open(open).show(ctx, |ui| {
             if edit.target.is_none() {
                 ui.horizontal_wrapped(|ui| {
                     ui.label("项目函数");
@@ -350,13 +364,7 @@ impl Dialog {
                     }
                 });
             }
-            ui.label(
-                RichText::new(format!(
-                    "使用 x 和参数名组成标量表达式，参数初值以逗号分隔。最多 {} 个参数。",
-                    scicanvas_core::nlfit::MAX_PARAMS
-                ))
-                .color(pal.weak),
-            );
+            hint(ui, "表达式使用 x 和参数名。");
             if let Some(target) = &edit.target {
                 ui.label(format!(
                     "更新 Book {} 的结果列 {}",
@@ -366,7 +374,8 @@ impl Dialog {
             ui.label("函数名");
             ui.text_edit_singleline(&mut edit.name);
             ui.label("表达式");
-            ui.add(
+            multiline_editor(
+                ui,
                 egui::TextEdit::multiline(&mut edit.formula)
                     .desired_rows(2)
                     .desired_width(f32::INFINITY)
@@ -378,7 +387,8 @@ impl Dialog {
             ui.label("初始值");
             ui.text_edit_singleline(&mut edit.initial);
             ui.label("参数约束");
-            ui.add(
+            multiline_editor(
+                ui,
                 egui::TextEdit::multiline(&mut edit.constraints)
                     .desired_rows(2)
                     .desired_width(f32::INFINITY)
@@ -408,7 +418,16 @@ impl Dialog {
                     }
                 });
             }
-            let (ok, cancel) = buttons(ui, "拟合");
+            let valid = edit.definition().and_then(|definition| {
+                let names = definition.parameters.iter().map(String::as_str).collect::<Vec<_>>();
+                parameter_bounds(&edit.limits).and_then(|_| {
+                    scicanvas_core::nlfit::parse_constraints_for_names(&names, &edit.constraints).map(|_| ())
+                })
+            });
+            if let Err(error) = &valid {
+                field_error(ui, error);
+            }
+            let (ok, cancel) = buttons(ui, "拟合", valid);
             if ok {
                 if let Some(target) = &edit.target {
                     let recipe = edit.definition().and_then(|definition| {

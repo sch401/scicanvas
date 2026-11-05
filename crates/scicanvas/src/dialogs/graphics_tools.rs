@@ -25,38 +25,42 @@ impl FunctionPlotEditor {
         }
         Ok(curve)
     }
-    pub fn show(&mut self, ctx: &egui::Context, pal: &Palette, open: &mut bool) -> Action {
+    pub fn show(&mut self, ctx: &egui::Context, _pal: &Palette, open: &mut bool) -> Action {
         let mut action = Action::None;
-        window(ctx, "函数绘图").default_width(440.).open(open).show(ctx, |ui| {
-            ui.label("表达式（仅变量 x）");
-            ui.text_edit_singleline(&mut self.expr);
-            ui.horizontal(|ui| {
-                ui.label("X 从");
-                ui.add(egui::DragValue::new(&mut self.lo));
-                ui.label("到");
-                ui.add(egui::DragValue::new(&mut self.hi));
-            });
-            ui.horizontal(|ui| {
-                ui.label("采样点数");
-                ui.add(egui::DragValue::new(&mut self.points).range(2..=100_000));
-            });
-            ui.add_enabled(
-                self.target.is_some() && self.index.is_none(),
-                egui::Checkbox::new(&mut self.add, "添加到当前图层"),
-            );
-            if let Some(error) = &self.error {
-                ui.colored_label(pal.error, error);
-            }
-            let (ok, cancel) = buttons(ui, "绘制");
-            if ok {
-                match self.curve() {
-                    Ok(_) => action = Action::FunctionPlot(Box::new(self.clone())),
-                    Err(error) => self.error = Some(error),
+        window(ctx, "函数绘图")
+            .centered()
+            .default_width(crate::theme::dialog::MEDIUM)
+            .open(open)
+            .show(ctx, |ui| {
+                ui.label("表达式（仅变量 x）");
+                ui.text_edit_singleline(&mut self.expr);
+                ui.horizontal(|ui| {
+                    ui.label("X 从");
+                    ui.add(egui::DragValue::new(&mut self.lo));
+                    ui.label("到");
+                    ui.add(egui::DragValue::new(&mut self.hi));
+                });
+                ui.horizontal(|ui| {
+                    ui.label("采样点数");
+                    ui.add(egui::DragValue::new(&mut self.points).range(2..=100_000));
+                });
+                ui.add_enabled(
+                    self.target.is_some() && self.index.is_none(),
+                    egui::Checkbox::new(&mut self.add, "添加到当前图层"),
+                );
+                if let Some(error) = &self.error {
+                    field_error(ui, error);
                 }
-            } else if cancel {
-                action = Action::Close;
-            }
-        });
+                let (ok, cancel) = buttons(ui, "绘制", Ok(()));
+                if ok {
+                    match self.curve() {
+                        Ok(_) => action = Action::FunctionPlot(Box::new(self.clone())),
+                        Err(error) => self.error = Some(error),
+                    }
+                } else if cancel {
+                    action = Action::Close;
+                }
+            });
         action
     }
 }
@@ -69,16 +73,17 @@ impl GraphThemeEditor {
     pub fn show(
         &mut self,
         ctx: &egui::Context,
-        pal: &Palette,
+        _pal: &Palette,
         open: &mut bool,
         project: &scicanvas_core::Project,
     ) -> Action {
         let mut action = Action::None;
         window(ctx, "图形主题与选项")
-            .default_width(480.)
+            .centered()
+            .default_width(crate::theme::dialog::MEDIUM)
             .open(open)
             .show(ctx, |ui| {
-                ui.label("主题只改样式，不改数据、范围和标题。");
+                hint(ui, "主题只改样式，不改数据、范围和标题。");
                 ui.horizontal(|ui| {
                     ui.label("保存当前样式为");
                     ui.text_edit_singleline(&mut self.theme.name);
@@ -112,7 +117,7 @@ impl GraphThemeEditor {
                     });
                 }
                 if let Some(error) = &self.error {
-                    ui.colored_label(pal.error, error);
+                    field_error(ui, error);
                 }
                 if ui.button("关闭").clicked() {
                     action = Action::Close;

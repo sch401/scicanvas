@@ -1,13 +1,7 @@
 use super::*;
 
 impl Dialog {
-    pub(super) fn show_set_values(
-        &mut self,
-        ctx: &egui::Context,
-        pal: &Palette,
-        open: &mut bool,
-        _esc: bool,
-    ) -> Action {
+    pub(super) fn show_set_values(&mut self, ctx: &egui::Context, pal: &Palette, open: &mut bool) -> Action {
         let Self::SetValues {
             target,
             formula,
@@ -20,7 +14,7 @@ impl Dialog {
             unreachable!()
         };
         let mut action = Action::None;
-        window(ctx, "设置列值").open(open).show(ctx, |ui| {
+        window(ctx, "设置列值").centered().open(open).show(ctx, |ui| {
             ui.horizontal_wrapped(|ui| {
                 ui.label(RichText::new(format!("{target} =")).strong());
                 let edit = ui.add(
@@ -41,7 +35,7 @@ impl Dialog {
             }
             ui.add_space(4.0);
             ui.horizontal_wrapped(|ui| {
-                ui.label(RichText::new("插入").small().color(pal.weak));
+                hint(ui, "插入");
                 for (key, name) in columns.iter() {
                     if ui.small_button(key.as_str()).on_hover_text(name.as_str()).clicked() {
                         formula.push_str(key);
@@ -66,17 +60,16 @@ impl Dialog {
                 });
             });
             ui.collapsing("语法", |ui| {
-                ui.label(
-                    RichText::new("列用 A、B 或 col(A)，i 为行号，pi、e 为常数；比较结果为 1 或 0。无效结果留空。")
-                        .small()
-                        .color(pal.weak),
+                hint(
+                    ui,
+                    "列用 A、B 或 col(A)，i 为行号，pi、e 为常数；比较结果为 1 或 0。无效结果留空。",
                 );
             });
             if *filtered {
                 ui.colored_label(pal.warn, "工作表已筛选：设置列值会改写所有行，包括隐藏行。");
             }
             ui.checkbox(keep, "保存公式，引用的列变化时自动重算");
-            let (ok, cancel) = buttons(ui, "计算");
+            let (ok, cancel) = buttons(ui, "计算", Ok(()));
             if ok {
                 action = Action::SetValues(formula.clone(), *keep);
             } else if cancel {

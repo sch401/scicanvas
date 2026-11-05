@@ -1,10 +1,10 @@
 use super::*;
 
 impl Dialog {
-    pub(super) fn show_poly(&mut self, ctx: &egui::Context, _pal: &Palette, open: &mut bool, _esc: bool) -> Action {
+    pub(super) fn show_poly(&mut self, ctx: &egui::Context, _pal: &Palette, open: &mut bool) -> Action {
         let Self::Poly { order } = self else { unreachable!() };
         let mut action = Action::None;
-        window(ctx, "多项式拟合").open(open).show(ctx, |ui| {
+        window(ctx, "多项式拟合").centered().open(open).show(ctx, |ui| {
             data_hint(ui);
             ui.horizontal_wrapped(|ui| {
                 ui.label("阶数")
@@ -17,7 +17,7 @@ impl Dialog {
                         }
                     });
             });
-            let (ok, cancel) = buttons(ui, "拟合");
+            let (ok, cancel) = buttons(ui, "拟合", Ok(()));
             if ok {
                 action = Action::Fit(*order);
             } else if cancel {

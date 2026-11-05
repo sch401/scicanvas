@@ -1,7 +1,7 @@
 use super::*;
 
 impl Dialog {
-    pub(super) fn show_areas(&mut self, ctx: &egui::Context, pal: &Palette, open: &mut bool, _esc: bool) -> Action {
+    pub(super) fn show_areas(&mut self, ctx: &egui::Context, pal: &Palette, open: &mut bool) -> Action {
         let Self::Areas(areas) = self else { unreachable!() };
         let mut action = Action::None;
         window(ctx, "积分结果").open(open).show(ctx, |ui| {
@@ -22,12 +22,11 @@ impl Dialog {
                         ui.end_row();
                     }
                 });
-            ui.label(
-                RichText::new("梯形法。绝对面积把 X 轴下方的部分也按正值计入。累积积分已写入新列。")
-                    .small()
-                    .color(pal.weak),
+            hint(
+                ui,
+                "梯形法。绝对面积把 X 轴下方的部分也按正值计入。累积积分已写入新列。",
             );
-            if actions(ui, &[(ActionKind::Plain, "关闭")], Keys::None).is_some() {
+            if actions(ui, &[(ActionKind::Plain, "关闭")], Keys::None, Ok(())).is_some() {
                 action = Action::Close;
             }
         });

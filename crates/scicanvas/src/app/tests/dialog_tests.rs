@@ -38,7 +38,9 @@ fn nlfit_dialog_linear_constraint_holds_and_bad_text_keeps_the_dialog() {
     *constraints = "y0 + A1 = q".into();
     press_dialog_button(&mut app, "拟合");
     assert!(matches!(app.dialog, Some(Dialog::NlFit { .. })), "dialog kept");
-    assert!(app.status.contains("不是参数名"), "{}", app.status);
+    assert!(dialog_rendered_texts(&mut app)
+        .iter()
+        .any(|text| text.contains("不是参数名")));
     if let Some(Dialog::NlFit { constraints, .. }) = app.dialog.as_mut() {
         *constraints = "y0 + A1 = 0".into();
     }
@@ -425,7 +427,7 @@ fn column_math_dialog_follows_the_picked_columns_and_undoes() {
         Some(Dialog::ColumnMath { a, b: Some(b), use_constant: false, .. }) if a == "电压 B" && b == "电压 A"
     ));
     app.finish_edit();
-    app.column_math(ColumnOp::Sub, None);
+    app.column_math(ColumnOp::Sub, None).unwrap();
 
     let book = app.project.book(1).unwrap();
     let result = book.columns.iter().find(|c| c.long_name == "电压 B − 电压 A").unwrap();
@@ -456,7 +458,7 @@ fn frequency_dialog_defaults_to_the_picked_columns_value_range() {
         Some(Dialog::Frequency { auto: true, custom: false, from, to, .. }) if from == 0.0 && to == 20.0
     ));
     let before = app.project.clone();
-    app.frequency_counts(Some(4), None);
+    app.frequency_counts(Some(4), None).unwrap();
     assert_eq!(app.project.books.len(), before.books.len() + 1);
     assert_eq!(
         app.active,
@@ -471,7 +473,8 @@ fn baseline_subtraction_runs_on_picked_columns_in_one_undo_step() {
     app.active = Some(1);
     app.selection.insert(1, vec!["B".into()]);
     let cols = app.project.book(1).unwrap().columns.len();
-    app.subtract_baseline(scicanvas_core::baseline::BaselineMethod::Line);
+    app.subtract_baseline(scicanvas_core::baseline::BaselineMethod::Line)
+        .unwrap();
 
     let book = app.project.book(1).unwrap();
     assert_eq!(book.columns.len(), cols + 2);
@@ -496,7 +499,7 @@ fn peaks_open_a_table_per_curve_in_one_undo_step() {
         .collect();
     app.selection.insert(1, vec!["B".into()]);
     let books = app.project.books.len();
-    app.find_peaks(0.05);
+    app.find_peaks(0.05).unwrap();
 
     assert_eq!(app.project.books.len(), books + 1);
     let table = app.project.books.last().unwrap();
@@ -528,7 +531,8 @@ fn correlation_fill_and_average_create_results() {
     app.open_fill_dialog();
     assert!(matches!(&app.dialog, Some(Dialog::Fill { target, .. }) if target.starts_with('C')));
     app.dialog = None;
-    app.fill_sequence(scicanvas_core::stats::Sequence::Arithmetic { start: 0.0, step: 0.5 }, 3);
+    app.fill_sequence(scicanvas_core::stats::Sequence::Arithmetic { start: 0.0, step: 0.5 }, 3)
+        .unwrap();
     assert_eq!(
         app.project.book(1).unwrap().column("C").unwrap().data,
         ["0", "0.5", "1"]
@@ -579,7 +583,7 @@ fn row_stats_and_fft_filter_add_columns_in_one_undo_step() {
     let (lo, nyquist) = (*lo, *nyquist);
     assert!(lo > 0.0 && lo < nyquist);
     app.dialog = None;
-    app.fft_filter(scicanvas_core::fft::FilterKind::LowPass(lo));
+    app.fft_filter(scicanvas_core::fft::FilterKind::LowPass(lo)).unwrap();
     assert_eq!(app.project.book(1).unwrap().columns.len(), cols + 1, "{}", app.status);
 }
 
@@ -1595,7 +1599,7 @@ fn legacy_library_function_fits_through_the_real_dialog_button() {
 }
 
 #[test]
-fn analysis_dialog_ignores_enter_without_focus() {
+fn analysis_dialog_enter_submits_valid_input_and_escape_closes() {
     let ctx = egui::Context::default();
     crate::theme::install(&ctx);
     crate::fonts::setup(&ctx);
@@ -1627,9 +1631,10 @@ fn analysis_dialog_ignores_enter_without_focus() {
     let before = app.project.clone();
     let generation = app.history.generation();
     h.frame(&mut app, vec![key(egui::Key::Enter)]);
-    assert!(matches!(app.dialog, Some(Dialog::Poly { .. })));
-    assert_eq!(app.project, before);
-    assert_eq!(app.history.generation(), generation);
+    assert!(matches!(app.dialog, Some(Dialog::FitReport(..))));
+    assert_ne!(app.project, before);
+    assert_eq!(app.history.generation(), generation + 1);
+    roundtrip(&mut app, &before);
 }
 #[test]
 fn nonlinear_report_uses_the_book_name() {
@@ -1846,8 +1851,17 @@ fn custom_fit_parameter_controls_scroll_into_view_in_a_normal_workspace() {
         let id = egui::Id::new(("scicanvas-dialog", "自定义非线性拟合"));
         let label = format!("b{count}");
         for _ in 0..40 {
-            if visible(&out, &label).is_some() && visible(&out, "拟合").is_some() {
-                break;
+            if let Some(last) = visible(&out, &label) {
+                let upper_visible = out.shapes.iter().any(|shape| match &shape.shape {
+                    egui::Shape::Text(text) if text.galley.job.text == "上限" => {
+                        let rect = text.galley.rect.translate(text.pos.to_vec2());
+                        rect.top() > last.bottom() && shape.clip_rect.contains_rect(rect)
+                    }
+                    _ => false,
+                });
+                if upper_visible && visible(&out, "拟合").is_some() {
+                    break;
+                }
             }
             let rect = ui.ctx.memory(|m| m.area_rect(id)).unwrap();
             let at = egui::pos2(rect.left() + 100.0, rect.bottom() - 80.0);
@@ -2846,4 +2860,220 @@ fn review_pie_status_counts_nonfirst_pie_layer() {
     assert_ne!(app.project.graph(2).unwrap().first_layer().plot_type, PlotType::Pie);
     assert_eq!(app.project.graph(2).unwrap().page.layers()[1].plot_type, PlotType::Pie);
     assert!(app.status.contains("跳过 3 行"), "{}", app.status);
+}
+
+#[test]
+fn u2_invalid_fields_disable_actual_primary_widgets() {
+    for case in 0..3 {
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["A".into(), "B".into(), "C".into()]);
+        let (command, label) = match case {
+            0 => ("signal.baseline", "扣除"),
+            1 => ("fit.calibration", "计算"),
+            _ => ("math.interp", "插值"),
+        };
+        app.run_command(command);
+        match app.dialog.as_mut().unwrap() {
+            Dialog::Baseline { advanced, anchors, .. } => {
+                *advanced = 1;
+                *anchors = "bad".into();
+            }
+            Dialog::Calibration { keys, .. } => keys[1] = keys[0].clone(),
+            Dialog::Interpolate { custom, from, to, .. } => {
+                *custom = true;
+                *from = 2.;
+                *to = 1.;
+            }
+            _ => unreachable!(),
+        }
+        let before = app.project.clone();
+        let ctx = egui::Context::default();
+        crate::theme::install(&ctx);
+        crate::fonts::setup(&ctx);
+        let mut harness = crate::test_ui::Harness::new(
+            ctx.clone(),
+            Some(egui::vec2(1280., 820.)),
+            |app: &mut SciApp, ctx: &egui::Context| app.dialogs(ctx),
+        )
+        .with_step(0.02);
+        for _ in 0..6 {
+            harness.frame(&mut app, vec![]);
+        }
+        let (rect, info) = ctx
+            .data(|d| d.get_temp::<(egui::Rect, egui::WidgetInfo)>(egui::Id::new(("dialog-primary", label))))
+            .unwrap();
+        assert!(!info.enabled, "case={case}");
+        harness.click(&mut app, rect.center());
+        harness.key(egui::Key::Enter, |ctx| app.dialogs(ctx));
+        assert_eq!(app.project, before);
+        assert!(app.dialog.is_some());
+    }
+}
+
+#[test]
+fn u2_failed_fft_retains_parameters_and_displays_error() {
+    let mut app = app();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["B".into()]);
+    app.project
+        .book_mut(1)
+        .unwrap()
+        .columns
+        .iter_mut()
+        .find(|c| c.key == "B")
+        .unwrap()
+        .data = vec!["1".into()].into();
+    app.run_command("signal.fft");
+    if let Some(Dialog::Fft { window }) = &mut app.dialog {
+        *window = scicanvas_core::fft::Window::Hamming;
+    }
+    let before = app.project.clone();
+    press_dialog_button(&mut app, "变换");
+    assert!(matches!(
+        app.dialog,
+        Some(Dialog::Fft {
+            window: scicanvas_core::fft::Window::Hamming
+        })
+    ));
+    assert_eq!(app.project, before);
+    let error = app.dialog_error.clone().expect("inline execution error");
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut h = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1280., 820.)),
+        |a: &mut SciApp, c: &egui::Context| a.dialogs(c),
+    );
+    for _ in 0..5 {
+        h.frame(&mut app, vec![]);
+    }
+    let out = h.frame(&mut app, vec![]);
+    assert!(crate::test_ui::find_text(&out, &error).is_some(), "{error}");
+}
+
+#[test]
+fn u2_enter_submits_poly_smooth_and_interpolation_once() {
+    for command in ["fit.poly", "math.smooth", "math.interp"] {
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["C".into()]);
+        app.run_command(command);
+        let before = app.project.clone();
+        let generation = app.history.generation();
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        let mut h = crate::test_ui::Harness::new(
+            ctx,
+            Some(egui::vec2(1280., 820.)),
+            |a: &mut SciApp, c: &egui::Context| a.dialogs(c),
+        );
+        for _ in 0..5 {
+            h.frame(&mut app, vec![]);
+        }
+        h.key(egui::Key::Enter, |ctx| app.dialogs(ctx));
+        assert_ne!(app.project, before, "{command}: {}", app.status);
+        assert_eq!(app.history.generation(), generation + 1, "{command}");
+        let after = app.project.clone();
+        for _ in 0..2 {
+            h.frame(&mut app, vec![]);
+        }
+        assert_eq!(app.project, after);
+        roundtrip(&mut app, &before);
+    }
+}
+
+#[test]
+fn u2_global_constraint_enter_inserts_newline() {
+    let mut app = app();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["B".into(), "C".into()]);
+    app.run_command("fit.global");
+    let before = app.project.clone();
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut h = crate::test_ui::Harness::new(
+        ctx.clone(),
+        Some(egui::vec2(1280., 820.)),
+        |a: &mut SciApp, c: &egui::Context| a.dialogs(c),
+    )
+    .with_step(0.02);
+    for _ in 0..6 {
+        h.frame(&mut app, vec![]);
+    }
+    let rect = ctx
+        .data(|d| d.get_temp::<egui::Rect>(egui::Id::new("dialog-multiline-rect")))
+        .unwrap();
+    h.click(&mut app, rect.center());
+    h.key(egui::Key::Enter, |ctx| app.dialogs(ctx));
+    assert_eq!(app.project, before);
+    assert!(matches!(&app.dialog,Some(Dialog::GlobalFit(edit)) if edit.constraints.contains('\n')));
+}
+
+#[test]
+fn u2_control_enter_submits_multiline_formula() {
+    let mut app = app();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["B".into()]);
+    app.run_command("col.setvalues");
+    if let Some(Dialog::SetValues { formula, .. }) = &mut app.dialog {
+        *formula = "A*2".into();
+    } else {
+        panic!("formula dialog");
+    }
+    let before = app.project.clone();
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut h = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1280., 820.)),
+        |a: &mut SciApp, c: &egui::Context| a.dialogs(c),
+    );
+    for _ in 0..5 {
+        h.frame(&mut app, vec![]);
+    }
+    h.frame(
+        &mut app,
+        vec![egui::Event::Key {
+            key: egui::Key::Enter,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::CTRL,
+        }],
+    );
+    assert!(app.dialog.is_none());
+    assert_ne!(app.project, before);
+    roundtrip(&mut app, &before);
+}
+
+#[test]
+fn u2_parameter_window_centers_once_and_remembers_drag() {
+    let mut app = app();
+    app.active = Some(1);
+    app.run_command("fit.poly");
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    ctx.style_mut(|s| s.animation_time = 0.);
+    let mut h = crate::test_ui::Harness::new(
+        ctx.clone(),
+        Some(egui::vec2(1280., 820.)),
+        |a: &mut SciApp, c: &egui::Context| a.dialogs(c),
+    )
+    .with_step(0.02);
+    for _ in 0..6 {
+        h.frame(&mut app, vec![]);
+    }
+    let id = egui::Id::new(("scicanvas-dialog", "多项式拟合"));
+    let rect = ctx.memory(|m| m.area_rect(id)).unwrap();
+    assert!(rect.center().distance(egui::pos2(640., 410.)) < 4., "{rect:?}");
+    let at = egui::pos2(rect.center().x, rect.top() + 12.);
+    let end = at + egui::vec2(100., 40.);
+    h.drag(at, at + egui::vec2(20., 0.), end, |ctx| app.dialogs(ctx));
+    let moved = ctx.memory(|m| m.area_rect(id)).unwrap();
+    for _ in 0..3 {
+        h.frame(&mut app, vec![]);
+    }
+    assert_eq!(ctx.memory(|m| m.area_rect(id)).unwrap().min, moved.min);
+    assert!(moved.center().distance(rect.center()) > 40.);
 }

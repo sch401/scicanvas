@@ -11,12 +11,14 @@ impl SciApp {
     }
 
     pub(crate) fn fit(&mut self, order: usize) {
-        self.fit_order(order, if order == 1 { "线性拟合" } else { "多项式拟合" });
+        let _ = self.fit_order(order, if order == 1 { "线性拟合" } else { "多项式拟合" });
     }
 
-    pub(super) fn fit_order(&mut self, order: usize, label: &str) {
-        let Some(src) = self.analysis_source() else { return };
-        self.edit_with(
+    pub(super) fn fit_order(&mut self, order: usize, label: &str) -> Result<String, String> {
+        let Some(src) = self.analysis_source() else {
+            return Err("请选择要处理的数据".into());
+        };
+        let result = self.edit_with(
             label,
             |project| project.fit_poly(&src, order).map(Some),
             |app, (gid, reports)| {
@@ -25,6 +27,9 @@ impl SciApp {
                 app.dialog = Some(Dialog::FitReport(reports));
             },
         );
+        result
+            .map(|_| self.status.to_string())
+            .ok_or_else(|| self.status.to_string())
     }
 
     pub(crate) fn open_nlfit_dialog(&mut self) {
@@ -308,9 +313,14 @@ impl SciApp {
         });
     }
 
-    pub(super) fn subtract_baseline(&mut self, method: scicanvas_core::baseline::BaselineMethod) {
-        let Some(src) = self.analysis_source() else { return };
-        self.edit_with(
+    pub(super) fn subtract_baseline(
+        &mut self,
+        method: scicanvas_core::baseline::BaselineMethod,
+    ) -> Result<String, String> {
+        let Some(src) = self.analysis_source() else {
+            return Err("请选择要处理的数据".into());
+        };
+        let result = self.edit_with(
             "扣除基线",
             |project| project.subtract_baseline(&src, method).map(Some),
             |app, made| {
@@ -318,6 +328,9 @@ impl SciApp {
                 app.status = format!("已扣除基线（{}），结果在新列 {}", method.label(), keys.join(", "));
             },
         );
+        result
+            .map(|_| self.status.to_string())
+            .ok_or_else(|| self.status.to_string())
     }
 
     pub(crate) fn open_peaks_dialog(&mut self) {
@@ -328,12 +341,14 @@ impl SciApp {
         });
     }
 
-    pub(super) fn find_peaks(&mut self, min_prominence: f64) {
+    pub(super) fn find_peaks(&mut self, min_prominence: f64) -> Result<String, String> {
         self.find_peaks_method(min_prominence, None)
     }
-    pub(super) fn find_peaks_method(&mut self, min_prominence: f64, window: Option<usize>) {
-        let Some(src) = self.analysis_source() else { return };
-        self.edit_with(
+    pub(super) fn find_peaks_method(&mut self, min_prominence: f64, window: Option<usize>) -> Result<String, String> {
+        let Some(src) = self.analysis_source() else {
+            return Err("请选择要处理的数据".into());
+        };
+        let result = self.edit_with(
             "寻峰",
             |project| project.find_peaks_with_method(&src, min_prominence, window).map(Some),
             |app, made| {
@@ -350,6 +365,9 @@ impl SciApp {
                 app.dialog = None;
             },
         );
+        result
+            .map(|_| self.status.to_string())
+            .ok_or_else(|| self.status.to_string())
     }
 
     pub(crate) fn open_fft_dialog(&mut self) {
@@ -358,9 +376,11 @@ impl SciApp {
         });
     }
 
-    pub(super) fn fft(&mut self, window: scicanvas_core::fft::Window) {
-        let Some(src) = self.analysis_source() else { return };
-        self.edit_with(
+    pub(super) fn fft(&mut self, window: scicanvas_core::fft::Window) -> Result<String, String> {
+        let Some(src) = self.analysis_source() else {
+            return Err("请选择要处理的数据".into());
+        };
+        let result = self.edit_with(
             "FFT",
             |project| {
                 let made = project.fft(&src, window)?;
@@ -387,6 +407,9 @@ impl SciApp {
                 app.status = format!("FFT 结果在 {}，幅值谱已画成图", names.join("、"));
             },
         );
+        result
+            .map(|_| self.status.to_string())
+            .ok_or_else(|| self.status.to_string())
     }
 
     pub(crate) fn open_column_math_dialog(&mut self) {
@@ -407,20 +430,28 @@ impl SciApp {
         });
     }
 
-    pub(super) fn column_math(&mut self, op: scicanvas_core::ops::ColumnOp, constant: Option<f64>) {
+    pub(super) fn column_math(
+        &mut self,
+        op: scicanvas_core::ops::ColumnOp,
+        constant: Option<f64>,
+    ) -> Result<String, String> {
         use scicanvas_core::ops::Operand;
-        let Some((id, keys)) = self.ttest_columns() else { return };
-        let Some(a) = keys.first().cloned() else { return };
+        let Some((id, keys)) = self.ttest_columns() else {
+            return Err("请选择要处理的数据".into());
+        };
+        let Some(a) = keys.first().cloned() else {
+            return Err("请选择要处理的数据".into());
+        };
         let operand = match (constant, keys.get(1)) {
             (Some(c), _) => Operand::Constant(c),
             (None, Some(b)) => Operand::Column(b.clone()),
             (None, None) => {
                 self.status = "请再选中第二列，或改用常数".into();
-                return;
+                return Err(self.status.to_string());
             }
         };
         let visible_only = self.project.book(id).is_some_and(|book| book.uses_visible_rows());
-        self.edit_with(
+        let result = self.edit_with(
             "列运算",
             |project| {
                 project
@@ -429,6 +460,9 @@ impl SciApp {
             },
             |app, key| app.status = format!("列运算结果在新列 {key}"),
         );
+        result
+            .map(|_| self.status.to_string())
+            .ok_or_else(|| self.status.to_string())
     }
 
     pub(crate) fn open_frequency_dialog(&mut self) {
@@ -446,9 +480,15 @@ impl SciApp {
         });
     }
 
-    pub(super) fn frequency_counts(&mut self, bins: Option<usize>, range: Option<(f64, f64)>) {
-        let Some(src) = self.analysis_source() else { return };
-        self.edit_with(
+    pub(super) fn frequency_counts(
+        &mut self,
+        bins: Option<usize>,
+        range: Option<(f64, f64)>,
+    ) -> Result<String, String> {
+        let Some(src) = self.analysis_source() else {
+            return Err("请选择要处理的数据".into());
+        };
+        let result = self.edit_with(
             "频数统计",
             |project| project.frequency_counts(&src, bins, range).map(Some),
             |app, ids| {
@@ -462,6 +502,9 @@ impl SciApp {
                 app.status = format!("频数统计结果在 {}", names.join("、"));
             },
         );
+        result
+            .map(|_| self.status.to_string())
+            .ok_or_else(|| self.status.to_string())
     }
 
     /// 当前工作簿里按点选顺序参与检验的列（没有点选列时用单元格选区覆盖的列）。
@@ -534,13 +577,18 @@ impl SciApp {
         });
     }
 
-    pub(super) fn fft_filter(&mut self, kind: scicanvas_core::fft::FilterKind) {
-        let Some(src) = self.analysis_source() else { return };
-        self.edit_with(
+    pub(super) fn fft_filter(&mut self, kind: scicanvas_core::fft::FilterKind) -> Result<String, String> {
+        let Some(src) = self.analysis_source() else {
+            return Err("请选择要处理的数据".into());
+        };
+        let result = self.edit_with(
             "FFT 滤波",
             |project| project.fft_filter(&src, kind).map(Some),
             |app, keys| app.status = format!("已 FFT 滤波（{}），结果在新列 {}", kind.label(), keys.join(", ")),
         );
+        result
+            .map(|_| self.status.to_string())
+            .ok_or_else(|| self.status.to_string())
     }
 
     /// 自相关（选一列）或互相关（选两列）。
@@ -1161,9 +1209,11 @@ impl SciApp {
         method: scicanvas_core::interpolate::InterpMethod,
         points: usize,
         range: Option<(f64, f64)>,
-    ) {
-        let Some(src) = self.analysis_source() else { return };
-        self.edit_with(
+    ) -> Result<String, String> {
+        let Some(src) = self.analysis_source() else {
+            return Err("请选择要处理的数据".into());
+        };
+        let result = self.edit_with(
             "插值",
             |project| project.interpolate(&src, method, points, range).map(Some),
             |app, (gid, keys)| {
@@ -1171,6 +1221,9 @@ impl SciApp {
                 app.status = format!("已{}插值，结果在新列 {}", method.label(), keys.join(", "));
             },
         );
+        result
+            .map(|_| self.status.to_string())
+            .ok_or_else(|| self.status.to_string())
     }
 
     pub(crate) fn open_normalize_dialog(&mut self) {
@@ -1179,13 +1232,18 @@ impl SciApp {
         });
     }
 
-    pub(super) fn smooth(&mut self, method: SmoothMethod, window: usize) {
-        let Some(src) = self.analysis_source() else { return };
-        self.edit_with(
+    pub(super) fn smooth(&mut self, method: SmoothMethod, window: usize) -> Result<String, String> {
+        let Some(src) = self.analysis_source() else {
+            return Err("请选择要处理的数据".into());
+        };
+        let result = self.edit_with(
             "平滑",
             |project| project.smooth(&src, method, window).map(Some),
             |app, keys| app.status = format!("已平滑，结果在新列 {}", keys.join(", ")),
         );
+        result
+            .map(|_| self.status.to_string())
+            .ok_or_else(|| self.status.to_string())
     }
 
     pub(crate) fn differentiate(&mut self) {
@@ -1207,13 +1265,18 @@ impl SciApp {
         }
     }
 
-    pub(super) fn normalize(&mut self, method: NormalizeMethod) {
-        let Some(src) = self.analysis_source() else { return };
-        self.edit_with(
+    pub(super) fn normalize(&mut self, method: NormalizeMethod) -> Result<String, String> {
+        let Some(src) = self.analysis_source() else {
+            return Err("请选择要处理的数据".into());
+        };
+        let result = self.edit_with(
             "归一化",
             |project| project.normalize(&src, method).map(Some),
             |app, keys| app.status = format!("已归一化，结果在新列 {}", keys.join(", ")),
         );
+        result
+            .map(|_| self.status.to_string())
+            .ok_or_else(|| self.status.to_string())
     }
 
     pub(crate) fn stats_on_columns(&mut self) {

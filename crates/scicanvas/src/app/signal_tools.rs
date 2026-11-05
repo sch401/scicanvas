@@ -64,7 +64,9 @@ impl SciApp {
                     },
                 );
             }
-            A::Peaks(window, threshold) => self.find_peaks_method(threshold, Some(window)),
+            A::Peaks(window, threshold) => {
+                self.finish_analysis_input(|app| app.find_peaks_method(threshold, Some(window)))
+            }
             A::Interpolate(method, target) => {
                 let Some(source) = self.analysis_source() else { return };
                 self.edit_with(

@@ -1,7 +1,7 @@
 use super::*;
 
 impl Dialog {
-    pub(super) fn show_anova(&mut self, ctx: &egui::Context, pal: &Palette, open: &mut bool, _esc: bool) -> Action {
+    pub(super) fn show_anova(&mut self, ctx: &egui::Context, pal: &Palette, open: &mut bool) -> Action {
         let Self::Anova { result, names, tukey } = self else {
             unreachable!()
         };

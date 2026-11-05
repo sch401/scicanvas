@@ -10,11 +10,17 @@ impl Dialog {
             unreachable!()
         };
         let mut action = Action::None;
-        window(ctx, "并排统计比较").open(open).show(ctx, |ui| {
-            ui.label(format!("数据列：{}", names.join("、")));
-            ui.checkbox(boxes, "同时生成箱线图");
-            ui.label("结果写入新表。");
-            let (ok, cancel) = buttons(ui, "生成");
+        window(ctx, "并排统计比较").centered().open(open).show(ctx, |ui| {
+            form(ui, "statistics-compare-form", |f| {
+                f.row("数据列", |ui| {
+                    ui.label(names.join("、"));
+                });
+                f.row("附图", |ui| {
+                    ui.checkbox(boxes, "同时生成箱线图");
+                });
+            });
+            hint(ui, "结果写入新表。");
+            let (ok, cancel) = buttons(ui, "生成", Ok(()));
             if ok {
                 action = Action::Statistics(Box::new(StatisticsAction::Compare(source.clone(), *boxes)));
             } else if cancel {

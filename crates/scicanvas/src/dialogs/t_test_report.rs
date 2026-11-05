@@ -1,30 +1,20 @@
 use super::*;
 
 impl Dialog {
-    pub(super) fn show_t_test_report(
-        &mut self,
-        ctx: &egui::Context,
-        pal: &Palette,
-        open: &mut bool,
-        _esc: bool,
-    ) -> Action {
+    pub(super) fn show_t_test_report(&mut self, ctx: &egui::Context, pal: &Palette, open: &mut bool) -> Action {
         let Self::TTestReport { result, names } = self else {
             unreachable!()
         };
         let mut action = Action::None;
         window(ctx, "t 检验结果").open(open).show(ctx, |ui| {
             let rows = ttest_rows(result, names);
-            egui::Grid::new("ttest-report")
-                .striped(true)
-                .num_columns(2)
-                .spacing([24.0, 4.0])
-                .show(ui, |ui| {
-                    for (k, v) in &rows {
-                        ui.label(k);
-                        ui.label(RichText::new(v).monospace());
-                        ui.end_row();
-                    }
-                });
+            form(ui, "ttest-report", |ui| {
+                for (k, v) in &rows {
+                    ui.label(k);
+                    ui.label(RichText::new(v).monospace());
+                    ui.end_row();
+                }
+            });
             let verdict = if result.p < 1.0 - result.level {
                 "在该显著性水平下拒绝原假设"
             } else {
