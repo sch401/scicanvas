@@ -44,6 +44,11 @@ impl SciApp {
                 props_section(ui, "data", "数据", true, |ui| {
                     data_source(ui, g, &options.book_specs);
                     columns(ui, g, &cols);
+                    for source in g.plot_sources(false) {
+                        ui.label(format!("行范围 · {}", source.col));
+                        ui.push_id(("data-rows", &source), |ui| source_rows(ui, g, &source, history_group));
+                        ui.end_row();
+                    }
                     foreign_curves(
                         ui,
                         g,
@@ -1086,7 +1091,6 @@ fn curve_style(
                         }
                     });
                 ui.data_mut(|d| d.insert_temp(pick_id, key.clone()));
-                source_rows(ui, g, &key, history_group);
                 let mut style = g.source_style(&key).cloned().unwrap_or_default();
                 let mapping = options.mapping_columns.get(&key.book).cloned().unwrap_or_default();
                 egui::Grid::new(("props-curve-grid", gid, props_layer))
@@ -1386,7 +1390,6 @@ fn source_rows(
     let mut all = before.is_none();
     let (mut start, mut end) = before.map(|(a, b)| (a + 1, b + 1)).unwrap_or((1, 100));
     ui.horizontal(|ui| {
-        ui.label("行范围");
         ui.checkbox(&mut all, "全部");
         ui.add_enabled_ui(!all, |ui| {
             ui.label("从");
