@@ -1271,7 +1271,7 @@ fn pattern_properties(ui: &mut egui::Ui, style: &mut scicanvas_core::page::Curve
         ui.end_row();
     }
     if let Some(error) = candidate.as_ref().and_then(|p| p.validate().err()) {
-        ui.colored_label(ui.visuals().error_fg_color, error);
+        dialogs::field_error(ui, &error);
         ui.end_row();
     } else {
         style.pattern = candidate;
@@ -1457,7 +1457,7 @@ fn source_rows(
     let after = if all { None } else { Some((start - 1, end - 1)) };
     if before != after {
         if let Err(error) = g.set_source_rows(key, after) {
-            ui.colored_label(ui.visuals().error_fg_color, error);
+            dialogs::field_error(ui, &error);
         }
     }
 }
@@ -1533,7 +1533,7 @@ fn scale_selector(
         }
     }
     if let Some(error) = ui.data(|d| d.get_temp::<String>(id)) {
-        ui.colored_label(ui.visuals().error_fg_color, error);
+        dialogs::field_error(ui, &error);
     }
     let (auto, min, max) = if x {
         (g.x_auto, g.x_min, g.x_max)
