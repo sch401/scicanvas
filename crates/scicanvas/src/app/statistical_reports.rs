@@ -4,14 +4,16 @@ impl SciApp {
         let Some(book) = self.active_book_id() else { return };
         let (keys, rows) = self.picked(book);
         match self.project.whole_table_statistics(book, &keys, rows) {
-            Ok(rows) => {
+            Ok(mut rows) => {
+                let mut method = vec![String::new(); rows.first().map_or(2, Vec::len)];
+                method[0] = "说明".into();
+                method[1] = "样本标准差使用 n−1，分位数按线性插值，缺失和非有限值不计入 N。".into();
+                rows.push(method);
                 self.status = "已汇总所选数值单元格".into();
                 self.dialog = Some(Dialog::Table {
                     title: "整表统计".into(),
                     rows,
-                    note:
-                        "合并所选数值单元格；未选区时取整表。标准差用 n−1，分位数按线性插值，缺失和非有限值不计入 N。"
-                            .into(),
+                    note: "未选区时取整表。".into(),
                 });
             }
             Err(error) => self.status = error,

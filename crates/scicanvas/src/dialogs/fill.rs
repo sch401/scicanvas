@@ -44,11 +44,7 @@ impl Dialog {
                     ui.add(egui::DragValue::new(rows).range(1..=1_000_000).speed(1.0));
                     ui.end_row();
                 });
-            ui.label(
-                RichText::new("结果覆盖目标列，可撤销。随机数每次生成都不同。")
-                    .small()
-                    .color(pal.weak),
-            );
+            ui.label(RichText::new("结果覆盖目标列。").small().color(pal.weak));
             let (ok, cancel) = buttons(ui, "填充");
             if ok {
                 let seq = match kind {

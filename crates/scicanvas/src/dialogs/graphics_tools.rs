@@ -44,7 +44,6 @@ impl FunctionPlotEditor {
                 self.target.is_some() && self.index.is_none(),
                 egui::Checkbox::new(&mut self.add, "添加到当前图层"),
             );
-            ui.label("当前图层自动 X 范围且含数据时，函数随数据范围采样。对数 X 轴采用几何间距。");
             if let Some(error) = &self.error {
                 ui.colored_label(pal.error, error);
             }
@@ -79,7 +78,7 @@ impl GraphThemeEditor {
             .default_width(480.)
             .open(open)
             .show(ctx, |ui| {
-                ui.label("主题只保存样式，数据映射、坐标范围和标题文字保持。现有图层使用固定出版字号。");
+                ui.label("主题只改样式，不改数据、范围和标题。");
                 ui.horizontal(|ui| {
                     ui.label("保存当前样式为");
                     ui.text_edit_singleline(&mut self.theme.name);

@@ -362,7 +362,20 @@ impl SciApp {
         let Some(src) = self.analysis_source() else { return };
         self.edit_with(
             "FFT",
-            |project| project.fft(&src, window).map(Some),
+            |project| {
+                let made = project.fft(&src, window)?;
+                for (book, _) in &made {
+                    if let Some(column) = project
+                        .book_mut(*book)
+                        .and_then(|book| book.columns.iter_mut().find(|c| c.long_name == "幅值"))
+                    {
+                        column
+                            .comment
+                            .push_str("。幅值按正弦振幅归一，加窗时按窗函数相干增益补偿。");
+                    }
+                }
+                Ok(Some(made))
+            },
             |app, made| {
                 let names: Vec<String> = made
                     .iter()
@@ -640,11 +653,7 @@ impl SciApp {
                 (
                     "Anderson–Darling",
                     stats::anderson_normal(&c.values).map(|r| {
-                        notes.push(format!(
-                            "{}：AD 的 SciPy 5% 临界值 = {}。",
-                            c.name,
-                            fmt_num(r.critical_5)
-                        ));
+                        notes.push(format!("{}：AD 的 5% 临界值 = {}。", c.name, fmt_num(r.critical_5)));
                         (r.n, r.a2, r.p)
                     }),
                 ),
@@ -731,7 +740,7 @@ impl SciApp {
                     title:"KS 双样本检验".into(),
                     rows:vec![ ["样本 A","样本 B","N₁","N₂","D","p","方法","结论（α = 0.05）"].map(String::from).to_vec(),
                         vec![columns[0].name.clone(),columns[1].name.clone(),r.n1.to_string(),r.n2.to_string(),fmt_num(round_sig(r.d,8)),fmt_num(round_sig(r.p,8)),if r.method == "exact" { "精确" } else { "渐近（有限样本 kstwo）" }.into(),if r.p < 0.05 { "分布存在差异" } else { "保留同分布假设" }.into()]],
-                    note:"原假设：两组独立样本来自同一连续分布。双侧检验，缺失值已跳过；两组均不超过 10000 点时采用精确路径概率，其余采用 SciPy auto 的有限样本 kstwo 渐近规则。有并列值时结果按相同规则计算，连续分布的 p 值解释需结合数据测量精度。".into(),
+                    note:"原假设：两组独立样本来自同一连续分布。双侧检验，缺失值已跳过；两组均不超过 10000 点时采用精确路径概率，其余采用有限样本 kstwo 渐近规则。有并列值时结果按相同规则计算，连续分布的 p 值解释需结合数据测量精度。".into(),
                 });
             }
             Err(error) => self.status = error,

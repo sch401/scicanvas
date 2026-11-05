@@ -43,6 +43,24 @@ impl SciApp {
 
     pub(super) fn generate_dialog_action(&mut self, ctx: &egui::Context) -> Option<DialogFrame> {
         self.sync_dialog_controls();
+        let caption = self
+            .analysis_source()
+            .and_then(|source| self.project.resolve(&source).ok())
+            .map(|resolved| {
+                let mut books = std::collections::BTreeMap::<u64, Vec<String>>::new();
+                for item in resolved.items {
+                    books.entry(item.book_id).or_default().push(item.y);
+                }
+                format!(
+                    "数据：{}",
+                    books
+                        .into_iter()
+                        .map(|(id, keys)| format!("{} · {}", self.project.name_of(id).unwrap_or(""), keys.join("、")))
+                        .collect::<Vec<_>>()
+                        .join("；")
+                )
+            });
+        ctx.data_mut(|data| data.insert_temp(egui::Id::new("analysis-data-caption"), caption));
         let d = self.dialog.as_mut()?;
         let layer_before = match d {
             Dialog::LayerContents(edit) => Some(edit.draft.clone()),
@@ -479,7 +497,7 @@ impl SciApp {
                 app.status = match &within {
                     Some(cols) => format!("已按 {} 排序 {} 列，其余列不动", names.join("、"), cols.join("、")),
                     None => format!(
-                        "已按 {} 排序整张工作表，保留 {} 个独立采样结果列的原顺序",
+                        "已按 {} 排序整张工作表，保留 {} 个随机数列的原顺序",
                         names.join("、"),
                         app.project
                             .book(book)

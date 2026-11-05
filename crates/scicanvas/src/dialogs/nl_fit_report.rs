@@ -26,7 +26,7 @@ impl Dialog {
                             let r = live.unwrap_or(r);
                             let f = &r.fit;
                             let status = if live.is_none() {
-                                "结果列已删除，以下为窗口保留的报告快照".into()
+                                "结果列已删除，下面是删除前的报告。".into()
                             } else {
                                 report_status(r)
                             };
@@ -264,7 +264,7 @@ impl Dialog {
                     *report = current.clone();
                 } else {
                     report.current = false;
-                    report.error = Some("结果列已删除，当前为窗口保留的报告快照".into());
+                    report.error = Some("结果列已删除，下面是删除前的报告。".into());
                 }
             }
         }

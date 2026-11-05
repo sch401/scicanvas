@@ -24,7 +24,7 @@ impl Dialog {
                         });
                 });
             }
-            ui.label("因子列可用文本或数值，按类别处理。模型包含交互项，任一字段缺失的行跳过。");
+            ui.label("模型含交互项，有缺失值的行跳过。");
             let valid = keys[0] != keys[1] && keys[0] != keys[2] && keys[1] != keys[2];
             if !valid {
                 ui.label("请选择三个不同的列");

@@ -38,11 +38,9 @@ impl Dialog {
                 ui.checkbox(use_constant, "用常数代替第二列");
             });
             ui.label(
-                RichText::new(
-                    "结果写成新列放在第一列右边。两列对应不同的 X 列时（如原始曲线减拟合曲线），\n先把第二列按线性插值到第一列的 X 上；除以 0 或缺失值处留空。\n只选一列时与常数运算，选两列时按点选顺序。",
-                )
-                .small()
-                .color(pal.weak),
+                RichText::new("两列 X 不同时，先把第二列插值到第一列的 X 上。")
+                    .small()
+                    .color(pal.weak),
             );
             let (ok, cancel) = buttons(ui, "计算");
             if ok {

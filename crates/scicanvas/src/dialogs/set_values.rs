@@ -65,13 +65,13 @@ impl Dialog {
                     }
                 });
             });
-            ui.label(
-                RichText::new(
-                    "列用短名（A、B 或 col(A)），i 为行号，常数 pi、e；比较 < > <= >= == != 结果为 1 或 0。\n结果覆盖目标列，无效结果留空，可撤销。",
-                )
-                .small()
-                .color(pal.weak),
-            );
+            ui.collapsing("语法", |ui| {
+                ui.label(
+                    RichText::new("列用 A、B 或 col(A)，i 为行号，pi、e 为常数；比较结果为 1 或 0。无效结果留空。")
+                        .small()
+                        .color(pal.weak),
+                );
+            });
             if *filtered {
                 ui.colored_label(pal.warn, "工作表已筛选：设置列值会改写所有行，包括隐藏行。");
             }

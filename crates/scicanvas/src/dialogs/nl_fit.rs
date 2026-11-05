@@ -191,66 +191,51 @@ impl Dialog {
         };
         let mut action = Action::None;
         window(ctx, "非线性拟合").open(open).show(ctx, |ui| {
-            ui.horizontal_wrapped(|ui| {
-                ui.label("类别");
-                let mut category = model.category();
-                egui::ComboBox::from_id_salt("nlfit-category")
-                    .selected_text(category)
-                    .show_ui(ui, |ui| {
-                        for c in Model::CATEGORIES {
-                            ui.selectable_value(&mut category, c, c);
-                        }
-                    });
-                if category != model.category() {
-                    if let Some(m) = Model::ALL.into_iter().find(|m| m.category() == category) {
-                        *model = m;
-                    }
-                }
-            });
-            egui::Grid::new("nlfit-models")
-                .num_columns(2)
-                .max_col_width((ui.available_width() - 120.0).max(100.0))
-                .spacing([12.0, 6.0])
-                .show(ui, |ui| {
-                    let category = model.category();
-                    for m in Model::ALL.into_iter().filter(|m| m.category() == category) {
-                        ui.radio_value(model, m, m.name());
-                        ui.add(egui::Label::new(RichText::new(m.formula()).monospace()).wrap());
-                        ui.end_row();
-                    }
-                });
-            ui.label(
-                RichText::new(format!(
-                    "参数：{}。初值由数据自动估计，Levenberg–Marquardt 迭代；\n对当前图形的数据曲线，或工作簿里选中的 Y 列拟合，拟合曲线加到工作簿和图中。",
-                    model.params().join("、")
-                ))
-                .small()
-                .color(pal.weak),
-            );
-            if matches!(*model,Model::CompetitiveInhibition | Model::NoncompetitiveInhibition | Model::UncompetitiveInhibition)
-                && limits.get(3).is_none_or(|limit|!limit.0) {
-                ui.colored_label(pal.warn,"I 为抑制剂浓度，需要固定；请用全局拟合同时拟合多个固定浓度。");
+            data_hint(ui);
+            model_picker(ui, model);
+            parameter_hint(ui, *model, pal);
+            if matches!(
+                *model,
+                Model::CompetitiveInhibition | Model::NoncompetitiveInhibition | Model::UncompetitiveInhibition
+            ) && limits.get(3).is_none_or(|limit| !limit.0)
+            {
+                ui.colored_label(pal.warn, "I 为抑制剂浓度，需要固定；请用全局拟合同时拟合多个固定浓度。");
             }
             if let Some(target) = target {
-                ui.label(format!("更新 Book {} 的结果列 {}", target.report.book_id, target.report.curve.1));
+                ui.label(format!(
+                    "更新 Book {} 的结果列 {}",
+                    target.report.book_id, target.report.curve.1
+                ));
                 ui.label("初始值（留空为自动估计）");
                 ui.text_edit_singleline(initial);
             }
             ui.add_space(4.0);
             limits.resize(model.params().len(), (false, 0.0, false, 0.0, false, 1.0));
-            egui::ScrollArea::vertical().id_salt("builtin-fit-parameters").max_height(300.0).show(ui, |ui| {
-            for (name, (fix, fv, has_lo, lo, has_hi, hi)) in model.params().iter().zip(limits.iter_mut()) {
-                ui.strong(*name);
-                let free = !*fix;
-                egui::Grid::new(("nlfit-limits", name)).num_columns(2).spacing([8.0, 4.0]).show(ui, |ui| {
-                    for (label, on, value, enabled) in [("固定", fix, fv, true), ("下限", has_lo, lo, free), ("上限", has_hi, hi, free)] {
-                        ui.add_enabled_ui(enabled, |ui| { ui.checkbox(on, label); });
-                        ui.add_enabled(enabled && *on, egui::DragValue::new(value).speed(0.01));
-                        ui.end_row();
+            egui::ScrollArea::vertical()
+                .id_salt("builtin-fit-parameters")
+                .max_height(300.0)
+                .show(ui, |ui| {
+                    for (name, (fix, fv, has_lo, lo, has_hi, hi)) in model.params().iter().zip(limits.iter_mut()) {
+                        ui.strong(*name);
+                        let free = !*fix;
+                        egui::Grid::new(("nlfit-limits", name))
+                            .num_columns(2)
+                            .spacing([8.0, 4.0])
+                            .show(ui, |ui| {
+                                for (label, on, value, enabled) in [
+                                    ("固定", fix, fv, true),
+                                    ("下限", has_lo, lo, free),
+                                    ("上限", has_hi, hi, free),
+                                ] {
+                                    ui.add_enabled_ui(enabled, |ui| {
+                                        ui.checkbox(on, label);
+                                    });
+                                    ui.add_enabled(enabled && *on, egui::DragValue::new(value).speed(0.01));
+                                    ui.end_row();
+                                }
+                            });
                     }
                 });
-            }
-            });
             ui.add_space(4.0);
             ui.label(RichText::new("参数约束").color(pal.weak));
             ui.add(
@@ -271,18 +256,50 @@ impl Dialog {
                     .params()
                     .iter()
                     .zip(limits.iter())
-                    .map(|(_, &(fix, fv, has_lo, lo, has_hi, hi))| scicanvas_core::nlfit::ParamLimits {
-                        fixed: fix.then_some(fv),
-                        lower: (!fix && has_lo).then_some(lo),
-                        upper: (!fix && has_hi).then_some(hi),
-                    })
+                    .map(
+                        |(_, &(fix, fv, has_lo, lo, has_hi, hi))| scicanvas_core::nlfit::ParamLimits {
+                            fixed: fix.then_some(fv),
+                            lower: (!fix && has_lo).then_some(lo),
+                            upper: (!fix && has_hi).then_some(hi),
+                        },
+                    )
                     .collect();
                 action = if let Some(target) = target {
-                    let values = if initial.trim().is_empty() { Ok(None) } else {
-                        initial.split([',', '，']).map(|v| v.trim().parse::<f64>().map_err(|_| "初始值应为逗号分隔的有限数".to_string())).collect::<Result<Vec<_>, _>>().map(Some)
+                    let values = if initial.trim().is_empty() {
+                        Ok(None)
+                    } else {
+                        initial
+                            .split([',', '，'])
+                            .map(|v| {
+                                v.trim()
+                                    .parse::<f64>()
+                                    .map_err(|_| "初始值应为逗号分隔的有限数".to_string())
+                            })
+                            .collect::<Result<Vec<_>, _>>()
+                            .map(Some)
                     };
-                    Action::Refit(Box::new(FitEditTarget { report: target.report.clone(), before: target.before.clone() }), values.and_then(|values| target.recipe(scicanvas_core::ops::FitMethod::Builtin(*model), values, held, constraints.clone())).map(|mut recipe| { recipe.weight = scicanvas_core::ops::FitWeight::from_y_error(*weighted); recipe }))
-                } else { Action::NlFit(*model, held, constraints.clone(), *weighted) };
+                    Action::Refit(
+                        Box::new(FitEditTarget {
+                            report: target.report.clone(),
+                            before: target.before.clone(),
+                        }),
+                        values
+                            .and_then(|values| {
+                                target.recipe(
+                                    scicanvas_core::ops::FitMethod::Builtin(*model),
+                                    values,
+                                    held,
+                                    constraints.clone(),
+                                )
+                            })
+                            .map(|mut recipe| {
+                                recipe.weight = scicanvas_core::ops::FitWeight::from_y_error(*weighted);
+                                recipe
+                            }),
+                    )
+                } else {
+                    Action::NlFit(*model, held, constraints.clone(), *weighted)
+                };
             } else if cancel && !matches!(action, Action::OpenCustomNlFit) {
                 action = Action::Close;
             }
@@ -428,4 +445,43 @@ impl Dialog {
         });
         action
     }
+}
+
+fn parameter_hint(ui: &mut egui::Ui, model: Model, pal: &Palette) {
+    ui.label(
+        RichText::new(format!("参数：{}。初值自动估计。", model.params().join("、")))
+            .small()
+            .color(pal.weak),
+    );
+}
+
+fn model_picker(ui: &mut egui::Ui, model: &mut Model) {
+    ui.horizontal_wrapped(|ui| {
+        ui.label("类别");
+        let mut category = model.category();
+        egui::ComboBox::from_id_salt("nlfit-category")
+            .selected_text(category)
+            .show_ui(ui, |ui| {
+                for c in Model::CATEGORIES {
+                    ui.selectable_value(&mut category, c, c);
+                }
+            });
+        if category != model.category() {
+            if let Some(m) = Model::ALL.into_iter().find(|m| m.category() == category) {
+                *model = m;
+            }
+        }
+    });
+    egui::Grid::new("nlfit-models")
+        .num_columns(2)
+        .max_col_width((ui.available_width() - 120.0).max(100.0))
+        .spacing([12.0, 6.0])
+        .show(ui, |ui| {
+            let category = model.category();
+            for m in Model::ALL.into_iter().filter(|m| m.category() == category) {
+                ui.radio_value(model, m, m.name());
+                ui.add(egui::Label::new(RichText::new(m.formula()).monospace()).wrap());
+                ui.end_row();
+            }
+        });
 }

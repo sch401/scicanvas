@@ -40,7 +40,7 @@ impl Dialog {
             };
             ui.label(
                 RichText::new(format!(
-                    "{verdict}。每个点选的列作为一组，缺失值已跳过。\nTukey HSD 的 p 值已按多重比较校正，组大小不等时为 Tukey–Kramer。"
+                    "{verdict}。缺失值已跳过。"
                 ))
                 .small()
                 .color(pal.weak),
@@ -71,7 +71,7 @@ impl Dialog {
                     let (table, groups) = anova_rows(result, names);
                     let pairs = tukey_rows(tukey, names);
                     let text = format!(
-                        "## 单因素方差分析\n\n{}\n### 各组统计量\n\n{}\n### Tukey HSD 多重比较\n\n{}",
+                        "## 单因素方差分析\n\n{}\n### 各组统计量\n\n{}\n### Tukey HSD 多重比较\n\n{}\n\nTukey HSD 的 p 值已作多重比较校正，组大小不等时使用 Tukey–Kramer。",
                         md_table(&table),
                         md_table(&groups),
                         md_table(&pairs)

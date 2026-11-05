@@ -102,3 +102,13 @@ pub(super) fn buttons(ui: &mut egui::Ui, ok: &str) -> (bool, bool) {
     );
     (selected == Some(0), selected == Some(1))
 }
+
+pub(super) fn data_hint(ui: &mut egui::Ui) {
+    let caption = ui
+        .ctx()
+        .data(|data| data.get_temp::<Option<String>>(egui::Id::new("analysis-data-caption")))
+        .flatten();
+    if let Some(caption) = caption {
+        ui.weak(caption);
+    }
+}

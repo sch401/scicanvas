@@ -20,8 +20,7 @@ impl BatchPlot {
                         }
                     });
             });
-            ui.label("选择工作簿，按列名匹配：");
-            ui.weak("各列按长名在所选工作簿中匹配；没有长名的列按列标识（A、B…）匹配。");
+            ui.weak("按长名称匹配列，没有长名称时按列标识（A、B…）匹配。");
             if self.graphs[self.selected_graph].2 {
                 ui.colored_label(
                     crate::theme::palette_for(ctx).warn,

@@ -193,11 +193,7 @@ impl Dialog {
                 ui.add_space(4.0);
                 ui.label(RichText::new(e.as_str()).color(ui.visuals().error_fg_color));
             }
-            ui.label(
-                RichText::new("显示格式只改变工作表里的显示，存储的数值和原始写法不变；编辑、复制和导出仍用原值。")
-                    .small()
-                    .color(pal.weak),
-            );
+            ui.label(RichText::new("只改变显示，不改变存储的数值。").small().color(pal.weak));
         });
         Action::None
     }

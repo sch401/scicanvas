@@ -615,3 +615,114 @@ fn chart_previews_grow_and_shrink_with_window_width() {
         assert_eq!(counts[2], counts[0], "{tab}: {counts:?}");
     }
 }
+
+#[path = "ui_capture.rs"]
+mod capture;
+
+fn rust_ui_literals(source: &str) -> Vec<(usize, String)> {
+    let bytes = source.as_bytes();
+    let mut i = 0;
+    let mut result = Vec::new();
+    while i < bytes.len() {
+        if bytes[i..].starts_with(b"//") {
+            i += 2;
+            while i < bytes.len() && bytes[i] != b'\n' {
+                i += 1;
+            }
+        } else if bytes[i..].starts_with(b"/*") {
+            i += 2;
+            let mut depth = 1;
+            while i + 1 < bytes.len() && depth > 0 {
+                if bytes[i..].starts_with(b"/*") {
+                    depth += 1;
+                    i += 2;
+                } else if bytes[i..].starts_with(b"*/") {
+                    depth -= 1;
+                    i += 2;
+                } else {
+                    i += 1;
+                }
+            }
+        } else if bytes[i] == b'"' {
+            let start = i;
+            i += 1;
+            let mut text = Vec::new();
+            while i < bytes.len() && bytes[i] != b'"' {
+                if bytes[i] == b'\\' && i + 1 < bytes.len() {
+                    text.push(bytes[i]);
+                    i += 1;
+                }
+                text.push(bytes[i]);
+                i += 1;
+            }
+            result.push((start, String::from_utf8(text).unwrap()));
+            i += 1;
+        } else {
+            i += 1;
+        }
+    }
+    result
+}
+
+#[test]
+fn ui_copy_uses_short_user_facing_hints() {
+    fn scan(path: &std::path::Path) {
+        for item in std::fs::read_dir(path).unwrap() {
+            let path = item.unwrap().path();
+            if path.is_dir() {
+                if path.file_name().unwrap() != "tests" {
+                    scan(&path);
+                }
+                continue;
+            }
+            if path.extension().is_none_or(|s| s != "rs")
+                || path
+                    .file_name()
+                    .is_some_and(|s| s == "markdown.rs" || s == "ui_review.rs" || s == "ui_capture.rs")
+            {
+                continue;
+            }
+            let source = std::fs::read_to_string(&path).unwrap();
+            let literals = rust_ui_literals(&source);
+            for (offset, text) in &literals {
+                // The sixth string argument to command c(...) is searchable metadata, not displayed copy.
+                let keywords = path.components().any(|s| s.as_os_str() == "commands")
+                    && source[..*offset]
+                        .rfind("c(")
+                        .is_some_and(|start| literals.iter().filter(|(i, _)| *i > start && *i < *offset).count() == 5);
+                if keywords {
+                    continue;
+                }
+                for word in [
+                    "NumPy",
+                    "numpy",
+                    "SciPy",
+                    "matplotlib",
+                    "statsmodels",
+                    "对齐",
+                    "快照",
+                    "一次性",
+                    "算法同",
+                    "可撤销",
+                    "可以撤销",
+                    "暂不支持",
+                ] {
+                    assert!(!text.contains(word), "{}: {text}", path.display());
+                }
+                if path.parent().is_some_and(|p| p.ends_with("dialogs"))
+                    && source[..*offset]
+                        .rsplit_once("hint(")
+                        .is_some_and(|(_, tail)| !tail.contains(')'))
+                {
+                    assert!(
+                        !text.contains("\\n")
+                            && text.chars().filter(|c| ('\u{4e00}'..='\u{9fff}').contains(c)).count() <= 30,
+                        "{}: {text}",
+                        path.display()
+                    );
+                }
+            }
+        }
+    }
+    scan(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"));
+}

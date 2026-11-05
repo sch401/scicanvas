@@ -812,7 +812,18 @@ fn migrated_analysis_dialogs_match_core_results_and_undo_as_one_step() {
                 )
             }
             6 => {
-                expected.fft(&src, Window::Rect).unwrap();
+                let made = expected.fft(&src, Window::Rect).unwrap();
+                for (book, _) in made {
+                    expected
+                        .book_mut(book)
+                        .unwrap()
+                        .columns
+                        .iter_mut()
+                        .find(|c| c.long_name == "幅值")
+                        .unwrap()
+                        .comment
+                        .push_str("。幅值按正弦振幅归一，加窗时按窗函数相干增益补偿。");
+                }
                 (Dialog::Fft { window: Window::Rect }, "变换", "FFT")
             }
             7 => {
@@ -1531,7 +1542,7 @@ fn deleted_report_export_is_a_snapshot_and_stale_editor_preserves_redo() {
     app.dialog = Some(Dialog::NlFitReport(vec![reference.clone()]));
     press_dialog_button(&mut app, "保存为 Note");
     let note = app.project.notes.last().unwrap();
-    assert!(note.text.contains("报告快照"));
+    assert!(note.text.contains("删除前的报告"));
     assert!(!note.text.contains("当前有效结果"));
     app.undo();
     app.undo();

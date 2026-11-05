@@ -13,7 +13,7 @@ impl Dialog {
         window(ctx, "并排统计比较").open(open).show(ctx, |ui| {
             ui.label(format!("数据列：{}", names.join("、")));
             ui.checkbox(boxes, "同时生成箱线图");
-            ui.label("按列比较 N、均值、样本标准差、SE、分位数、极值和缺失数。结果写入新表，箱线图引用原数据。");
+            ui.label("结果写入新表。");
             let (ok, cancel) = buttons(ui, "生成");
             if ok {
                 action = Action::Statistics(Box::new(StatisticsAction::Compare(source.clone(), *boxes)));

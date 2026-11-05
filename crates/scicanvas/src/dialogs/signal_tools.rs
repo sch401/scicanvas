@@ -45,7 +45,7 @@ impl SignalEditor {
                     }
                 });
             }
-            ui.label("离散结果与 NumPy 对齐，不乘采样间隔 dx。X 为结果样本序号，结果写入新列并附图。");
+            ui.label("结果不乘采样间隔，写入新列并附图。");
             if self.inverse && !self.epsilon.is_finite() {
                 ui.colored_label(pal.error, "ε 应为有限非负数");
             }
