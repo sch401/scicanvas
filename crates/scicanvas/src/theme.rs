@@ -409,3 +409,10 @@ mod consistency_tests {
         scan(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"));
     }
 }
+
+pub mod space {
+    pub const XS: f32 = 4.;
+    pub const S: f32 = 8.;
+    pub const M: f32 = 12.;
+    pub const L: f32 = 16.;
+}

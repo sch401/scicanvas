@@ -48,7 +48,7 @@ pub(super) fn selection(commands: &mut Vec<Command>) {
         ),
         c(
             "edit.find",
-            "查找",
+            "查找…",
             "search",
             "Ctrl+F",
             "选区",
@@ -58,7 +58,7 @@ pub(super) fn selection(commands: &mut Vec<Command>) {
         ),
         c(
             "edit.replace",
-            "替换",
+            "替换…",
             "search",
             "Ctrl+H",
             "选区",

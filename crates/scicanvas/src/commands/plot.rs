@@ -3,7 +3,7 @@ use super::*;
 pub(super) fn layer_contents(commands: &mut Vec<Command>) {
     commands.extend([c(
         "layer.contents",
-        "图层内容",
+        "图层内容…",
         "props",
         "",
         "图形",
@@ -27,7 +27,7 @@ pub(super) fn annotations(commands: &mut Vec<Command>) {
         ),
         c(
             "graph.text.manage",
-            "管理文字标注",
+            "管理文字标注…",
             "props",
             "",
             "图形",
@@ -54,7 +54,7 @@ pub(super) fn builder(commands: &mut Vec<Command>) {
         // 绘图
         c(
             "plot.builder",
-            "作图面板与图库",
+            "作图面板与图库…",
             "props",
             "",
             "绘图",
@@ -324,7 +324,7 @@ pub(super) fn decorations(commands: &mut Vec<Command>) {
         c(
             "plot.stacked_horizontal_bar",
             "堆叠条形图",
-            "area",
+            "bar",
             "",
             "绘图",
             "堆叠条形图",
@@ -335,7 +335,7 @@ pub(super) fn decorations(commands: &mut Vec<Command>) {
         c(
             "plot.percent_stacked_horizontal_bar",
             "百分比堆叠条形图",
-            "area",
+            "bar",
             "",
             "绘图",
             "百分比堆叠条形图",
@@ -404,6 +404,7 @@ pub(super) fn decorations(commands: &mut Vec<Command>) {
 }
 
 pub(super) fn graph(commands: &mut Vec<Command>) {
+    axis_scale_commands(commands);
     commands.extend([
         c(
             "graph.reference.vertical",
@@ -451,7 +452,7 @@ pub(super) fn graph(commands: &mut Vec<Command>) {
         .modifies(),
         c(
             "graph.props",
-            "绘图属性",
+            "绘图属性…",
             "props",
             "",
             "图形",
@@ -626,23 +627,16 @@ fn offset_series(commands: &mut Vec<Command>) {
 
 fn radial_plots(commands: &mut Vec<Command>) {
     commands.push(
-        c(
-            "plot.pie",
-            "饼图",
-            "scatter",
-            "",
-            "绘图",
-            "饼图",
-            need_data,
-            |a| a.plot(PlotType::Pie),
-        )
+        c("plot.pie", "饼图", "pie", "", "绘图", "饼图", need_data, |a| {
+            a.plot(PlotType::Pie)
+        })
         .modifies(),
     );
     commands.push(
         c(
             "plot.violin",
             "小提琴图",
-            "scatter",
+            "violin",
             "",
             "绘图",
             "小提琴图",
@@ -655,7 +649,7 @@ fn radial_plots(commands: &mut Vec<Command>) {
         c(
             "plot.polar_line",
             "极坐标线图",
-            "scatter",
+            "polar",
             "",
             "绘图",
             "极坐标线图",
@@ -668,7 +662,7 @@ fn radial_plots(commands: &mut Vec<Command>) {
         c(
             "plot.polar_scatter",
             "极坐标散点图",
-            "scatter",
+            "polar",
             "",
             "绘图",
             "极坐标散点图",
@@ -767,4 +761,197 @@ fn shape_tools(commands: &mut Vec<Command>) {
         need_graph,
         |a| a.start_shape_tool(scicanvas_core::page::ShapeKind::Ellipse),
     ));
+}
+
+fn axis_scale_commands(commands: &mut Vec<Command>) {
+    x_scale_commands(commands);
+    y_scale_commands(commands);
+}
+
+fn x_scale_commands(commands: &mut Vec<Command>) {
+    commands.push(
+        c(
+            "graph.scale.x.linear",
+            "X 线性",
+            "logx",
+            "",
+            "图形",
+            "axis scale",
+            need_graph,
+            |a| a.choose_axis_scale(true, scicanvas_core::ticks::AxisScale::Linear),
+        )
+        .modifies(),
+    );
+    commands.push(
+        c(
+            "graph.scale.x.log10",
+            "X Log10",
+            "logx",
+            "",
+            "图形",
+            "axis scale",
+            need_graph,
+            |a| a.choose_axis_scale(true, scicanvas_core::ticks::AxisScale::Log10),
+        )
+        .modifies(),
+    );
+    commands.push(
+        c(
+            "graph.scale.x.log2",
+            "X Log2",
+            "logx",
+            "",
+            "图形",
+            "axis scale",
+            need_graph,
+            |a| a.choose_axis_scale(true, scicanvas_core::ticks::AxisScale::Log2),
+        )
+        .modifies(),
+    );
+    commands.push(
+        c(
+            "graph.scale.x.ln",
+            "X Ln",
+            "logx",
+            "",
+            "图形",
+            "axis scale",
+            need_graph,
+            |a| a.choose_axis_scale(true, scicanvas_core::ticks::AxisScale::Ln),
+        )
+        .modifies(),
+    );
+    commands.push(
+        c(
+            "graph.scale.x.reciprocal",
+            "X 倒数",
+            "logx",
+            "",
+            "图形",
+            "axis scale",
+            need_graph,
+            |a| a.choose_axis_scale(true, scicanvas_core::ticks::AxisScale::Reciprocal),
+        )
+        .modifies(),
+    );
+    commands.push(
+        c(
+            "graph.scale.x.probability",
+            "X 概率",
+            "logx",
+            "",
+            "图形",
+            "axis scale",
+            need_graph,
+            |a| a.choose_axis_scale(true, scicanvas_core::ticks::AxisScale::Probability),
+        )
+        .modifies(),
+    );
+    commands.push(
+        c(
+            "graph.scale.x.logit",
+            "X Logit",
+            "logx",
+            "",
+            "图形",
+            "axis scale",
+            need_graph,
+            |a| a.choose_axis_scale(true, scicanvas_core::ticks::AxisScale::Logit),
+        )
+        .modifies(),
+    );
+}
+
+fn y_scale_commands(commands: &mut Vec<Command>) {
+    commands.push(
+        c(
+            "graph.scale.y.linear",
+            "Y 线性",
+            "logy",
+            "",
+            "图形",
+            "axis scale",
+            need_graph,
+            |a| a.choose_axis_scale(false, scicanvas_core::ticks::AxisScale::Linear),
+        )
+        .modifies(),
+    );
+    commands.push(
+        c(
+            "graph.scale.y.log10",
+            "Y Log10",
+            "logy",
+            "",
+            "图形",
+            "axis scale",
+            need_graph,
+            |a| a.choose_axis_scale(false, scicanvas_core::ticks::AxisScale::Log10),
+        )
+        .modifies(),
+    );
+    commands.push(
+        c(
+            "graph.scale.y.log2",
+            "Y Log2",
+            "logy",
+            "",
+            "图形",
+            "axis scale",
+            need_graph,
+            |a| a.choose_axis_scale(false, scicanvas_core::ticks::AxisScale::Log2),
+        )
+        .modifies(),
+    );
+    commands.push(
+        c(
+            "graph.scale.y.ln",
+            "Y Ln",
+            "logy",
+            "",
+            "图形",
+            "axis scale",
+            need_graph,
+            |a| a.choose_axis_scale(false, scicanvas_core::ticks::AxisScale::Ln),
+        )
+        .modifies(),
+    );
+    commands.push(
+        c(
+            "graph.scale.y.reciprocal",
+            "Y 倒数",
+            "logy",
+            "",
+            "图形",
+            "axis scale",
+            need_graph,
+            |a| a.choose_axis_scale(false, scicanvas_core::ticks::AxisScale::Reciprocal),
+        )
+        .modifies(),
+    );
+    commands.push(
+        c(
+            "graph.scale.y.probability",
+            "Y 概率",
+            "logy",
+            "",
+            "图形",
+            "axis scale",
+            need_graph,
+            |a| a.choose_axis_scale(false, scicanvas_core::ticks::AxisScale::Probability),
+        )
+        .modifies(),
+    );
+    commands.push(
+        c(
+            "graph.scale.y.logit",
+            "Y Logit",
+            "logy",
+            "",
+            "图形",
+            "axis scale",
+            need_graph,
+            |a| a.choose_axis_scale(false, scicanvas_core::ticks::AxisScale::Logit),
+        )
+        .modifies(),
+    );
 }

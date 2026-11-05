@@ -49,9 +49,9 @@ pub(crate) fn actions(ui: &mut egui::Ui, items: &[(ActionKind, &str)], keys: Key
     let pal = crate::theme::palette_for(ui.ctx());
     let mut selected = None;
     let mut ids = Vec::new();
-    ui.add_space(10.);
+    ui.add_space(crate::theme::space::M);
     ui.separator();
-    ui.add_space(4.);
+    ui.add_space(crate::theme::space::XS);
     let widths: Vec<_> = items
         .iter()
         .map(|(_, label)| {
@@ -110,5 +110,11 @@ pub(super) fn data_hint(ui: &mut egui::Ui) {
         .flatten();
     if let Some(caption) = caption {
         ui.weak(caption);
+    }
+}
+
+pub(crate) fn axis_scale_options(ui: &mut egui::Ui, scale: &mut scicanvas_core::ticks::AxisScale) {
+    for kind in scicanvas_core::ticks::AxisScale::ALL {
+        ui.selectable_value(scale, kind, kind.label());
     }
 }

@@ -493,14 +493,49 @@ fn chart_type_menus_open_and_dispatch_in_both_tabs() {
         harness.frame_value(&mut state, vec![crate::test_ui::button(direct, true)]);
         let clicked = harness.frame_value(&mut state, vec![crate::test_ui::button(direct, false)]);
         assert_eq!(clicked, Some("plot.scatter"), "{tab} preview");
+        harness.frame(&mut state, vec![]);
+        let menu = harness
+            .ctx
+            .data(|data| data.get_temp::<Rect>(egui::Id::new("ribbon-gallery-menu-rect")))
+            .unwrap()
+            .center();
+        harness.click(&mut state, menu);
         output = harness.frame(&mut state, vec![]);
-        harness.click_text(&mut state, &output, "▾");
-        output = harness.frame(&mut state, vec![]);
-        let position = crate::test_ui::text_positions(&output, "柱状图")
-            .into_iter()
-            .max_by(|a, b| a.y.total_cmp(&b.y))
-            .expect("chart menu should show bar chart")
-            + vec2(5.0, 5.0);
+        let scroll = crate::test_ui::find_text(&output, "线").expect("gallery category") + vec2(80., 80.);
+        let mut position = None;
+        for _ in 0..12 {
+            position = output
+                .shapes
+                .iter()
+                .filter_map(|shape| {
+                    if let egui::Shape::Text(text) = &shape.shape {
+                        let at = text.pos + vec2(5., 5.);
+                        if text.galley.job.text == "柱状图" && at.y > 180. && shape.clip_rect.contains(at) {
+                            return Some(at);
+                        }
+                    }
+                    None
+                })
+                .max_by(|a, b| a.y.total_cmp(&b.y));
+            if position.is_some() {
+                break;
+            }
+            harness.frame(
+                &mut state,
+                vec![
+                    egui::Event::PointerMoved(scroll),
+                    egui::Event::MouseWheel {
+                        unit: egui::MouseWheelUnit::Point,
+                        delta: vec2(0., -180.),
+                        modifiers: egui::Modifiers::NONE,
+                    },
+                ],
+            );
+            for _ in 0..4 {
+                output = harness.frame(&mut state, vec![]);
+            }
+        }
+        let position = position.expect("bar chart reachable in grouped gallery");
         harness.frame_value(&mut state, vec![egui::Event::PointerMoved(position)]);
         harness.frame_value(&mut state, vec![crate::test_ui::button(position, true)]);
         let clicked = harness.frame_value(&mut state, vec![crate::test_ui::button(position, false)]);
@@ -531,7 +566,7 @@ fn narrow_ribbon_exposes_overflow_without_horizontal_scrolling() {
     for _ in 0..3 {
         output = harness.frame(&mut state, vec![]);
     }
-    let before = crate::test_ui::find_text(&output, "更多功能 ▾").expect("overflow menu");
+    let before = crate::test_ui::find_text(&output, "更多功能").expect("overflow menu");
     output = harness.frame(
         &mut state,
         vec![
@@ -543,9 +578,9 @@ fn narrow_ribbon_exposes_overflow_without_horizontal_scrolling() {
             },
         ],
     );
-    let after = crate::test_ui::find_text(&output, "更多功能 ▾").expect("overflow remains visible");
+    let after = crate::test_ui::find_text(&output, "更多功能").expect("overflow remains visible");
     assert!((before.x - after.x).abs() < 0.5);
-    harness.click_text(&mut state, &output, "更多功能 ▾");
+    harness.click_text(&mut state, &output, "更多功能");
     output = harness.frame(&mut state, vec![]);
     assert!(
         crate::test_ui::find_text(&output, "信号处理").is_some(),
@@ -553,8 +588,9 @@ fn narrow_ribbon_exposes_overflow_without_horizontal_scrolling() {
     );
     harness.click_text(&mut state, &output, "信号处理");
     output = harness.frame(&mut state, vec![]);
-    let position =
-        crate::test_ui::find_text(&output, "FFT").expect("overflow submenu contains commands") + vec2(4.0, 4.0);
+    let position = crate::test_ui::find_text(&output, crate::commands::find("signal.fft").unwrap().label)
+        .expect("overflow submenu contains commands")
+        + vec2(4.0, 4.0);
     harness.frame_value(&mut state, vec![egui::Event::PointerMoved(position)]);
     harness.frame_value(&mut state, vec![crate::test_ui::button(position, true)]);
     let clicked = harness.frame_value(&mut state, vec![crate::test_ui::button(position, false)]);
@@ -562,7 +598,7 @@ fn narrow_ribbon_exposes_overflow_without_horizontal_scrolling() {
 }
 
 #[test]
-fn chart_previews_grow_and_shrink_with_window_width() {
+fn chart_previews_show_only_common_types_and_resize_consistently() {
     let ids = [
         "plot.line",
         "plot.scatter",
@@ -597,7 +633,7 @@ fn chart_previews_grow_and_shrink_with_window_width() {
             },
         );
         let mut counts = Vec::new();
-        for width in [800.0, 1800.0, 800.0] {
+        for width in [640.0, 800.0, 1800.0, 640.0] {
             harness.size = Some(vec2(width, 820.0));
             let mut output = harness.frame(&mut state, vec![]);
             for _ in 0..2 {
@@ -610,9 +646,10 @@ fn chart_previews_grow_and_shrink_with_window_width() {
                 .count();
             counts.push(count);
         }
-        assert!(counts[0] >= 3, "{tab}: {counts:?}");
-        assert!(counts[1] > counts[0], "{tab}: {counts:?}");
-        assert_eq!(counts[2], counts[0], "{tab}: {counts:?}");
+        assert!(counts[0] >= 1 && counts[1] >= 3, "{tab}: {counts:?}");
+        assert!(counts.iter().all(|count| *count <= 4), "{tab}: {counts:?}");
+        assert_eq!(counts[2], 4, "{tab}: {counts:?}");
+        assert_eq!(counts[3], counts[0], "{tab}: {counts:?}");
     }
 }
 
@@ -725,4 +762,183 @@ fn ui_copy_uses_short_user_facing_hints() {
         }
     }
     scan(&std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src"));
+}
+
+#[test]
+fn visible_plot_and_analysis_commands_have_ribbon_entries() {
+    use crate::ribbon::Item;
+    let mut visible = std::collections::HashSet::new();
+    for tab in TABS {
+        for group in tab.groups {
+            for item in group.items {
+                match item {
+                    Item::Big(id) => {
+                        visible.insert(*id);
+                    }
+                    Item::Smalls(ids) | Item::Gallery(ids) => visible.extend(ids.iter().copied()),
+                    Item::Scale(x) => {
+                        for kind in scicanvas_core::ticks::AxisScale::ALL {
+                            visible.insert(crate::commands::axis_scale_command(*x, kind));
+                        }
+                    }
+                }
+            }
+        }
+    }
+    for id in crate::ribbon::PLOT_TYPES.iter().copied().chain([
+        "fit.linear",
+        "fit.poly",
+        "fit.nonlinear",
+        "fit.global",
+        "fit.peaks",
+        "fit.mlr",
+        "fit.compare",
+        "fit.calibration",
+        "fit.reports",
+        "math.smooth",
+        "math.diff",
+        "math.integ",
+        "math.norm",
+        "math.interp",
+        "math.colmath",
+        "math.average",
+        "math.diff_sg",
+        "signal.baseline",
+        "signal.peaks",
+        "signal.fft",
+        "signal.ifft",
+        "signal.filter",
+        "signal.convolve",
+        "signal.correlate",
+        "stats.columns",
+        "stats.rows",
+        "stats.frequency",
+        "stats.whole",
+        "stats.compare",
+        "stats.summary",
+        "stats.ttest",
+        "stats.anova",
+        "stats.anova2",
+        "stats.correlation",
+        "stats.normality",
+        "stats.grubbs",
+        "stats.dixon",
+        "stats.ks2",
+        "graph.style.copy",
+        "graph.style.paste",
+        "graph.new",
+        "project.folder.new",
+        "plot.builder",
+        "plot.panels_stacked",
+        "plot.panels_side",
+        "plot.panels_grid4",
+    ]) {
+        assert!(crate::commands::find(id).is_some(), "{id}");
+        assert!(visible.contains(id), "missing ribbon entry: {id}");
+    }
+    let mut grouped = Vec::new();
+    for (_, ids) in crate::ribbon::PLOT_CATEGORIES {
+        grouped.extend(ids.iter().copied());
+    }
+    grouped.sort();
+    assert!(grouped.windows(2).all(|p| p[0] != p[1]));
+    let mut all = crate::ribbon::PLOT_TYPES.to_vec();
+    all.sort();
+    assert_eq!(grouped, all);
+}
+
+#[test]
+fn command_labels_use_dialog_ellipsis_and_readable_spacing() {
+    for id in [
+        "fit.poly",
+        "fit.nonlinear",
+        "fit.global",
+        "fit.peaks",
+        "fit.compare",
+        "fit.calibration",
+        "fit.mlr",
+        "fit.reports",
+        "stats.whole",
+        "stats.normality",
+        "stats.dixon",
+        "stats.ks2",
+        "signal.convolve",
+        "math.interp",
+        "plot.function",
+    ] {
+        assert!(crate::commands::find(id).unwrap().label.ends_with('…'), "{id}");
+    }
+    for id in [
+        "book.new",
+        "graph.new",
+        "edit.undo",
+        "plot.line",
+        "graph.style.copy",
+        "graph.style.paste",
+    ] {
+        assert!(!crate::commands::find(id).unwrap().label.ends_with('…'), "{id}");
+    }
+    for command in crate::commands::commands() {
+        let chars = command.label.chars().collect::<Vec<_>>();
+        for pair in chars.windows(2) {
+            let cjk = |c: char| ('\u{4e00}'..='\u{9fff}').contains(&c);
+            assert!(
+                !(pair[0].is_ascii_alphabetic() && cjk(pair[1]) || cjk(pair[0]) && pair[1].is_ascii_alphabetic()),
+                "{}: {}",
+                command.id,
+                command.label
+            );
+        }
+    }
+}
+
+#[test]
+fn axis_scale_commands_use_one_history_step() {
+    let mut app = SciApp::initial(theme::palette(egui::Theme::Light));
+    app.active = Some(2);
+    let before = app.project.clone();
+    app.run_command("graph.scale.x.log2");
+    assert_eq!(
+        app.project.graph(2).unwrap().first_layer().effective_x_scale(),
+        scicanvas_core::ticks::AxisScale::Log2
+    );
+    app.run_command("edit.undo");
+    assert_eq!(app.project, before);
+}
+
+#[test]
+fn axis_scale_menu_dispatches_registered_choice() {
+    let ctx = egui::Context::default();
+    crate::theme::install(&ctx);
+    crate::fonts::setup(&ctx);
+    ctx.style_mut(|s| s.animation_time = 0.);
+    let pal = theme::palette(egui::Theme::Light);
+    let mut app = SciApp::initial(pal);
+    app.active = Some(2);
+    let mut state = UiState::default();
+    state.tab = "graph";
+    let mut harness = crate::test_ui::Harness::new(
+        ctx,
+        Some(vec2(1800., 820.)),
+        |state: &mut UiState, ctx: &egui::Context| {
+            let mut clicked = None;
+            show(ctx, &app, state, &pal, &mut clicked);
+            clicked
+        },
+    );
+    for _ in 0..4 {
+        harness.frame(&mut state, vec![]);
+    }
+    let output = harness.frame(&mut state, vec![]);
+    harness.click_text(&mut state, &output, "X 刻度类型");
+    let output = harness.frame(&mut state, vec![]);
+    let at = crate::test_ui::text_rect(&output, scicanvas_core::ticks::AxisScale::Log2.label())
+        .expect("scale option")
+        .center();
+    harness.frame_value(
+        &mut state,
+        vec![egui::Event::PointerMoved(at), crate::test_ui::button(at, true)],
+    );
+    let clicked = harness.frame_value(&mut state, vec![crate::test_ui::button(at, false)]);
+    assert_eq!(clicked, Some("graph.scale.x.log2"));
 }

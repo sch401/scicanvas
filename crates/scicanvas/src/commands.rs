@@ -218,3 +218,22 @@ pub fn tooltip(app: &SciApp, cmd: &Command) -> String {
     }
     s
 }
+
+pub(crate) fn axis_scale_command(x: bool, scale: scicanvas_core::ticks::AxisScale) -> &'static str {
+    match (x, scale) {
+        (true, scicanvas_core::ticks::AxisScale::Linear) => "graph.scale.x.linear",
+        (true, scicanvas_core::ticks::AxisScale::Log10) => "graph.scale.x.log10",
+        (true, scicanvas_core::ticks::AxisScale::Log2) => "graph.scale.x.log2",
+        (true, scicanvas_core::ticks::AxisScale::Ln) => "graph.scale.x.ln",
+        (true, scicanvas_core::ticks::AxisScale::Reciprocal) => "graph.scale.x.reciprocal",
+        (true, scicanvas_core::ticks::AxisScale::Probability) => "graph.scale.x.probability",
+        (true, scicanvas_core::ticks::AxisScale::Logit) => "graph.scale.x.logit",
+        (false, scicanvas_core::ticks::AxisScale::Linear) => "graph.scale.y.linear",
+        (false, scicanvas_core::ticks::AxisScale::Log10) => "graph.scale.y.log10",
+        (false, scicanvas_core::ticks::AxisScale::Log2) => "graph.scale.y.log2",
+        (false, scicanvas_core::ticks::AxisScale::Ln) => "graph.scale.y.ln",
+        (false, scicanvas_core::ticks::AxisScale::Reciprocal) => "graph.scale.y.reciprocal",
+        (false, scicanvas_core::ticks::AxisScale::Probability) => "graph.scale.y.probability",
+        (false, scicanvas_core::ticks::AxisScale::Logit) => "graph.scale.y.logit",
+    }
+}

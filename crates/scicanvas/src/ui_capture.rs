@@ -195,3 +195,68 @@ fn capture_u0_dialogs() {
         }
     }
 }
+
+impl Capture {
+    fn app_frame(&mut self, ctx: &egui::Context, app: &mut SciApp, events: Vec<egui::Event>) -> egui::FullOutput {
+        let time = ctx.input(|i| i.time) + 0.02;
+        let output = ctx.run(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280., 820.))),
+                time: Some(time),
+                events,
+                ..Default::default()
+            },
+            |ctx| app.ui_frame(ctx),
+        );
+        self.upload(&output);
+        output
+    }
+    fn app_capture(&mut self, ctx: &egui::Context, app: &mut SciApp, path: &std::path::Path) {
+        for _ in 0..7 {
+            self.app_frame(ctx, app, vec![]);
+        }
+        let mut output = self.app_frame(ctx, app, vec![]);
+        output.textures_delta.set.clear();
+        self.frame(ctx, output, path);
+    }
+}
+
+#[test]
+#[ignore = "Explicit before/after ribbon screenshots"]
+fn capture_u1_tabs() {
+    let dir = std::env::var("SCICANVAS_UI_CAPTURE_DIR").expect("capture directory");
+    let directory = std::path::Path::new(&dir);
+    std::fs::create_dir_all(directory).unwrap();
+    let mut capture = Capture::new();
+    for theme in [egui::Theme::Light, egui::Theme::Dark] {
+        for tab in crate::ribbon::TABS {
+            let ctx = egui::Context::default();
+            crate::theme::install(&ctx);
+            crate::fonts::setup(&ctx);
+            crate::icons::install_loaders(&ctx);
+            ctx.set_theme(theme);
+            let mut app = SciApp::initial(crate::theme::palette(theme));
+            app.active = Some(if tab.ctx == Some(crate::ribbon::Ctx::Book) {
+                1
+            } else {
+                2
+            });
+            app.ui.tab = tab.id;
+            capture.app_capture(&ctx, &mut app, &directory.join(format!("tab-{}-{theme:?}.png", tab.id)));
+            if tab.id == "plot" {
+                capture.app_frame(&ctx, &mut app, vec![]);
+                let at = ctx
+                    .data(|data| data.get_temp::<egui::Rect>(egui::Id::new("ribbon-gallery-menu-rect")))
+                    .expect("gallery menu")
+                    .center();
+                capture.app_frame(
+                    &ctx,
+                    &mut app,
+                    vec![egui::Event::PointerMoved(at), crate::test_ui::button(at, true)],
+                );
+                capture.app_frame(&ctx, &mut app, vec![crate::test_ui::button(at, false)]);
+                capture.app_capture(&ctx, &mut app, &directory.join(format!("gallery-{theme:?}.png")));
+            }
+        }
+    }
+}

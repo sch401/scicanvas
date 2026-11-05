@@ -26,14 +26,11 @@ pub(super) fn fits(commands: &mut Vec<Command>) {
     ));
     commands.extend([
         c("fit.reports", "拟合报告…", "fitpoly", "", "分析", "report 拟合报告 重新编辑", |_| Ok(()), |a| a.open_nlfit_reports()),
-        c("fit.compare","拟合比较","fitpoly","","分析","AIC AICc BIC nested F test 拟合比较",|_|Ok(()),|a|a.open_fit_compare()),
-        c("fit.global","全局拟合","fitpoly","","分析","global shared parameters 全局拟合 共享参数",need_data,|a|a.open_global_fit()),
-        c("fit.peaks","多峰拟合","fitpoly","","分析","multi peak deconvolution Gauss Lorentz Voigt",need_data,|a|a.open_peak_fit()),
+        c("fit.compare", "拟合比较…", "fitpoly","","分析","AIC AICc BIC nested F test 拟合比较",|_|Ok(()),|a|a.open_fit_compare()),
+        c("fit.global", "全局拟合…", "fitglobal","","分析","global shared parameters 全局拟合 共享参数",need_data,|a|a.open_global_fit()),
+        c("fit.peaks", "多峰拟合…", "fitpeaks","","分析","multi peak deconvolution Gauss Lorentz Voigt",need_data,|a|a.open_peak_fit()),
         // 分析
-        c(
-            "fit.linear",
-            "线性拟合",
-            "fitlin",
+        c("fit.linear", "线性拟合", "fitlin",
             "",
             "分析",
             "linear fit regression",
@@ -41,20 +38,14 @@ pub(super) fn fits(commands: &mut Vec<Command>) {
             |a| a.fit(1),
         )
         .modifies(),
-        c(
-            "fit.poly",
-            "多项式拟合",
-            "fitpoly",
+        c("fit.poly", "多项式拟合…", "fitpoly",
             "",
             "分析",
             "polynomial fit regression",
             need_data,
             |a| a.open_poly_dialog(),
         ),
-        c(
-            "fit.nonlinear",
-            "非线性拟合",
-            "fitpoly",
+        c("fit.nonlinear", "非线性拟合…", "fitpoly",
             "",
             "分析",
             "nonlinear fit curve fitting levenberg marquardt gauss lorentz exponential boltzmann logistic power 非线性拟合 峰 指数 S形",
@@ -68,7 +59,7 @@ pub(super) fn signal(commands: &mut Vec<Command>) {
     commands.extend([
         c(
             "math.smooth",
-            "平滑",
+            "平滑…",
             "smooth",
             "",
             "分析",
@@ -78,7 +69,7 @@ pub(super) fn signal(commands: &mut Vec<Command>) {
         ),
         c(
             "signal.baseline",
-            "扣除基线",
+            "扣除基线…",
             "fitlin",
             "",
             "分析",
@@ -88,7 +79,7 @@ pub(super) fn signal(commands: &mut Vec<Command>) {
         ),
         c(
             "signal.peaks",
-            "寻峰",
+            "寻峰…",
             "integ",
             "",
             "分析",
@@ -120,7 +111,7 @@ pub(super) fn signal(commands: &mut Vec<Command>) {
         .modifies(),
         c(
             "signal.filter",
-            "FFT 滤波",
+            "FFT 滤波…",
             "smooth",
             "",
             "分析",
@@ -130,7 +121,7 @@ pub(super) fn signal(commands: &mut Vec<Command>) {
         ),
         c(
             "signal.fft",
-            "FFT",
+            "FFT…",
             "diff",
             "",
             "分析",
@@ -140,7 +131,7 @@ pub(super) fn signal(commands: &mut Vec<Command>) {
         ),
         c(
             "signal.ifft",
-            "IFFT",
+            "IFFT…",
             "diff",
             "",
             "分析",
@@ -155,7 +146,7 @@ pub(super) fn calculus(commands: &mut Vec<Command>) {
     commands.extend([
         c(
             "math.colmath",
-            "列运算",
+            "列运算…",
             "colins",
             "",
             "分析",
@@ -165,7 +156,7 @@ pub(super) fn calculus(commands: &mut Vec<Command>) {
         ),
         c(
             "math.interp",
-            "插值",
+            "插值…",
             "smooth",
             "",
             "分析",
@@ -186,7 +177,7 @@ pub(super) fn calculus(commands: &mut Vec<Command>) {
         .modifies(),
         c(
             "math.diff_sg",
-            "SG 平滑求导",
+            "SG 平滑求导…",
             "diff",
             "",
             "分析",
@@ -218,7 +209,7 @@ pub(super) fn calculus(commands: &mut Vec<Command>) {
         .modifies(),
         c(
             "math.norm",
-            "归一化",
+            "归一化…",
             "norm",
             "",
             "分析",
@@ -234,8 +225,8 @@ pub(super) fn statistics(commands: &mut Vec<Command>) {
     commands.extend([
         c(
             "stats.frequency",
-            "频数统计",
-            "stats",
+            "频数统计…",
+            "statdescribe",
             "",
             "统计",
             "frequency count histogram bin distribution 频数 分箱 直方图 分布",
@@ -245,7 +236,7 @@ pub(super) fn statistics(commands: &mut Vec<Command>) {
         c(
             "stats.rows",
             "行统计",
-            "stats",
+            "statdescribe",
             "",
             "统计",
             "row statistics mean sd replicates 行统计 平行样 均值 标准差 误差棒",
@@ -255,7 +246,7 @@ pub(super) fn statistics(commands: &mut Vec<Command>) {
         .modifies(),
         c(
             "fit.mlr",
-            "多元线性回归",
+            "多元线性回归…",
             "fitlin",
             "",
             "分析",
@@ -265,8 +256,8 @@ pub(super) fn statistics(commands: &mut Vec<Command>) {
         ),
         c(
             "stats.normality",
-            "正态性检验",
-            "stats",
+            "正态性检验…",
+            "stattest",
             "",
             "统计",
             "normality test shapiro wilk lilliefors anderson darling ks ad normal distribution 正态性 正态分布 检验",
@@ -275,8 +266,8 @@ pub(super) fn statistics(commands: &mut Vec<Command>) {
         ),
         c(
             "stats.dixon",
-            "Dixon Q 检验",
-            "stats",
+            "Dixon Q 检验…",
+            "stattest",
             "",
             "统计",
             "dixon outlier Q 异常值 离群值",
@@ -285,8 +276,8 @@ pub(super) fn statistics(commands: &mut Vec<Command>) {
         ),
         c(
             "stats.ks2",
-            "KS 双样本检验",
-            "stats",
+            "KS 双样本检验…",
+            "stattest",
             "",
             "统计",
             "ks kolmogorov smirnov two sample 双样本 分布 检验",
@@ -295,8 +286,8 @@ pub(super) fn statistics(commands: &mut Vec<Command>) {
         ),
         c(
             "stats.anova2",
-            "双因素方差分析",
-            "stats",
+            "双因素方差分析…",
+            "anova",
             "",
             "统计",
             "two way anova interaction Type II 双因素 交互项",
@@ -305,8 +296,8 @@ pub(super) fn statistics(commands: &mut Vec<Command>) {
         ),
         c(
             "stats.grubbs",
-            "Grubbs 异常值",
-            "stats",
+            "Grubbs 异常值…",
+            "stattest",
             "",
             "统计",
             "grubbs outlier test 异常值 离群值 可疑值 检验",
@@ -315,7 +306,7 @@ pub(super) fn statistics(commands: &mut Vec<Command>) {
         ),
         c(
             "fit.calibration",
-            "标准曲线反查",
+            "标准曲线反查…",
             "fitlin",
             "",
             "分析",
@@ -325,8 +316,8 @@ pub(super) fn statistics(commands: &mut Vec<Command>) {
         ),
         c(
             "stats.anova",
-            "单因素方差分析",
-            "stats",
+            "单因素方差分析…",
+            "anova",
             "",
             "统计",
             "anova one way analysis of variance f test 方差分析 单因素 F 检验",
@@ -335,8 +326,8 @@ pub(super) fn statistics(commands: &mut Vec<Command>) {
         ),
         c(
             "stats.correlation",
-            "相关系数",
-            "stats",
+            "相关系数…",
+            "stattest",
             "",
             "统计",
             "correlation pearson spearman kendall rank 相关 相关系数 秩相关",
@@ -345,8 +336,8 @@ pub(super) fn statistics(commands: &mut Vec<Command>) {
         ),
         c(
             "stats.ttest",
-            "t 检验",
-            "stats",
+            "t 检验…",
+            "stattest",
             "",
             "统计",
             "t test ttest student welch paired one sample hypothesis 假设检验 显著性 p 值",
@@ -356,7 +347,7 @@ pub(super) fn statistics(commands: &mut Vec<Command>) {
         c(
             "stats.columns",
             "列统计",
-            "stats",
+            "statdescribe",
             "",
             "统计",
             "descriptive statistics mean sd",
@@ -371,8 +362,8 @@ fn statistical_reports(commands: &mut Vec<Command>) {
     commands.extend([
         c(
             "stats.whole",
-            "整表统计",
-            "stats",
+            "整表统计…",
+            "statdescribe",
             "",
             "统计",
             "whole sheet pooled statistics",
@@ -382,7 +373,7 @@ fn statistical_reports(commands: &mut Vec<Command>) {
         c(
             "stats.compare",
             "并排统计比较…",
-            "stats",
+            "statdescribe",
             "",
             "统计",
             "side by side descriptive comparison",
@@ -392,7 +383,7 @@ fn statistical_reports(commands: &mut Vec<Command>) {
         c(
             "stats.summary",
             "图形摘要报告",
-            "stats",
+            "statdescribe",
             "",
             "统计",
             "graphical summary histogram box QQ",

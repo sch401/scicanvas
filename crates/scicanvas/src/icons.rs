@@ -23,7 +23,7 @@ fn wrap(body: &str) -> String {
 
 /// (名称, SVG 主体)
 fn sources() -> Vec<(&'static str, String)> {
-    [source_group_1(), source_group_2(), source_group_3()].concat()
+    [source_group_1(), source_group_2(), source_group_3(), source_ui_groups()].concat()
 }
 
 fn source_group_1() -> Vec<(&'static str, String)> {
@@ -359,13 +359,7 @@ fn source_group_3() -> Vec<(&'static str, String)> {
 
 /// 图类型画廊缩略图：白底，Origin 默认配色，两种主题通用。
 /// 图型缩略图：功能区画廊与悬停说明共用。配色与实际出图一致（深蓝、砖红）。
-fn thumbs() -> Vec<(&'static str, String)> {
-    let th = |b: &str| {
-        format!(
-            r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 58 40" width="58" height="40"><rect width="58" height="40" rx="3" fill="#ffffff" stroke="#d6dbe2"/><path d="M8 4v30h46" fill="none" stroke="#333333" stroke-width="1"/>{}</svg>"##,
-            b
-        )
-    };
+fn base_thumbnails() -> Vec<(&'static str, String)> {
     vec![
         (
             "line",
@@ -528,9 +522,9 @@ pub fn icon(name: &str, dark: bool) -> egui::Image<'static> {
 
 /// 图类型缩略图，名称为命令 id 中 plot. 之后的部分（line、stacked_bar……）。
 pub fn thumb(kind: &str) -> egui::Image<'static> {
-    let bytes = *cache()
-        .get(&(format!("thumb-{}", kind), false))
-        .unwrap_or_else(|| cache().get(&("thumb-line".to_string(), false)).unwrap());
+    let key = (format!("thumb-{}", kind), false);
+    debug_assert!(cache().contains_key(&key), "Missing plot thumbnail: {kind}");
+    let bytes = *cache().get(&key).expect("registered plot thumbnail");
     egui::Image::from_bytes(format!("bytes://scicanvas/thumb/{}.svg", kind), bytes)
 }
 
@@ -563,5 +557,207 @@ mod tests {
                 }
             }
         }
+    }
+}
+
+fn th(b: &str) -> String {
+    format!(
+        r##"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 58 40" width="58" height="40"><rect width="58" height="40" rx="3" fill="#ffffff" stroke="#d6dbe2"/><path d="M8 4v30h46" fill="none" stroke="#333333" stroke-width="1"/>{}</svg>"##,
+        b
+    )
+}
+
+fn extra_thumbnails() -> Vec<(&'static str, String)> {
+    vec![
+        (
+            "histogram",
+            th(
+                r##"<rect x="10" y="27" width="7" height="7" fill="#0f4d92"/><rect x="17" y="17" width="7" height="17" fill="#0f4d92"/><rect x="24" y="9" width="7" height="25" fill="#0f4d92"/><rect x="31" y="14" width="7" height="20" fill="#0f4d92"/><rect x="38" y="24" width="7" height="10" fill="#0f4d92"/><rect x="45" y="30" width="7" height="4" fill="#0f4d92"/>"##,
+            ),
+        ),
+        (
+            "qq",
+            th(
+                r##"<path d="M11 31L50 7" fill="none" stroke="#b64342" stroke-width="1.2"/><circle cx="12" cy="30" r="1.7" fill="#0f4d92"/><circle cx="20" cy="26" r="1.7" fill="#0f4d92"/><circle cx="28" cy="20" r="1.7" fill="#0f4d92"/><circle cx="36" cy="16" r="1.7" fill="#0f4d92"/><circle cx="43" cy="12" r="1.7" fill="#0f4d92"/><circle cx="50" cy="7" r="1.7" fill="#0f4d92"/>"##,
+            ),
+        ),
+        (
+            "box",
+            th(
+                r##"<path d="M20 8V31M15 8H25M15 31H25" fill="none" stroke="#0f4d92" stroke-width="1.2"/><rect x="14" y="15" width="12" height="10" fill="#0f4d92"/><path d="M14 20H26" fill="none" stroke="#ffffff" stroke-width="1.2"/><path d="M42 11V29M37 11H47M37 29H47" fill="none" stroke="#b64342" stroke-width="1.2"/><rect x="36" y="17" width="12" height="9" fill="#b64342"/>"##,
+            ),
+        ),
+        (
+            "stacked_horizontal_bar",
+            th(
+                r##"<rect x="9" y="8" width="15" height="5" fill="#0f4d92"/><rect x="24" y="8" width="13" height="5" fill="#b64342"/><rect x="9" y="16" width="23" height="5" fill="#0f4d92"/><rect x="32" y="16" width="17" height="5" fill="#b64342"/><rect x="9" y="24" width="18" height="5" fill="#0f4d92"/><rect x="27" y="24" width="12" height="5" fill="#b64342"/>"##,
+            ),
+        ),
+        (
+            "percent_stacked_horizontal_bar",
+            th(
+                r##"<rect x="9" y="8" width="15" height="5" fill="#0f4d92"/><rect x="24" y="8" width="27" height="5" fill="#b64342"/><rect x="9" y="16" width="27" height="5" fill="#0f4d92"/><rect x="36" y="16" width="15" height="5" fill="#b64342"/><rect x="9" y="24" width="21" height="5" fill="#0f4d92"/><rect x="30" y="24" width="21" height="5" fill="#b64342"/>"##,
+            ),
+        ),
+        (
+            "stacked_area",
+            th(
+                r##"<path d="M9 34L18 25L29 28L40 20L53 23V34Z" fill="#0f4d92" stroke="#0f4d92" stroke-width="1.2"/><path d="M9 24L18 14L29 19L40 8L53 13V23L40 20L29 28L18 25L9 34Z" fill="#b64342" stroke="#b64342" stroke-width="1.2"/>"##,
+            ),
+        ),
+        (
+            "fill_between",
+            th(
+                r##"<path d="M10 14L20 10L30 19L42 9L52 15L52 25L42 29L30 24L20 29L10 23Z" fill="#b5cee9" stroke="#0f4d92" stroke-width="1.2"/><path d="M10 14L20 10L30 19L42 9L52 15" fill="none" stroke="#0f4d92" stroke-width="1.2"/><path d="M10 23L20 29L30 24L42 29L52 25" fill="none" stroke="#b64342" stroke-width="1.2"/>"##,
+            ),
+        ),
+        (
+            "error_band",
+            th(
+                r##"<path d="M10 28L20 19L30 22L42 10L52 13L52 22L42 21L30 30L20 28L10 34Z" fill="#b5cee9" stroke="#0f4d92" stroke-width="1.2"/><path d="M10 31L20 23L30 26L42 15L52 17" fill="none" stroke="#0f4d92" stroke-width="1.2"/>"##,
+            ),
+        ),
+        (
+            "column_scatter",
+            th(
+                r##"<circle cx="17" cy="12" r="1.5" fill="#0f4d92"/><circle cx="20" cy="18" r="1.5" fill="#0f4d92"/><circle cx="16" cy="23" r="1.5" fill="#0f4d92"/><circle cx="22" cy="26" r="1.5" fill="#0f4d92"/><circle cx="41" cy="9" r="1.5" fill="#b64342"/><circle cx="38" cy="15" r="1.5" fill="#b64342"/><circle cx="44" cy="21" r="1.5" fill="#b64342"/><circle cx="40" cy="27" r="1.5" fill="#b64342"/><path d="M13 20H24M35 17H47" fill="none" stroke="#0f4d92" stroke-width="1.2"/>"##,
+            ),
+        ),
+        (
+            "bubble",
+            th(
+                r##"<circle cx="14" cy="26" r="2" fill="#0f4d92"/><circle cx="23" cy="18" r="3" fill="#0f4d92"/><circle cx="36" cy="24" r="4" fill="#0f4d92"/><circle cx="47" cy="12" r="5" fill="#0f4d92"/>"##,
+            ),
+        ),
+        (
+            "color_scatter",
+            th(
+                r##"<circle cx="14" cy="26" r="2" fill="#0f4d92"/><circle cx="24" cy="14" r="2" fill="#0f4d92"/><circle cx="36" cy="22" r="2" fill="#b64342"/><circle cx="46" cy="10" r="2" fill="#b64342"/><rect x="53" y="7" width="2" height="10" fill="#0f4d92"/><rect x="53" y="17" width="2" height="10" fill="#b64342"/>"##,
+            ),
+        ),
+        (
+            "bubble_color",
+            th(
+                r##"<circle cx="14" cy="26" r="2" fill="#0f4d92"/><circle cx="24" cy="14" r="3" fill="#0f4d92"/><circle cx="36" cy="23" r="4" fill="#b64342"/><circle cx="46" cy="11" r="5" fill="#b64342"/><rect x="54" y="7" width="2" height="10" fill="#0f4d92"/><rect x="54" y="17" width="2" height="10" fill="#b64342"/>"##,
+            ),
+        ),
+        (
+            "offset_line",
+            th(
+                r##"<path d="M10 30L18 25L27 28L35 22L44 25L52 20" fill="none" stroke="#0f4d92" stroke-width="1.2"/><path d="M10 22L18 17L27 20L35 14L44 17L52 12" fill="none" stroke="#b64342" stroke-width="1.2"/><path d="M10 14L18 9L27 12L35 6L44 9L52 4" fill="none" stroke="#0f4d92" stroke-width="1.2"/>"##,
+            ),
+        ),
+        (
+            "waterfall",
+            th(
+                r##"<path d="M10 31L18 28L25 31L33 23L40 26" fill="none" stroke="#0f4d92" stroke-width="1.2"/><path d="M16 24L24 21L31 24L39 16L46 19" fill="none" stroke="#b64342" stroke-width="1.2"/><path d="M22 17L30 14L37 17L45 9L52 12" fill="none" stroke="#0f4d92" stroke-width="1.2"/>"##,
+            ),
+        ),
+        (
+            "line_series",
+            th(
+                r##"<path d="M12 29L30 16L49 12" fill="none" stroke="#0f4d92" stroke-width="1.2"/><path d="M12 18L30 24L49 9" fill="none" stroke="#b64342" stroke-width="1.2"/><circle cx="12" cy="29" r="1.7" fill="#0f4d92"/><circle cx="30" cy="16" r="1.7" fill="#0f4d92"/><circle cx="49" cy="12" r="1.7" fill="#0f4d92"/>"##,
+            ),
+        ),
+        (
+            "pie",
+            th(
+                r##"<path d="M31 20L31 7A13 13 0 1 1 18 20Z" fill="#0f4d92" stroke="#0f4d92" stroke-width="1.2"/><path d="M31 20H18A13 13 0 0 1 31 7Z" fill="#b64342" stroke="#b64342" stroke-width="1.2"/>"##,
+            ),
+        ),
+        (
+            "violin",
+            th(
+                r##"<path d="M21 7C27 12 29 20 24 27L21 33L18 27C13 20 15 12 21 7Z" fill="#b5cee9" stroke="#0f4d92" stroke-width="1.2"/><path d="M42 8C48 13 50 22 43 31L42 33L41 31C34 22 36 13 42 8Z" fill="#e7b6b6" stroke="#b64342" stroke-width="1.2"/><path d="M17 20H25M38 22H46" fill="none" stroke="#0f4d92" stroke-width="1.2"/>"##,
+            ),
+        ),
+        (
+            "polar_line",
+            th(
+                r##"<circle cx="32" cy="20" r="13" fill="none" stroke="#888" stroke-width="0.8"/><path d="M19 20H45M32 7V33" fill="none" stroke="#888" stroke-width="0.8"/><path d="M32 9L42 15L37 27L26 28L21 16Z" fill="none" stroke="#0f4d92" stroke-width="1.2"/>"##,
+            ),
+        ),
+        (
+            "polar_scatter",
+            th(
+                r##"<circle cx="32" cy="20" r="13" fill="none" stroke="#888" stroke-width="0.8"/><path d="M19 20H45M32 7V33" fill="none" stroke="#888" stroke-width="0.8"/><circle cx="32" cy="9" r="1.7" fill="#0f4d92"/><circle cx="42" cy="15" r="1.7" fill="#b64342"/><circle cx="37" cy="27" r="1.7" fill="#0f4d92"/><circle cx="26" cy="28" r="1.7" fill="#b64342"/><circle cx="21" cy="16" r="1.7" fill="#0f4d92"/>"##,
+            ),
+        ),
+        (
+            "function",
+            th(
+                r##"<path d="M10 28C17 28 17 10 24 10S31 29 38 29 45 12 52 12" fill="none" stroke="#0f4d92" stroke-width="1.2"/>"##,
+            ),
+        ),
+    ]
+}
+
+fn thumbs() -> Vec<(&'static str, String)> {
+    [base_thumbnails(), extra_thumbnails()].concat()
+}
+
+fn source_ui_groups() -> Vec<(&'static str, String)> {
+    vec![
+        (
+            "fft",
+            wrap(r##"<path d="M3 20h18M5 19v-4M9 19V5M13 19v-8M17 19v-5M21 19v-2" stroke="IC_B"/>"##),
+        ),
+        (
+            "area",
+            wrap(r##"<path d="M3 20V4M3 20h18M4 19l5-8 5 3 6-9v14Z" stroke="IC_B" fill="IC_B" fill-opacity="0.3"/>"##),
+        ),
+        (
+            "pie",
+            wrap(r##"<circle cx="12" cy="12" r="9" stroke="IC_B"/><path d="M12 3v9h9" stroke="IC_R"/>"##),
+        ),
+        (
+            "violin",
+            wrap(
+                r##"<path d="M8 3C15 8 13 15 8 21C3 15 1 8 8 3ZM18 4C23 9 23 16 18 21C14 16 14 9 18 4Z" stroke="IC_B"/>"##,
+            ),
+        ),
+        (
+            "polar",
+            wrap(
+                r##"<circle cx="12" cy="12" r="9" stroke="IC_B"/><path d="M3 12h18M12 3v18M12 5l6 5-3 8-8-3Z" stroke="IC_R"/>"##,
+            ),
+        ),
+        (
+            "fitglobal",
+            wrap(
+                r##"<path d="M3 20V4M3 20h18M5 16Q12 3 21 6M5 19Q12 9 21 11" stroke="IC_B"/><path d="M12 6v10" stroke="IC_R"/>"##,
+            ),
+        ),
+        (
+            "fitpeaks",
+            wrap(r##"<path d="M3 20h18M4 20Q8 20 9 9Q10 2 12 20Q15 20 16 11Q18 5 20 20" stroke="IC_R"/>"##),
+        ),
+        (
+            "statdescribe",
+            wrap(r##"<path d="M4 20V10h4v10M10 20V4h4v16M16 20V7h4v13M3 20h18" stroke="IC_B"/>"##),
+        ),
+        (
+            "stattest",
+            wrap(
+                r##"<path d="M3 19Q6 19 9 9Q12 0 15 9Q18 19 21 19" stroke="IC_B"/><path d="M13 18l3 3 5-7" stroke="IC_R"/>"##,
+            ),
+        ),
+        (
+            "anova",
+            wrap(
+                r##"<path d="M4 3v18M4 7h17M4 14h17M10 3v18M17 3v18" stroke="IC_B"/><path d="M5 20h16" stroke="IC_R"/>"##,
+            ),
+        ),
+    ]
+}
+
+#[cfg(test)]
+#[test]
+fn all_gallery_types_have_distinct_thumbnails() {
+    let sources = thumbs();
+    for id in crate::ribbon::PLOT_TYPES {
+        let kind = id.strip_prefix("plot.").unwrap();
+        let svg = &sources.iter().find(|(name, _)| *name == kind).expect(kind).1;
+        assert_eq!(sources.iter().filter(|(_, other)| other == svg).count(), 1, "{kind}");
     }
 }
