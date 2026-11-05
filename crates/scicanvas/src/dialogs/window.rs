@@ -196,7 +196,7 @@ impl<'open> SettingsWindow<'open> {
                 ("吸附到右侧", Some(DockSide::Right)),
                 ("浮动", None),
             ] {
-                if ui.button(label).clicked() {
+                if ui.radio(docked == side, label).clicked() {
                     dock_panel(ctx, id, side, Some(out.response.rect.min));
                     ui.close_menu();
                 }

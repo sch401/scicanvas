@@ -47,6 +47,17 @@ pub(super) fn selection(commands: &mut Vec<Command>) {
             |a| a.copy_range(),
         ),
         c(
+            "edit.paste",
+            "粘贴",
+            "paste",
+            "Ctrl+V",
+            "选区",
+            "paste clipboard",
+            need_range,
+            |a| a.paste_range(),
+        )
+        .modifies(),
+        c(
             "edit.find",
             "查找…",
             "search",

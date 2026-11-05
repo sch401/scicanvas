@@ -3205,3 +3205,162 @@ fn r16_whole_statistics_keep_method_in_note_and_sheet_errors_outside_dialog() {
     h.frame(&mut app, vec![]);
     assert!(app.dialog_error.is_none());
 }
+
+#[test]
+fn u6_every_advertised_shortcut_dispatches_from_real_frame_events() {
+    for command in commands::commands().iter().filter(|c| !c.keys.is_empty()) {
+        let bindings = commands::shortcut_bindings(command);
+        assert!(!bindings.is_empty(), "{}: {}", command.id, command.keys);
+        for (modifiers, key) in bindings {
+            let ctx = egui::Context::default();
+            crate::fonts::setup(&ctx);
+            let mut app = app();
+            app.active = Some(if command.id.starts_with("graph.") { 2 } else { 1 });
+            let mut h = crate::test_ui::Harness::new(
+                ctx.clone(),
+                Some(egui::vec2(1280., 820.)),
+                |a: &mut SciApp, c: &egui::Context| a.ui_frame(c),
+            );
+            h.frame(&mut app, vec![]);
+            ctx.data_mut(|d| d.insert_temp(egui::Id::new("shortcut-probe"), true));
+            h.modifiers = modifiers;
+            let event = if key == egui::Key::C && modifiers.command {
+                egui::Event::Copy
+            } else if key == egui::Key::V && modifiers.command {
+                egui::Event::Paste("test".into())
+            } else {
+                egui::Event::Key {
+                    key,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers,
+                }
+            };
+            h.frame(&mut app, vec![event]);
+            let dispatched = ctx
+                .data(|d| d.get_temp::<Vec<&'static str>>(egui::Id::new("shortcut-dispatched")))
+                .unwrap_or_default();
+            assert_eq!(dispatched, vec![command.id], "{} / {}", command.id, command.keys);
+        }
+    }
+}
+
+#[test]
+fn u6_native_shift_clipboard_changes_graph_format_but_never_pastes_sheet_text() {
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut app = app();
+    app.active = Some(2);
+    let mut h = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1280., 820.)),
+        |a: &mut SciApp, c: &egui::Context| a.ui_frame(c),
+    );
+    for _ in 0..3 {
+        h.frame(&mut app, vec![]);
+    }
+    h.modifiers = egui::Modifiers {
+        shift: true,
+        ..egui::Modifiers::COMMAND
+    };
+    h.frame(&mut app, vec![egui::Event::Copy]);
+    assert!(app.style_clipboard.is_some());
+    let width = app.project.graph(2).unwrap().first_layer().line_width;
+    app.project.graph_mut(2).unwrap().first_layer_mut().line_width = 4.;
+    h.frame(&mut app, vec![egui::Event::Paste("unrelated clipboard text".into())]);
+    assert_eq!(app.project.graph(2).unwrap().first_layer().line_width, width);
+    app.active = Some(1);
+    app.selection.insert(1, vec!["B".into()]);
+    app.sheets.entry(1).or_default().edit = Some(Edit {
+        cell: Cell { c: 0, r: 0 },
+        buf: "42".into(),
+        focused: false,
+    });
+    h.modifiers = egui::Modifiers::NONE;
+    for _ in 0..2 {
+        h.frame(&mut app, vec![]);
+    }
+    let before = app.project.clone();
+    h.modifiers = egui::Modifiers {
+        shift: true,
+        ..egui::Modifiers::COMMAND
+    };
+    h.frame(&mut app, vec![egui::Event::Paste("999".into())]);
+    assert_eq!(app.project, before);
+    assert_eq!(app.sheets[&1].edit.as_ref().unwrap().buf, "42");
+    h.modifiers = egui::Modifiers::COMMAND;
+    h.frame(
+        &mut app,
+        vec![egui::Event::Key {
+            key: egui::Key::Q,
+            physical_key: None,
+            pressed: true,
+            repeat: false,
+            modifiers: egui::Modifiers::COMMAND,
+        }],
+    );
+    assert!(matches!(app.dialog, Some(Dialog::SetValues { .. })));
+}
+
+#[test]
+fn u6_palette_wheel_scroll_is_retained_and_search_ignores_case() {
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut app = app();
+    app.ui.open_palette();
+    let mut h = crate::test_ui::Harness::new(
+        ctx.clone(),
+        Some(egui::vec2(1280., 820.)),
+        |a: &mut SciApp, c: &egui::Context| a.ui_frame(c),
+    );
+    for _ in 0..5 {
+        h.frame(&mut app, vec![]);
+    }
+    let (_, rect) = ctx
+        .data(|d| d.get_temp::<(f32, egui::Rect)>(egui::Id::new("palette-scroll")))
+        .unwrap();
+    h.frame(&mut app, vec![egui::Event::PointerMoved(rect.center())]);
+    for _ in 0..4 {
+        h.frame(
+            &mut app,
+            vec![egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: egui::vec2(0., -240.),
+                modifiers: egui::Modifiers::NONE,
+            }],
+        );
+    }
+    for _ in 0..5 {
+        h.frame(&mut app, vec![]);
+    }
+    assert!(
+        ctx.data(|d| d.get_temp::<(f32, egui::Rect)>(egui::Id::new("palette-scroll")))
+            .unwrap()
+            .0
+            > 100.
+    );
+    for (query, label) in [("voigt", "多峰拟合…"), ("nature", "图形主题与选项…")] {
+        app.ui.palette.as_mut().unwrap().query = query.into();
+        let out = h.frame(&mut app, vec![]);
+        assert!(crate::test_ui::find_text(&out, label).is_some(), "{query}");
+    }
+}
+
+#[test]
+fn u6_insertion_and_menu_states_follow_current_selection() {
+    let mut app = app();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["C".into(), "A".into()]);
+    let before = app.project.clone();
+    app.run_command("col.insert");
+    assert_eq!(app.project.book(1).unwrap().columns[3].key, "D");
+    roundtrip(&mut app, &before);
+    app.selection.insert(1, vec!["A".into()]);
+    let state = crate::menus::MenuState::new(&app);
+    assert_eq!(state.0["col.setX"].1, Some(true));
+    assert!(state.0["col.type.num"].0.is_err());
+    assert!((commands::find("sheet.unfreeze").unwrap().when)(&app).is_err());
+    app.active = Some(2);
+    assert!((commands::find("graph.style.paste").unwrap().when)(&app).is_err());
+}

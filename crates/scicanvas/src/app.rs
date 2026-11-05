@@ -60,17 +60,10 @@ struct BookPreview {
 /// 列标题右键菜单里的操作。
 #[derive(Clone, Copy)]
 enum ColAction {
+    Command(&'static str),
     Props,
     Filter,
     ClearFilter,
-    SetRole(Role),
-    SetDataKind(scicanvas_core::DataKind),
-    InsertRight,
-    CategoryOrder,
-    Move(scicanvas_core::ColumnMove),
-    Clear,
-    Delete,
-    Plot(PlotType),
     AddToGraph(u64),
 }
 
@@ -1966,12 +1959,10 @@ impl SciApp {
         }
     }
     fn background_frame(&mut self, ctx: &egui::Context) {
-        let reset = egui::Modifiers {
-            shift: true,
-            ..egui::Modifiers::COMMAND
-        };
-        if !self.background_blocked && ctx.input_mut(|input| input.consume_key(reset, egui::Key::R)) {
-            self.run_command("win.reset");
+        self.pal = theme::palette(ctx.theme());
+        // 命令面板打开时不处理全局快捷键，避免和输入框冲突
+        if !self.background_blocked {
+            self.shortcuts(ctx);
         }
         if std::mem::take(&mut self.pending_window_reset) {
             dialogs::reset_docks(ctx);
@@ -1996,11 +1987,6 @@ impl SciApp {
         self.history_group = None;
         if let Some(pref) = self.pending_theme.take() {
             ctx.set_theme(pref);
-        }
-        self.pal = theme::palette(ctx.theme());
-        // 命令面板打开时不处理全局快捷键，避免和输入框冲突
-        if !self.background_blocked && self.ui.palette.is_none() {
-            self.shortcuts(ctx);
         }
 
         self.prepare_modal_focus(ctx);

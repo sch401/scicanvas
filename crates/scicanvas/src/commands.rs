@@ -186,6 +186,7 @@ fn build() -> Vec<Command> {
     workspace::note(&mut commands);
     file::note(&mut commands);
     plot::examples(&mut commands);
+    presentation(&mut commands);
     commands
 }
 
@@ -235,5 +236,150 @@ pub(crate) fn axis_scale_command(x: bool, scale: scicanvas_core::ticks::AxisScal
         (false, scicanvas_core::ticks::AxisScale::Reciprocal) => "graph.scale.y.reciprocal",
         (false, scicanvas_core::ticks::AxisScale::Probability) => "graph.scale.y.probability",
         (false, scicanvas_core::ticks::AxisScale::Logit) => "graph.scale.y.logit",
+    }
+}
+
+/// Registry shortcut text is the binding source, including aliases separated by `/`.
+pub(crate) fn shortcut_bindings(c: &Command) -> Vec<(eframe::egui::Modifiers, eframe::egui::Key)> {
+    c.keys
+        .split('/')
+        .filter_map(|keys| {
+            let parts = keys.trim().split('+').collect::<Vec<_>>();
+            let key = eframe::egui::Key::from_name(parts.last()?)?;
+            Some((
+                eframe::egui::Modifiers {
+                    ctrl: false,
+                    command: parts.contains(&"Ctrl"),
+                    shift: parts.contains(&"Shift"),
+                    alt: parts.contains(&"Alt"),
+                    ..Default::default()
+                },
+                key,
+            ))
+        })
+        .collect()
+}
+
+fn presentation(commands: &mut Vec<Command>) {
+    commands.retain(|c| !matches!(c.id, "graph.logx" | "graph.logy"));
+    for command in commands.iter_mut() {
+        command.icon = match command.id {
+            "signal.convolve" => "convolve",
+            "project.folder.new" => "folder-new",
+            "plot.panels_stacked" => "panels-stack",
+            "plot.panels_side" => "panels-side",
+            "plot.panels_grid4" => "panels-grid",
+            "fit.nonlinear" => "fit-nonlinear",
+            "fit.compare" => "fit-compare",
+            "fit.reports" => "fit-report",
+            "fit.mlr" => "fit-multi",
+            "fit.calibration" => "calibration",
+            "math.interp" => "interpolate",
+            "math.average" => "average",
+            "math.diff_sg" => "diff-sg",
+            "signal.fft" => "fft",
+            "signal.ifft" => "ifft",
+            "signal.correlate" => "correlate",
+            "stats.anova2" => "anova2",
+            "stats.correlation" => "correlation",
+            "edit.replace" => "replace",
+            "col.setvalues" => "formula",
+            "col.fill" => "fill",
+            "sort.custom" => "sort-custom",
+            "book.template.save" => "template-save",
+            "book.template.open" => "template-open",
+            "graph.legend.auto" => "legend-auto",
+            "layer.contents" => "layer-contents",
+            "help.about" => "about",
+
+            "graph.shape.line" => "shape-line",
+            "graph.shape.arrow" => "shape-arrow",
+            "graph.shape.rect" => "shape-rect",
+            "graph.shape.ellipse" => "shape-ellipse",
+            "book.transpose" => "transpose",
+            "sheet.stack" => "stack",
+            "sheet.split" => "split",
+            "sheet.reduce" => "reduce",
+            "sheet.freeze" => "freeze",
+            "sheet.unfreeze" => "unfreeze",
+            "layer.add" => "layer-add",
+            "layer.remove" => "layer-remove",
+            "graph.reference.vertical" => "refline-v",
+            "graph.reference.horizontal" => "refline-h",
+            "signal.peaks" => "peaks",
+            "win.reset" => "window-reset",
+            "stats.normality" => "normality",
+            "stats.grubbs" => "outlier",
+            "stats.dixon" => "dixon",
+            "stats.ks2" => "ks2",
+            "stats.rows" => "stat-rows",
+            "stats.frequency" => "frequency",
+            "stats.whole" => "whole-stat",
+            "stats.compare" => "compare-stat",
+            "stats.summary" => "summary-stat",
+            "col.setZ" => "setz",
+            "col.setLabel" => "setlabel",
+            "col.setXError" => "setx-error",
+            "col.setYError" => "sety-error",
+            "note.new" => "note",
+            "note.export" => "note",
+            "graph.text.add" => "annotation-text",
+            "graph.text.manage" => "annotation-edit",
+            "graph.export" => "export-svg",
+            "graph.export_pdf" => "export-pdf",
+            "graph.export_png" => "export-png",
+            "graph.export_tiff" => "export-tiff",
+            "book.export_csv" => "export-csv",
+            "window.minimize" => "window-min",
+            "window.maximize" => "window-max",
+            "window.restore" => "window-restore",
+            "project.show" => "window-show",
+            "project.hide" => "window-hide",
+            _ => command.icon,
+        };
+        command.label = match command.id {
+            "col.insert" => "在右侧插入列",
+            "graph.legend.auto" => "恢复图例自动位置",
+            "graph.text.manage" => "编辑文字标注…",
+            "file.recent" => "打开上次的项目",
+            "stats.grubbs" => "Grubbs 异常值检验…",
+            "project.delete" => "删除当前项…",
+            _ => command.label,
+        };
+        if matches!(
+            command.id,
+            "file.import"
+                | "file.open"
+                | "file.saveas"
+                | "graph.export"
+                | "graph.export_pdf"
+                | "graph.export_png"
+                | "graph.export_tiff"
+                | "book.export_csv"
+                | "note.export"
+                | "book.template.save"
+                | "book.template.open"
+                | "graph.template.save"
+                | "graph.template.apply"
+        ) && !command.label.ends_with('…')
+        {
+            command.label = Box::leak(format!("{}…", command.label).into_boxed_str());
+        }
+        if command.id == "graph.style.paste" {
+            command.when = |a| {
+                need_graph(a)?;
+                a.style_clipboard.as_ref().map(|_| ()).ok_or("请先复制格式")
+            };
+        }
+        if command.id == "sheet.unfreeze" {
+            command.when = |a| {
+                let id = a.active_book_id().ok_or("请先激活工作簿")?;
+                a.sheets
+                    .get(&id)
+                    .filter(|s| s.frozen_columns > 0)
+                    .map(|_| ())
+                    .ok_or("没有冻结列")
+            };
+        }
     }
 }

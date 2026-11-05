@@ -42,63 +42,93 @@ impl SciApp {
     // ---------------------------------------------------------------- 输入
 
     pub(super) fn shortcuts(&mut self, ctx: &egui::Context) {
-        use egui::{Key, Modifiers};
+        use egui::Key;
         // 正在输入文字时，Ctrl+Z 留给 TextEdit 自己的文字历史。
         let text_focus = ctx
             .memory(|m| m.focused())
             .is_some_and(|id| egui::TextEdit::load_state(ctx, id).is_some());
-        if !text_focus {
-            let redo_mod = Modifiers {
-                shift: true,
-                ..Modifiers::COMMAND
-            };
-            let action = ctx.input_mut(|i| {
-                if i.consume_key(redo_mod, Key::Z) || i.consume_key(Modifiers::COMMAND, Key::Y) {
-                    Some("edit.redo")
-                } else if i.consume_key(Modifiers::COMMAND, Key::Z) {
-                    Some("edit.undo")
-                } else {
-                    None
-                }
+        let shifted = ctx.input(|i| (i.modifiers.command || i.modifiers.ctrl) && i.modifiers.shift);
+        let mut clipboard = None;
+        let mut paste = None;
+        if self.ui.palette.is_none() {
+            ctx.input_mut(|i| {
+                i.events.retain(|event| match event {
+                    egui::Event::Copy if shifted => {
+                        clipboard = Some("graph.style.copy");
+                        false
+                    }
+                    egui::Event::Paste(_) if shifted => {
+                        clipboard = Some("graph.style.paste");
+                        false
+                    }
+                    egui::Event::Copy if !text_focus => {
+                        clipboard = Some("edit.copy");
+                        false
+                    }
+                    egui::Event::Paste(text) if !text_focus => {
+                        paste = Some(text.clone());
+                        false
+                    }
+                    _ => true,
+                })
             });
-            if let Some(id) = action {
-                self.run_command(id);
+        }
+        if let Some(command) = clipboard {
+            if !shifted || self.active_graph_id().is_some() {
+                self.shortcut_command(ctx, command);
             }
         }
-        // 命令面板打开时，方向键、回车由面板自己处理
-        let keys: [(Modifiers, Key, &str); 12] = [
-            (
-                Modifiers {
-                    shift: true,
-                    ..Modifiers::COMMAND
-                },
-                Key::N,
-                "project.new",
-            ),
-            (Modifiers::COMMAND, Key::N, "book.new"),
-            (Modifiers::COMMAND, Key::O, "file.open"),
-            (Modifiers::COMMAND, Key::S, "file.save"),
-            (Modifiers::COMMAND, Key::I, "file.import"),
-            (Modifiers::COMMAND, Key::E, "graph.export"),
-            (Modifiers::COMMAND, Key::J, "graph.copy"),
-            (Modifiers::COMMAND, Key::K, "palette.open"),
-            (Modifiers::COMMAND, Key::F, "edit.find"),
-            (Modifiers::COMMAND, Key::H, "edit.replace"),
-            (Modifiers::COMMAND, Key::F1, "ribbon.toggle"),
-            (Modifiers::NONE, Key::F1, "help.show"),
-        ];
-        let hit: Vec<&str> = ctx.input_mut(|inp| {
-            keys.iter()
-                .filter(|(m, k, _)| inp.consume_key(*m, *k))
-                .map(|(_, _, id)| *id)
-                .collect()
-        });
-        for id in hit {
-            self.run_command(id);
+        if let Some(text) = paste {
+            #[cfg(test)]
+            if ctx.data(|d| d.get_temp::<bool>(egui::Id::new("shortcut-probe"))) == Some(true) {
+                self.shortcut_command(ctx, "edit.paste");
+            } else {
+                self.paste_text(text);
+            }
+            #[cfg(not(test))]
+            self.paste_text(text);
+        }
+        for command in commands::commands().iter().filter(|c| !c.keys.is_empty()) {
+            if self.ui.palette.is_some() && command.id != "win.reset" {
+                continue;
+            }
+            if text_focus
+                && matches!(
+                    command.id,
+                    "edit.undo" | "edit.redo" | "edit.copy" | "edit.paste" | "edit.clear"
+                )
+            {
+                continue;
+            }
+            let hit = commands::shortcut_bindings(command)
+                .into_iter()
+                .any(|(m,k)|ctx.input_mut(|i| {
+                    let exact=i.events.iter().any(|e|matches!(e,egui::Event::Key{key,pressed:true,modifiers,..} if *key==k && modifiers.matches_exact(m)));
+                    exact && i.consume_key(m,k)
+                }));
+            if hit {
+                self.shortcut_command(ctx, command.id);
+            }
         }
         if self.ui.backstage && ctx.input(|i| i.key_pressed(Key::Escape)) {
             self.ui.backstage = false;
         }
+    }
+
+    fn shortcut_command(&mut self, ctx: &egui::Context, id: &'static str) {
+        #[cfg(test)]
+        if ctx.data(|d| d.get_temp::<bool>(egui::Id::new("shortcut-probe"))) == Some(true) {
+            ctx.data_mut(|d| {
+                let mut ids = d
+                    .get_temp::<Vec<&'static str>>(egui::Id::new("shortcut-dispatched"))
+                    .unwrap_or_default();
+                ids.push(id);
+                d.insert_temp(egui::Id::new("shortcut-dispatched"), ids);
+            });
+            return;
+        }
+        let _ = ctx;
+        self.run_command(id);
     }
 
     // ---------------------------------------------------------------- 界面
@@ -536,30 +566,6 @@ impl SciApp {
             .flatten();
         let mut object_action = None;
         response.context_menu(|ui| {
-            if ui.button("复制格式").clicked() {
-                act = Some("graph.style.copy");
-                ui.close_menu();
-            }
-            if ui.button("粘贴格式").clicked() {
-                act = Some("graph.style.paste");
-                ui.close_menu();
-            }
-            if ui.button("保存为主题…").clicked() {
-                act = Some("graph.themes");
-                ui.close_menu();
-            }
-            ui.menu_button("应用主题", |ui| {
-                let themes: Vec<_> = std::iter::once(scicanvas_core::graph_theme::GraphTheme::nature())
-                    .chain(self.project.graph_themes.iter().cloned())
-                    .collect();
-                for theme in themes {
-                    if ui.button(&theme.name).clicked() {
-                        self.apply_graph_theme(theme);
-                        ui.close_menu();
-                    }
-                }
-            });
-            ui.separator();
             if let Some(target) = menu_object {
                 if ui
                     .button(if matches!(target, plot::ObjectTarget::Shape(_)) {
@@ -577,7 +583,7 @@ impl SciApp {
                     ui.close_menu();
                 }
                 if let plot::ObjectTarget::Legend(index) = target {
-                    if ui.button("恢复自动避让").clicked() {
+                    if ui.button("恢复图例自动位置").clicked() {
                         object_action = Some(plot::ObjectAction::AutoLegend(index));
                         ui.close_menu();
                     }
@@ -591,31 +597,71 @@ impl SciApp {
                 }
                 ui.separator();
             }
-            for (cid, label) in [
-                ("layer.contents", "图层内容…"),
-                ("graph.props", "绘图属性…"),
-                ("graph.text.add", "添加文字标注"),
-                ("graph.text.manage", "管理文字标注…"),
-                ("graph.legend.auto", "图例自动避让"),
-                ("graph.copy", "复制图形"),
-                ("graph.export", "导出 SVG…"),
-                ("graph.export_pdf", "导出 PDF…"),
-                ("graph.export_png", "导出 PNG…"),
-                ("", ""),
-                ("graph.legend", "图例"),
-                ("graph.grid", "网格线"),
-                ("graph.logx", "X 对数刻度"),
-                ("graph.logy", "Y 对数刻度"),
-            ] {
-                if cid.is_empty() {
-                    ui.separator();
-                    continue;
-                }
-                if ui.button(label).clicked() {
+            let state = crate::menus::MenuState::new(self);
+            for cid in ["graph.props", "layer.contents"] {
+                if crate::menus::menu_command(ui, &state, cid) {
                     act = Some(cid);
-                    ui.close_menu();
                 }
             }
+            ui.separator();
+            ui.menu_button("坐标轴", |ui| {
+                crate::ribbon::scale_menu(ui, true, self, &mut act);
+                crate::ribbon::scale_menu(ui, false, self, &mut act);
+                if crate::menus::menu_command(ui, &state, "graph.grid") {
+                    act = Some("graph.grid");
+                }
+            });
+            for cid in ["graph.legend", "graph.labels"] {
+                if crate::menus::menu_command(ui, &state, cid) {
+                    act = Some(cid);
+                }
+            }
+            ui.menu_button("添加", |ui| {
+                for cid in [
+                    "graph.text.add",
+                    "graph.reference.vertical",
+                    "graph.reference.horizontal",
+                    "layer.add",
+                ] {
+                    if crate::menus::menu_command(ui, &state, cid) {
+                        act = Some(cid);
+                    }
+                }
+            });
+            ui.menu_button("格式", |ui| {
+                for cid in ["graph.style.copy", "graph.style.paste"] {
+                    if crate::menus::menu_command(ui, &state, cid) {
+                        act = Some(cid);
+                    }
+                }
+                ui.menu_button("应用主题", |ui| {
+                    let themes: Vec<_> = std::iter::once(scicanvas_core::graph_theme::GraphTheme::nature())
+                        .chain(self.project.graph_themes.iter().cloned())
+                        .collect();
+                    for theme in themes {
+                        if ui.button(&theme.name).clicked() {
+                            self.apply_graph_theme(theme);
+                            ui.close_menu();
+                        }
+                    }
+                });
+                if crate::menus::menu_command(ui, &state, "graph.themes") {
+                    act = Some("graph.themes");
+                }
+            });
+            ui.menu_button("导出", |ui| {
+                for cid in [
+                    "graph.copy",
+                    "graph.export",
+                    "graph.export_pdf",
+                    "graph.export_png",
+                    "graph.export_tiff",
+                ] {
+                    if crate::menus::menu_command(ui, &state, cid) {
+                        act = Some(cid);
+                    }
+                }
+            });
             ui.separator();
             if ui.button("恢复原始范围").clicked() {
                 plot::reset_view(ui.ctx(), id, self.layer_index(id));

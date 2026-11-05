@@ -934,7 +934,7 @@ fn axis_scale_menu_dispatches_registered_choice() {
         harness.frame(&mut state, vec![]);
     }
     let output = harness.frame(&mut state, vec![]);
-    harness.click_text(&mut state, &output, "X 刻度类型");
+    harness.click_text(&mut state, &output, "X：线性");
     let output = harness.frame(&mut state, vec![]);
     let at = crate::test_ui::text_rect(&output, scicanvas_core::ticks::AxisScale::Log2.label())
         .expect("scale option")
@@ -965,4 +965,28 @@ fn dialog_code_lines_remain_formatter_friendly() {
             );
         }
     }
+}
+
+#[test]
+fn u6_group_icons_are_distinct() {
+    let mut duplicates = Vec::new();
+    for tab in TABS {
+        for group in tab.groups {
+            let mut seen = std::collections::HashMap::new();
+            for item in group.items {
+                let ids = match item {
+                    crate::ribbon::Item::Big(id) => vec![*id],
+                    crate::ribbon::Item::Smalls(ids) => ids.to_vec(),
+                    _ => vec![],
+                };
+                for id in ids {
+                    let c = crate::commands::find(id).unwrap();
+                    if let Some(other) = seen.insert(c.icon, id) {
+                        duplicates.push((tab.id, group.label, other, id, c.icon));
+                    }
+                }
+            }
+        }
+    }
+    assert!(duplicates.is_empty(), "{duplicates:?}");
 }

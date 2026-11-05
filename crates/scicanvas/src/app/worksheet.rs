@@ -261,8 +261,9 @@ impl SciApp {
         let sel = self.selected_keys(bid);
         if let Some(b) = self.project.book_mut(bid) {
             let at = sel
-                .last()
-                .and_then(|k| b.column_index(k))
+                .iter()
+                .filter_map(|k| b.column_index(k))
+                .max()
                 .map(|i| i + 1)
                 .unwrap_or(b.columns.len());
             let key = b.insert_column(at, Role::Y);
@@ -585,6 +586,7 @@ impl SciApp {
         let focus_id = egui::Id::new(("sheet-focus", id));
         let edit_id = egui::Id::new(("sheet-edit", id));
         let selected = self.selected_keys(id);
+        let menu = crate::menus::MenuState::new(self);
         let mut st = self.sheets.remove(&id).unwrap_or_default();
         let visible_rows = self.project.book(id).and_then(|book| st.filtered_rows(book));
         if let Some(rows) = &visible_rows {
@@ -697,6 +699,7 @@ impl SciApp {
         st.viewport_width = ui.available_width();
         let grid = egui::Stroke::new(1.0_f32, pal.meta_bg);
         let mut frame = SheetFrame {
+            menu,
             frozen,
             id,
             pal,
@@ -973,65 +976,11 @@ impl SciApp {
                 self.add_to_graph(id, gid);
                 return;
             }
-            let command = match act {
-                ColAction::Props => "col.props",
-                ColAction::Filter | ColAction::ClearFilter => unreachable!(),
-                ColAction::SetDataKind(scicanvas_core::DataKind::Num) => "col.type.num",
-                ColAction::SetDataKind(scicanvas_core::DataKind::Text) => "col.type.text",
-                ColAction::SetDataKind(scicanvas_core::DataKind::DateTime) => "col.type.datetime",
-                ColAction::SetDataKind(scicanvas_core::DataKind::Category) => "col.type.category",
-                ColAction::SetRole(Role::X) => "col.setX",
-                ColAction::SetRole(Role::Y) => "col.setY",
-                ColAction::SetRole(Role::XError) => "col.setXError",
-                ColAction::SetRole(Role::YError) => "col.setYError",
-                ColAction::SetRole(Role::Ignore) => "col.setIgnore",
-                ColAction::SetRole(Role::Z) => "col.setZ",
-                ColAction::SetRole(Role::Label) => "col.setLabel",
-                ColAction::InsertRight => "col.insert",
-                ColAction::CategoryOrder => "col.categories",
-                ColAction::Move(scicanvas_core::ColumnMove::Left) => "col.left",
-                ColAction::Move(scicanvas_core::ColumnMove::Right) => "col.right",
-                ColAction::Move(scicanvas_core::ColumnMove::First) => "col.first",
-                ColAction::Move(scicanvas_core::ColumnMove::Last) => "col.last",
-                ColAction::Clear => "col.clear",
-                ColAction::Delete => "col.delete",
-                ColAction::Plot(PlotType::Line) => "plot.line",
-                ColAction::Plot(PlotType::Scatter) => "plot.scatter",
-                ColAction::Plot(PlotType::LineSymbol) => "plot.linesym",
-                ColAction::Plot(PlotType::Bar) => "plot.bar",
-                ColAction::Plot(PlotType::StackedBar) => "plot.stacked_bar",
-                ColAction::Plot(PlotType::PercentStackedBar) => "plot.percent_stacked_bar",
-                ColAction::Plot(PlotType::FloatingBar) => "plot.floating_bar",
-                ColAction::Plot(PlotType::HorizontalBar) => "plot.horizontal_bar",
-                ColAction::Plot(PlotType::Area) => "plot.area",
-                ColAction::Plot(PlotType::Spline) => "plot.spline",
-                ColAction::Plot(PlotType::SplineSymbol) => "plot.spline_symbol",
-                ColAction::Plot(PlotType::VerticalDrop) => "plot.vertical_drop",
-                ColAction::Plot(PlotType::StepHorizontal) => "plot.step_horizontal",
-                ColAction::Plot(PlotType::StepVertical) => "plot.step_vertical",
-                ColAction::Plot(PlotType::Histogram) => "plot.histogram",
-                ColAction::Plot(PlotType::QQ) => "plot.qq",
-                ColAction::Plot(PlotType::Box) => "plot.box",
-                ColAction::Plot(PlotType::StackedHorizontalBar) => "plot.stacked_horizontal_bar",
-                ColAction::Plot(PlotType::PercentStackedHorizontalBar) => "plot.percent_stacked_horizontal_bar",
-                ColAction::Plot(PlotType::StackedArea) => "plot.stacked_area",
-                ColAction::Plot(PlotType::FillBetween) => "plot.fill_between",
-                ColAction::Plot(PlotType::ErrorBand) => "plot.error_band",
-                ColAction::Plot(PlotType::ColumnScatter) => "plot.column_scatter",
-                ColAction::Plot(PlotType::Bubble) => "plot.bubble",
-                ColAction::Plot(PlotType::ColorScatter) => "plot.color_scatter",
-                ColAction::Plot(PlotType::BubbleColor) => "plot.bubble_color",
-                ColAction::Plot(PlotType::OffsetLine) => "plot.offset_line",
-                ColAction::Plot(PlotType::Waterfall) => "plot.waterfall",
-                ColAction::Plot(PlotType::LineSeries) => "plot.line_series",
-                ColAction::Plot(PlotType::Pie) => "plot.pie",
-                ColAction::Plot(PlotType::Violin) => "plot.violin",
-                ColAction::Plot(PlotType::PolarLine) => "plot.polar_line",
-                ColAction::Plot(PlotType::PolarScatter) => "plot.polar_scatter",
-
-                ColAction::AddToGraph(_) => unreachable!(),
-            };
-            self.run_command(command);
+            self.run_command(if let ColAction::Command(command) = act {
+                command
+            } else {
+                "col.props"
+            });
         }
 
         // 单元格右键菜单
@@ -1429,4 +1378,39 @@ fn sheet_events(ctx: &egui::Context) -> Vec<egui::Event> {
         });
         mine
     })
+}
+
+impl SciApp {
+    pub(crate) fn paste_range(&mut self) {
+        match arboard::Clipboard::new().and_then(|mut c| c.get_text()) {
+            Ok(text) => self.paste_text(text),
+            Err(e) => self.status_err(format!("读取剪贴板失败：{e}")),
+        }
+    }
+    pub(super) fn paste_text(&mut self, text: String) {
+        let Some(id) = self.active_book_id() else {
+            return;
+        };
+        let mut state = self.sheets.remove(&id).unwrap_or_default();
+        if let Some(range) = state.range {
+            self.edit_with(
+                "粘贴",
+                |project| {
+                    apply_sheet_events(
+                        project.book_mut(id).unwrap(),
+                        &mut state,
+                        range,
+                        vec![egui::Event::Paste(text)],
+                    )
+                    .map(Some)
+                },
+                |app, (_, message, _, _)| {
+                    if let Some((kind, text)) = message {
+                        app.set_status(kind, text);
+                    }
+                },
+            );
+        }
+        self.sheets.insert(id, state);
+    }
 }
