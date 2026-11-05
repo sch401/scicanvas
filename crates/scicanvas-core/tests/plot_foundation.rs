@@ -482,7 +482,7 @@ fn presets_have_example_data_and_use_the_shared_scene() {
     let mut project = Project::default();
     project.books.push(book.clone());
     let presets = scicanvas_core::presets::all();
-    assert_eq!(presets.len(), 26);
+    assert_eq!(presets.len(), 29);
     let mut ids = std::collections::BTreeSet::new();
     for preset in presets {
         assert!(ids.insert(preset.id));

@@ -467,6 +467,9 @@ impl PlotSpec {
         if self.plot_type == kind {
             return Ok(());
         }
+        if kind == PlotType::LineSeries && self.y_keys.iter().filter(|k| !self.line_only.contains(k)).count() < 2 {
+            return Err("线系列图请至少选择两个 Y 列".into());
+        }
         if kind == PlotType::FillBetween {
             let keys: Vec<_> = self
                 .y_keys
@@ -688,7 +691,7 @@ impl PlotSpec {
             let xv = own_x.filter(|_| {
                 !matches!(
                     self.plot_type,
-                    PlotType::QQ | PlotType::Box | PlotType::Histogram | PlotType::ColumnScatter
+                    PlotType::QQ | PlotType::Box | PlotType::Histogram | PlotType::ColumnScatter | PlotType::LineSeries
                 ) || mapping.line_only
             });
             let n = yv.len().max(xv.as_ref().map_or(0, |v| v.len()));
@@ -783,7 +786,7 @@ impl PlotSpec {
         }
         if !matches!(
             self.plot_type,
-            PlotType::QQ | PlotType::Box | PlotType::Histogram | PlotType::ColumnScatter
+            PlotType::QQ | PlotType::Box | PlotType::Histogram | PlotType::ColumnScatter | PlotType::LineSeries
         ) {
             crate::stat::apply(&mut out, self.transform);
         }

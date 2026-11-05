@@ -178,6 +178,13 @@ impl Page {
         }) {
             return Err("图例位置应为有效的页面比例".into());
         }
+        if self
+            .layers
+            .iter()
+            .any(|l| l.offset.is_some_and(|o| !o.dx.is_finite() || !o.dy.is_finite()))
+        {
+            return Err("曲线偏移必须是有限数值".into());
+        }
         if self.layers.is_empty() || self.columns == 0 || self.columns > self.layers.len() {
             return Err("页面需要至少一个图层，排版列数应在 1 与图层数之间".into());
         }
@@ -292,6 +299,8 @@ pub struct Layer {
     pub histogram: HistogramOptions,
     #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Option::is_none"))]
     pub color_scale: Option<ColorScale>,
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Option::is_none"))]
+    pub offset: Option<CurveOffset>,
     #[cfg_attr(feature = "serde", serde(default))]
     pub error_bars: ErrorBars,
     #[cfg_attr(feature = "serde", serde(default))]
@@ -402,6 +411,23 @@ pub enum SymbolFill {
     MatchCurve,
     Hollow,
     Color([u8; 3]),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize), serde(default))]
+pub struct CurveOffset {
+    pub dx: f64,
+    pub dy: f64,
+    pub auto: bool,
+}
+impl Default for CurveOffset {
+    fn default() -> Self {
+        Self {
+            dx: 0.0,
+            dy: 0.0,
+            auto: true,
+        }
+    }
 }
 
 /// 色阶条位置为页面比例；None 使用坐标框右侧的自动位置。
@@ -565,6 +591,7 @@ impl Default for Layer {
             area_opacity: default_area_opacity(),
             histogram: HistogramOptions::default(),
             color_scale: None,
+            offset: None,
             error_bars: Default::default(),
             labels: Default::default(),
             reference_lines: Vec::new(),
@@ -716,6 +743,7 @@ pub struct PreparedPlot {
     pub paths: Vec<Vec<[f64; 2]>>,
     pub box_stats: Option<crate::stats::BoxStats>,
     pub histogram_width: Option<f64>,
+    pub offset: [f64; 2],
 }
 
 impl Layer {
@@ -782,6 +810,7 @@ impl Layer {
                                         | crate::PlotType::QQ
                                         | crate::PlotType::Box
                                         | crate::PlotType::ColumnScatter
+                                        | crate::PlotType::LineSeries
                                 )
                         }) {
                             style.kind = kind;
@@ -810,27 +839,14 @@ impl Layer {
                     paths: Vec::new(),
                     box_stats: None,
                     histogram_width: None,
+                    offset: [0.; 2],
                 }
             })
             .collect();
         if self.plot_type == crate::PlotType::Box {
             crate::stat::boxes(&mut prepared);
         }
-        if self.plot_type == crate::PlotType::ColumnScatter {
-            for (i, p) in prepared.iter_mut().filter(|p| !p.series.line_only).enumerate() {
-                let center = (i + 1) as f64;
-                for error in &mut p.series.errors {
-                    error[0] = None;
-                }
-                let mean = p.series.points.iter().map(|p| p[1]).sum::<f64>() / p.series.points.len() as f64;
-                for (j, point) in p.series.points.iter_mut().enumerate() {
-                    point[0] = center + 0.15 * (2.0 * (j as f64 * 0.618034).fract() - 1.0);
-                }
-                if mean.is_finite() {
-                    p.paths.push(vec![[center - 0.2, mean], [center + 0.2, mean]]);
-                }
-            }
-        }
+        crate::stat::columns(self, &mut prepared);
         if let Some(histogram) = histogram {
             for (p, path) in prepared.iter_mut().zip(histogram.paths) {
                 p.histogram_width = histogram.bin_width;
@@ -861,6 +877,7 @@ impl Layer {
                 p.style.bar_count = count;
             }
         }
+        crate::stat::offset(self, &mut prepared);
         (xcol, prepared)
     }
 
@@ -1001,7 +1018,10 @@ impl Layer {
         if !self.x_title.trim().is_empty() {
             return self.x_title.clone();
         }
-        if matches!(self.plot_type, crate::PlotType::Box | crate::PlotType::ColumnScatter) {
+        if matches!(
+            self.plot_type,
+            crate::PlotType::Box | crate::PlotType::ColumnScatter | crate::PlotType::LineSeries
+        ) {
             return String::new();
         }
         if self.plot_type == crate::PlotType::QQ {

@@ -293,6 +293,7 @@ pub(crate) fn prepare(g: &crate::page::Layer, series: &mut [Series]) {
     for s in series {
         // 均值变换后的点没有原始行，按顺序编号，连线不在组之间断开
         if (g.plot_type == PlotType::Area || g.plot_type.is_spline() || g.plot_type.has_line())
+            && g.plot_type != PlotType::LineSeries
             && g.transform == crate::plotspec::Transform::Mean
             && !s.line_only
         {
@@ -319,5 +320,107 @@ pub(crate) fn prepare(g: &crate::page::Layer, series: &mut [Series]) {
         s.bases.retain(|_| *flags.next().unwrap());
         let mut flags = keep.iter();
         s.rows.retain(|_| *flags.next().unwrap());
+    }
+}
+
+/// 偏移不改变列数据或源标识；派生拟合线跟随对应原曲线，不占序号。
+pub(crate) fn offset(layer: &crate::page::Layer, plots: &mut [crate::page::PreparedPlot]) {
+    let options = layer.offset.or_else(|| {
+        matches!(layer.plot_type, PlotType::OffsetLine | PlotType::Waterfall).then_some(Default::default())
+    });
+    let Some(options) = options else {
+        return;
+    };
+    let span = |values: Vec<f64>| {
+        values
+            .iter()
+            .copied()
+            .fold(None, |range, v| {
+                Some(range.map_or((v, v), |(lo, hi): (f64, f64)| (lo.min(v), hi.max(v))))
+            })
+            .map_or(0.0, |(lo, hi)| hi - lo)
+    };
+    let (dx, dy) = if options.auto {
+        let dy = plots
+            .iter()
+            .filter(|p| !p.series.line_only)
+            .map(|p| span(p.series.points.iter().map(|v| v[1]).collect()))
+            .fold(0.0, f64::max);
+        let dx = if layer.plot_type == PlotType::Waterfall {
+            0.05 * span(
+                plots
+                    .iter()
+                    .filter(|p| !p.series.line_only)
+                    .flat_map(|p| p.series.points.iter().map(|v| v[0]))
+                    .collect(),
+            )
+        } else {
+            0.0
+        };
+        (dx, dy)
+    } else {
+        (options.dx, options.dy)
+    };
+    let shifts: std::collections::BTreeMap<_, _> = plots
+        .iter()
+        .filter(|p| !p.series.line_only)
+        .enumerate()
+        .map(|(i, p)| (p.series.key.clone(), [i as f64 * dx, i as f64 * dy]))
+        .collect();
+    for plot in plots {
+        let shift = if plot.series.line_only {
+            plot.series
+                .source
+                .as_ref()
+                .and_then(|k| shifts.get(k))
+                .copied()
+                .unwrap_or([0.; 2])
+        } else {
+            shifts[&plot.series.key]
+        };
+        for point in &mut plot.series.points {
+            point[0] += shift[0];
+            point[1] += shift[1];
+        }
+        for point in plot.paths.iter_mut().flatten() {
+            point[0] += shift[0];
+            point[1] += shift[1];
+        }
+        plot.offset = shift;
+    }
+}
+
+pub(crate) fn columns(layer: &crate::page::Layer, prepared: &mut [crate::page::PreparedPlot]) {
+    if layer.plot_type == crate::PlotType::LineSeries {
+        for (i, p) in prepared.iter_mut().filter(|p| !p.series.line_only).enumerate() {
+            for point in &mut p.series.points {
+                point[0] = (i + 1) as f64;
+            }
+            for e in &mut p.series.errors {
+                e[0] = None;
+            }
+            if p.plot.style.as_ref().is_none_or(|s| s.color.is_none()) {
+                p.style.color = if layer.color_map == crate::colormap::ColorMap::Origin {
+                    crate::SeriesColor::Palette(0)
+                } else {
+                    crate::SeriesColor::Rgb(layer.color_map.sample(0.0))
+                };
+            }
+        }
+    }
+    if layer.plot_type == crate::PlotType::ColumnScatter {
+        for (i, p) in prepared.iter_mut().filter(|p| !p.series.line_only).enumerate() {
+            let center = (i + 1) as f64;
+            for error in &mut p.series.errors {
+                error[0] = None;
+            }
+            let mean = p.series.points.iter().map(|p| p[1]).sum::<f64>() / p.series.points.len() as f64;
+            for (j, point) in p.series.points.iter_mut().enumerate() {
+                point[0] = center + 0.15 * (2.0 * (j as f64 * 0.618034).fract() - 1.0);
+            }
+            if mean.is_finite() {
+                p.paths.push(vec![[center - 0.2, mean], [center + 0.2, mean]]);
+            }
+        }
     }
 }

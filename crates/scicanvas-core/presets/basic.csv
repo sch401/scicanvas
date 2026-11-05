@@ -25,3 +25,6 @@ column-scatter,列散点图,ColumnScatter,Symbol,Identity,Vertical,Straight
 bubble,气泡图,Bubble,Symbol,Identity,Vertical,Straight
 color-scatter,颜色映射散点图,ColorScatter,Symbol,Identity,Vertical,Straight
 bubble-color,气泡颜色映射图,BubbleColor,Symbol,Identity,Vertical,Straight
+offset-line,偏移堆叠线图,OffsetLine,Line,Identity,Vertical,Straight
+waterfall,二维瀑布图,Waterfall,Line,Identity,Vertical,Straight
+line-series,线系列图,LineSeries,Line+Symbol,Identity,Vertical,Straight

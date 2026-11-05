@@ -580,6 +580,9 @@ impl SheetFrame {
             ("plot.bubble", "气泡图"),
             ("plot.color_scatter", "颜色映射散点图"),
             ("plot.bubble_color", "气泡颜色映射图"),
+            ("plot.offset_line", "偏移堆叠线图"),
+            ("plot.waterfall", "二维瀑布图"),
+            ("plot.line_series", "线系列图"),
         ] {
             if cid.is_empty() {
                 ui.separator();

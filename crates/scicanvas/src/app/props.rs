@@ -60,6 +60,7 @@ impl SciApp {
                         titles(ui, g, history_group);
                         axes(ui, g, history_group);
                         histogram_options(ui, g, history_group);
+                        curve_offset_options(ui, g, history_group);
                         layer_style(ui, g, history_group);
                         labels(ui, g, &cols, history_group);
                         error_bars(ui, g, history_group);
@@ -633,6 +634,26 @@ fn axes(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_group: &
             );
         });
         ui.end_row();
+    }
+}
+
+fn curve_offset_options(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_group: &mut Option<egui::Id>) {
+    if g.offset.is_none() && !matches!(g.plot_type, PlotType::OffsetLine | PlotType::Waterfall) {
+        return;
+    }
+    let mut offset = g.offset.unwrap_or_default();
+    let before = offset;
+    ui.label("曲线偏移");
+    ui.checkbox(&mut offset.auto, "自动偏移");
+    ui.end_row();
+    for (label, value) in [("手动 dx", &mut offset.dx), ("手动 dy", &mut offset.dy)] {
+        ui.label(label);
+        let response = ui.add_enabled(!offset.auto, egui::DragValue::new(value).speed(0.1));
+        edit_group(&response, history_group);
+        ui.end_row();
+    }
+    if offset != before && offset.dx.is_finite() && offset.dy.is_finite() {
+        g.offset = Some(offset);
     }
 }
 

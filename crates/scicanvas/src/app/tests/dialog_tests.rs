@@ -2239,3 +2239,16 @@ fn a3_global_fit_real_dialog_writes_curves_note_and_undoes_once() {
     assert!(matches!(&app.dialog,Some(Dialog::Table{rows,note,..}) if rows.len()==3 && note.contains("t1")));
     roundtrip(&mut app, &before);
 }
+
+#[test]
+fn b3_new_commands_create_offset_or_row_series_and_undo() {
+    for command in ["plot.offset_line", "plot.waterfall", "plot.line_series"] {
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["B".into(), "C".into()]);
+        let before = app.project.clone();
+        app.run_command(command);
+        assert_eq!(app.project.graphs.len(), before.graphs.len() + 1, "{}", app.status);
+        roundtrip(&mut app, &before);
+    }
+}

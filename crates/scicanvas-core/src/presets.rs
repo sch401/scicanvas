@@ -71,6 +71,9 @@ fn entries() -> &'static [(Preset, Recipe)] {
                     "Bubble" => PlotType::Bubble,
                     "ColorScatter" => PlotType::ColorScatter,
                     "BubbleColor" => PlotType::BubbleColor,
+                    "OffsetLine" => PlotType::OffsetLine,
+                    "Waterfall" => PlotType::Waterfall,
+                    "LineSeries" => PlotType::LineSeries,
                     _ => unreachable!("built-in preset type"),
                 };
                 let marks = columns

@@ -63,7 +63,7 @@ def generate(source):
     fig = plt.figure(figsize=(page["w"]/96, page["h"]/96))
     output = dict(case=doc["case"], page=page, data=doc["data"], versions=VERSIONS, layers=[])
     for layer in doc["layers"]:
-        statistical = layer["kind"] in ("Histogram", "QQ", "Box", "ColumnScatter")
+        statistical = layer["kind"] in ("Histogram", "QQ", "Box", "ColumnScatter", "LineSeries")
         date = source_date and not statistical
         category = None if statistical else source_category
         left, top, width, height = layer["plot"]
@@ -110,6 +110,23 @@ def generate(source):
         arrays = [raw(k) for k in keys]
         if kind == "Box":
             ax.set_xticks(np.arange(1, len(keys) + 1), keys)
+        if kind=="LineSeries":
+            ax.set_xticks(np.arange(1,len(keys)+1),keys)
+            for row in range(max(len(y) for y in arrays)):
+                yy=np.array([y[row] if row<len(y) else np.nan for y in arrays])
+                points=np.column_stack([np.arange(1,len(keys)+1),yy])
+                points[~np.isfinite(yy)]=np.nan
+                for run in runs(points):
+                    if len(run)>1:
+                        line,=ax.plot(run[:,0],run[:,1],color="#0F4D92")
+                        marks["polylines"].append(artist_points(line,ax).tolist())
+        offset=layer.get("offset",{})
+        if kind in ("OffsetLine","Waterfall"):
+            if offset.get("auto",True):
+                dy=max((np.ptp(y[np.isfinite(y)&np.isfinite(x)]) for y in arrays if np.any(np.isfinite(y)&np.isfinite(x))),default=0)
+                dx=.05*np.ptp(x[np.isfinite(x)]) if kind=="Waterfall" else 0
+            else:
+                dx,dy=offset["dx"],offset["dy"]
         sums = np.zeros((2, len(x)))
         totals = np.zeros((2, len(x)))
         for y in arrays:
@@ -118,11 +135,15 @@ def generate(source):
         for si, (key, y) in enumerate(zip(keys, arrays)):
             target = right if key in layer["right_keys"] else ax
             valid = np.isfinite(y)
-            if kind not in ("QQ", "Box", "Histogram", "ColumnScatter"):
+            if kind not in ("QQ", "Box", "Histogram", "ColumnScatter", "LineSeries"):
                 valid &= np.isfinite(x)
             if layer["rows"] is not None:
                 lo, hi = layer["rows"]
                 valid &= (np.arange(len(x)) >= lo) & (np.arange(len(x)) <= hi)
+            if kind=="LineSeries":
+                dots=target.scatter(np.full(np.count_nonzero(valid),si+1),y[valid],s=10,color="#0F4D92")
+                marks["symbols"].extend(target.transAxes.inverted().transform(dots.get_offset_transform().transform(dots.get_offsets())).tolist())
+                continue
             if kind == "ColumnScatter":
                 center=si+1
                 xx=center+.15*(2*(np.arange(np.count_nonzero(valid))*.618034 % 1)-1)
@@ -313,7 +334,7 @@ def generate(source):
                     else:
                         marks["bars"].append([(a[0]+b[0])/2, min(a[1], b[1]), max(a[1], b[1])])
                 continue
-            points = np.column_stack([x, y])
+            points = np.column_stack([x+si*dx,y+si*dy]) if kind in ("OffsetLine","Waterfall") else np.column_stack([x,y])
             points[~valid] = np.nan
             paths = runs(points)
             if kind == "VerticalDrop":

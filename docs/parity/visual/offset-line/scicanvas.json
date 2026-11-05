@@ -1,0 +1,244 @@
+{
+  "case": "offset-line",
+  "data": [
+    {
+      "category": null,
+      "key": "A",
+      "kind": "Num",
+      "role": "X",
+      "utc_offset": 0,
+      "values": [
+        0.0,
+        1.0,
+        2.0,
+        3.0,
+        4.0
+      ]
+    },
+    {
+      "category": null,
+      "key": "B",
+      "kind": "Num",
+      "role": "Y",
+      "utc_offset": 0,
+      "values": [
+        -2.0,
+        3.0,
+        null,
+        5.0,
+        -1.0
+      ]
+    },
+    {
+      "category": null,
+      "key": "C",
+      "kind": "Num",
+      "role": "Y",
+      "utc_offset": 0,
+      "values": [
+        1.0,
+        -2.0,
+        4.0,
+        2.0,
+        -3.0
+      ]
+    }
+  ],
+  "layers": [
+    {
+      "axes": {
+        "right_y": null,
+        "x": {
+          "hi": 4.0,
+          "lo": 0.0,
+          "log": false,
+          "minor": [
+            {
+              "position": 0.125,
+              "value": 0.5
+            },
+            {
+              "position": 0.375,
+              "value": 1.5
+            },
+            {
+              "position": 0.625,
+              "value": 2.5
+            },
+            {
+              "position": 0.875,
+              "value": 3.5
+            }
+          ],
+          "ticks": [
+            {
+              "position": 0.0,
+              "value": 0.0
+            },
+            {
+              "position": 0.25,
+              "value": 1.0
+            },
+            {
+              "position": 0.5,
+              "value": 2.0
+            },
+            {
+              "position": 0.75,
+              "value": 3.0
+            },
+            {
+              "position": 1.0,
+              "value": 4.0
+            }
+          ]
+        },
+        "y": {
+          "hi": 12.0,
+          "lo": -2.0,
+          "log": false,
+          "minor": [
+            {
+              "position": 0.07142857142857142,
+              "value": -1.0
+            },
+            {
+              "position": 0.21428571428571427,
+              "value": 1.0
+            },
+            {
+              "position": 0.35714285714285715,
+              "value": 3.0
+            },
+            {
+              "position": 0.5,
+              "value": 5.0
+            },
+            {
+              "position": 0.6428571428571429,
+              "value": 7.0
+            },
+            {
+              "position": 0.7857142857142857,
+              "value": 9.0
+            },
+            {
+              "position": 0.9285714285714286,
+              "value": 11.0
+            }
+          ],
+          "ticks": [
+            {
+              "position": 0.0,
+              "value": -2.0
+            },
+            {
+              "position": 0.14285714285714285,
+              "value": 0.0
+            },
+            {
+              "position": 0.2857142857142857,
+              "value": 2.0
+            },
+            {
+              "position": 0.42857142857142855,
+              "value": 4.0
+            },
+            {
+              "position": 0.5714285714285714,
+              "value": 6.0
+            },
+            {
+              "position": 0.7142857142857143,
+              "value": 8.0
+            },
+            {
+              "position": 0.8571428571428571,
+              "value": 10.0
+            },
+            {
+              "position": 1.0,
+              "value": 12.0
+            }
+          ]
+        }
+      },
+      "base_by_y": {},
+      "connect": "Straight",
+      "kind": "OffsetLine",
+      "marks": {
+        "area": [],
+        "bars": [],
+        "colors": [],
+        "polylines": [
+          [
+            [
+              0.0,
+              0.0
+            ],
+            [
+              0.25,
+              0.3571428571428572
+            ]
+          ],
+          [
+            [
+              0.75,
+              0.5
+            ],
+            [
+              0.9999999999999998,
+              0.0714285714285714
+            ]
+          ],
+          [
+            [
+              0.0,
+              0.7142857142857143
+            ],
+            [
+              0.25,
+              0.5
+            ],
+            [
+              0.5,
+              0.9285714285714286
+            ],
+            [
+              0.75,
+              0.7857142857142857
+            ],
+            [
+              0.9999999999999998,
+              0.4285714285714286
+            ]
+          ]
+        ],
+        "segments": [],
+        "symbols": []
+      },
+      "offset": {
+        "auto": true,
+        "dx": 0.0,
+        "dy": 0.0
+      },
+      "plot": [
+        84.9438202247191,
+        23.59550561797753,
+        675.7232593116872,
+        484.37671414668677
+      ],
+      "reference_lines": [],
+      "right_keys": [],
+      "rows": null,
+      "y_keys": [
+        "B",
+        "C"
+      ]
+    }
+  ],
+  "page": {
+    "h": 595.2755905511812,
+    "w": 793.7007874015749
+  }
+}

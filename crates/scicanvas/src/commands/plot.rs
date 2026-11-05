@@ -251,6 +251,7 @@ pub(super) fn basic(commands: &mut Vec<Command>) {
 
 pub(super) fn decorations(commands: &mut Vec<Command>) {
     scatter_variants(commands);
+    offset_series(commands);
     commands.extend([
         c(
             "plot.spline",
@@ -578,6 +579,44 @@ fn scatter_variants(commands: &mut Vec<Command>) {
             "气泡颜色映射图",
             need_data,
             |a| a.plot(PlotType::BubbleColor),
+        )
+        .modifies(),
+    ]);
+}
+
+fn offset_series(commands: &mut Vec<Command>) {
+    commands.extend([
+        c(
+            "plot.offset_line",
+            "偏移堆叠线图",
+            "area",
+            "",
+            "绘图",
+            "偏移堆叠线图",
+            need_data,
+            |a| a.plot(PlotType::OffsetLine),
+        )
+        .modifies(),
+        c(
+            "plot.waterfall",
+            "二维瀑布图",
+            "area",
+            "",
+            "绘图",
+            "二维瀑布图",
+            need_data,
+            |a| a.plot(PlotType::Waterfall),
+        )
+        .modifies(),
+        c(
+            "plot.line_series",
+            "线系列图",
+            "area",
+            "",
+            "绘图",
+            "线系列图",
+            need_data,
+            |a| a.plot(PlotType::LineSeries),
         )
         .modifies(),
     ]);

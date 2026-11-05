@@ -74,7 +74,7 @@ pub(super) fn draw(
         } else {
             draw_paths(ctx, style, splines, items);
         }
-    } else if recipe.marks.contains(&Kind::Line) {
+    } else if recipe.marks.contains(&Kind::Line) && style.kind != crate::PlotType::LineSeries {
         if mapped_color {
             let segments = colored_line_segments(ctx, series, style, recipe.path, color);
             if !segments.is_empty() {

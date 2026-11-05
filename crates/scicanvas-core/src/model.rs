@@ -3,7 +3,7 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-pub const PROJECT_VERSION: u32 = 31;
+pub const PROJECT_VERSION: u32 = 32;
 pub const GRAPH_TEMPLATE_VERSION: u32 = 1;
 
 /// 列的绘图角色，对应 Origin 里的 X / Y / 忽略。
@@ -500,10 +500,13 @@ pub enum PlotType {
     Bubble,
     ColorScatter,
     BubbleColor,
+    OffsetLine,
+    Waterfall,
+    LineSeries,
 }
 
 impl PlotType {
-    pub const ALL: [PlotType; 26] = [
+    pub const ALL: [PlotType; 29] = [
         PlotType::Line,
         PlotType::Scatter,
         PlotType::LineSymbol,
@@ -530,6 +533,9 @@ impl PlotType {
         PlotType::Bubble,
         PlotType::ColorScatter,
         PlotType::BubbleColor,
+        PlotType::OffsetLine,
+        PlotType::Waterfall,
+        PlotType::LineSeries,
     ];
 
     pub fn label(self) -> &'static str {
@@ -560,6 +566,9 @@ impl PlotType {
             PlotType::Bubble => "气泡图",
             PlotType::ColorScatter => "颜色映射散点图",
             PlotType::BubbleColor => "气泡颜色映射图",
+            PlotType::OffsetLine => "偏移堆叠线图",
+            PlotType::Waterfall => "二维瀑布图",
+            PlotType::LineSeries => "线系列图",
         }
     }
 
@@ -845,7 +854,16 @@ impl Project {
         let id = self.alloc_id();
         let mut graph = Graph::new(id, self.unique_name("Graph"));
         graph.first_layer_mut().spec = spec.into();
-        if matches!(graph.first_layer().plot_type, PlotType::Box | PlotType::ColumnScatter) {
+        if matches!(
+            graph.first_layer().plot_type,
+            PlotType::OffsetLine | PlotType::Waterfall
+        ) {
+            graph.first_layer_mut().offset = Some(Default::default());
+        }
+        if matches!(
+            graph.first_layer().plot_type,
+            PlotType::Box | PlotType::ColumnScatter | PlotType::LineSeries
+        ) {
             graph.first_layer_mut().legend = false;
         }
         self.graphs.push(graph);

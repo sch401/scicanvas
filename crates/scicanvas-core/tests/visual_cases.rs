@@ -28,7 +28,17 @@ fn case(name: &str, kind: PlotType) -> (String, Project, Graph) {
         column("A", Role::X, &["0", "1", "2", "3", "4"]),
         column("B", Role::Y, &["-2", "3", "", "5", "-1"]),
     ];
-    if kind.is_bar() || matches!(kind, PlotType::QQ | PlotType::StackedArea | PlotType::FillBetween) {
+    if kind.is_bar()
+        || matches!(
+            kind,
+            PlotType::QQ
+                | PlotType::StackedArea
+                | PlotType::FillBetween
+                | PlotType::OffsetLine
+                | PlotType::Waterfall
+                | PlotType::LineSeries
+        )
+    {
         p.book_mut(1)
             .unwrap()
             .columns
@@ -67,6 +77,9 @@ fn case(name: &str, kind: PlotType) -> (String, Project, Graph) {
     }
     let mut g = Graph::new(2, name);
     g.first_layer_mut().spec = PlotSpec::from_selection(p.book(1).unwrap(), &[], kind).unwrap().into();
+    if matches!(kind, PlotType::OffsetLine | PlotType::Waterfall) {
+        g.first_layer_mut().offset = Some(Default::default());
+    }
     g.first_layer_mut().legend = false;
     if name == "scatter" {
         g.first_layer_mut().edit_draft(|draft| draft.rows = Some((1, 3)));
@@ -347,6 +360,9 @@ fn export(p: &Project, g: &Graph) -> (Value, String) {
             .map(|p| p.key.clone())
             .collect();
         let mut entry = json!({"axes":{"x":axis(&view.axes.x),"y":axis(&view.axes.left_y),"right_y":view.axes.right_y.as_ref().map(axis)},"plot":rect,"kind":format!("{:?}",l.plot_type),"connect":format!("{:?}",l.connect),"y_keys":draft.y_keys,"base_by_y":draft.base_by_y,"right_keys":right,"rows":draft.rows,"reference_lines":l.reference_lines.iter().map(|r|json!({"axis":format!("{:?}",r.axis),"value":r.value})).collect::<Vec<_>>(),"marks":{"symbols":symbols,"polylines":lines,"bars":bars,"segments":segments,"area":bounds,"colors":colors}});
+        if let Some(offset) = l.offset {
+            entry["offset"] = serde_json::to_value(offset).unwrap();
+        }
         if !l.histogram.is_default() {
             entry["histogram"] = serde_json::to_value(l.histogram).unwrap();
         }

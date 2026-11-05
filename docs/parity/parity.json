@@ -4667,11 +4667,35 @@
   "feature": "Y 偏移堆叠线图",
   "ref": "Stacked Lines by Y Offsets Graph",
   "pri": "P1",
-  "status": "未开始",
-  "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 Origin 同数据出图目视比较",
+  "status": "已实现待验收",
+  "how": "绘图 → Y 偏移堆叠线图。自动 dy 为各曲线最大 Y 跨度，支持手动 dx/dy，偏移跟随源数据更新；派生拟合线跟随原曲线，拾取和标签显示原值。",
+  "verify": "核心偏移、派生路径、原值拾取、源行连接与 v32 保存兼容；真实命令一步撤销；新增 NumPy/matplotlib 位置对照。",
   "id": "F257",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "visual",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/offset_lines.rs::b3_offsets_paths_and_pick_return_original_values",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::b3_new_commands_create_offset_or_row_series_and_undo"
+   ],
+   "reference": [
+    "docs/parity/visual/offset-line/matplotlib.json"
+   ],
+   "visual": [
+    "docs/parity/visual/offset-line/README.md"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/plotting.md#F257",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "图类型 · 2D 线图",
@@ -5072,11 +5096,35 @@
   "feature": "线系列图",
   "ref": "Line Series Graph",
   "pri": "P1",
-  "status": "未开始",
-  "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 Origin 同数据出图目视比较",
+  "status": "已实现待验收",
+  "how": "绘图 → 线系列图。按 Origin 官方定义，每个原始行跨所选 Y 列连接为一条点线，X 为列位置和列名；至少两列，无隐藏工作表，保留原始行/列及实时源数据连接，缺失列处断开。",
+  "verify": "核心偏移、派生路径、原值拾取、源行连接与 v32 保存兼容；真实命令一步撤销；新增 NumPy/matplotlib 位置对照。",
   "id": "F275",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "visual",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/offset_lines.rs::b3_line_series_links_original_rows_without_hidden_book",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::b3_new_commands_create_offset_or_row_series_and_undo"
+   ],
+   "reference": [
+    "docs/parity/visual/line-series/matplotlib.json"
+   ],
+   "visual": [
+    "docs/parity/visual/line-series/README.md"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/plotting.md#F275",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "图类型 · 2D 点线图",
@@ -5885,11 +5933,35 @@
   "feature": "2D 瀑布图",
   "ref": "2D Waterfall Graph",
   "pri": "P1",
-  "status": "未开始",
-  "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 Origin 同数据出图目视比较",
+  "status": "已实现待验收",
+  "how": "绘图 → 二维瀑布图。自动 dy 为各曲线最大 Y 跨度，支持手动 dx/dy，偏移跟随源数据更新；派生拟合线跟随原曲线，拾取和标签显示原值。自动 dx 为全部 X 跨度的 5%。首版不做前景遮挡填充。",
+  "verify": "核心偏移、派生路径、原值拾取、源行连接与 v32 保存兼容；真实命令一步撤销；新增 NumPy/matplotlib 位置对照。",
   "id": "F331",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "visual",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/offset_lines.rs::b3_offsets_paths_and_pick_return_original_values",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::b3_new_commands_create_offset_or_row_series_and_undo"
+   ],
+   "reference": [
+    "docs/parity/visual/waterfall/matplotlib.json"
+   ],
+   "visual": [
+    "docs/parity/visual/waterfall/README.md"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/plotting.md#F331",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "图类型 · 瀑布图",
