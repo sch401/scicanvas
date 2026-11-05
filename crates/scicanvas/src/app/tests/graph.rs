@@ -1638,3 +1638,85 @@ fn batch_export_controls_return_selected_graphs_and_format() {
         matches!(action, dialogs::Action::BatchExport(graphs, dialogs::BatchFormat::Tiff, 300) if graphs == vec![first])
     );
 }
+
+#[test]
+fn supplement_builder_color_choice_defaults_then_preserves_manual_origin() {
+    use scicanvas_core::colormap::ColorMap;
+    let mut app = app();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["A".into(), "B".into(), "C".into()]);
+    app.run_command("plot.builder");
+    assert_eq!(app.plot_draft.as_ref().unwrap().plot_type, PlotType::LineSymbol);
+    let before = app.project.clone();
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    ctx.style_mut(|s| s.animation_time = 0.);
+    let mut harness = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1400., 1200.)),
+        |app: &mut SciApp, ctx: &egui::Context| {
+            if crate::builder::show(ctx, &app.project, &mut app.plot_draft) {
+                app.run_command("plot.apply_spec");
+            }
+        },
+    )
+    .with_step(0.02);
+    for _ in 0..5 {
+        harness.frame(&mut app, vec![]);
+    }
+    let output = harness.frame(&mut app, vec![]);
+    let scroll = crate::test_ui::find_text(&output, "图库 · 当前数据").unwrap() + egui::vec2(100., 100.);
+    let mut selected = false;
+    for _ in 0..55 {
+        let output = harness.frame(&mut app, vec![]);
+        let tile = output.shapes.iter().find_map(|shape| {
+            if let egui::Shape::Text(text) = &shape.shape {
+                let at = text.pos + egui::vec2(80., 80.);
+                if text.galley.job.text == "颜色映射散点图" && shape.clip_rect.contains(at) {
+                    return Some(at);
+                }
+            }
+            None
+        });
+        if let Some(at) = tile {
+            harness.click(&mut app, at);
+            selected = true;
+            break;
+        }
+        harness.frame(
+            &mut app,
+            vec![
+                egui::Event::PointerMoved(scroll),
+                egui::Event::MouseWheel {
+                    unit: egui::MouseWheelUnit::Point,
+                    delta: egui::vec2(0., -160.),
+                    modifiers: egui::Modifiers::NONE,
+                },
+            ],
+        );
+        for _ in 0..3 {
+            harness.frame(&mut app, vec![]);
+        }
+    }
+    assert!(selected, "color scatter gallery tile is reachable");
+    assert_eq!(app.plot_draft.as_ref().unwrap().plot_type, PlotType::ColorScatter);
+    assert_eq!(app.plot_draft.as_ref().unwrap().color_map, ColorMap::Viridis);
+    let output = harness.frame(&mut app, vec![]);
+    harness.click_text(&mut app, &output, "默认");
+    for _ in 0..3 {
+        harness.frame(&mut app, vec![]);
+    }
+    assert_eq!(app.plot_draft.as_ref().unwrap().color_map, ColorMap::Origin);
+    let output = harness.frame(&mut app, vec![]);
+    harness.click_text(&mut app, &output, "创建图形");
+    assert!(app.plot_draft.is_none());
+    assert_eq!(
+        app.project.graphs.last().unwrap().first_layer().color_map,
+        ColorMap::Origin
+    );
+    roundtrip(&mut app, &before);
+    let id = app.project.graphs.last().unwrap().id;
+    app.active = Some(id);
+    app.open_plot_builder();
+    assert_eq!(app.plot_draft.as_ref().unwrap().color_map, ColorMap::Origin);
+}

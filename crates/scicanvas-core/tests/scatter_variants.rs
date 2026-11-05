@@ -206,3 +206,25 @@ fn review_dataset_color_size_mapping() {
     assert_eq!(points.point_styles.first().unwrap().color, Some([68, 1, 84]));
     assert_eq!(points.point_styles.last().unwrap().color, Some([253, 231, 37]));
 }
+
+#[test]
+fn supplement_declarative_origin_is_not_replaced_by_ui_defaults() {
+    use scicanvas_core::{colormap::ColorMap, plotspec::PlotSpec};
+    for kind in [PlotType::ColorScatter, PlotType::BubbleColor] {
+        let mut p = project(kind);
+        let spec = PlotSpec {
+            book_id: Some(p.books[0].id),
+            x_key: Some("A".into()),
+            y_keys: if kind == PlotType::BubbleColor {
+                vec!["B".into(), "C".into(), "D".into()]
+            } else {
+                vec!["B".into(), "C".into()]
+            },
+            plot_type: kind,
+            color_map: ColorMap::Origin,
+            ..Default::default()
+        };
+        let id = p.plot_spec(spec).unwrap();
+        assert_eq!(p.graph(id).unwrap().first_layer().color_map, ColorMap::Origin);
+    }
+}

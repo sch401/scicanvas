@@ -410,6 +410,9 @@ impl PlotSpec {
                 ..Default::default()
             };
             spec.set_plot_type(plot_type)?;
+            if matches!(plot_type, PlotType::ColorScatter | PlotType::BubbleColor) {
+                spec.color_map = crate::colormap::ColorMap::Viridis;
+            }
             return Ok(spec);
         }
         let cols: Vec<&Column> = book

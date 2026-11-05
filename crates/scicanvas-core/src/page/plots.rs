@@ -86,19 +86,7 @@ impl Default for LayerSpec {
 }
 impl From<PlotSpec> for LayerSpec {
     fn from(spec: PlotSpec) -> Self {
-        let mut layer = Self::from_draft(spec, BTreeMap::new());
-        if matches!(
-            layer.plot_type,
-            crate::PlotType::ColorScatter | crate::PlotType::BubbleColor
-        ) && layer.color_map == crate::colormap::ColorMap::Origin
-            && layer
-                .plots
-                .iter()
-                .any(|p| p.style.as_ref().is_some_and(|s| s.color_column.is_some()))
-        {
-            layer.color_map = crate::colormap::ColorMap::Viridis;
-        }
-        layer
+        Self::from_draft(spec, BTreeMap::new())
     }
 }
 impl LayerSpec {

@@ -133,9 +133,7 @@ pub fn show(ctx: &egui::Context, project: &Project, draft: &mut Option<PlotSpec>
                                 ui.label(preset.name);
                                 let mut g = Graph::new(i as u64, "预览");
                                 g.first_layer_mut().spec = layer.spec.clone();
-                                let preview_valid = g
-                                    .first_layer_mut()
-                                    .set_plot_type(preset.kind)
+                                let preview_valid = select_plot_type(g.first_layer_mut(), preset.kind)
                                     .and_then(|_| g.first_layer().validate(book));
                                 let selected = layer.plot_type == preset.kind;
                                 let response = ui
@@ -171,6 +169,35 @@ pub fn show(ctx: &egui::Context, project: &Project, draft: &mut Option<PlotSpec>
                 });
             });
         });
-    *draft = open.then(|| layer.draft());
+    *draft = open.then(|| selection_draft(&layer));
     apply
+}
+
+fn select_plot_type(layer: &mut Layer, kind: PlotType) -> Result<(), String> {
+    let previous = layer.plot_type;
+    layer.set_plot_type(kind)?;
+    if previous != kind
+        && matches!(kind, PlotType::ColorScatter | PlotType::BubbleColor)
+        && layer.color_map == ColorMap::Origin
+    {
+        layer.color_map = ColorMap::Viridis;
+    }
+    Ok(())
+}
+
+fn selection_draft(layer: &Layer) -> PlotSpec {
+    let mut draft = layer.draft();
+    if matches!(
+        layer.plot_type,
+        PlotType::Bubble | PlotType::ColorScatter | PlotType::BubbleColor
+    ) {
+        for style in layer.styles().values() {
+            for key in [&style.size_column, &style.color_column].into_iter().flatten() {
+                if !draft.y_keys.contains(key) {
+                    draft.y_keys.push(key.clone());
+                }
+            }
+        }
+    }
+    draft
 }

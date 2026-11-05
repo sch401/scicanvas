@@ -44,10 +44,6 @@ fn sample(kind: PlotType, book_name: &str, columns: Vec<Spec>) -> Project {
     }
     p.books.push(book);
     let (graph, _) = p.plot_from_selection(id, &[], kind).unwrap();
-    if matches!(kind, PlotType::ColorScatter | PlotType::BubbleColor) {
-        // 已发布示例保留原色表；新图默认 Viridis 在 scatter_variants 中单独验证。
-        p.graph_mut(graph).unwrap().first_layer_mut().color_map = scicanvas_core::colormap::ColorMap::Origin;
-    }
     p.rename_project_item(graph, kind.label()).unwrap();
     p
 }
@@ -818,7 +814,12 @@ fn sample_group_b2() -> Vec<Project> {
 #[test]
 #[ignore = "维护者显式生成 B2 新示例"]
 fn update_b2_samples() {
-    for (name, p) in samples().into_iter().skip(21) {
+    for (name, p) in samples().into_iter().filter(|(_, p)| {
+        matches!(
+            p.graphs[0].first_layer().plot_type,
+            PlotType::ColorScatter | PlotType::BubbleColor
+        )
+    }) {
         fs::write(directory().join(name), project_file::to_scv(&p).unwrap()).unwrap();
     }
 }
