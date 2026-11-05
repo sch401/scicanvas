@@ -54,7 +54,10 @@ impl Dialog {
             ui.separator();
             ui.add_space(4.0);
             ui.horizontal_wrapped(|ui| {
-                center_buttons(ui, 2);
+                center_buttons(ui, 3);
+                if ui.add(plain("残差 Q-Q")).clicked() {
+                    action = Action::ResidualQQ(reports.clone());
+                }
                 if ui.add(plain("残差图")).clicked() {
                     action = Action::ResidualPlot(reports.clone());
                 }

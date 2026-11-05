@@ -1,5 +1,9 @@
 # 项目文件格式
 
+## v30 非线性拟合残差输出
+
+NonlinearRecipe 新增可选 `residual` 列键，默认 None 且省略。按需创建残差列后，与原拟合曲线、置信带共用多输出重算和所有权。删除残差列清除键；重算使用原数据行，缺失行留空。信息准则只计算，不持久化。新文件 v30，读取 v0–v29，SCV 容器版本保持 1。
+
 ## v29 横向堆叠与带状填充
 
 新增 StackedHorizontalBar、PercentStackedHorizontalBar、StackedArea、FillBetween 图型。FillBetween 复用每条曲线现有 base 列映射保存下边界，原 Y 列顺序保留，奇数末列只画线。新文件 v29，读取 v0–v28，SCV 容器版本保持 1。

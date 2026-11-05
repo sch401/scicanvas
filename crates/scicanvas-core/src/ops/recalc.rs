@@ -159,6 +159,8 @@ pub struct NonlinearRecipe {
     pub constraints: String,
     pub output_x: String,
     pub bands: Vec<FitBands>,
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Option::is_none"))]
+    pub residual: Option<String>,
     /// 权重方式；不加权时不写入（v24）。
     #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "FitWeight::is_none"))]
     pub weight: FitWeight,
@@ -169,6 +171,12 @@ pub struct NonlinearRecipe {
 }
 
 impl NonlinearRecipe {
+    pub(crate) fn output_keys(&self) -> impl Iterator<Item = &String> {
+        std::iter::once(&self.output_x)
+            .chain(self.residual.iter())
+            .chain(self.bands.iter().flat_map(|b| &b.columns))
+    }
+
     pub fn validate(&self) -> Result<(), String> {
         let function = self.function.resolve()?;
         let count = function.params().len();
@@ -192,7 +200,8 @@ impl NonlinearRecipe {
             }
         }
         crate::nlfit::parse_constraints_for_function_with(&function, &self.constraints, &crate::formula::FILE_LIMITS)?;
-        if self.output_x.is_empty()
+        if self.residual.as_ref().is_some_and(String::is_empty)
+            || self.output_x.is_empty()
             || self.bands.iter().any(|b| {
                 !b.level.is_finite()
                     || !(0.0..1.0).contains(&b.level)
@@ -303,6 +312,21 @@ impl NonlinearRecipe {
                 result.push((key.clone(), data(&v)));
             }
         }
+        if let Some(key) = &self.residual {
+            let item = Item {
+                book_id: book.id,
+                y: op.y.clone(),
+                x: op.x.clone(),
+                rows: op.rows,
+                visible_only: op.visible_only,
+            };
+            let (xs, ys, indices) = get_xy(book, &item);
+            let mut residual = vec![f64::NAN; book.column(&op.y).unwrap().data.len()];
+            for ((x, y), row) in xs.iter().zip(&ys).zip(indices) {
+                residual[row] = y - fit.eval(*x);
+            }
+            result.push((key.clone(), data(&residual)));
+        }
         // Y 的键由拥有此记录的列提供。
         result.push((String::new(), data(&values)));
         Ok((result, fit))
@@ -329,6 +353,7 @@ impl NonlinearRecipe {
             + self.limits.capacity() * size_of::<crate::nlfit::ParamLimits>()
             + self.constraints.capacity()
             + self.output_x.capacity()
+            + self.residual.as_ref().map_or(0, String::capacity)
             + self.bands.capacity() * size_of::<FitBands>()
             + self
                 .bands
@@ -516,7 +541,7 @@ fn computed_order(
             if col.formula.is_some() {
                 return Err(format!("拟合结果列 {} 同时有其他计算定义", col.key));
             }
-            for key in std::iter::once(&recipe.output_x).chain(recipe.bands.iter().flat_map(|b| &b.columns)) {
+            for key in recipe.output_keys() {
                 if deps.contains_key(key) {
                     return Err(format!("非线性输出列 {key} 同时有其他计算定义"));
                 }
@@ -774,6 +799,7 @@ impl Operation {
                     && a.limits == b.limits
                     && a.constraints == b.constraints
                     && a.output_x == b.output_x
+                    && a.residual == b.residual
                     && a.bands == b.bands
                     && a.weight == b.weight
             }

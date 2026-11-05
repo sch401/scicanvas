@@ -753,11 +753,42 @@ def two_way_anova():
     write("two_way_anova", cases, {"statsmodels":statsmodels.__version__})
 
 
+
+def fit_tools():
+    cases=[]
+    x=np.linspace(0,8,61)
+    y=.3+3*np.exp(-x/1.2)+1.4*np.exp(-x/4.5)+.02*np.sin(np.arange(len(x))*1.7)
+    fits=[]
+    for model,f,p0 in [
+        ("ExpDec1",lambda x,y0,a,t:y0+a*np.exp(-x/t),[.3,4.4,2]),
+        ("ExpDec2",lambda x,y0,a,t,b,u:y0+a*np.exp(-x/t)+b*np.exp(-x/u),[.3,3,1.2,1.4,4.5]),
+    ]:
+        p,_=optimize.curve_fit(f,x,y,p0=p0,maxfev=100000,ftol=1e-13,xtol=1e-13,gtol=1e-13)
+        rss=float(np.sum((y-f(x,*p))**2));n=len(x);k=len(p)+1
+        aic=n*np.log(rss/n)+2*k
+        fits.append(dict(model=model,initial=p0,params=p,rss=rss,n=n,dof=n-len(p),aic=aic,aicc=aic+2*k*(k+1)/(n-k-1),bic=n*np.log(rss/n)+k*np.log(n)))
+    f=((fits[0]['rss']-fits[1]['rss'])/(fits[0]['dof']-fits[1]['dof']))/(fits[1]['rss']/fits[1]['dof'])
+    cases.append(dict(name="comparison",x=x,y=y,fits=fits,f=f,p=stats.f.sf(f,2,fits[1]['dof'])))
+    for model,p,f in [
+        ("Hill",[.2,8,3,1.7],lambda x,p:p[0]+(p[1]-p[0])*x**p[3]/(p[2]**p[3]+x**p[3])),
+        ("Logistic",[.4,7,2.5,1.8],lambda x,p:p[1]+(p[0]-p[1])/(1+(x/p[2])**p[3])),
+    ]:
+        x=np.linspace(.1,12,51);y=f(x,p)
+        targets=[1.5,3.,5.]
+        roots=[optimize.brentq(lambda x:f(x,p)-v,x[0],x[-1],xtol=1e-14) for v in targets]
+        cases.append(dict(name="inverse",model=model,params=p,x=x,y=y,targets=targets,roots=roots))
+    x=np.array([0.,1.,2.,3.,4.,5.]);y=np.array([1.1,2.8,5.2,6.9,9.2,10.8]);samples=np.array([.5,2.5,6.])
+    p,cov=np.polyfit(x,y,1,cov=True);residual=np.sum((y-np.polyval(p,x))**2)/(len(x)-2)
+    half=stats.t.ppf(.975,len(x)-2)*np.sqrt(residual*(1+1/len(x)+(samples-x.mean())**2/np.sum((x-x.mean())**2)))
+    cases.append(dict(name="linear-forward",x=x,y=y,samples=samples,estimates=np.polyval(p,samples),half=half))
+    write("fit_tools",cases)
+
+
 GENERATORS = [
     integrals, normalization, descriptive, column_math, polynomial, statistical_tests, signal_tests,
     interpolation_cases, derivative_cases, peak_cases, constrained_fit_cases, builtin_fit_cases,
     smoothing_cases, percent_bar_cases, fit_report_cases, formula_cases, weighted_fit_cases, qq_cases, box_cases,
-    histogram_option_cases, normality_ks_ad, ks_2samp, two_way_anova,
+    histogram_option_cases, normality_ks_ad, ks_2samp, two_way_anova, fit_tools,
 ]
 
 

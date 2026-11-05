@@ -616,12 +616,11 @@ fn calibrate_needs_three_columns_in_click_order() {
     assert!(app.status.contains("三列"));
     let cols = app.project.book(1).unwrap().columns.len();
     app.selection.insert(1, vec!["A".into(), "B".into(), "C".into()]);
-    app.begin_edit("标准曲线反查");
     app.calibrate();
-    app.history.changed();
-    app.finish_edit();
-    assert_eq!(app.project.book(1).unwrap().columns.len(), cols + 2, "{}", app.status);
-    assert!(app.status.contains("R²"));
+    assert!(matches!(&app.dialog, Some(Dialog::Calibration { forward: false, .. })));
+    press_dialog_button(&mut app, "计算");
+    assert_eq!(app.project.book(1).unwrap().columns.len(), cols + 3, "{}", app.status);
+    assert!(app.status.contains("标准曲线结果"));
     app.undo();
     assert_eq!(app.project.book(1).unwrap().columns.len(), cols);
 }
@@ -2051,4 +2050,64 @@ fn b1_new_plot_commands_create_and_undo_in_one_step() {
         );
         roundtrip(&mut app, &before);
     }
+}
+
+#[test]
+fn a2_residual_qq_comparison_and_nonlinear_calibration_follow_real_controls() {
+    use scicanvas_core::nlfit::Model;
+    let mut app = app();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["B".into()]);
+    let xs: Vec<_> = (0..61).map(|i| i as f64 * 0.15).collect();
+    let book = app.project.book_mut(1).unwrap();
+    book.columns.iter_mut().find(|c| c.key == "A").unwrap().data = xs.iter().map(ToString::to_string).collect();
+    book.columns.iter_mut().find(|c| c.key == "B").unwrap().data = xs
+        .iter()
+        .enumerate()
+        .map(|(i, x)| {
+            (0.3 + 3.0 * (-x / 1.2).exp() + 1.4 * (-x / 4.5).exp() + 0.02 * (i as f64 * 1.7).sin()).to_string()
+        })
+        .collect();
+    app.nlfit(Model::ExpDec1, &[], &[]);
+    let before = app.project.clone();
+    press_dialog_button(&mut app, "残差 Q-Q");
+    assert!(app
+        .project
+        .graphs
+        .iter()
+        .any(|g| g.first_layer().plot_type == PlotType::QQ));
+    roundtrip(&mut app, &before);
+    app.active = Some(1);
+    app.selection.insert(1, vec!["B".into()]);
+    app.nlfit(Model::ExpDec2, &[], &[]);
+    app.open_fit_compare();
+    assert!(matches!(&app.dialog, Some(Dialog::FitCompare { .. })), "{}", app.status);
+    press_dialog_button(&mut app, "比较");
+    assert!(
+        matches!(&app.dialog,Some(Dialog::Table {rows,note,..}) if rows.len()==3 && note.contains("K =") && note.contains("F ="))
+    );
+    let before = app.project.clone();
+    press_dialog_button(&mut app, "保存为 Note");
+    roundtrip(&mut app, &before);
+    app.active = Some(1);
+    app.selection.insert(1, vec!["A".into(), "B".into(), "C".into()]);
+    app.project
+        .book_mut(1)
+        .unwrap()
+        .columns
+        .iter_mut()
+        .find(|c| c.key == "C")
+        .unwrap()
+        .data = ["0", "1", "2"].map(str::to_string).to_vec().into();
+    app.calibrate();
+    let Some(Dialog::Calibration { model, forward, .. }) = &mut app.dialog else {
+        panic!("calibration dialog")
+    };
+    *model = Some(0);
+    *forward = true;
+    let before = app.project.clone();
+    let count = before.book(1).unwrap().columns.len();
+    press_dialog_button(&mut app, "计算");
+    assert_eq!(app.project.book(1).unwrap().columns.len(), count + 3, "{}", app.status);
+    roundtrip(&mut app, &before);
 }
