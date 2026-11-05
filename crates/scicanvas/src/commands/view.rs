@@ -16,7 +16,7 @@ pub(super) fn help(commands: &mut Vec<Command>) {
         c(
             "help.about",
             "关于 SciCanvas",
-            "help",
+            "about",
             "",
             "帮助",
             "about version 版本",

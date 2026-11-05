@@ -6,7 +6,7 @@ pub(super) fn objects(commands: &mut Vec<Command>) {
         c(
             "project.folder.new",
             "新建文件夹",
-            "open",
+            "folder-new",
             "",
             "工作区",
             "folder new 文件夹",
@@ -50,7 +50,7 @@ pub(super) fn objects(commands: &mut Vec<Command>) {
         c(
             "project.show",
             "显示窗口",
-            "book",
+            "window-show",
             "",
             "工作区",
             "show window",
@@ -60,7 +60,7 @@ pub(super) fn objects(commands: &mut Vec<Command>) {
         c(
             "project.hide",
             "隐藏窗口",
-            "book",
+            "window-hide",
             "",
             "工作区",
             "hide window",
@@ -69,7 +69,7 @@ pub(super) fn objects(commands: &mut Vec<Command>) {
         ),
         c(
             "project.delete",
-            "删除项目对象…",
+            "删除当前项…",
             "coldel",
             "",
             "工作区",
@@ -85,7 +85,7 @@ pub(super) fn note(commands: &mut Vec<Command>) {
         c(
             "note.new",
             "新建 Note",
-            "book",
+            "note",
             "",
             "工作区",
             "note 笔记 计算结果",

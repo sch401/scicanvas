@@ -288,8 +288,27 @@ pub(super) fn prepare_submission(ctx: &egui::Context) {
     ctx.data_mut(|data| data.insert_temp(egui::Id::new("dialog-enter"), (frame, enter, control)));
 }
 
+pub(crate) fn effective_limits(
+    limits: &[scicanvas_core::nlfit::ParamLimits],
+) -> Vec<scicanvas_core::nlfit::ParamLimits> {
+    limits
+        .iter()
+        .map(|limit| {
+            if limit.fixed.is_some() {
+                scicanvas_core::nlfit::ParamLimits {
+                    lower: None,
+                    upper: None,
+                    ..*limit
+                }
+            } else {
+                *limit
+            }
+        })
+        .collect()
+}
+
 pub(crate) fn parameter_bounds(limits: &[scicanvas_core::nlfit::ParamLimits]) -> Result<(), String> {
-    for (index, limit) in limits.iter().enumerate() {
+    for (index, limit) in effective_limits(limits).iter().enumerate() {
         if [limit.fixed, limit.lower, limit.upper]
             .into_iter()
             .flatten()
@@ -299,12 +318,6 @@ pub(crate) fn parameter_bounds(limits: &[scicanvas_core::nlfit::ParamLimits]) ->
         }
         if limit.lower.zip(limit.upper).is_some_and(|(a, b)| a > b) {
             return Err(format!("第 {} 个参数的下限应小于或等于上限", index + 1));
-        }
-        if limit
-            .fixed
-            .is_some_and(|v| limit.lower.is_some_and(|a| v < a) || limit.upper.is_some_and(|b| v > b))
-        {
-            return Err(format!("第 {} 个参数的固定值应在限制范围内", index + 1));
         }
     }
     Ok(())
@@ -321,8 +334,15 @@ pub(crate) fn multiline_editor(ui: &mut egui::Ui, editor: egui::TextEdit<'_>) ->
 
 pub(crate) fn odd_window(ui: &mut egui::Ui, value: &mut usize) -> egui::Response {
     let response = ui.add(egui::DragValue::new(value).range(3..=101).speed(2.));
-    if response.changed() && (*value).is_multiple_of(2) {
-        *value = (*value + 1).min(101);
+    let notice = response.id.with("odd-window-adjusted");
+    if response.changed() {
+        let adjusted = (*value).is_multiple_of(2);
+        if adjusted {
+            *value = (*value + 1).min(101);
+        }
+        ui.data_mut(|d| d.insert_temp(notice, adjusted));
+    }
+    if ui.data(|d| d.get_temp::<bool>(notice)) == Some(true) {
         hint(ui, "窗口点数已调整为奇数。");
     }
     response
@@ -351,11 +371,12 @@ pub(crate) fn parameter_table(
         ui.end_row();
         for (name, limit) in names.iter().zip(limits) {
             ui.label(*name);
+            let mut fixed = limit.fixed.is_some();
             for (column, field) in [&mut limit.fixed, &mut limit.lower, &mut limit.upper]
                 .into_iter()
                 .enumerate()
             {
-                ui.horizontal(|ui| {
+                ui.add_enabled_ui(column == 0 || !fixed, |ui| {
                     let key = ui.id().with((id, name, column));
                     let mut value = field.unwrap_or_else(|| ui.data(|d| d.get_temp::<f64>(key)).unwrap_or(0.));
                     let mut on = field.is_some();
@@ -379,7 +400,10 @@ pub(crate) fn parameter_table(
                             }),
                     );
                     ui.data_mut(|d| d.insert_temp(key, value));
-                    *field = on.then_some(value);
+                    if column == 0 {
+                        fixed = on;
+                    }
+                    *field = (on && (column == 0 || !fixed)).then_some(value);
                 });
             }
             ui.end_row();
@@ -398,7 +422,45 @@ pub(crate) fn weighted_checkbox(ui: &mut egui::Ui, weighted: &mut bool, label: &
             (response.rect, response.enabled()),
         )
     });
-    response.on_disabled_hover_text("数据未关联 Y 误差列");
+    response
+        .on_hover_text("误差为空的点跳过，误差为 0 或负数时报错")
+        .on_disabled_hover_text("数据未关联 Y 误差列");
 }
 
 pub(crate) const CONSTRAINT_HINT: &str = "每行一条，如 a >= 0 或 a + b = 1";
+
+#[cfg(test)]
+mod review_tests {
+    use super::*;
+    use scicanvas_core::nlfit::ParamLimits;
+
+    #[test]
+    fn p11_fixed_parameters_disable_and_ignore_bounds() {
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        let mut limits = vec![ParamLimits {
+            fixed: Some(2.),
+            lower: Some(9.),
+            upper: Some(1.),
+        }];
+        assert!(parameter_bounds(&limits).is_ok());
+        let effective = effective_limits(&limits);
+        assert_eq!(effective[0].fixed, Some(2.));
+        assert_eq!(effective[0].lower, None);
+        assert_eq!(effective[0].upper, None);
+        let mut h = crate::test_ui::Harness::new(
+            ctx.clone(),
+            Some(egui::vec2(600., 300.)),
+            |limits: &mut Vec<ParamLimits>, ctx: &egui::Context| {
+                egui::CentralPanel::default().show(ctx, |ui| parameter_table(ui, "review", &["a"], limits));
+            },
+        );
+        h.frame(&mut limits, vec![]);
+        let lower = ctx
+            .data(|d| d.get_temp::<egui::Rect>(egui::Id::new(("parameter-toggle", "review", "a", 1_usize))))
+            .unwrap();
+        h.click(&mut limits, lower.center());
+        assert_eq!(limits[0].lower, None);
+        assert_eq!(limits[0].upper, None);
+    }
+}

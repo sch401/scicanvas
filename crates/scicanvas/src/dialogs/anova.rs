@@ -39,19 +39,20 @@ impl Dialog {
                 "α = 0.05 时不能认为各组均值有差异"
             };
             ui.label(
-                RichText::new(format!(
-                    "{verdict}。缺失值已跳过。"
-                ))
-                .small()
-                .color(pal.weak),
+                RichText::new(format!("{verdict}。缺失值已跳过。"))
+                    .small()
+                    .color(pal.weak),
             );
             ui.add_space(10.0);
-                ui.separator();
-                ui.add_space(4.0);
-                let (mut rows,groups)=anova_rows(result,names);let pairs=tukey_rows(tukey,names);
-                let markdown=format!("## 单因素方差分析\n\n{}\n### 各组统计量\n\n{}\n### Tukey HSD 多重比较\n\n{}\n\nTukey HSD 的 p 值已作多重比较校正，组大小不等时使用 Tukey–Kramer。",md_table(&rows),md_table(&groups),md_table(&pairs));
-                rows.extend(groups);rows.extend(pairs);let text=rows.iter().map(|r|r.join("\t")).collect::<Vec<_>>().join("\n");
-                action=result_actions(ui,"方差分析结果",&rows,markdown,text);
+            ui.separator();
+            ui.add_space(4.0);
+            let (mut rows, groups) = anova_rows(result, names);
+            let pairs = tukey_rows(tukey, names);
+            let markdown = anova_markdown(&rows, &groups, &pairs);
+            rows.extend(groups);
+            rows.extend(pairs);
+            let text = rows.iter().map(|r| r.join("\t")).collect::<Vec<_>>().join("\n");
+            action = result_actions(ui, "方差分析结果", &rows, markdown, text);
         });
         action
     }
@@ -117,4 +118,14 @@ fn anova_rows(a: &Anova, names: &[String]) -> (Vec<Vec<String>>, Vec<Vec<String>
         ]);
     }
     (table, groups)
+}
+
+fn anova_markdown(table: &[Vec<String>], groups: &[Vec<String>], pairs: &[Vec<String>]) -> String {
+    format!(
+        "## 单因素方差分析\n\n{}\n### 各组统计量\n\n{}\n### Tukey HSD 多重比较\n\n{}\n\n{}",
+        md_table(table),
+        md_table(groups),
+        md_table(pairs),
+        "Tukey HSD 的 p 值已作多重比较校正，组大小不等时使用 Tukey–Kramer。"
+    )
 }

@@ -551,10 +551,12 @@ fn regression_uses_the_last_picked_column_as_y() {
         &book.column("B").unwrap().values(),
     );
     match (&app.dialog, want) {
-        (Some(Dialog::Table { rows, note, .. }), Ok(r)) => {
-            assert_eq!(rows.len(), 5);
-            assert_eq!(rows[3][0], book.column("A").unwrap().display_name());
-            assert_eq!(rows[2][1], fmt_num(round_sig(r.coef[0], 8)));
+        (Some(Dialog::Table { title, rows, note }), Ok(r)) => {
+            assert_eq!(rows.len(), 4);
+            assert_eq!(rows[0][0], "参数");
+            assert!(title.contains(book.column("B").unwrap().display_name()));
+            assert_eq!(rows[2][0], book.column("A").unwrap().display_name());
+            assert_eq!(rows[1][1], fmt_num(round_sig(r.coef[0], 8)));
             assert!(note.contains(book.column("B").unwrap().display_name()));
         }
         (d, w) => panic!("unexpected {:?} / {:?}", d.is_some(), w),
@@ -3234,7 +3236,16 @@ fn u6_every_advertised_shortcut_dispatches_from_real_frame_events() {
                 Some(egui::vec2(1280., 820.)),
                 |a: &mut SciApp, c: &egui::Context| a.ui_frame(c),
             );
+            app.selection.insert(1, vec!["B".into()]);
+            app.sheets.entry(1).or_default().range = Some(Range::single(1, 0));
+            if command.id == "graph.style.paste" {
+                app.run_command("graph.style.copy");
+            }
             h.frame(&mut app, vec![]);
+            if app.active == Some(1) {
+                ctx.memory_mut(|m| m.request_focus(egui::Id::new(("sheet-focus", 1_u64))));
+            }
+            let enabled = (command.when)(&app).is_ok();
             ctx.data_mut(|d| d.insert_temp(egui::Id::new("shortcut-probe"), true));
             h.modifiers = modifiers;
             let event = if key == egui::Key::C && modifiers.command {
@@ -3254,7 +3265,13 @@ fn u6_every_advertised_shortcut_dispatches_from_real_frame_events() {
             let dispatched = ctx
                 .data(|d| d.get_temp::<Vec<&'static str>>(egui::Id::new("shortcut-dispatched")))
                 .unwrap_or_default();
-            assert_eq!(dispatched, vec![command.id], "{} / {}", command.id, command.keys);
+            assert_eq!(
+                dispatched,
+                if enabled { vec![command.id] } else { vec![] },
+                "{} / {}",
+                command.id,
+                command.keys
+            );
         }
     }
 }
@@ -3456,7 +3473,7 @@ fn h4_reports_copy_with_feedback_and_write_one_undoable_workbook() {
 }
 
 #[test]
-fn h6_new_custom_fit_keeps_limits_and_linked_error_weighting() {
+fn h6_new_custom_fit_keeps_limits_and_positional_error_weighting() {
     use scicanvas_core::nlfit::{CustomFitDefinition, FitFunction, ParamLimits};
     use scicanvas_core::ops::FitWeight;
     let mut app = app();
@@ -3466,8 +3483,11 @@ fn h6_new_custom_fit_keeps_limits_and_linked_error_weighting() {
     {
         let error = &mut app.project.book_mut(1).unwrap().columns[2];
         error.role = Role::YError;
-        error.error_for = Some("B".into());
-        error.data = vec!["0.2".into(); n].into();
+        error.error_for = None;
+        error.data = (0..n)
+            .map(|row| (0.1 + row as f64 * 0.02).to_string())
+            .collect::<Vec<_>>()
+            .into();
     }
     let definition = CustomFitDefinition::from_text("linear", "a*x+b", "a,b", "1,0", "").unwrap();
     let mut edit = dialogs::CustomFitEditor::from_definition(&definition);
@@ -3521,4 +3541,239 @@ fn h10_find_opens_with_a_selected_keyboard_focus() {
     assert!(ctx.memory(|m| m.focused()).is_some());
     h.frame(&mut app, vec![egui::Event::Text("needle".into())]);
     assert!(matches!(&app.dialog,Some(Dialog::FindReplace(edit)) if edit.needle=="needle"));
+}
+
+#[test]
+fn p1_graph_delete_and_copy_leave_sheet_shortcuts_alone() {
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut app = app();
+    app.active = Some(2);
+    let text = app.project.graph_mut(2).unwrap().page.add_text([0.3, 0.3]).unwrap();
+    app.project.graph_mut(2).unwrap().page.text_mut(text).unwrap().text = "Delete this annotation".into();
+    let mut h = crate::test_ui::Harness::new(
+        ctx.clone(),
+        Some(egui::vec2(1280., 820.)),
+        |a: &mut SciApp, c: &egui::Context| a.ui_frame(c),
+    );
+    for _ in 0..5 {
+        h.frame(&mut app, vec![]);
+    }
+    let out = h.frame(&mut app, vec![]);
+    h.click_text(&mut app, &out, "Delete this annotation");
+    let before = app.project.clone();
+    h.key(egui::Key::Delete, |c| app.ui_frame(c));
+    assert!(
+        app.project.graph(2).unwrap().page.text(text).is_none(),
+        "{}",
+        app.status
+    );
+    assert_ne!(app.status.kind, StatusKind::Error);
+    h.frame(&mut app, vec![egui::Event::Copy]);
+    assert_ne!(app.status.kind, StatusKind::Error);
+    roundtrip(&mut app, &before);
+}
+
+#[test]
+fn p1_explorer_paste_does_not_modify_sheet() {
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut app = app();
+    app.active = Some(1);
+    app.sheets.entry(1).or_default().range = Some(Range::single(1, 0));
+    let mut h = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1280., 820.)),
+        |a: &mut SciApp, c: &egui::Context| a.ui_frame(c),
+    );
+    for _ in 0..4 {
+        h.frame(&mut app, vec![]);
+    }
+    app.explorer_focus = true;
+    let before = app.project.clone();
+    h.frame(&mut app, vec![egui::Event::Paste("999\n888".into())]);
+    assert_eq!(app.project, before);
+    assert_ne!(app.status.kind, StatusKind::Error);
+}
+
+#[test]
+fn p2_header_paste_and_menu_queue_share_anchor_and_cleanup() {
+    let mut projects = Vec::new();
+    for menu in [false, true] {
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        let mut app = app();
+        app.active = Some(1);
+        let mut h = crate::test_ui::Harness::new(
+            ctx.clone(),
+            Some(egui::vec2(1280., 820.)),
+            |a: &mut SciApp, c: &egui::Context| a.ui_frame(c),
+        );
+        for _ in 0..4 {
+            h.frame(&mut app, vec![]);
+        }
+        app.selection.insert(1, vec!["B".into()]);
+        app.sheets.entry(1).or_default().range = None;
+        assert!(app.paste_available().is_ok());
+        ctx.memory_mut(|m| m.request_focus(egui::Id::new(("sheet-focus", 1_u64))));
+        if menu {
+            // Menu command queues its clipboard payload for the same frame handler.
+            app.pending_paste = Some("123\n456".into());
+            h.frame(&mut app, vec![]);
+        } else {
+            h.frame(&mut app, vec![egui::Event::Paste("123\n456".into())]);
+        }
+        let values = app.project.book(1).unwrap().column("B").unwrap().values();
+        assert_eq!(&values[..2], &[123., 456.]);
+        assert!(app.selected_keys(1).is_empty());
+        assert_eq!(ctx.memory(|m| m.focused()), Some(egui::Id::new(("sheet-focus", 1_u64))));
+        projects.push(app.project);
+    }
+    assert_eq!(projects[0], projects[1]);
+}
+
+#[test]
+fn p8_idle_books_do_not_compute_context_menu_states() {
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut app = app();
+    app.active = Some(1);
+    let mut h = crate::test_ui::Harness::new(
+        ctx.clone(),
+        Some(egui::vec2(1280., 820.)),
+        |a: &mut SciApp, c: &egui::Context| a.ui_frame(c),
+    );
+    for _ in 0..4 {
+        h.frame(&mut app, vec![]);
+    }
+    assert_eq!(
+        ctx.data(|d| d.get_temp::<bool>(egui::Id::new(("sheet-menu-built", 1_u64)))),
+        Some(false)
+    );
+    let at = ctx
+        .read_response(egui::Id::new(("cell", 1_u64, 0_usize, 0_usize)))
+        .unwrap()
+        .rect
+        .center();
+    for pressed in [true, false] {
+        h.frame(
+            &mut app,
+            vec![
+                egui::Event::PointerMoved(at),
+                egui::Event::PointerButton {
+                    pos: at,
+                    button: egui::PointerButton::Secondary,
+                    pressed,
+                    modifiers: egui::Modifiers::NONE,
+                },
+            ],
+        );
+    }
+    h.frame(&mut app, vec![]);
+    assert_eq!(
+        ctx.data(|d| d.get_temp::<bool>(egui::Id::new(("sheet-menu-built", 1_u64)))),
+        Some(true)
+    );
+}
+
+#[test]
+fn d4_wheel_view_becomes_one_undoable_axis_edit() {
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut app = app();
+    app.active = Some(2);
+    // Use the real graph widget and wheel event, then its shared menu action.
+    let page = object_frame(&mut app, &ctx, vec![], false);
+    let scene = scicanvas_core::scene::layout_page(app.project.graph(2).unwrap(), &app.project, &[]);
+    let [x, y, w, h] = scene.plot;
+    let scale = page.width() / scene.w as f32;
+    let at = page.min + egui::vec2((x + w / 2.) as f32 * scale, (y + h / 2.) as f32 * scale);
+    object_frame(
+        &mut app,
+        &ctx,
+        vec![
+            egui::Event::PointerMoved(at),
+            egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: egui::vec2(0., 120.),
+                modifiers: egui::Modifiers::NONE,
+            },
+        ],
+        false,
+    );
+    let view = plot::current_view(&ctx, 2, 0).expect("wheel creates a zoomed view");
+    let before = app.project.clone();
+    app.commit_view_range(&ctx, 2, 0);
+    let layer = app.project.graph(2).unwrap().first_layer();
+    assert_eq!((layer.x_min, layer.x_max), view.x);
+    assert_eq!((layer.y_min, layer.y_max), view.y);
+    assert!(!layer.x_auto && !layer.y_auto);
+    roundtrip(&mut app, &before);
+}
+
+#[test]
+fn p13_settings_stay_above_documents_below_menus_and_modal() {
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut app = app();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["B".into()]);
+    app.run_command("fit.poly");
+    let mut h = crate::test_ui::Harness::new(
+        ctx.clone(),
+        Some(egui::vec2(1280., 820.)),
+        |a: &mut SciApp, c: &egui::Context| a.ui_frame(c),
+    );
+    for _ in 0..6 {
+        h.frame(&mut app, vec![]);
+    }
+    let id = egui::Id::new(("scicanvas-dialog", "多项式拟合"));
+    let settings = egui::LayerId::new(egui::Order::Middle, id);
+    let rect = ctx.memory(|m| m.area_rect(id)).unwrap();
+    let cell = ctx
+        .read_response(egui::Id::new(("cell", 1_u64, 0_usize, 0_usize)))
+        .unwrap()
+        .rect
+        .center();
+    h.click(&mut app, cell);
+    h.frame(&mut app, vec![]);
+    let overlap = rect
+        .intersect(app.geoms[&1].rect.translate(app.ws.min.to_vec2()))
+        .shrink(8.);
+    assert!(overlap.is_positive(), "{rect:?} / {:?}", app.geoms[&1].rect);
+    assert_eq!(ctx.layer_id_at(overlap.center()), Some(settings));
+    for pressed in [true, false] {
+        h.frame(
+            &mut app,
+            vec![
+                egui::Event::PointerMoved(cell),
+                egui::Event::PointerButton {
+                    pos: cell,
+                    button: egui::PointerButton::Secondary,
+                    pressed,
+                    modifiers: egui::Modifiers::NONE,
+                },
+            ],
+        );
+    }
+    let out = h.frame(&mut app, vec![]);
+    assert!(out.shapes.iter().any(|shape| {
+        matches!(&shape.shape, egui::Shape::Text(text) if text.galley.job.text == "复制"
+            && ctx.layer_id_at(text.pos + egui::vec2(3., 3.)).is_some_and(|layer| layer.order == egui::Order::Foreground))
+    }), "context menu must be above Middle settings");
+    h.key(egui::Key::Escape, |c| app.ui_frame(c));
+    app.edit_grouped("改项目名", None, |project| {
+        project.books[0].name.push_str(" modified")
+    });
+    app.request_discard(PendingDiscard::Quit);
+    h.frame(&mut app, vec![]);
+    h.frame(&mut app, vec![]);
+    assert_eq!(
+        ctx.layer_id_at(overlap.center()).unwrap().order,
+        egui::Order::Foreground
+    );
+    let (_, modal) = ctx
+        .data(|d| d.get_temp::<(u64, egui::LayerId)>(egui::Id::new("keyboard-modal-layer")))
+        .expect("unsaved modal");
+    assert_eq!(modal.order, egui::Order::Foreground);
 }

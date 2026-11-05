@@ -38,12 +38,12 @@ pub(super) fn types_and_roles(commands: &mut Vec<Command>) {
             |a| a.set_role(Role::Ignore),
         )
         .modifies(),
-        c("col.setZ", "设为 Z", "sety", "", "列", "z column 三维 等高线", need_cols, |a| a.set_role(Role::Z)).modifies(),
-        c("col.setLabel", "设为标签", "ignore", "", "列", "label column 标签列 数据标签", need_cols, |a| {
+        c("col.setZ", "设为 Z", "setz", "", "列", "z column 三维 等高线", need_cols, |a| a.set_role(Role::Z)).modifies(),
+        c("col.setLabel", "设为标签", "setlabel", "", "列", "label column 标签列 数据标签", need_cols, |a| {
             a.set_role(Role::Label)
         })
         .modifies(),
-        c("col.setXError", "设为 X 误差", "setx",
+        c("col.setXError", "设为 X 误差", "setx-error",
             "",
             "列",
             "x error",
@@ -51,7 +51,7 @@ pub(super) fn types_and_roles(commands: &mut Vec<Command>) {
             |a| a.set_role(Role::XError),
         )
         .modifies(),
-        c("col.setYError", "设为 Y 误差", "sety",
+        c("col.setYError", "设为 Y 误差", "sety-error",
             "",
             "列",
             "y error",
@@ -94,7 +94,7 @@ fn workbook_commands(commands: &mut Vec<Command>) {
         c(
             "book.transpose",
             "转置",
-            "grid",
+            "transpose",
             "",
             "工作表",
             "transpose 转置",
@@ -105,7 +105,7 @@ fn workbook_commands(commands: &mut Vec<Command>) {
         c(
             "sheet.stack",
             "堆叠列…",
-            "grid",
+            "stack",
             "",
             "工作表",
             "stack 堆叠",
@@ -115,7 +115,7 @@ fn workbook_commands(commands: &mut Vec<Command>) {
         c(
             "sheet.split",
             "拆分列…",
-            "grid",
+            "split",
             "",
             "工作表",
             "split 拆分",
@@ -125,7 +125,7 @@ fn workbook_commands(commands: &mut Vec<Command>) {
         c(
             "sheet.reduce",
             "数据精简…",
-            "grid",
+            "reduce",
             "",
             "工作表",
             "reduce decimate 精简",
@@ -135,7 +135,7 @@ fn workbook_commands(commands: &mut Vec<Command>) {
         c(
             "sheet.freeze",
             "冻结至选中列",
-            "grid",
+            "freeze",
             "",
             "工作表",
             "freeze columns 冻结列",
@@ -145,17 +145,24 @@ fn workbook_commands(commands: &mut Vec<Command>) {
         c(
             "sheet.unfreeze",
             "取消冻结",
-            "grid",
+            "unfreeze",
             "",
             "工作表",
             "unfreeze columns 取消冻结",
-            need_book,
+            |a| {
+                let id = a.active_book_id().ok_or("请先激活工作簿")?;
+                a.sheets
+                    .get(&id)
+                    .filter(|s| s.frozen_columns > 0)
+                    .map(|_| ())
+                    .ok_or("没有冻结列")
+            },
             |a| a.unfreeze_columns(),
         ),
         c(
             "book.template.save",
             "保存工作簿模板…",
-            "grid",
+            "template-save",
             "",
             "工作表",
             "workbook template save 模板 保存",
@@ -165,7 +172,7 @@ fn workbook_commands(commands: &mut Vec<Command>) {
         c(
             "book.template.open",
             "从模板新建工作簿…",
-            "grid",
+            "template-open",
             "",
             "工作表",
             "workbook template new 模板 新建",
@@ -181,7 +188,7 @@ pub(super) fn columns(commands: &mut Vec<Command>) {
         c(
             "col.fill",
             "填充序列…",
-            "colins",
+            "fill",
             "",
             "列",
             "fill sequence arithmetic random uniform normal 填充 序列 等差 随机数 正态",
@@ -191,7 +198,7 @@ pub(super) fn columns(commands: &mut Vec<Command>) {
         c(
             "col.setvalues",
             "设置列值…",
-            "colins",
+            "formula",
             "Ctrl+Q",
             "列",
             "set column values formula expression calculate 设置列值 公式 计算列 表达式",
@@ -200,7 +207,7 @@ pub(super) fn columns(commands: &mut Vec<Command>) {
         ),
         c(
             "col.insert",
-            "插入列",
+            "在右侧插入列",
             "colins",
             "",
             "列",
@@ -293,7 +300,7 @@ pub(super) fn sort(commands: &mut Vec<Command>) {
         c(
             "sort.custom",
             "自定义排序…",
-            "sortasc",
+            "sort-custom",
             "",
             "排序",
             "sort custom multiple keys 多列排序 多关键字 自定义排序 只排选中列",

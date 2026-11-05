@@ -102,6 +102,10 @@ impl<'open> SettingsWindow<'open> {
             result
         });
         if let Some(out) = &out {
+            ctx.data_mut(|d| {
+                let layers = d.get_temp_mut_or_default::<Vec<egui::LayerId>>(egui::Id::new("settings-layers"));
+                layers.push(out.response.layer_id);
+            });
             Self::window_header(ctx, id, out, docked, dock_size);
             if first_open && docked.is_none() {
                 let mut state = docks(ctx);
@@ -272,7 +276,6 @@ pub(crate) fn window<'open>(ctx: &egui::Context, title: &str) -> SettingsWindow<
         id,
         centered: false,
         window: egui::Window::new(RichText::new(title).strong())
-            .order(egui::Order::Foreground)
             .id(id)
             .constrain_to(floating_bounds(ctx))
             .collapsible(true)
@@ -288,5 +291,18 @@ pub(crate) fn window<'open>(ctx: &egui::Context, title: &str) -> SettingsWindow<
             .max_height((ctx.available_rect().height() - 64.0).max(100.0))
             .vscroll(false)
             .frame(egui::Frame::window(&ctx.style()).inner_margin(egui::Margin::same(PANEL_MARGIN))),
+    }
+}
+
+pub(crate) fn begin_settings(ctx: &egui::Context) {
+    ctx.data_mut(|d| d.insert_temp(egui::Id::new("settings-layers"), Vec::<egui::LayerId>::new()));
+}
+
+pub(crate) fn raise_settings(ctx: &egui::Context) {
+    for layer in ctx
+        .data(|d| d.get_temp::<Vec<egui::LayerId>>(egui::Id::new("settings-layers")))
+        .unwrap_or_default()
+    {
+        ctx.move_to_top(layer);
     }
 }

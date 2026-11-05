@@ -4,7 +4,7 @@ use super::*;
 
 /// 工作表一次绘制所需的输入和待处理结果，不跨帧保存。
 pub(super) struct SheetFrame {
-    pub(super) menu: crate::menus::MenuState,
+    pub(super) menu: Option<crate::menus::MenuState>,
     pub(super) frozen: bool,
     pub(super) id: u64,
     pub(super) pal: Palette,
@@ -227,6 +227,7 @@ impl SheetFrame {
                     self.action = Some((ci, ColAction::Props));
                 }
                 resp.context_menu(|ui| {
+                    ui.data_mut(|d| d.insert_temp(egui::Id::new(("sheet-menu-response", self.id)), resp.id));
                     self.column_menu(ui, col, ci);
                 });
                 let active = book
@@ -256,8 +257,12 @@ impl SheetFrame {
         }
     }
     fn column_menu(&mut self, ui: &mut egui::Ui, col: &scicanvas_core::Column, ci: usize) {
+        let Some(menu) = &self.menu else {
+            ui.ctx().request_repaint();
+            return;
+        };
         let mut choose = |ui: &mut egui::Ui, id: &'static str| {
-            if crate::menus::menu_command(ui, &self.menu, id) {
+            if crate::menus::menu_command(ui, menu, id) {
                 self.action = Some((ci, ColAction::Command(id)));
             }
         };
@@ -290,7 +295,7 @@ impl SheetFrame {
             choose(ui, "col.categories");
         }
         ui.separator();
-        if let Some(id) = crate::menus::plot_menu(ui, &self.menu) {
+        if let Some(id) = crate::menus::plot_menu(ui, menu) {
             self.action = Some((ci, ColAction::Command(id)));
         }
         if !self.graphs.is_empty() {
@@ -304,25 +309,25 @@ impl SheetFrame {
             });
         }
         for id in ["sort.asc", "sort.desc"] {
-            if crate::menus::menu_command(ui, &self.menu, id) {
+            if crate::menus::menu_command(ui, menu, id) {
                 self.action = Some((ci, ColAction::Command(id)));
             }
         }
         ui.separator();
         ui.menu_button("移动列", |ui| {
             for id in ["col.left", "col.right", "col.first", "col.last"] {
-                if crate::menus::menu_command(ui, &self.menu, id) {
+                if crate::menus::menu_command(ui, menu, id) {
                     self.action = Some((ci, ColAction::Command(id)));
                 }
             }
         });
         for id in ["col.insert", "col.clear"] {
-            if crate::menus::menu_command(ui, &self.menu, id) {
+            if crate::menus::menu_command(ui, menu, id) {
                 self.action = Some((ci, ColAction::Command(id)));
             }
         }
         ui.separator();
-        if crate::menus::menu_command(ui, &self.menu, "col.delete") {
+        if crate::menus::menu_command(ui, menu, "col.delete") {
             self.action = Some((ci, ColAction::Command("col.delete")));
         }
     }
@@ -566,6 +571,7 @@ impl SheetFrame {
             self.right_cell = Some((ci, r));
         }
         resp.context_menu(|ui| {
+            ui.data_mut(|d| d.insert_temp(egui::Id::new(("sheet-menu-response", self.id)), resp.id));
             self.cell_menu(ui);
         });
 
@@ -573,22 +579,26 @@ impl SheetFrame {
         self.cell_selection(&painter, rect, here);
     }
     fn cell_menu(&mut self, ui: &mut egui::Ui) {
+        let Some(menu) = &self.menu else {
+            ui.ctx().request_repaint();
+            return;
+        };
         for group in [
             &["edit.copy", "edit.paste", "edit.clear"][..],
             &["row.insert", "row.delete"],
             &["col.setvalues", "col.fill"],
         ] {
             for id in group {
-                if crate::menus::menu_command(ui, &self.menu, id) {
+                if crate::menus::menu_command(ui, menu, id) {
                     self.menu_cmd = Some(id);
                 }
             }
             ui.separator();
         }
-        if let Some(id) = crate::menus::plot_menu(ui, &self.menu) {
+        if let Some(id) = crate::menus::plot_menu(ui, menu) {
             self.menu_cmd = Some(id);
         }
-        if crate::menus::menu_command(ui, &self.menu, "plot.builder") {
+        if crate::menus::menu_command(ui, menu, "plot.builder") {
             self.menu_cmd = Some("plot.builder");
         }
     }

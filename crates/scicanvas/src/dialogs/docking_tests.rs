@@ -218,3 +218,29 @@ fn actual_title_drags_dock_stack_reorder_resize_collapse_and_float() {
     host.settle();
     assert!(!has_docks(&host.ctx, DockSide::Right));
 }
+
+#[test]
+fn p13_drag_guide_remains_visible_above_middle_settings() {
+    let mut host = Host::new();
+    host.settle();
+    let rect = host.rect("First");
+    let start = egui::pos2(rect.center().x, rect.top() + 12.);
+    host.frame(vec![
+        egui::Event::PointerMoved(start),
+        crate::test_ui::button(start, true),
+    ]);
+    host.frame(vec![egui::Event::PointerMoved(start + egui::vec2(30., 0.))]);
+    let end = egui::pos2(160., 430.);
+    let out = host.frame(vec![egui::Event::PointerMoved(end)]);
+    let id = egui::Id::new(("scicanvas-dialog", "First"));
+    let layer = host.ctx.layer_id_at(host.rect("First").center()).unwrap();
+    assert_eq!(layer.order, egui::Order::Middle);
+    let (_, guide) = super::docking::dock_target(&host.ctx, &docks(&host.ctx), end).unwrap();
+    let color = host.ctx.style().visuals.selection.bg_fill;
+    assert!(out.shapes.iter().any(|shape| {
+        matches!(&shape.shape, egui::Shape::Rect(rect)
+            if rect.rect == guide && rect.fill == color.gamma_multiply(0.25))
+    }));
+    assert!(egui::Order::Foreground > layer.order);
+    assert_eq!(layer.id, id);
+}

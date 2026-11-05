@@ -704,19 +704,9 @@ impl SciApp {
                     fmt_num(round_sig(r.f, 6)),
                     fmt_num(round_sig(r.f_p, 6))
                 );
-                rows.insert(
-                    0,
-                    vec![
-                        format!("因变量：{}", y.name),
-                        String::new(),
-                        String::new(),
-                        String::new(),
-                        String::new(),
-                    ],
-                );
                 self.status_ok(format!("多元线性回归：R² = {}", fmt_num(round_sig(r.r2, 6))));
                 self.dialog = Some(Dialog::Table {
-                    title: "多元线性回归".into(),
+                    title: format!("多元线性回归（因变量：{}）", y.name),
                     rows,
                     note,
                 });

@@ -4,7 +4,7 @@ pub(super) fn reset(commands: &mut Vec<Command>) {
     commands.extend([c(
         "win.reset",
         "重置窗口位置",
-        "cascade",
+        "window-reset",
         "Ctrl+Shift+R",
         "窗口",
         "reset windows 找回窗口 还原位置",
@@ -18,7 +18,7 @@ pub(super) fn current(commands: &mut Vec<Command>) {
         c(
             "window.minimize",
             "最小化当前窗口",
-            "book",
+            "window-min",
             "",
             "工作区",
             "minimize",
@@ -28,7 +28,7 @@ pub(super) fn current(commands: &mut Vec<Command>) {
         c(
             "window.maximize",
             "最大化当前窗口",
-            "book",
+            "window-max",
             "",
             "工作区",
             "maximize",
@@ -38,7 +38,7 @@ pub(super) fn current(commands: &mut Vec<Command>) {
         c(
             "window.restore",
             "还原当前窗口",
-            "book",
+            "window-restore",
             "",
             "工作区",
             "restore",

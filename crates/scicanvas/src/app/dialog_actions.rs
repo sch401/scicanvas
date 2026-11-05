@@ -74,8 +74,8 @@ impl SciApp {
                 !resolved.items.is_empty()
                     && resolved.items.iter().all(|item| {
                         self.project.book(item.book_id).is_some_and(|book| {
-                            book.columns.iter().any(|column| {
-                                column.role == Role::YError && column.error_for.as_deref() == Some(&item.y)
+                            book.columns.iter().enumerate().any(|(index, column)| {
+                                column.role == Role::YError && book.error_source(index) == Some(item.y.as_str())
                             })
                         })
                     })

@@ -36,7 +36,7 @@ pub(super) fn project(commands: &mut Vec<Command>) {
         .modifies(),
         c(
             "file.import",
-            "导入数据",
+            "导入数据…",
             "import",
             "Ctrl+I",
             "文件",
@@ -47,7 +47,7 @@ pub(super) fn project(commands: &mut Vec<Command>) {
         .modifies(),
         c(
             "file.open",
-            "打开项目",
+            "打开项目…",
             "open",
             "Ctrl+O",
             "文件",
@@ -67,7 +67,7 @@ pub(super) fn project(commands: &mut Vec<Command>) {
         ),
         c(
             "file.saveas",
-            "项目另存为",
+            "项目另存为…",
             "save",
             "",
             "文件",
@@ -77,8 +77,8 @@ pub(super) fn project(commands: &mut Vec<Command>) {
         ),
         c(
             "graph.export",
-            "导出 SVG",
-            "export",
+            "导出 SVG…",
+            "export-svg",
             "Ctrl+E",
             "文件",
             "export svg image vector 矢量",
@@ -97,8 +97,8 @@ pub(super) fn project(commands: &mut Vec<Command>) {
         ),
         c(
             "book.export_csv",
-            "导出 CSV",
-            "export",
+            "导出 CSV…",
+            "export-csv",
             "",
             "文件",
             "export csv excel table worksheet 表格 工作表",
@@ -112,8 +112,8 @@ pub(super) fn graphics(commands: &mut Vec<Command>) {
     commands.extend([
         c(
             "graph.export_pdf",
-            "导出 PDF",
-            "export",
+            "导出 PDF…",
+            "export-pdf",
             "",
             "文件",
             "export pdf vector font embed 矢量 字体 嵌入",
@@ -132,8 +132,8 @@ pub(super) fn graphics(commands: &mut Vec<Command>) {
         ),
         c(
             "graph.export_tiff",
-            "导出 TIFF",
-            "export",
+            "导出 TIFF…",
+            "export-tiff",
             "",
             "文件",
             "export tiff bitmap lzw dpi",
@@ -142,8 +142,8 @@ pub(super) fn graphics(commands: &mut Vec<Command>) {
         ),
         c(
             "graph.export_png",
-            "导出 PNG",
-            "export",
+            "导出 PNG…",
+            "export-png",
             "",
             "文件",
             "export png bitmap raster dpi image 位图 分辨率",
@@ -174,8 +174,8 @@ pub(super) fn session(commands: &mut Vec<Command>) {
 pub(super) fn note(commands: &mut Vec<Command>) {
     commands.push(c(
         "note.export",
-        "导出 Note",
-        "book",
+        "导出 Note…",
+        "note",
         "",
         "导出",
         "note txt md markdown 文本",
@@ -192,7 +192,7 @@ pub(super) fn note(commands: &mut Vec<Command>) {
 pub(super) fn recent(commands: &mut Vec<Command>) {
     commands.push(c(
         "file.recent",
-        "打开最近项目",
+        "打开上次的项目",
         "open",
         "",
         "文件",

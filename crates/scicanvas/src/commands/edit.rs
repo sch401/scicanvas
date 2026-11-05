@@ -53,7 +53,7 @@ pub(super) fn selection(commands: &mut Vec<Command>) {
             "Ctrl+V",
             "选区",
             "paste clipboard",
-            need_range,
+            |a| a.paste_available(),
             |a| a.paste_range(),
         )
         .modifies(),
@@ -70,7 +70,7 @@ pub(super) fn selection(commands: &mut Vec<Command>) {
         c(
             "edit.replace",
             "替换…",
-            "search",
+            "replace",
             "Ctrl+H",
             "选区",
             "replace 查找替换",

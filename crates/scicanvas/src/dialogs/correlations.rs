@@ -30,18 +30,17 @@ impl Dialog {
                     });
             });
             ui.label(
-                RichText::new(
-                    "p 值为双侧，只用两列都有数值的行。",
-                )
-                .small()
-                .color(pal.weak),
+                RichText::new("p 值为双侧，只用两列都有数值的行。")
+                    .small()
+                    .color(pal.weak),
             );
             ui.add_space(10.0);
-                ui.separator();
-                ui.add_space(4.0);
-                let mut rows=vec![correlation_header().map(String::from).to_vec()];rows.extend(correlation_rows(pairs));
-                let text=rows.iter().map(|r|r.join("\t")).collect::<Vec<_>>().join("\n");
-                action=result_actions(ui,"相关系数结果",&rows,format!("## 相关系数\n\n{}\n\np 值为双侧。Pearson 和 Spearman 用 t 分布，Kendall τ-b 用含并列校正的正态近似；只使用成对有效行。",md_table(&rows)),text);
+            ui.separator();
+            ui.add_space(4.0);
+            let mut rows = vec![correlation_header().map(String::from).to_vec()];
+            rows.extend(correlation_rows(pairs));
+            let text = rows.iter().map(|r| r.join("\t")).collect::<Vec<_>>().join("\n");
+            action = result_actions(ui, "相关系数结果", &rows, correlation_markdown(&rows), text);
         });
         action
     }
@@ -77,4 +76,12 @@ fn correlation_rows(pairs: &[(String, String, Vec<Correlation>)]) -> Vec<Vec<Str
             row
         })
         .collect()
+}
+
+fn correlation_markdown(rows: &[Vec<String>]) -> String {
+    format!(
+        "## 相关系数\n\n{}\n\n{}",
+        md_table(rows),
+        "p 值为双侧。Pearson 和 Spearman 用 t 分布，Kendall τ-b 用含并列校正的正态近似；只使用成对有效行。"
+    )
 }

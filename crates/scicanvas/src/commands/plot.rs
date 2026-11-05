@@ -4,7 +4,7 @@ pub(super) fn layer_contents(commands: &mut Vec<Command>) {
     commands.extend([c(
         "layer.contents",
         "图层内容…",
-        "props",
+        "layer-contents",
         "",
         "图形",
         "layer contents 添加 移除 排序 左右轴 曲线 数据源",
@@ -18,7 +18,7 @@ pub(super) fn annotations(commands: &mut Vec<Command>) {
         c(
             "graph.text.add",
             "添加文字标注",
-            "note",
+            "annotation-text",
             "",
             "图形",
             "text annotation label 文字 标注",
@@ -27,8 +27,8 @@ pub(super) fn annotations(commands: &mut Vec<Command>) {
         ),
         c(
             "graph.text.manage",
-            "管理文字标注…",
-            "props",
+            "编辑文字标注…",
+            "annotation-edit",
             "",
             "图形",
             "text annotation edit 文字 编辑",
@@ -37,8 +37,8 @@ pub(super) fn annotations(commands: &mut Vec<Command>) {
         ),
         c(
             "graph.legend.auto",
-            "图例自动避让",
-            "legend",
+            "恢复图例自动位置",
+            "legend-auto",
             "",
             "图形",
             "legend automatic position reset 图例 位置 自动",
@@ -76,7 +76,7 @@ pub(super) fn builder(commands: &mut Vec<Command>) {
         c(
             "plot.panels_stacked",
             "上下两面板",
-            "tile",
+            "panels-stack",
             "",
             "绘图",
             "multi panel stack vertical two panels 多面板 上下 堆叠",
@@ -87,7 +87,7 @@ pub(super) fn builder(commands: &mut Vec<Command>) {
         c(
             "plot.panels_side",
             "左右两面板",
-            "tile",
+            "panels-side",
             "",
             "绘图",
             "multi panel side by side horizontal two panels 多面板 左右 并排",
@@ -98,7 +98,7 @@ pub(super) fn builder(commands: &mut Vec<Command>) {
         c(
             "plot.panels_grid4",
             "四面板",
-            "tile",
+            "panels-grid",
             "",
             "绘图",
             "multi panel four 2x2 grid 多面板 四面板 网格",
@@ -123,7 +123,7 @@ pub(super) fn templates(commands: &mut Vec<Command>) {
         ),
         c(
             "graph.template.save",
-            "保存为模板",
+            "保存为模板…",
             "save",
             "",
             "绘图",
@@ -133,7 +133,7 @@ pub(super) fn templates(commands: &mut Vec<Command>) {
         ),
         c(
             "graph.template.apply",
-            "应用模板",
+            "应用模板…",
             "open",
             "",
             "绘图",
@@ -409,7 +409,7 @@ pub(super) fn graph(commands: &mut Vec<Command>) {
         c(
             "graph.reference.vertical",
             "添加垂直参考线",
-            "stepv",
+            "refline-v",
             "",
             "图形",
             "reference line vertical x value 参考线 垂直 X 轴值",
@@ -420,7 +420,7 @@ pub(super) fn graph(commands: &mut Vec<Command>) {
         c(
             "graph.reference.horizontal",
             "添加水平参考线",
-            "fitlin",
+            "refline-h",
             "",
             "图形",
             "reference line horizontal y value 参考线 水平 Y 轴值",
@@ -431,7 +431,7 @@ pub(super) fn graph(commands: &mut Vec<Command>) {
         c(
             "layer.add",
             "添加图层",
-            "newbook",
+            "layer-add",
             "",
             "图形",
             "layer panel subplot 添加图层",
@@ -442,7 +442,7 @@ pub(super) fn graph(commands: &mut Vec<Command>) {
         c(
             "layer.remove",
             "删除图层",
-            "coldel",
+            "layer-remove",
             "",
             "图形",
             "layer remove 删除图层",
@@ -460,30 +460,6 @@ pub(super) fn graph(commands: &mut Vec<Command>) {
             need_any_graph,
             |a| a.open_props(),
         ),
-        c(
-            "graph.logx",
-            "X 对数",
-            "logx",
-            "",
-            "图形",
-            "log scale x",
-            need_graph,
-            |a| a.toggle_axis_scale(true),
-        )
-        .modifies()
-        .checked(|a| graph_flag(a, |g| g.effective_x_scale().is_log())),
-        c(
-            "graph.logy",
-            "Y 对数",
-            "logy",
-            "",
-            "图形",
-            "log scale y",
-            need_graph,
-            |a| a.toggle_axis_scale(false),
-        )
-        .modifies()
-        .checked(|a| graph_flag(a, |g| g.effective_y_scale().is_log())),
         c(
             "graph.grid",
             "网格线",
@@ -720,7 +696,10 @@ fn graphics_tools(commands: &mut Vec<Command>) {
             "Ctrl+Shift+V",
             "图形",
             "paste format style",
-            need_graph,
+            |a| {
+                need_graph(a)?;
+                a.style_clipboard.as_ref().map(|_| ()).ok_or("请先复制格式")
+            },
             |a| a.paste_style(),
         )
         .modifies(),
@@ -731,7 +710,7 @@ fn shape_tools(commands: &mut Vec<Command>) {
     commands.push(c(
         "graph.shape.line",
         "绘制直线",
-        "area",
+        "shape-line",
         "",
         "图形",
         "draw shape line",
@@ -741,7 +720,7 @@ fn shape_tools(commands: &mut Vec<Command>) {
     commands.push(c(
         "graph.shape.arrow",
         "绘制箭头",
-        "area",
+        "shape-arrow",
         "",
         "图形",
         "draw shape arrow",
@@ -751,7 +730,7 @@ fn shape_tools(commands: &mut Vec<Command>) {
     commands.push(c(
         "graph.shape.rect",
         "绘制矩形",
-        "area",
+        "shape-rect",
         "",
         "图形",
         "draw shape rect",
@@ -761,7 +740,7 @@ fn shape_tools(commands: &mut Vec<Command>) {
     commands.push(c(
         "graph.shape.ellipse",
         "绘制椭圆",
-        "area",
+        "shape-ellipse",
         "",
         "图形",
         "draw shape ellipse",

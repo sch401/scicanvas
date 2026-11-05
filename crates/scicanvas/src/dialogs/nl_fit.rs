@@ -250,8 +250,8 @@ impl Dialog {
                 .map(
                     |&(fix, fv, has_lo, lo, has_hi, hi)| scicanvas_core::nlfit::ParamLimits {
                         fixed: fix.then_some(fv),
-                        lower: has_lo.then_some(lo),
-                        upper: has_hi.then_some(hi),
+                        lower: (has_lo && !fix).then_some(lo),
+                        upper: (has_hi && !fix).then_some(hi),
                     },
                 )
                 .collect();
@@ -293,8 +293,8 @@ impl Dialog {
                 .map(
                     |(_, &(fix, fv, has_lo, lo, has_hi, hi))| scicanvas_core::nlfit::ParamLimits {
                         fixed: fix.then_some(fv),
-                        lower: has_lo.then_some(lo),
-                        upper: has_hi.then_some(hi),
+                        lower: (has_lo && !fix).then_some(lo),
+                        upper: (has_hi && !fix).then_some(hi),
                     },
                 )
                 .collect();
@@ -461,7 +461,7 @@ impl Dialog {
                                     parameters: definition.parameters,
                                 },
                                 Some(definition.initial),
-                                edit.limits.clone(),
+                                effective_limits(&edit.limits),
                                 edit.constraints.clone(),
                             )
                             .map(|mut recipe| {
