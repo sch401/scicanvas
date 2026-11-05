@@ -267,6 +267,8 @@ impl HistogramOptions {
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Layer {
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Projection::is_cartesian"))]
+    pub projection: Projection,
     /// None 使用网格排版；自定义矩形按页面比例定位，可与其他图层重叠。
     #[cfg_attr(feature = "serde", serde(default))]
     pub placement: Option<LayerRect>,
@@ -568,9 +570,25 @@ impl TickDir {
     }
 }
 
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
+pub enum Projection {
+    #[default]
+    Cartesian,
+    Polar {
+        degrees: bool,
+    },
+}
+impl Projection {
+    pub fn is_cartesian(&self) -> bool {
+        matches!(self, Self::Cartesian)
+    }
+}
+
 impl Default for Layer {
     fn default() -> Self {
         Self {
+            projection: Projection::Cartesian,
             placement: None,
             transparent: false,
             spec: Default::default(),
@@ -809,6 +827,7 @@ impl Layer {
                                     crate::PlotType::Histogram
                                         | crate::PlotType::QQ
                                         | crate::PlotType::Box
+                                        | crate::PlotType::Violin
                                         | crate::PlotType::ColumnScatter
                                         | crate::PlotType::LineSeries
                                 )
@@ -843,7 +862,7 @@ impl Layer {
                 }
             })
             .collect();
-        if self.plot_type == crate::PlotType::Box {
+        if matches!(self.plot_type, crate::PlotType::Box | crate::PlotType::Violin) {
             crate::stat::boxes(&mut prepared);
         }
         crate::stat::columns(self, &mut prepared);
@@ -1020,7 +1039,10 @@ impl Layer {
         }
         if matches!(
             self.plot_type,
-            crate::PlotType::Box | crate::PlotType::ColumnScatter | crate::PlotType::LineSeries
+            crate::PlotType::Box
+                | crate::PlotType::Violin
+                | crate::PlotType::ColumnScatter
+                | crate::PlotType::LineSeries
         ) {
             return String::new();
         }
@@ -1111,5 +1133,17 @@ impl Layer {
             .find(|k| self.plot_style(k).is_some_and(|c| c.right_axis))
             .and_then(|k| self.curve_axis_label(book, others, k))
             .unwrap_or_default()
+    }
+}
+
+impl Layer {
+    pub fn set_plot_type(&mut self, kind: crate::PlotType) -> Result<(), String> {
+        self.spec.set_plot_type(kind)?;
+        self.projection = if matches!(kind, crate::PlotType::PolarLine | crate::PlotType::PolarScatter) {
+            Projection::Polar { degrees: true }
+        } else {
+            Projection::Cartesian
+        };
+        Ok(())
     }
 }

@@ -1538,6 +1538,26 @@ pub fn histogram_edges(values: &[f64], edges: &[f64]) -> Result<Vec<Bin>, String
     Ok(out)
 }
 
+/// Gaussian KDE with Scott bandwidth and sample standard deviation.
+pub fn gaussian_kde(values: &[f64], at: &[f64]) -> Vec<f64> {
+    let values: Vec<_> = values.iter().copied().filter(|v| v.is_finite()).collect();
+    let n = values.len() as f64;
+    if n < 2. {
+        return vec![f64::NAN; at.len()];
+    }
+    let mean = values.iter().sum::<f64>() / n;
+    let h = (values.iter().map(|v| (v - mean).powi(2)).sum::<f64>() / (n - 1.)).sqrt() * n.powf(-0.2);
+    if h == 0. {
+        return vec![f64::NAN; at.len()];
+    }
+    at.iter()
+        .map(|x| {
+            values.iter().map(|v| (-0.5 * ((x - v) / h).powi(2)).exp()).sum::<f64>()
+                / (n * h * (2. * std::f64::consts::PI).sqrt())
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

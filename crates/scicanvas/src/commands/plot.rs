@@ -252,6 +252,7 @@ pub(super) fn basic(commands: &mut Vec<Command>) {
 pub(super) fn decorations(commands: &mut Vec<Command>) {
     scatter_variants(commands);
     offset_series(commands);
+    radial_plots(commands);
     commands.extend([
         c(
             "plot.spline",
@@ -620,4 +621,59 @@ fn offset_series(commands: &mut Vec<Command>) {
         )
         .modifies(),
     ]);
+}
+
+fn radial_plots(commands: &mut Vec<Command>) {
+    commands.push(
+        c(
+            "plot.pie",
+            "饼图",
+            "scatter",
+            "",
+            "绘图",
+            "饼图",
+            need_data,
+            |a| a.plot(PlotType::Pie),
+        )
+        .modifies(),
+    );
+    commands.push(
+        c(
+            "plot.violin",
+            "小提琴图",
+            "scatter",
+            "",
+            "绘图",
+            "小提琴图",
+            need_data,
+            |a| a.plot(PlotType::Violin),
+        )
+        .modifies(),
+    );
+    commands.push(
+        c(
+            "plot.polar_line",
+            "极坐标线图",
+            "scatter",
+            "",
+            "绘图",
+            "极坐标线图",
+            need_data,
+            |a| a.plot(PlotType::PolarLine),
+        )
+        .modifies(),
+    );
+    commands.push(
+        c(
+            "plot.polar_scatter",
+            "极坐标散点图",
+            "scatter",
+            "",
+            "绘图",
+            "极坐标散点图",
+            need_data,
+            |a| a.plot(PlotType::PolarScatter),
+        )
+        .modifies(),
+    );
 }

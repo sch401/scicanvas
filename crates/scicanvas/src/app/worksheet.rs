@@ -990,6 +990,10 @@ impl SciApp {
                 ColAction::Plot(PlotType::OffsetLine) => "plot.offset_line",
                 ColAction::Plot(PlotType::Waterfall) => "plot.waterfall",
                 ColAction::Plot(PlotType::LineSeries) => "plot.line_series",
+                ColAction::Plot(PlotType::Pie) => "plot.pie",
+                ColAction::Plot(PlotType::Violin) => "plot.violin",
+                ColAction::Plot(PlotType::PolarLine) => "plot.polar_line",
+                ColAction::Plot(PlotType::PolarScatter) => "plot.polar_scatter",
 
                 ColAction::AddToGraph(_) => unreachable!(),
             };

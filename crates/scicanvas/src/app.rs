@@ -516,6 +516,12 @@ impl SciApp {
             }
             Err(e) => self.status = e,
         }
+        if t == PlotType::Pie {
+            if let Some(g) = self.active.and_then(|id| self.project.graph(id)) {
+                let skipped = scicanvas_core::scene::pie_skipped(g.first_layer(), &|id| self.project.book(id));
+                self.status.push_str(&format!("；跳过 {skipped} 行非正值或缺失值"));
+            }
+        }
     }
 
     /// 用当前工作簿选中的 Y 列画多面板折线图，选区行范围对每个面板都生效。

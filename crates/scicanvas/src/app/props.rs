@@ -61,6 +61,9 @@ impl SciApp {
                         axes(ui, g, history_group);
                         histogram_options(ui, g, history_group);
                         curve_offset_options(ui, g, history_group);
+                        if let scicanvas_core::page::Projection::Polar { degrees } = &mut g.projection {
+                            edit_group(&ui.checkbox(degrees, "角度单位为度（取消为弧度）"), history_group);
+                        }
                         layer_style(ui, g, history_group);
                         labels(ui, g, &cols, history_group);
                         error_bars(ui, g, history_group);

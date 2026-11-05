@@ -2297,3 +2297,18 @@ fn a4_damped_model_real_report_reedit_preserves_fixed_origin() {
     assert!(matches!(reports[0].fit.model,scicanvas_core::nlfit::FitFunction::SineDamp{origin} if origin==5.));
     assert_ne!(app.project, before);
 }
+
+#[test]
+fn b4_new_plot_commands_save_and_undo() {
+    for command in ["plot.pie", "plot.violin", "plot.polar_line", "plot.polar_scatter"] {
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["B".into(), "C".into()]);
+        let before = app.project.clone();
+        app.run_command(command);
+        assert_eq!(app.project.graphs.len(), before.graphs.len() + 1, "{}", app.status);
+        let json = scicanvas_core::project_file::to_json(&app.project).unwrap();
+        assert_eq!(app.project, scicanvas_core::project_file::from_json(&json).unwrap());
+        roundtrip(&mut app, &before);
+    }
+}

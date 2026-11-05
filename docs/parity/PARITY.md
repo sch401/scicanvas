@@ -4,7 +4,7 @@
 数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。
 
 共 514 项：P0 97 项，P1 146 项，P2 259 项，不做 12 项。
-状态：已完成 82 项，已实现待验收 80 项，部分实现 12 项，未开始 328 项，不做 12 项。
+状态：已完成 82 项，已实现待验收 83 项，部分实现 12 项，未开始 325 项，不做 12 项。
 
 - **P0 / M1 日常够用**：日常数据处理和论文作图的最小集合。
 - **P1 / M2 论文全流程**：统计、多面板、信号处理等。
@@ -419,7 +419,7 @@
 
 | 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |
 |---|---|---|---|---|---|---|---|
-| F295 | 2D 饼图 | 2D Color Pie Chart | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F295 | 2D 饼图 | 2D Color Pie Chart | P1 | 已实现待验收 | 绘图 → 饼图。仅第一 Y 列，X 文本类别或行号，跳过非正值与缺失值，顶部起顺时针扇区、百分比、按行图例及扇区拾取。 | 原始行拾取、角度正逆映射、KDE 1e-12、保存兼容和真实命令撤销；matplotlib 场景位置参考 1e-6。 | — |
 | F296 | 3D 饼图 | 3D Color Pie Chart | P2 | 未开始 | wgpu 3D 渲染（three-d 或自写） | 与 Origin 同数据出图目视比较 | — |
 | F297 | 环形图 | Doughnut Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F298 | 复合饼图 | Pie Of Pie Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
@@ -507,7 +507,7 @@
 | F360 | 堆叠直方图 | Stacked Histograms Graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F361 | 多变异图 | Multi-Vari Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F362 | 变异性图 | Variability Chart | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
-| F363 | 小提琴图 | Violin Plot | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F363 | 小提琴图 | Violin Plot | P1 | 已实现待验收 | 绘图 → 小提琴图。Scott 带宽、样本标准差、100 点 Gaussian KDE，对称半宽 0.25，透明填充、轮廓、中位数白点和四分位粗线。 | 原始行拾取、角度正逆映射、KDE 1e-12、保存兼容和真实命令撤销；matplotlib 场景位置参考 1e-6。 | — |
 | F364 | 桑基图 | Sankey Diagrams | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F365 | 冲积图 | Alluvial Diagrams | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F366 | 网络图 | Network Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
@@ -577,7 +577,7 @@
 | F410 | Piper 三线图 | Piper/Trilinear Diagram | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F411 | Durov 图 | Durov Diagram | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F412 | Stiff 图 | Stiff Diagram | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
-| F413 | 极坐标图 | Polar Graph | P1 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
+| F413 | 极坐标图 | Polar Graph | P1 | 已实现待验收 | 绘图 → 极坐标图。极坐标线图和散点图，度或弧度，零角向东逆时针，径向从零起，128 段同心网格、45°径向线和每数据段 16 次插值；首版仅拾取，缩放平移关闭。 | 原始行拾取、角度正逆映射、KDE 1e-12、保存兼容和真实命令撤销；matplotlib 场景位置参考 1e-6。 | — |
 | F414 | 极坐标矢量图（θrθr） | Polar Vector theta r theta r graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F415 | 罗盘图 | Compass Plot | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |
 | F416 | 极坐标矢量图（θrAM） | Polar Vector ?RAM graph | P2 | 未开始 | 2D 渲染器 + SVG 导出 | 与 Origin 同数据出图目视比较 | — |

@@ -8,6 +8,10 @@ use crate::{
 
 pub(super) fn draw(ctx: &Context<'_, '_, '_, '_>, plot: &PreparedPlot, items: &mut Vec<Item>) -> bool {
     let style = &plot.style;
+    if super::contains(style.kind, Kind::Violin) {
+        violin(ctx, plot, items);
+        return true;
+    }
     if !super::contains(style.kind, Kind::Box) {
         return false;
     }
@@ -97,4 +101,75 @@ pub(super) fn draw(ctx: &Context<'_, '_, '_, '_>, plot: &PreparedPlot, items: &m
         );
     }
     true
+}
+
+fn violin(ctx: &Context<'_, '_, '_, '_>, plot: &PreparedPlot, items: &mut Vec<Item>) {
+    let (Some(stats), Some(point)) = (&plot.box_stats, plot.series.points.first()) else {
+        return;
+    };
+    let values: Vec<_> = plot.series.points.iter().map(|p| p[1]).collect();
+    let lo = values.iter().copied().fold(f64::INFINITY, f64::min);
+    let hi = values.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+    let at: Vec<_> = (0..100).map(|i| lo + (hi - lo) * i as f64 / 99.).collect();
+    let density = crate::stats::gaussian_kde(&values, &at);
+    let peak = density.iter().copied().fold(0., f64::max);
+    let x = point[0];
+    let axis = plot.style.y_axis;
+    let color = plot.style.color.rgb();
+    if peak > 0. && peak.is_finite() {
+        let side = |sign: f64| {
+            at.iter()
+                .zip(&density)
+                .map(|(v, d)| [ctx.px(x + sign * ctx.dx * 0.25 * d / peak), ctx.py(*v, axis)])
+                .collect::<Vec<_>>()
+        };
+        let left = side(-1.);
+        let right = side(1.);
+        let mut triangles = Vec::new();
+        for i in 1..at.len() {
+            triangles.extend([left[i - 1], right[i - 1], left[i], left[i], right[i - 1], right[i]]);
+        }
+        ctx.push(
+            items,
+            Prim::Triangles {
+                pts: triangles,
+                color,
+                opacity: 0.3,
+            },
+            true,
+        );
+        let mut outline = left;
+        outline.extend(right.into_iter().rev());
+        outline.push(outline[0]);
+        ctx.push(
+            items,
+            Prim::Polyline {
+                pts: outline,
+                color,
+                width: f64::from(plot.style.line_width),
+            },
+            true,
+        );
+    }
+    let center = ctx.px(x);
+    ctx.push(
+        items,
+        Prim::Segments {
+            segs: vec![[center, ctx.py(stats.q1, axis), center, ctx.py(stats.q3, axis)]],
+            color,
+            width: 3.,
+            dashed: false,
+        },
+        true,
+    );
+    ctx.push(
+        items,
+        Prim::Symbols {
+            sym: Symbol::Circle,
+            pts: vec![[center, ctx.py(stats.median, axis)]],
+            r: 2.,
+            color: (255, 255, 255),
+        },
+        true,
+    );
 }

@@ -12,6 +12,7 @@ use crate::ticks::{axis, Axis, TickLabel};
 mod color_scale;
 mod layout;
 mod legend;
+mod radial;
 
 pub type Rgb = (u8, u8, u8);
 
@@ -181,6 +182,12 @@ pub fn nearest_point<'a>(
     y: f64,
     radius: f64,
 ) -> Option<PointHit> {
+    if layer.plot_type == PlotType::Pie {
+        return radial::pick_pie(layer, view, books, x, y);
+    }
+    if let crate::page::Projection::Polar { degrees } = layer.projection {
+        return radial::pick_polar(layer, view, books, [x, y], radius, degrees);
+    }
     let (_, plots) = layer.prepared_plots_in(books(layer.book_id?)?, books);
     let horizontal = crate::presets::recipe(layer.plot_type).orientation == crate::coord::Orientation::Horizontal;
     let identity = (layer.transform == crate::plotspec::Transform::Identity
@@ -714,14 +721,19 @@ fn prepare_layer_data(ctx: &LayerContext<'_, '_, '_>) -> LayerData {
     let x_col = x_col.filter(|_| {
         !matches!(
             g.plot_type,
-            PlotType::Histogram | PlotType::QQ | PlotType::Box | PlotType::ColumnScatter | PlotType::LineSeries
+            PlotType::Histogram
+                | PlotType::QQ
+                | PlotType::Box
+                | PlotType::Violin
+                | PlotType::ColumnScatter
+                | PlotType::LineSeries
         )
     });
     let x_date = !horizontal && !g.x_log && x_col.is_some_and(|c| c.data.kind() == crate::DataKind::DateTime);
     let date_offset = x_col.map_or(0.0, |c| f64::from(c.format.utc_offset) * 60_000.0);
     let categories = if matches!(
         g.plot_type,
-        PlotType::Box | PlotType::ColumnScatter | PlotType::LineSeries
+        PlotType::Box | PlotType::Violin | PlotType::ColumnScatter | PlotType::LineSeries
     ) {
         Some(
             plots
@@ -888,7 +900,10 @@ fn axis_ranges(ctx: &LayerContext<'_, '_, '_>, data: &LayerData) -> AxisRanges {
                 .filter(|(s, st)| {
                     !s.line_only
                         && (st.kind.has_symbol()
-                            || matches!(st.kind, PlotType::Box | PlotType::ColumnScatter | PlotType::LineSeries))
+                            || matches!(
+                                st.kind,
+                                PlotType::Box | PlotType::Violin | PlotType::ColumnScatter | PlotType::LineSeries
+                            ))
                         && st.y_axis == crate::coord::YAxis::Left
                 })
                 .flat_map(|(s, _)| s.points.iter().copied())
@@ -963,7 +978,10 @@ fn axis_ranges(ctx: &LayerContext<'_, '_, '_>, data: &LayerData) -> AxisRanges {
                 .filter(|(s, st)| {
                     !s.line_only
                         && (st.kind.has_symbol()
-                            || matches!(st.kind, PlotType::Box | PlotType::ColumnScatter | PlotType::LineSeries))
+                            || matches!(
+                                st.kind,
+                                PlotType::Box | PlotType::Violin | PlotType::ColumnScatter | PlotType::LineSeries
+                            ))
                         && st.y_axis == crate::coord::YAxis::Right
                 })
                 .flat_map(|(s, _)| s.points.iter().map(|p| p[1]))
@@ -1496,6 +1514,9 @@ fn build_layer_full(ctx: LayerContext<'_, '_, '_>) -> Scene {
     let g = ctx.layer;
     let w = ctx.w;
     let h = ctx.h;
+    if ctx.layer.plot_type == PlotType::Pie || !ctx.layer.projection.is_cartesian() {
+        return radial::build(&ctx);
+    }
     let data = prepare_layer_data(&ctx);
     let ranges = axis_ranges(&ctx, &data);
     let layout = axis_layout(&ctx, ranges);
@@ -1521,6 +1542,10 @@ fn build_layer_full(ctx: LayerContext<'_, '_, '_>) -> Scene {
         layer_plots: vec![layout.rect],
         objects,
     }
+}
+
+pub fn pie_skipped(layer: &Layer, books: BookLookup<'_, '_>) -> usize {
+    radial::skipped(layer, books)
 }
 
 #[cfg(test)]

@@ -197,4 +197,18 @@ pub const ALL: &[Example] = &[
         "29-线系列图",
         "线系列图：共同数据列，保留原始行和源数据连接。"
     ),
+    example!("pie", Pie, "30-饼图", "饼图：列注释说明数据与单位。"),
+    example!("violin", Violin, "31-小提琴图", "小提琴图：列注释说明数据与单位。"),
+    example!(
+        "polar_line",
+        PolarLine,
+        "32-极坐标线图",
+        "极坐标线图：列注释说明数据与单位。"
+    ),
+    example!(
+        "polar_scatter",
+        PolarScatter,
+        "33-极坐标散点图",
+        "极坐标散点图：列注释说明数据与单位。"
+    ),
 ];

@@ -1,0 +1,187 @@
+{
+  "case": "pie",
+  "data": [
+    {
+      "category": null,
+      "key": "A",
+      "kind": "Num",
+      "role": "X",
+      "utc_offset": 0,
+      "values": [
+        0.0,
+        1.0,
+        2.0,
+        3.0,
+        4.0
+      ]
+    },
+    {
+      "category": null,
+      "key": "B",
+      "kind": "Num",
+      "role": "Y",
+      "utc_offset": 0,
+      "values": [
+        -2.0,
+        3.0,
+        null,
+        5.0,
+        -1.0
+      ]
+    }
+  ],
+  "layers": [
+    {
+      "axes": {
+        "right_y": null,
+        "x": {
+          "hi": 360.0,
+          "lo": 0.0,
+          "log": false,
+          "minor": [
+            {
+              "position": 0.06944444444444445,
+              "value": 25.0
+            },
+            {
+              "position": 0.20833333333333334,
+              "value": 75.0
+            },
+            {
+              "position": 0.3472222222222222,
+              "value": 125.0
+            },
+            {
+              "position": 0.4861111111111111,
+              "value": 175.0
+            },
+            {
+              "position": 0.625,
+              "value": 225.0
+            },
+            {
+              "position": 0.7638888888888888,
+              "value": 275.0
+            },
+            {
+              "position": 0.9027777777777778,
+              "value": 325.0
+            }
+          ],
+          "ticks": [
+            {
+              "position": 0.0,
+              "value": 0.0
+            },
+            {
+              "position": 0.1388888888888889,
+              "value": 50.0
+            },
+            {
+              "position": 0.2777777777777778,
+              "value": 100.0
+            },
+            {
+              "position": 0.4166666666666667,
+              "value": 150.0
+            },
+            {
+              "position": 0.5555555555555556,
+              "value": 200.0
+            },
+            {
+              "position": 0.6944444444444444,
+              "value": 250.0
+            },
+            {
+              "position": 0.8333333333333334,
+              "value": 300.0
+            },
+            {
+              "position": 0.9722222222222222,
+              "value": 350.0
+            }
+          ]
+        },
+        "y": {
+          "hi": 5.0,
+          "lo": 0.0,
+          "log": false,
+          "minor": [
+            {
+              "position": 0.1,
+              "value": 0.5
+            },
+            {
+              "position": 0.3,
+              "value": 1.5
+            },
+            {
+              "position": 0.5,
+              "value": 2.5
+            },
+            {
+              "position": 0.7,
+              "value": 3.5
+            },
+            {
+              "position": 0.9,
+              "value": 4.5
+            }
+          ],
+          "ticks": [
+            {
+              "position": 0.0,
+              "value": 0.0
+            },
+            {
+              "position": 0.2,
+              "value": 1.0
+            },
+            {
+              "position": 0.4,
+              "value": 2.0
+            },
+            {
+              "position": 0.6,
+              "value": 3.0
+            },
+            {
+              "position": 0.8,
+              "value": 4.0
+            },
+            {
+              "position": 1.0,
+              "value": 5.0
+            }
+          ]
+        }
+      },
+      "base_by_y": {},
+      "connect": "Straight",
+      "kind": "Pie",
+      "marks": {
+        "ends": [
+          135.00000000000003,
+          360.0
+        ]
+      },
+      "plot": [
+        56.62921348314607,
+        56.62921348314607,
+        680.4423604352827,
+        482.01716358488903
+      ],
+      "reference_lines": [],
+      "right_keys": [],
+      "rows": null,
+      "y_keys": [
+        "B"
+      ]
+    }
+  ],
+  "page": {
+    "h": 595.2755905511812,
+    "w": 793.7007874015749
+  }
+}

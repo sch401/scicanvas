@@ -505,6 +505,9 @@ fn update_saved_view(
     let mut changed = false;
     if let Some(index) = input.dragging.or(input.hovered).filter(|_| !input.block_pan) {
         let layer = &g.page.layers()[index];
+        if !layer.projection.is_cartesian() || layer.plot_type == scicanvas_core::PlotType::Pie {
+            return sc;
+        }
         let layout = &sc.layers[index];
         if input.response.double_clicked() {
             saved[index] = None;

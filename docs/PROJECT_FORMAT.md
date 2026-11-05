@@ -1,5 +1,9 @@
 # 项目文件格式
 
+## v34 饼图、小提琴与极坐标
+
+追加 Pie、Violin、PolarLine、PolarScatter。Layer 新增 projection，缺省 Cartesian 且省略；Polar { degrees } 保存角度单位。KDE、扇区及投影点均为运行时派生数据。新文件 v34，读取 v0–v33，SCV 容器版本保持 1。
+
 ## v33 波形、抑制与结合模型
 
 Model 追加 10 个内置模型。FitMethod 新增 SineDamp { origin }，保存首次拟合有效数据最小 X，作为固定时间原点，重算和重新编辑保留此值；它不占自由参数。新文件 v33，读取 v0–v32，SCV 容器版本保持 1。普通参数上限 12 和全局上限 60 保持原值。

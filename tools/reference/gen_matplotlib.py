@@ -40,8 +40,56 @@ def runs(points):
     return result
 
 
+def generate_b4(source,doc):
+    layer=doc["layers"][0];kind=layer["kind"];page=doc["page"]
+    columns={c["key"]:np.asarray(c["values"],dtype=float) for c in doc["data"]}
+    fig=plt.figure(figsize=(page["w"]/96,page["h"]/96))
+    l,t,w,h=layer["plot"];ax=fig.add_axes([l/page["w"],1-(t+h)/page["h"],w/page["w"],h/page["h"]],projection="polar" if kind.startswith("Polar") else None)
+    if kind=="Pie":
+        y=columns[layer["y_keys"][0]];y=y[np.isfinite(y)&(y>0)]
+        wedges,_=ax.pie(y,startangle=90,counterclock=False)
+        marks={"ends":[float((90-w.theta1)%360) for w in wedges]}
+        if marks["ends"]:marks["ends"][-1]=360.
+    elif kind=="Violin":
+        ax.set_xlim(layer["axes"]["x"]["lo"],layer["axes"]["x"]["hi"]);ax.set_ylim(layer["axes"]["y"]["lo"],layer["axes"]["y"]["hi"])
+        arrays=[columns[k][np.isfinite(columns[k])] for k in layer["y_keys"]]
+        bodies=ax.violinplot(arrays,widths=.5,points=100,bw_method="scott",showmedians=True)["bodies"]
+        contours=[]
+        for body in bodies:
+            points=np.unique(body.get_paths()[0].vertices,axis=0)
+            points=ax.transAxes.inverted().transform(ax.transData.transform(points))
+            points=points[np.lexsort((points[:,0],points[:,1]))]
+            contours.append(points.tolist())
+        marks={"contours":contours}
+    else:
+        ax.set_ylim(0,layer["axes"]["y"]["hi"]);lines=[];symbols=[]
+        def projected(points):
+            points=np.asarray(points);pixels=ax.transData.transform(points)
+            center=ax.transAxes.transform([.5,.5]);radius=ax.bbox.width/2
+            # Matplotlib polar axes are square after aspect adjustment.
+            return ((pixels-center)/radius).tolist()
+        fig.canvas.draw()
+        theta=np.deg2rad(columns["A"])
+        for key in layer["y_keys"]:
+            y=columns[key];points=np.column_stack([theta,y]);points[(~np.isfinite(y))|(y<0)]=np.nan
+            for run in runs(points):
+                if kind=="PolarLine" and len(run)>1:
+                    sampled=[]
+                    for a,b in zip(run[:-1],run[1:]):
+                        sampled.extend(a+(b-a)*np.arange(16)[:,None]/16);sampled.append(b)
+                    line,=ax.plot(np.asarray(sampled)[:,0],np.asarray(sampled)[:,1]);lines.append(projected(line.get_xydata()))
+            if kind=="PolarScatter":
+                valid=points[np.isfinite(points).all(axis=1)];ax.scatter(valid[:,0],valid[:,1]);symbols.extend(projected(valid))
+        marks={"lines":lines,"symbols":symbols}
+    copy={k:v for k,v in layer.items() if k!="marks"};copy["marks"]=marks
+    output=dict(case=doc["case"],page=page,data=doc["data"],versions=VERSIONS,layers=[copy])
+    fig.savefig(source.with_name("matplotlib.png"),dpi=300,transparent=True);plt.close(fig)
+    source.with_name("matplotlib.json").write_text(json.dumps(output,ensure_ascii=False,indent=2,allow_nan=False)+"\n",encoding="utf-8",newline="\n")
+
 def generate(source):
     doc = json.loads(source.read_text(encoding="utf-8"))
+    if doc["layers"][0]["kind"] in ("Pie","Violin","PolarLine","PolarScatter"):
+        return generate_b4(source,doc)
     columns = {c["key"]: c for c in doc["data"]}
     raw = lambda key: np.asarray(columns[key]["values"], dtype=float)
     x_column = columns["A"]

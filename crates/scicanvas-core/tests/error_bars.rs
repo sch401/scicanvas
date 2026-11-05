@@ -122,6 +122,10 @@ fn autoscale_svg_and_all_basic_chart_types_share_error_segments() {
                 | PlotType::ErrorBand
                 | PlotType::ColumnScatter
                 | PlotType::LineSeries
+                | PlotType::Pie
+                | PlotType::Violin
+                | PlotType::PolarLine
+                | PlotType::PolarScatter
                 | PlotType::Bubble
                 | PlotType::ColorScatter
                 | PlotType::BubbleColor

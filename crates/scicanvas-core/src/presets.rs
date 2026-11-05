@@ -74,6 +74,10 @@ fn entries() -> &'static [(Preset, Recipe)] {
                     "OffsetLine" => PlotType::OffsetLine,
                     "Waterfall" => PlotType::Waterfall,
                     "LineSeries" => PlotType::LineSeries,
+                    "Pie" => PlotType::Pie,
+                    "Violin" => PlotType::Violin,
+                    "PolarLine" => PlotType::PolarLine,
+                    "PolarScatter" => PlotType::PolarScatter,
                     _ => unreachable!("built-in preset type"),
                 };
                 let marks = columns
@@ -85,6 +89,7 @@ fn entries() -> &'static [(Preset, Recipe)] {
                         "Symbol" => Kind::Symbol,
                         "Bar" => Kind::Bar,
                         "Box" => Kind::Box,
+                        "Violin" => Kind::Violin,
                         "Area" => Kind::Area,
                         "Drop" => Kind::Drop,
                         _ => unreachable!("built-in mark"),
