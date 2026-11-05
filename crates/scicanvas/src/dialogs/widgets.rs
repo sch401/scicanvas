@@ -256,6 +256,13 @@ pub(crate) fn begin_keyboard_frame(ctx: &egui::Context) {
     ctx.data_mut(|data| data.insert_temp(egui::Id::new("dialog-frame-focus"), (frame, focus)));
 }
 pub(super) fn owns_keyboard(ui: &egui::Ui) -> bool {
+    if ui
+        .ctx()
+        .data(|d| d.get_temp::<(u64, egui::LayerId)>(egui::Id::new("keyboard-modal-layer")))
+        == Some((ui.ctx().cumulative_pass_nr(), ui.layer_id()))
+    {
+        return true;
+    }
     let focus = ui
         .ctx()
         .data(|data| data.get_temp::<(u64, Option<egui::Id>)>(egui::Id::new("dialog-frame-focus")))

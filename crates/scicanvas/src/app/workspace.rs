@@ -364,72 +364,69 @@ impl SciApp {
     pub(super) fn project_item_menu(&mut self, ui: &mut egui::Ui, id: u64) {
         self.explorer_target = Some(id);
         let folder = self.project.folder(id).is_some();
+        let mut state = crate::menus::MenuState::new(self);
         if folder {
-            if ui.button("新建子文件夹").clicked() {
+            if crate::menus::menu_command(ui, &state, "project.folder.new") {
                 self.run_command("project.folder.new");
-                ui.close_menu();
             }
         } else {
-            for (command, label) in [
-                ("project.show", "显示窗口"),
-                ("project.hide", "隐藏窗口"),
-                ("window.minimize", "最小化"),
-                ("window.maximize", "最大化"),
-                ("window.restore", "还原"),
+            let visible = self.open.get(&id).copied().unwrap_or(false);
+            let cid = if visible { "project.hide" } else { "project.show" };
+            if crate::menus::menu_command(ui, &state, cid) {
+                self.run_command(cid);
+            }
+            let current = self.geoms.get(&id).map_or(WinState::Normal, |g| g.state);
+            for (cid, value) in [
+                ("window.minimize", WinState::Min),
+                ("window.maximize", WinState::Max),
+                ("window.restore", WinState::Normal),
             ] {
-                if ui.button(label).clicked() {
-                    self.run_command(command);
+                if current == value {
+                    state.0.insert(cid, (Err("窗口已处于此状态"), None));
+                }
+                if crate::menus::menu_command(ui, &state, cid) {
+                    self.run_command(cid);
+                }
+            }
+        }
+        ui.separator();
+        if ui.add(egui::Button::new("重命名").shortcut_text("F2")).clicked() {
+            self.start_explorer_rename(id);
+            ui.close_menu();
+        }
+        let current = self
+            .project
+            .folder(id)
+            .map_or_else(|| self.project.folder_of(id), |f| f.parent);
+        let destinations: Vec<_> = std::iter::once((None, "项目根目录".to_owned()))
+            .chain(
+                self.project
+                    .folders
+                    .iter()
+                    .filter(|f| f.id != id)
+                    .map(|f| (Some(f.id), self.project.folder_path(f.id).unwrap())),
+            )
+            .collect();
+        ui.menu_button("移动到", |ui| {
+            for (destination, label) in destinations {
+                if ui
+                    .add_enabled(destination != current, egui::Button::new(label))
+                    .clicked()
+                {
+                    self.folder_destination = destination;
+                    self.run_command("project.move");
                     ui.close_menu();
                 }
             }
-        }
+        });
         ui.separator();
-        if self.explorer_selection.len() > 1 {
-            ui.label(format!(
-                "已选 {} 项，移动将应用于全部所选项",
-                self.explorer_selection.len()
-            ));
-            ui.label("重命名、显示、隐藏及删除针对当前项");
-        }
-        ui.label("名称");
-        let response = ui.text_edit_singleline(&mut self.project_name);
-        if ui.button("重命名").clicked() || (response.lost_focus() && ui.input(|i| i.key_pressed(egui::Key::Enter)))
-        {
-            self.run_command("project.rename");
-            ui.close_menu();
-        }
-        ui.separator();
-        egui::ComboBox::from_id_salt(("move-project", id))
-            .selected_text(
-                self.folder_destination
-                    .and_then(|d| self.project.folder_path(d))
-                    .unwrap_or_else(|| "项目根目录".into()),
-            )
-            .show_ui(ui, |ui| {
-                ui.selectable_value(&mut self.folder_destination, None, "项目根目录");
-                for f in &self.project.folders {
-                    if f.id != id {
-                        ui.selectable_value(
-                            &mut self.folder_destination,
-                            Some(f.id),
-                            self.project.folder_path(f.id).unwrap(),
-                        );
-                    }
-                }
-            });
-        if ui.button("移动到所选位置").clicked() {
-            self.run_command("project.move");
-            ui.close_menu();
-        }
-        ui.separator();
-        if folder {
-            if ui.button("删除文件夹（保留内容）").clicked() {
-                self.run_command("project.folder.remove");
-                ui.close_menu();
-            }
-        } else if ui.button("删除对象…").clicked() {
-            self.run_command("project.delete");
-            ui.close_menu();
+        let cid = if folder {
+            "project.folder.remove"
+        } else {
+            "project.delete"
+        };
+        if crate::menus::menu_command(ui, &state, cid) {
+            self.run_command(cid);
         }
     }
 
@@ -634,7 +631,7 @@ impl SciApp {
                     crate::icons::icon(["book", "graph", "note"][kind], self.pal.dark)
                         .fit_to_exact_size(egui::vec2(16.0, 16.0)),
                 )
-                .on_hover_text(["数据表", "图形", "Note 笔记"][kind]);
+                .on_hover_text(["工作簿", "图形", "Note"][kind]);
                 self.explorer_label(
                     ui,
                     id,
@@ -666,9 +663,9 @@ impl SciApp {
             ui.menu_button(RichText::new("＋ 新建").strong(), |ui| {
                 ui.set_min_width(150.0);
                 for (id, icon, label) in [
-                    ("book.new", "book", "数据表"),
+                    ("book.new", "book", "工作簿"),
                     ("graph.new", "graph", "图形"),
-                    ("note.new", "note", "Note 笔记"),
+                    ("note.new", "note", "Note"),
                     ("project.folder.new", "open", "文件夹"),
                 ] {
                     if id == "project.folder.new" {

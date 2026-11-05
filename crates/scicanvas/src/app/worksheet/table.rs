@@ -4,6 +4,7 @@ use super::*;
 
 /// 工作表一次绘制所需的输入和待处理结果，不跨帧保存。
 pub(super) struct SheetFrame {
+    pub(super) menu: crate::menus::MenuState,
     pub(super) frozen: bool,
     pub(super) id: u64,
     pub(super) pal: Palette,
@@ -218,7 +219,7 @@ impl SheetFrame {
                 if matches!(self.drag, Some(Drag::Cols(_))) && self.down && ui.rect_contains_pointer(rect) {
                     self.hover = Some(Target::Col(ci));
                 }
-                if resp.clicked() {
+                if resp.clicked() || (resp.secondary_clicked() && !self.sel_flags[ci]) {
                     self.clicked = Some(ci);
                 }
                 // 双击列标题打开列属性（与 Origin 相同）
@@ -255,50 +256,75 @@ impl SheetFrame {
         }
     }
     fn column_menu(&mut self, ui: &mut egui::Ui, col: &scicanvas_core::Column, ci: usize) {
-        let mut pick = |ui: &mut egui::Ui, label: &str, a: ColAction| {
-            if ui.button(label).clicked() {
-                self.action = Some((ci, a));
-                ui.close_menu();
+        let mut choose = |ui: &mut egui::Ui, id: &'static str| {
+            if crate::menus::menu_command(ui, &self.menu, id) {
+                self.action = Some((ci, ColAction::Command(id)));
             }
         };
-        pick(ui, "列属性…", ColAction::Props);
+        choose(ui, "col.props");
         ui.separator();
-        pick(ui, "设为 X", ColAction::SetRole(Role::X));
-        pick(ui, "设为 Y", ColAction::SetRole(Role::Y));
-        pick(ui, "设为 X 误差", ColAction::SetRole(Role::XError));
-        pick(ui, "设为 Y 误差", ColAction::SetRole(Role::YError));
-        pick(ui, "设为 Z", ColAction::SetRole(Role::Z));
-        pick(ui, "设为标签", ColAction::SetRole(Role::Label));
-        pick(ui, "设为忽略", ColAction::SetRole(Role::Ignore));
-        ui.separator();
-        ui.label(format!("数据类型：{}", col.data.kind().label()));
+        ui.menu_button("设为", |ui| {
+            for id in [
+                "col.setX",
+                "col.setY",
+                "col.setZ",
+                "col.setLabel",
+                "col.setIgnore",
+                "col.setXError",
+                "col.setYError",
+            ] {
+                choose(ui, id);
+            }
+        });
+        ui.menu_button("数据类型", |ui| {
+            for id in [
+                "col.type.num",
+                "col.type.text",
+                "col.type.datetime",
+                "col.type.category",
+            ] {
+                choose(ui, id);
+            }
+        });
         if col.data.kind() == scicanvas_core::DataKind::Category {
-            pick(ui, "类别顺序…", ColAction::CategoryOrder);
-        }
-        for kind in scicanvas_core::DataKind::ALL {
-            pick(ui, &format!("转换为{}列", kind.label()), ColAction::SetDataKind(kind));
+            choose(ui, "col.categories");
         }
         ui.separator();
-        for t in PlotType::ALL {
-            pick(ui, t.label(), ColAction::Plot(t));
+        if let Some(id) = crate::menus::plot_menu(ui, &self.menu) {
+            self.action = Some((ci, ColAction::Command(id)));
         }
         if !self.graphs.is_empty() {
             ui.menu_button("添加到图形", |ui| {
-                for (gid, name) in &self.graphs {
-                    pick(ui, name, ColAction::AddToGraph(*gid));
+                for (id, name) in &self.graphs {
+                    if ui.button(name).clicked() {
+                        self.action = Some((ci, ColAction::AddToGraph(*id)));
+                        ui.close_menu();
+                    }
                 }
             });
         }
+        for id in ["sort.asc", "sort.desc"] {
+            if crate::menus::menu_command(ui, &self.menu, id) {
+                self.action = Some((ci, ColAction::Command(id)));
+            }
+        }
         ui.separator();
         ui.menu_button("移动列", |ui| {
-            pick(ui, "左移", ColAction::Move(scicanvas_core::ColumnMove::Left));
-            pick(ui, "右移", ColAction::Move(scicanvas_core::ColumnMove::Right));
-            pick(ui, "移到最前", ColAction::Move(scicanvas_core::ColumnMove::First));
-            pick(ui, "移到最后", ColAction::Move(scicanvas_core::ColumnMove::Last));
+            for id in ["col.left", "col.right", "col.first", "col.last"] {
+                if crate::menus::menu_command(ui, &self.menu, id) {
+                    self.action = Some((ci, ColAction::Command(id)));
+                }
+            }
         });
-        pick(ui, "在右侧插入列", ColAction::InsertRight);
-        pick(ui, "清空", ColAction::Clear);
-        pick(ui, "删除列", ColAction::Delete);
+        for id in ["col.insert", "col.clear"] {
+            if crate::menus::menu_command(ui, &self.menu, id) {
+                self.action = Some((ci, ColAction::Command(id)));
+            }
+        }
+        ui.separator();
+        if crate::menus::menu_command(ui, &self.menu, "col.delete") {
+            self.action = Some((ci, ColAction::Command("col.delete")));
+        }
     }
     fn body(
         &mut self,
@@ -547,49 +573,23 @@ impl SheetFrame {
         self.cell_selection(&painter, rect, here);
     }
     fn cell_menu(&mut self, ui: &mut egui::Ui) {
-        for (cid, label) in [
-            ("edit.copy", "复制"),
-            ("edit.clear", "清除内容"),
-            ("", ""),
-            ("row.insert", "插入行"),
-            ("row.delete", "删除行"),
-            ("", ""),
-            ("plot.line", "折线图"),
-            ("plot.scatter", "散点图"),
-            ("plot.linesym", "点线图"),
-            ("plot.bar", "柱状图"),
-            ("plot.stacked_bar", "堆叠柱图"),
-            ("plot.percent_stacked_bar", "百分比堆叠柱图"),
-            ("plot.floating_bar", "浮动柱图"),
-            ("plot.horizontal_bar", "条形图"),
-            ("plot.area", "面积图"),
-            ("plot.spline", "样条曲线图"),
-            ("plot.spline_symbol", "样条点线图"),
-            ("plot.vertical_drop", "垂线图"),
-            ("plot.step_horizontal", "水平阶梯图"),
-            ("plot.step_vertical", "垂直阶梯图"),
-            ("plot.histogram", "直方图"),
-            ("plot.qq", "Q-Q 图"),
-            ("plot.box", "箱线图"),
-            ("plot.stacked_horizontal_bar", "堆叠条形图"),
-            ("plot.percent_stacked_horizontal_bar", "百分比堆叠条形图"),
-            ("plot.stacked_area", "堆叠面积图"),
-            ("plot.fill_between", "两曲线间填充"),
-            ("plot.error_band", "误差带图"),
-            ("plot.column_scatter", "列散点图"),
-            ("plot.bubble", "气泡图"),
-            ("plot.color_scatter", "颜色映射散点图"),
-            ("plot.bubble_color", "气泡颜色映射图"),
-            ("plot.offset_line", "偏移堆叠线图"),
-            ("plot.waterfall", "二维瀑布图"),
-            ("plot.line_series", "线系列图"),
+        for group in [
+            &["edit.copy", "edit.paste", "edit.clear"][..],
+            &["row.insert", "row.delete"],
+            &["col.setvalues", "col.fill"],
         ] {
-            if cid.is_empty() {
-                ui.separator();
-            } else if ui.button(label).clicked() {
-                self.menu_cmd = Some(cid);
-                ui.close_menu();
+            for id in group {
+                if crate::menus::menu_command(ui, &self.menu, id) {
+                    self.menu_cmd = Some(id);
+                }
             }
+            ui.separator();
+        }
+        if let Some(id) = crate::menus::plot_menu(ui, &self.menu) {
+            self.menu_cmd = Some(id);
+        }
+        if crate::menus::menu_command(ui, &self.menu, "plot.builder") {
+            self.menu_cmd = Some("plot.builder");
         }
     }
     fn cell_selection(&self, painter: &egui::Painter, rect: egui::Rect, here: Cell) {

@@ -13,6 +13,8 @@ pub(crate) fn modal<R>(ctx: &egui::Context, title: &str, contents: impl FnOnce(&
         .frame(frame)
         .backdrop_color(backdrop(ctx))
         .show(ctx, |ui| {
+            let frame = ctx.cumulative_pass_nr();
+            ctx.data_mut(|d| d.insert_temp(egui::Id::new("keyboard-modal-layer"), (frame, ui.layer_id())));
             ui.set_min_width(320.);
             ui.set_max_width(460.);
             ui.heading(RichText::new(title).strong());

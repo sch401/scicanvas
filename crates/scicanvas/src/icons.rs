@@ -23,7 +23,16 @@ fn wrap(body: &str) -> String {
 
 /// (名称, SVG 主体)
 fn sources() -> Vec<(&'static str, String)> {
-    [source_group_1(), source_group_2(), source_group_3(), source_ui_groups()].concat()
+    [
+        source_group_1(),
+        source_group_2(),
+        source_group_3(),
+        source_ui_groups(),
+        source_menu_icons(),
+        source_analysis_icons(),
+        source_action_icons(),
+    ]
+    .concat()
 }
 
 fn source_group_1() -> Vec<(&'static str, String)> {
@@ -760,4 +769,227 @@ fn all_gallery_types_have_distinct_thumbnails() {
         let svg = &sources.iter().find(|(name, _)| *name == kind).expect(kind).1;
         assert_eq!(sources.iter().filter(|(_, other)| other == svg).count(), 1, "{kind}");
     }
+}
+
+fn source_menu_icons() -> Vec<(&'static str, String)> {
+    vec![
+        ("menu-check", wrap(r#"<path d="M3 12l6 6L21 5"/>"#)),
+        (
+            "paste",
+            wrap(r#"<path d="M7 5H4v16h16V5h-3M8 2h8v5H8zM8 11h8M8 15h8"/>"#),
+        ),
+        (
+            "convolve",
+            wrap(r#"<path d="M2 18l5-12 5 12M10 18l5-12 5 12M3 22h17M17 20l3 2-3 2"/>"#),
+        ),
+        ("folder-new", wrap(r#"<path d="M3 7V4h7l2 3h9v14H3zM12 11v7M9 14h7"/>"#)),
+        ("panels-stack", wrap(r#"<path d="M3 3h18v7H3zM3 14h18v7H3z"/>"#)),
+        ("panels-side", wrap(r#"<path d="M3 3h7v18H3zM14 3h7v18h-7z"/>"#)),
+        (
+            "panels-grid",
+            wrap(r#"<path d="M3 3h7v7H3zM14 3h7v7h-7zM3 14h7v7H3zM14 14h7v7h-7z"/>"#),
+        ),
+        (
+            "fit-compare",
+            wrap(r#"<path d="M3 3v18h18M5 16l5-7 5 4 5-8M5 18c4-15 10 1 15-13"/>"#),
+        ),
+        (
+            "fit-report",
+            wrap(r#"<path d="M4 2h16v20H4zM7 6h10M7 10h10M7 18l3-4 3 2 4-4"/>"#),
+        ),
+        (
+            "fit-multi",
+            wrap(r#"<path d="M4 3v17h17M4 20l9-8M6 15l6-7 7 5M6 10l5-6 7 4"/>"#),
+        ),
+        (
+            "calibration",
+            wrap(r#"<path d="M3 3v18h18M5 18L20 4M3 10h11v11M3 7h5"/>"#),
+        ),
+        (
+            "average",
+            wrap(r#"<path d="M3 5h18M3 12h18M3 19h18M6 3v4M17 10v4M10 17v4M14 2v20"/>"#),
+        ),
+        (
+            "diff-sg",
+            wrap(r#"<path d="M3 3v18h18M4 16c5 0 6-11 11-11l6 4M10 20L17 3"/>"#),
+        ),
+        (
+            "fft",
+            wrap(r#"<path d="M3 20h18M6 20v-5M10 20V5M14 20V9M18 20v-3M3 3l3 3-3 3"/>"#),
+        ),
+        (
+            "ifft",
+            wrap(r#"<path d="M3 20h18M3 15c2-14 4 14 6 0s4 14 6 0 4 14 6 0M21 3l-3 3 3 3"/>"#),
+        ),
+        (
+            "correlate",
+            wrap(r#"<path d="M2 10c2-10 4 10 6 0s4 10 6 0M10 18c2-10 4 10 6 0s4 10 6 0M4 22h15M16 20l3 2-3 2"/>"#),
+        ),
+        (
+            "anova2",
+            wrap(r#"<path d="M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18M5 6h2M11 12h2M17 18h2"/>"#),
+        ),
+        (
+            "replace",
+            wrap(r#"<circle cx="9" cy="8" r="5"/><path d="M13 12l7 8M3 19h10M10 16l3 3-3 3"/>"#),
+        ),
+        ("formula", wrap(r#"<path d="M3 5h8l-5 7 5 7H3M15 8l6 8M21 8l-6 8"/>"#)),
+        (
+            "fill",
+            wrap(r#"<path d="M4 3h8v18H4zM4 9h8M4 15h8M18 3v18M15 18l3 3 3-3"/>"#),
+        ),
+        (
+            "sort-custom",
+            wrap(r#"<path d="M3 5h9M3 10h6M3 15h3M16 3v12M13 12l3 3 3-3M12 20h9M15 18v4"/>"#),
+        ),
+        (
+            "template-save",
+            wrap(r#"<path d="M4 2h16v20H4zM7 5h10v6H7zM12 13v7M9 17l3 3 3-3"/>"#),
+        ),
+        (
+            "template-open",
+            wrap(r#"<path d="M4 2h16v20H4zM7 5h10v6H7zM12 13v7M9 16l3-3 3 3"/>"#),
+        ),
+    ]
+}
+
+fn source_analysis_icons() -> Vec<(&'static str, String)> {
+    vec![
+        (
+            "legend-auto",
+            wrap(r#"<path d="M6 6h12v12H6zM8 10h8M8 14h8M2 7V2h5M17 2h5v5M22 17v5h-5M7 22H2v-5"/>"#),
+        ),
+        (
+            "layer-contents",
+            wrap(r#"<path d="M3 4h18v16H3zM3 9h18M8 4v16M12 12h6M12 16h6"/>"#),
+        ),
+        (
+            "about",
+            wrap(r#"<circle cx="12" cy="12" r="9"/><path d="M12 11v7M12 6v1"/>"#),
+        ),
+        ("shape-line", wrap(r#"<path d="M4 19L20 5"/>"#)),
+        ("shape-arrow", wrap(r#"<path d="M4 19L20 5M12 5h8v8"/>"#)),
+        (
+            "shape-rect",
+            wrap(r#"<rect x="4" y="6" width="16" height="12" rx="1"/>"#),
+        ),
+        ("shape-ellipse", wrap(r#"<ellipse cx="12" cy="12" rx="9" ry="6"/>"#)),
+        (
+            "transpose",
+            wrap(r#"<path d="M3 4h9v9H3zM3 8h9M7 4v9M12 15h9v6h-9zM16 15v6M15 3h6v7M21 3l-6 7"/>"#),
+        ),
+        ("stack", wrap(r#"<path d="M5 3h14v4H5zM5 10h14v4H5zM5 17h14v4H5z"/>"#)),
+        (
+            "split",
+            wrap(r#"<path d="M3 4h6v16H3zM15 4h6v16h-6zM10 12h4M12 10l2 2-2 2"/>"#),
+        ),
+        ("reduce", wrap(r#"<path d="M3 3h6v18H3zM15 8h6v8h-6zM10 7l4 5-4 5"/>"#)),
+        (
+            "freeze",
+            wrap(r#"<path d="M3 3h18v18H3zM3 9h18M9 3v18M14 14h5v5h-5zM15 14v-2a1.5 1.5 0 0 1 3 0v2"/>"#),
+        ),
+        (
+            "unfreeze",
+            wrap(r#"<path d="M3 3h18v18H3zM3 9h18M9 3v18M14 14h5v5h-5zM18 14v-2a2 2 0 0 1 4 0M2 22L22 2"/>"#),
+        ),
+        (
+            "layer-add",
+            wrap(r#"<path d="M3 7l9-4 9 4-9 4zM3 12l9 4 5-2M3 17l9 4M19 16v6M16 19h6"/>"#),
+        ),
+        (
+            "layer-remove",
+            wrap(r#"<path d="M3 7l9-4 9 4-9 4zM3 12l9 4 5-2M3 17l9 4M16 19h6"/>"#),
+        ),
+        ("refline-v", wrap(r#"<path d="M3 3v18h18M13 4v16"/>"#)),
+        ("refline-h", wrap(r#"<path d="M3 3v18h18M4 11h17"/>"#)),
+        ("peaks", wrap(r#"<path d="M2 20l5-6 4 5 5-15 6 16M12 5h8M16 2v6"/>"#)),
+        (
+            "window",
+            wrap(r#"<rect x="3" y="4" width="18" height="16" rx="1"/><path d="M3 9h18M6 6h1M10 6h1"/>"#),
+        ),
+        (
+            "window-reset",
+            wrap(r#"<path d="M8 4h13v15H5v-8M3 3v6h6M3 9l5-5M15 12l4 4M19 12l-4 4"/>"#),
+        ),
+        (
+            "normality",
+            wrap(r#"<path d="M2 20h20M2 19c5 0 5-15 10-15s5 15 10 15M12 3v18"/>"#),
+        ),
+        ("ks2", wrap(r#"<path d="M3 3v18h18M5 18h4v-5h5V6h6M5 15h7v-5h7V4"/>"#)),
+        (
+            "dixon",
+            wrap(r#"<path d="M3 18h18M5 14v8M9 14v8M13 14v8M20 14v8M14 6h6M14 4v4M20 4v4"/>"#),
+        ),
+        (
+            "stat-rows",
+            wrap(r#"<path d="M3 4h13v4H3zM3 10h13v4H3zM3 16h13v4H3zM19 4v16M18 4h4M18 20h4"/>"#),
+        ),
+    ]
+}
+
+fn source_action_icons() -> Vec<(&'static str, String)> {
+    vec![
+        (
+            "frequency",
+            wrap(r#"<path d="M3 3v18h18M6 20v-5h3v5M11 20V6h3v14M16 20V11h3v9"/>"#),
+        ),
+        (
+            "whole-stat",
+            wrap(r#"<path d="M3 3h18v18H3zM3 9h18M9 3v18M14 12h5l-4 6h4"/>"#),
+        ),
+        (
+            "compare-stat",
+            wrap(r#"<path d="M3 4h7v16H3zM14 4h7v16h-7zM4 12h5M15 9h5M4 16h5M15 15h5"/>"#),
+        ),
+        (
+            "summary-stat",
+            wrap(r#"<path d="M3 3h18v18H3zM5 8l3-3 3 3M5 18v-6h4v6M13 18l3-6 3 6"/>"#),
+        ),
+        ("setz", wrap(r#"<path d="M5 5h14L5 19h14"/>"#)),
+        ("setlabel", wrap(r#"<path d="M3 6h18M12 6v15M8 21h8"/>"#)),
+        (
+            "setx-error",
+            wrap(r#"<path d="M5 5l14 14M19 5L5 19M2 12h20M2 9v6M22 9v6"/>"#),
+        ),
+        (
+            "sety-error",
+            wrap(r#"<path d="M5 4l7 8 7-8M12 12v10M3 2h18M3 1v4M21 1v4"/>"#),
+        ),
+        (
+            "export-svg",
+            wrap(r#"<path d="M4 3h11l5 5v13H4zM15 3v5h5M7 17l3-5 3 5 3-5M7 19h10"/>"#),
+        ),
+        (
+            "export-pdf",
+            wrap(r#"<path d="M4 3h11l5 5v13H4zM15 3v5h5M7 18c5-7 8-8 6-7s-2 8-6 7z"/>"#),
+        ),
+        (
+            "export-png",
+            wrap(r#"<path d="M4 3h11l5 5v13H4zM15 3v5h5M6 18l4-5 3 3 3-5 2 7z"/>"#),
+        ),
+        (
+            "export-tiff",
+            wrap(r#"<path d="M4 3h11l5 5v13H4zM15 3v5h5M7 11h10M12 11v8M9 19h6"/>"#),
+        ),
+        (
+            "export-csv",
+            wrap(r#"<path d="M4 3h11l5 5v13H4zM15 3v5h5M7 12h10M7 16h10M10 10v9M14 10v9"/>"#),
+        ),
+        ("window-min", wrap(r#"<path d="M3 4h18v16H3zM7 16h10"/>"#)),
+        ("window-max", wrap(r#"<path d="M3 4h18v16H3zM7 8h10v8H7z"/>"#)),
+        ("window-restore", wrap(r#"<path d="M7 3h14v14M3 7h14v14H3z"/>"#)),
+        (
+            "window-show",
+            wrap(r#"<path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>"#),
+        ),
+        (
+            "window-hide",
+            wrap(r#"<path d="M2 12s4-6 10-6 10 6 10 6-4 6-10 6S2 12 2 12zM3 22L21 2"/>"#),
+        ),
+        ("annotation-text", wrap(r#"<path d="M4 4h16v5M12 4v16M8 20h8M4 4v5"/>"#)),
+        (
+            "annotation-edit",
+            wrap(r#"<path d="M3 4h12M9 4v13M5 17h8M13 19l7-7 2 2-7 7h-2z"/>"#),
+        ),
+    ]
 }

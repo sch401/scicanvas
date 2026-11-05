@@ -133,16 +133,15 @@ pub static TABS: &[Tab] = &[
                 label: "项目",
                 items: &[
                     Big("book.new"),
-                    Smalls(&["note.new", "file.import"]),
-                    Smalls(&["file.open", "file.save"]),
-                    Smalls(&["graph.new", "project.folder.new"]),
+                    Smalls(&["graph.new", "note.new", "project.folder.new"]),
+                    Smalls(&["file.open", "file.save", "file.import"]),
                 ],
             },
             Group {
                 label: "编辑",
                 items: &[
                     Smalls(&["edit.undo", "edit.redo"]),
-                    Smalls(&["edit.copy", "edit.clear"]),
+                    Smalls(&["edit.copy", "edit.paste", "edit.clear"]),
                 ],
             },
             Group {
@@ -201,7 +200,7 @@ pub static TABS: &[Tab] = &[
         groups: &[
             Group {
                 label: "数据选择",
-                items: &[Smalls(&["analysis.curves"])],
+                items: &[Big("analysis.curves")],
             },
             Group {
                 label: "拟合",
@@ -218,7 +217,7 @@ pub static TABS: &[Tab] = &[
                 items: &[
                     Smalls(&["math.smooth", "math.diff", "math.integ"]),
                     Smalls(&["math.norm", "math.interp", "math.colmath"]),
-                    Smalls(&["math.average", "math.diff_sg", "data.recalc"]),
+                    Smalls(&["math.average", "math.diff_sg"]),
                 ],
             },
             Group {
@@ -274,15 +273,16 @@ pub static TABS: &[Tab] = &[
             Group {
                 label: "选区",
                 items: &[
-                    Smalls(&["edit.copy", "edit.clear"]),
+                    Smalls(&["edit.copy", "edit.paste", "edit.clear"]),
                     Smalls(&["edit.find", "edit.replace"]),
                 ],
             },
             Group {
-                label: "列属性",
+                label: "列角色",
                 items: &[
                     Smalls(&["col.setX", "col.setY", "col.setIgnore"]),
-                    Smalls(&["col.setXError", "col.setYError"]),
+                    Smalls(&["col.setXError", "col.setYError", "col.setZ"]),
+                    Smalls(&["col.setLabel"]),
                 ],
             },
             Group {
@@ -295,6 +295,7 @@ pub static TABS: &[Tab] = &[
                     Big("col.props"),
                     Big("col.setvalues"),
                     Big("col.fill"),
+                    Smalls(&["data.recalc"]),
                     Smalls(&["col.insert", "col.delete", "col.clear"]),
                     Smalls(&["col.left", "col.right"]),
                 ],
@@ -344,12 +345,12 @@ pub static TABS: &[Tab] = &[
             },
             Group {
                 label: "图例与标签",
-                items: &[Big("graph.legend"), Big("graph.labels")],
+                items: &[Big("graph.legend"), Big("graph.labels"), Smalls(&["graph.legend.auto"])],
             },
             Group {
                 label: "标注",
                 items: &[
-                    Smalls(&["graph.text.add", "graph.text.manage", "graph.legend.auto"]),
+                    Smalls(&["graph.text.add", "graph.text.manage"]),
                     Smalls(&["graph.shape.line", "graph.shape.arrow"]),
                     Smalls(&["graph.shape.rect", "graph.shape.ellipse"]),
                 ],
@@ -412,17 +413,25 @@ const QAT: &[&str] = &[
 const BACKSTAGE_NAV: &[&str] = &[
     "project.new",
     "book.new",
-    "file.import",
+    "book.template.open",
+    "",
     "file.open",
+    "file.recent",
     "file.save",
     "file.saveas",
+    "file.import",
+    "",
     "graph.export",
-    "graph.export_png",
     "graph.export_pdf",
+    "graph.export_png",
+    "graph.export_tiff",
+    "graph.export_batch",
+    "project.export_xlsx",
     "book.export_csv",
-    "project.reset",
+    "note.export",
+    "",
     "help.show",
-    "app.quit",
+    "help.about",
 ];
 
 pub struct PaletteState {
@@ -1001,6 +1010,9 @@ fn small_button(
 /// 图型命令的悬停说明：较大的缩略图、用途与数据排列说明，以及“打开示例”。
 fn plot_hover(ui: &mut egui::Ui, app: &SciApp, c: &Command, clicked: &mut Option<&'static str>) {
     ui.set_max_width(300.0);
+    if app.active_graph_id().is_some() {
+        ui.strong("将当前图形改为此类型");
+    }
     ui.strong(c.label);
     if let Some(example) = crate::examples::ALL.iter().find(|e| e.plot_command == c.id) {
         let kind = c.id.split('.').nth(1).unwrap_or("line");
@@ -1031,7 +1043,12 @@ fn gallery_tile(
     );
     let width = (label.size().x + 12.0).max(72.0);
     let (rect, resp) = ui.allocate_exact_size(vec2(width, 62.0), if enabled { Sense::click() } else { Sense::hover() });
-    button_bg(ui, rect, &resp, enabled, false, pal);
+    let checked = app.active_layer().is_some_and(|layer| {
+        crate::examples::ALL
+            .iter()
+            .any(|e| e.plot_command == c.id && e.kind == layer.plot_type)
+    });
+    button_bg(ui, rect, &resp, enabled, checked, pal);
     let kind = c.id.split('.').nth(1).unwrap_or("line");
     let thumb_rect = Rect::from_center_size(egui::pos2(rect.center().x, rect.top() + 24.0), vec2(58.0, 40.0));
     icons::thumb(kind).tint(dim(enabled, pal)).paint_at(ui, thumb_rect);
@@ -1153,16 +1170,22 @@ pub fn backstage(
                 st.backstage = false;
             }
             ui.add_space(crate::theme::space::S);
-            for id in BACKSTAGE_NAV {
-                if let Some(c) = commands::find(id) {
-                    let enabled = (c.when)(app).is_ok();
-                    let r = nav_item(ui, c.icon, c.label, c.keys, enabled, pal);
-                    if enabled && r.clicked() {
-                        st.backstage = false;
-                        *clicked = Some(c.id);
+            egui::ScrollArea::vertical().show(ui, |ui| {
+                for id in BACKSTAGE_NAV {
+                    if id.is_empty() {
+                        ui.separator();
+                        continue;
+                    }
+                    if let Some(c) = commands::find(id) {
+                        let enabled = (c.when)(app).is_ok();
+                        let r = nav_item(ui, c.icon, c.label, c.keys, enabled, pal);
+                        if enabled && r.clicked() {
+                            st.backstage = false;
+                            *clicked = Some(c.id);
+                        }
                     }
                 }
-            }
+            });
         });
     egui::CentralPanel::default()
         .frame(
@@ -1237,7 +1260,12 @@ pub fn backstage(
                     .num_columns(2)
                     .spacing([18.0, 4.0])
                     .show(ui, |ui| {
-                        for c in commands::commands().iter().filter(|c| !c.keys.is_empty()) {
+                        let mut shortcuts: Vec<_> = commands::commands()
+                            .iter()
+                            .filter(|c| !commands::shortcut_bindings(c).is_empty())
+                            .collect();
+                        shortcuts.sort_by_key(|c| (c.group, c.label));
+                        for c in shortcuts {
                             ui.label(RichText::new(c.keys).monospace());
                             ui.label(c.label);
                             ui.end_row();
@@ -1309,21 +1337,27 @@ fn project_card(ui: &mut egui::Ui, icon: &str, name: &str, sub: &str, dark: bool
 }
 
 /// 命令面板（Ctrl+K）：输入关键词，方向键选择，回车执行。
-pub fn palette(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palette, clicked: &mut Option<&'static str>) {
-    let Some(ps) = st.palette.as_mut() else { return };
-    let q = ps.query.trim().to_lowercase();
+fn palette_commands(query: &str, app: &SciApp) -> Vec<&'static Command> {
+    let q = query.trim().to_lowercase();
     let mut list: Vec<&'static Command> = commands::commands()
         .iter()
         .filter(|c| {
             q.is_empty()
                 || c.label.to_lowercase().contains(&q)
-                || c.group.contains(&q)
-                || c.kw.contains(&q)
-                || c.id.contains(&q)
+                || c.group.to_lowercase().contains(&q)
+                || c.kw.to_lowercase().contains(&q)
+                || c.id.to_lowercase().contains(&q)
         })
         .collect();
     // 可用的命令排在前面
     list.sort_by_key(|c| (c.when)(app).is_err());
+    list
+}
+
+pub fn palette(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palette, clicked: &mut Option<&'static str>) {
+    let Some(ps) = st.palette.as_mut() else { return };
+    let list = palette_commands(&ps.query, app);
+    let previous = ps.sel;
     if !list.is_empty() {
         ps.sel = ps.sel.min(list.len() - 1);
     }
@@ -1346,6 +1380,7 @@ pub fn palette(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palett
     if down && ps.sel + 1 < list.len() {
         ps.sel += 1;
     }
+    let mut scroll = up || down || previous != ps.sel;
     let mut run: Option<&'static str> = None;
     if enter {
         if let Some(c) = list.get(ps.sel) {
@@ -1375,9 +1410,10 @@ pub fn palette(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palett
             }
             if te.changed() {
                 ps.sel = 0;
+                scroll = true;
             }
             ui.separator();
-            egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
+            let _scroll_output = egui::ScrollArea::vertical().max_height(360.0).show(ui, |ui| {
                 if list.is_empty() {
                     ui.label(RichText::new("没有找到匹配的命令").color(pal.weak));
                 }
@@ -1387,7 +1423,9 @@ pub fn palette(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palett
                     let (rect, resp) = ui.allocate_exact_size(vec2(ui.available_width(), 38.0), Sense::click());
                     if selected {
                         ui.painter().rect_filled(rect, 5.0, pal.accent);
-                        resp.scroll_to_me(None);
+                        if scroll {
+                            resp.scroll_to_me(None);
+                        }
                     } else if resp.hovered() {
                         ui.painter().rect_filled(rect, 5.0, pal.hover);
                     }
@@ -1440,6 +1478,13 @@ pub fn palette(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palett
                     }
                 }
             });
+            #[cfg(test)]
+            ctx.data_mut(|d| {
+                d.insert_temp(
+                    egui::Id::new("palette-scroll"),
+                    (_scroll_output.state.offset.y, _scroll_output.inner_rect),
+                )
+            });
             ui.add_space(crate::theme::space::XS);
             ui.label(RichText::new("↑ ↓ 选择 · 回车执行 · Esc 关闭").small().color(pal.weak));
         });
@@ -1461,8 +1506,16 @@ pub fn palette(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palett
     }
 }
 
-fn scale_menu(ui: &mut egui::Ui, x: bool, app: &SciApp, clicked: &mut Option<&'static str>) {
-    let label = if x { "X 刻度类型" } else { "Y 刻度类型" };
+pub(crate) fn scale_menu(ui: &mut egui::Ui, x: bool, app: &SciApp, clicked: &mut Option<&'static str>) {
+    let axis = if x { "X" } else { "Y" };
+    let current = app.active_layer().map(|l| {
+        if x {
+            l.effective_x_scale()
+        } else {
+            l.effective_y_scale()
+        }
+    });
+    let label = format!("{axis}：{}", current.map_or("刻度", |s| s.label()));
     ui.add_enabled_ui(
         app.active_layer()
             .is_some_and(|layer| !x || layer.projection.is_cartesian()),
@@ -1483,7 +1536,9 @@ fn scale_menu(ui: &mut egui::Ui, x: bool, app: &SciApp, clicked: &mut Option<&'s
                 }
             });
         },
-    );
+    )
+    .response
+    .on_disabled_hover_text("极坐标角度轴不支持切换刻度类型");
 }
 
 #[cfg(test)]

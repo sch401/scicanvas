@@ -401,3 +401,60 @@ fn capture_u4_status() {
         }
     }
 }
+
+#[test]
+#[ignore = "Explicit menu screenshots"]
+fn capture_u6_menus() {
+    let directory = std::path::PathBuf::from(std::env::var("SCICANVAS_UI_CAPTURE_DIR").unwrap());
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut capture = Capture::new();
+    for theme in [egui::Theme::Light, egui::Theme::Dark] {
+        for menu in ["cell", "column", "graph", "project"] {
+            let ctx = egui::Context::default();
+            crate::theme::install(&ctx);
+            crate::fonts::setup(&ctx);
+            crate::icons::install_loaders(&ctx);
+            ctx.set_theme(theme);
+            let mut app = SciApp::initial(crate::theme::palette(theme));
+            app.active = Some(if menu == "graph" { 2 } else { 1 });
+            app.selection.insert(1, vec!["B".into()]);
+            for _ in 0..8 {
+                capture.app_frame(&ctx, &mut app, vec![]);
+            }
+            let out = capture.app_frame(&ctx, &mut app, vec![]);
+            let at = match menu {
+                "cell" => ctx
+                    .read_response(egui::Id::new(("cell", 1_u64, 1_usize, 0_usize)))
+                    .unwrap()
+                    .rect
+                    .center(),
+                "column" => crate::test_ui::text_rect(&out, "B(Y)").unwrap().center(),
+                "project" => out
+                    .shapes
+                    .iter()
+                    .find_map(|s| match &s.shape {
+                        egui::Shape::Text(t) if t.galley.job.text == "Book1" && t.pos.x < 180. => {
+                            Some(t.pos + egui::vec2(8., 6.))
+                        }
+                        _ => None,
+                    })
+                    .unwrap(),
+                _ => egui::pos2(1050., 400.),
+            };
+            capture.app_frame(&ctx, &mut app, vec![egui::Event::PointerMoved(at)]);
+            for pressed in [true, false] {
+                capture.app_frame(
+                    &ctx,
+                    &mut app,
+                    vec![egui::Event::PointerButton {
+                        pos: at,
+                        button: egui::PointerButton::Secondary,
+                        pressed,
+                        modifiers: egui::Modifiers::NONE,
+                    }],
+                );
+            }
+            capture.app_capture(&ctx, &mut app, &directory.join(format!("u6-{menu}-{theme:?}.png")));
+        }
+    }
+}

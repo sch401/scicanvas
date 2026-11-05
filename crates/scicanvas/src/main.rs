@@ -14,6 +14,7 @@ mod fonts;
 mod icons;
 mod markdown;
 mod mdi;
+mod menus;
 mod plot;
 mod ribbon;
 mod sheet;

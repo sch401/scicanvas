@@ -102,7 +102,7 @@ fn sheet_keys_only_apply_after_clicking_the_sheet_not_the_explorer() {
 
 #[test]
 fn explorer_new_table_and_graph_buttons_use_folder_and_history() {
-    for (label, command) in [("数据表", "book.new"), ("图形", "graph.new")] {
+    for (label, command) in [("工作簿", "book.new"), ("图形", "graph.new")] {
         let mut app = app();
         let folder = app.project.add_folder(None).unwrap();
         app.explorer_target = Some(folder);
@@ -431,4 +431,42 @@ fn deleted_workbook_returns_and_new_windows_are_cleaned_up() {
     assert_ne!(app.active, Some(id));
     app.run_command("edit.redo");
     assert_eq!(app.open.get(&id), Some(&true));
+}
+
+#[test]
+fn u6_project_destination_submenu_moves_without_losing_target() {
+    let mut app = app();
+    let folder = app.project.add_folder(None).unwrap();
+    app.project.rename_project_item(folder, "目标目录").unwrap();
+    let before = app.project.clone();
+    let mut ui = ExplorerUi::new();
+    let at = ui.at(&mut app, "Book1");
+    ui.frame(&mut app, vec![egui::Event::PointerMoved(at)]);
+    for pressed in [true, false] {
+        ui.frame(
+            &mut app,
+            vec![egui::Event::PointerButton {
+                pos: at,
+                button: egui::PointerButton::Secondary,
+                pressed,
+                modifiers: egui::Modifiers::NONE,
+            }],
+        );
+    }
+    let out = ui.frame(&mut app, vec![]);
+    let at = crate::test_ui::text_rect(&out, "移动到").unwrap().center();
+    ui.click(&mut app, at);
+    let out = ui.frame(&mut app, vec![]);
+    let at = out
+        .shapes
+        .iter()
+        .filter_map(|s| match &s.shape {
+            egui::Shape::Text(t) if t.galley.job.text == "目标目录" => Some(t.pos + egui::vec2(4., 4.)),
+            _ => None,
+        })
+        .max_by(|a, b| a.x.total_cmp(&b.x))
+        .unwrap();
+    ui.click(&mut app, at);
+    assert_eq!(app.project.folder_of(1), Some(folder));
+    roundtrip(&mut app, &before);
 }
