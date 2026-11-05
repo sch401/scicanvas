@@ -44,7 +44,7 @@ pub(crate) enum Keys {
     Modal,
 }
 
-/// 普通面板不接管键盘；模态 Enter 只触发主按钮，危险按钮需要点击或先获得焦点。
+/// Enter / Esc 只作用于帧开始时拥有焦点的窗口；无焦点时只作用于指针所在窗口。危险按钮仍需点击。
 pub(crate) fn actions(
     ui: &mut egui::Ui,
     items: &[(ActionKind, &str)],
@@ -109,7 +109,7 @@ pub(crate) fn actions(
             }
         }
     });
-    if keys == Keys::Modal && selected.is_none() {
+    if keys == Keys::Modal && selected.is_none() && owns_keyboard(ui) {
         let frame = ui.ctx().cumulative_pass_nr();
         let submit = ui
             .ctx()
@@ -250,7 +250,32 @@ pub(crate) fn mark_multiline(response: &egui::Response) {
 pub(crate) fn multiline(ui: &mut egui::Ui, text: &mut String) -> egui::Response {
     multiline_editor(ui, egui::TextEdit::multiline(text).desired_rows(2))
 }
+pub(crate) fn begin_keyboard_frame(ctx: &egui::Context) {
+    let frame = ctx.cumulative_pass_nr();
+    let focus = ctx.memory(|memory| memory.focused());
+    ctx.data_mut(|data| data.insert_temp(egui::Id::new("dialog-frame-focus"), (frame, focus)));
+}
+pub(super) fn owns_keyboard(ui: &egui::Ui) -> bool {
+    let focus = ui
+        .ctx()
+        .data(|data| data.get_temp::<(u64, Option<egui::Id>)>(egui::Id::new("dialog-frame-focus")))
+        .and_then(|(_, focus)| focus);
+    match focus {
+        Some(id) => ui.ctx().read_response(id).is_some_and(|r| r.layer_id == ui.layer_id()),
+        None => ui
+            .ctx()
+            .pointer_hover_pos()
+            .is_some_and(|p| ui.ctx().layer_id_at(p) == Some(ui.layer_id())),
+    }
+}
 pub(super) fn prepare_submission(ctx: &egui::Context) {
+    let frame = ctx.cumulative_pass_nr();
+    if ctx
+        .data(|data| data.get_temp::<(u64, Option<egui::Id>)>(egui::Id::new("dialog-frame-focus")))
+        .is_none_or(|v| v.0 != frame)
+    {
+        begin_keyboard_frame(ctx);
+    }
     let control = ctx.input_mut(|input| input.consume_key(egui::Modifiers::CTRL, egui::Key::Enter));
     let enter = control || ctx.input(|input| input.key_pressed(egui::Key::Enter));
     let frame = ctx.cumulative_pass_nr();

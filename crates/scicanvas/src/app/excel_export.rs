@@ -30,7 +30,7 @@ impl SciApp {
             }
             Err(error) => {
                 self.status_err(format!("导出失败：{error}"));
-                self.dialog_error = Some(self.status.to_string());
+                self.record_dialog_error(self.status.to_string());
                 false
             }
         }

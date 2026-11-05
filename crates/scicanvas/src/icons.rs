@@ -524,7 +524,7 @@ pub fn icon(name: &str, dark: bool) -> egui::Image<'static> {
 pub fn thumb(kind: &str) -> egui::Image<'static> {
     let key = (format!("thumb-{}", kind), false);
     debug_assert!(cache().contains_key(&key), "Missing plot thumbnail: {kind}");
-    let bytes = *cache().get(&key).expect("registered plot thumbnail");
+    let bytes = *cache().get(&key).unwrap_or(&cache()[&("thumb-line".into(), false)]);
     egui::Image::from_bytes(format!("bytes://scicanvas/thumb/{}.svg", kind), bytes)
 }
 

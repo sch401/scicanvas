@@ -160,7 +160,7 @@ impl SciApp {
             self.set_status(status_kind, text);
         };
         if !errors.is_empty() {
-            self.dialog_error = Some(self.status.to_string());
+            self.record_dialog_error(self.status.to_string());
         }
         errors.is_empty()
     }

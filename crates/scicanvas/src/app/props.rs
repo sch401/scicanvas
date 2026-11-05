@@ -86,10 +86,6 @@ impl SciApp {
                     Some("偏移与瀑布")
                 } else if !g.projection.is_cartesian() {
                     Some("极坐标")
-                } else if matches!(g.plot_type, PlotType::ColorScatter | PlotType::BubbleColor)
-                    || g.styles().values().any(|s| s.color_column.is_some())
-                {
-                    Some("颜色映射")
                 } else {
                     None
                 };
@@ -102,9 +98,13 @@ impl SciApp {
                             edit_group(&ui.checkbox(degrees, "度（取消为弧度）"), history_group);
                             ui.end_row();
                         }
-                        if title == "颜色映射" {
-                            color_mapping(ui, g, history_group);
-                        }
+                    });
+                }
+                if matches!(g.plot_type, PlotType::ColorScatter | PlotType::BubbleColor)
+                    || g.styles().values().any(|s| s.color_column.is_some())
+                {
+                    props_section(ui, "color-mapping", "颜色映射", true, |ui| {
+                        color_mapping(ui, g, history_group)
                     });
                 }
                 props_section(ui, "appearance", "外观", false, |ui| {
@@ -190,14 +190,11 @@ fn color_mapping(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, group: 
         ui.label("位置 X / Y");
         ui.horizontal(|ui| {
             for value in pos {
-                edit_group(&ui.add(egui::DragValue::new(value).speed(0.01)), group);
+                edit_group(&ui.add(egui::DragValue::new(value).range(0.0..=1.0).speed(0.01)), group);
             }
         });
         ui.end_row();
     }
-    ui.label("刻度数字格式");
-    dialogs::hint(ui, "自动");
-    ui.end_row();
     if scale != before {
         g.color_scale = if scale == ColorScale::default() {
             None
@@ -1609,5 +1606,73 @@ mod histogram_tests {
         let output = harness.frame(&mut app, vec![egui::Event::Text("0".into())]);
         assert!(crate::test_ui::find_text(&output, "区间数需为 1–10000，宽度为正数，起点小于终点。").is_some());
         assert_eq!(app.project, before_invalid);
+    }
+}
+
+#[cfg(test)]
+mod review_tests {
+    use super::*;
+    #[test]
+    fn r16_color_mapping_is_available_with_histogram_and_polar_settings() {
+        for kind in [PlotType::Histogram, PlotType::PolarScatter] {
+            let ctx = egui::Context::default();
+            crate::fonts::setup(&ctx);
+            ctx.style_mut(|s| s.animation_time = 0.0);
+            let mut app = SciApp::initial(crate::theme::palette(egui::Theme::Light));
+            let layer = app.project.graph_mut(2).unwrap().first_layer_mut();
+            layer.set_plot_type(kind).unwrap();
+            layer.edit_styles(|styles| styles.entry("B".into()).or_default().color_column = Some("C".into()));
+            app.props_for = Some(2);
+            let mut h = crate::test_ui::Harness::new(
+                ctx,
+                Some(egui::vec2(1600., 2600.)),
+                |a: &mut SciApp, c: &egui::Context| a.props_window(c),
+            );
+            for _ in 0..5 {
+                h.frame(&mut app, vec![]);
+            }
+            let out = h.frame(&mut app, vec![]);
+            assert!(crate::test_ui::find_text(
+                &out,
+                if kind == PlotType::Histogram {
+                    "直方图"
+                } else {
+                    "极坐标"
+                }
+            )
+            .is_some());
+            assert!(crate::test_ui::find_text(&out, "颜色映射").is_some());
+            assert!(crate::test_ui::find_text(&out, "刻度数字格式").is_none());
+            h.click_text(&mut app, &out, "手动");
+            let out = h.frame(&mut app, vec![]);
+            let at = crate::test_ui::text_rect(&out, "0.80")
+                .or_else(|| crate::test_ui::text_rect(&out, "0.8"))
+                .unwrap()
+                .center();
+            h.click(&mut app, at);
+            h.frame(
+                &mut app,
+                vec![egui::Event::Key {
+                    key: egui::Key::A,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers::CTRL,
+                }],
+            );
+            h.frame(&mut app, vec![egui::Event::Text("2".into())]);
+            h.key(egui::Key::Enter, |c| app.props_window(c));
+            let pos = app
+                .project
+                .graph(2)
+                .unwrap()
+                .first_layer()
+                .color_scale
+                .as_ref()
+                .unwrap()
+                .position
+                .unwrap();
+            assert!(pos.into_iter().all(|p| (0.0..=1.0).contains(&p)));
+        }
     }
 }

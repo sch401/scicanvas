@@ -513,9 +513,16 @@ pub(super) fn graph(commands: &mut Vec<Command>) {
 
 pub(super) fn examples(commands: &mut Vec<Command>) {
     commands.extend(crate::examples::ALL.iter().map(|example| {
+        let name = example.kind.label();
+        let gap = if name.starts_with(|c: char| c.is_ascii_alphabetic()) {
+            " "
+        } else {
+            ""
+        };
         c(
             example.command,
-            example.label,
+            // The command registry is initialized once; its finite label set lives with it.
+            Box::leak(format!("打开{gap}{name}示例").into_boxed_str()),
             "book",
             "",
             "图型示例",

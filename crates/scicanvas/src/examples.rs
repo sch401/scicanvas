@@ -7,7 +7,6 @@ pub struct Example {
     pub kind: PlotType,
     pub plot_command: &'static str,
     pub command: &'static str,
-    pub label: &'static str,
     pub description: &'static str,
     pub bytes: &'static [u8],
     pub run: fn(&mut SciApp),
@@ -19,10 +18,6 @@ macro_rules! example {
             kind: PlotType::$kind,
             plot_command: concat!("plot.", $id),
             command: concat!("example.", $id),
-            label: match PlotType::$kind {
-                PlotType::QQ => "打开 Q-Q 图示例",
-                _ => concat!("打开 ", $file, " 示例"),
-            },
             description: $description,
             bytes: include_bytes!(concat!("../../../samples/", $file, ".scv")),
             run: |app| app.open_plot_example(PlotType::$kind),

@@ -85,10 +85,18 @@ impl<'open> SettingsWindow<'open> {
             if let Some(size) = dock_size {
                 ui.set_min_size(size);
             }
-            egui::ScrollArea::vertical()
+            let result = egui::ScrollArea::vertical()
                 .auto_shrink([false, dock_size.is_none()])
                 .show(ui, contents)
-                .inner
+                .inner;
+            if ctx.data(|d| d.get_temp::<bool>(egui::Id::new("rendering-dialog-window"))) == Some(true)
+                && super::widgets::owns_keyboard(ui)
+                && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
+            {
+                let frame = ctx.cumulative_pass_nr();
+                ctx.data_mut(|d| d.insert_temp(egui::Id::new("dialog-window-escape"), frame));
+            }
+            result
         });
         if let Some(out) = &out {
             Self::window_header(ctx, id, out, docked, dock_size);

@@ -457,7 +457,7 @@ impl SciApp {
                     .map(|b| b.columns[col].key.clone())
                     .unwrap_or_default();
                 self.status_ok(format!(
-                    "已按 {} 列{}排序来源数据，保留 {} 个随机数列的原顺序",
+                    "已按 {} 列{}排序来源数据，保留 {} 个计算结果列（如拟合曲线）的原顺序",
                     key,
                     if ascending { "升序" } else { "降序" },
                     self.project
