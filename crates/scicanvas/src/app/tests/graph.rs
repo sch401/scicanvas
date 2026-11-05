@@ -858,6 +858,7 @@ fn area_opacity_slider_is_an_undoable_property_edit() {
     let id = app.active.unwrap();
     app.props_for = Some(id);
     editor_frame(&mut app, &ctx, vec![], true);
+    open_property_section(&mut app, &ctx, "外观");
     let output = editor_frame(&mut app, &ctx, vec![], true);
     let y = output
         .shapes
@@ -907,6 +908,7 @@ fn data_label_command_and_actual_checkbox_are_undoable() {
     roundtrip(&mut app, &before);
     app.props_for = Some(2);
     editor_frame(&mut app, &ctx, vec![], true);
+    open_property_section(&mut app, &ctx, "标注");
     let output = editor_frame(&mut app, &ctx, vec![], true);
     let at = crate::test_ui::text_rect(&output, "数据标签")
         .map(|rect| rect.center())
@@ -950,6 +952,7 @@ fn error_role_commands_and_visibility_control_are_undoable() {
     roundtrip(&mut app, &before);
     app.props_for = Some(2);
     editor_frame(&mut app, &ctx, vec![], true);
+    open_property_section(&mut app, &ctx, "标注");
     let output = editor_frame(&mut app, &ctx, vec![], true);
     let at = crate::test_ui::text_rect(&output, "显示 X / Y 误差")
         .map(|rect| rect.center())
@@ -1074,6 +1077,7 @@ fn layer_placement_control_is_undoable() {
     app.props_for = Some(2);
     let before = app.project.clone();
     editor_frame(&mut app, &ctx, vec![], true);
+    open_property_section(&mut app, &ctx, "页面与图层");
     let output = editor_frame(&mut app, &ctx, vec![], true);
     let at = crate::test_ui::find_text(&output, "自定义图层位置")
         .map(|pos| pos + egui::vec2(4.0, 4.0))
@@ -1417,6 +1421,10 @@ fn reference_line_properties_add_and_remove_live_with_history() {
     .with_step(0.02);
     harness.frame(&mut app, vec![]);
     let output = harness.frame(&mut app, vec![]);
+    harness.click_text(&mut app, &output, "坐标轴");
+    let output = harness.frame(&mut app, vec![]);
+    harness.click_text(&mut app, &output, "标注");
+    let output = harness.frame(&mut app, vec![]);
     harness.click_text(&mut app, &output, "＋水平");
     assert_eq!(app.project.graph(2).unwrap().first_layer().reference_lines.len(), 1);
     roundtrip(&mut app, &before);
@@ -1702,7 +1710,7 @@ fn supplement_builder_color_choice_defaults_then_preserves_manual_origin() {
     assert_eq!(app.plot_draft.as_ref().unwrap().plot_type, PlotType::ColorScatter);
     assert_eq!(app.plot_draft.as_ref().unwrap().color_map, ColorMap::Viridis);
     let output = harness.frame(&mut app, vec![]);
-    harness.click_text(&mut app, &output, "默认");
+    harness.click_text(&mut app, &output, "分类色（Origin）");
     for _ in 0..3 {
         harness.frame(&mut app, vec![]);
     }
@@ -1719,4 +1727,78 @@ fn supplement_builder_color_choice_defaults_then_preserves_manual_origin() {
     app.active = Some(id);
     app.open_plot_builder();
     assert_eq!(app.plot_draft.as_ref().unwrap().color_map, ColorMap::Origin);
+}
+
+fn open_property_section(app: &mut SciApp, ctx: &egui::Context, title: &str) {
+    ctx.style_mut(|style| style.animation_time = 0.0);
+    for label in ["坐标轴", title] {
+        let output = editor_frame(app, ctx, vec![], true);
+        let at = crate::test_ui::text_rect(&output, label).unwrap().center();
+        for pressed in [true, false] {
+            editor_frame(
+                app,
+                ctx,
+                vec![egui::Event::PointerMoved(at), crate::test_ui::button(at, pressed)],
+                true,
+            );
+        }
+    }
+    editor_frame(app, ctx, vec![], true);
+}
+
+#[test]
+fn u3_color_mapping_controls_are_saved_and_undoable() {
+    use scicanvas_core::{colormap::ColorMap, project_file, scene};
+    let mut app = app();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["A".into(), "B".into(), "C".into()]);
+    app.run_command("plot.color_scatter");
+    let gid = app.active.unwrap();
+    assert!(app.project.graph(gid).is_some(), "{}", app.status);
+    app.props_for = Some(gid);
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    ctx.style_mut(|style| style.animation_time = 0.0);
+    let mut harness = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1400., 2200.)),
+        |app: &mut SciApp, ctx: &egui::Context| {
+            app.props_window(ctx);
+            app.finish_edit();
+        },
+    );
+    for _ in 0..4 {
+        harness.frame(&mut app, vec![]);
+    }
+    let before = app.project.clone();
+    let out = harness.frame(&mut app, vec![]);
+    harness.click_text(&mut app, &out, "Viridis（连续）");
+    let out = harness.frame(&mut app, vec![]);
+    harness.click_text(&mut app, &out, "分类色（Origin）");
+    assert_eq!(
+        app.project.graph(gid).unwrap().first_layer().color_map,
+        ColorMap::Origin
+    );
+    let after = app.project.clone();
+    app.undo();
+    assert_eq!(app.project, before);
+    app.redo();
+    assert_eq!(app.project, after);
+    assert_eq!(
+        project_file::from_scv(&project_file::to_scv(&app.project).unwrap()).unwrap(),
+        app.project
+    );
+    let has_scale = |app: &SciApp| {
+        scene::layout_page(app.project.graph(gid).unwrap(), &app.project, &[])
+            .objects
+            .iter()
+            .any(|o| o.target == scicanvas_core::scene::ObjectTarget::ColorScale(0))
+    };
+    assert!(has_scale(&app));
+    let out = harness.frame(&mut app, vec![]);
+    harness.click_text(&mut app, &out, "显示色阶条");
+    assert!(!has_scale(&app));
+    let out = harness.frame(&mut app, vec![]);
+    harness.click_text(&mut app, &out, "显示色阶条");
+    assert!(has_scale(&app));
 }
