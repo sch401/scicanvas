@@ -177,3 +177,28 @@ mod history;
 mod import_export;
 mod worksheet;
 mod workspace_tests;
+
+fn dialog_rendered_texts(app: &mut SciApp) -> Vec<String> {
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut harness = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1400., 1000.)),
+        |a: &mut SciApp, c: &egui::Context| a.dialogs(c),
+    );
+    for _ in 0..5 {
+        harness.frame(app, vec![]);
+    }
+    harness
+        .frame(app, vec![])
+        .shapes
+        .into_iter()
+        .filter_map(|shape| {
+            if let egui::Shape::Text(text) = shape.shape {
+                Some(text.galley.job.text.clone())
+            } else {
+                None
+            }
+        })
+        .collect()
+}

@@ -1,7 +1,7 @@
 use super::*;
 
 impl Dialog {
-    pub(super) fn show_png(&mut self, ctx: &egui::Context, pal: &Palette, open: &mut bool, _esc: bool) -> Action {
+    pub(super) fn show_png(&mut self, ctx: &egui::Context, _pal: &Palette, open: &mut bool) -> Action {
         let (dpi, page_mm, is_tiff) = match self {
             Self::Png { dpi, page_mm } => (dpi, page_mm, false),
             Self::Tiff { dpi, page_mm } => (dpi, page_mm, true),
@@ -26,8 +26,8 @@ impl Dialog {
                     px(page_mm.0),
                     px(page_mm.1)
                 ));
-                ui.label(RichText::new("线条图投稿一般用 600 dpi。").small().color(pal.weak));
-                let (ok, cancel) = buttons(ui, "导出…");
+                hint(ui, "线条图投稿一般用 600 dpi。");
+                let (ok, cancel) = buttons(ui, "导出…", Ok(()));
                 if ok {
                     action = if is_tiff {
                         Action::ExportTiff(*dpi)

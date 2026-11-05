@@ -1,13 +1,7 @@
 use super::*;
 
 impl Dialog {
-    pub(super) fn show_fit_report(
-        &mut self,
-        ctx: &egui::Context,
-        pal: &Palette,
-        open: &mut bool,
-        _esc: bool,
-    ) -> Action {
+    pub(super) fn show_fit_report(&mut self, ctx: &egui::Context, pal: &Palette, open: &mut bool) -> Action {
         let Self::FitReport(reports) = self else { unreachable!() };
         let mut action = Action::None;
         window(ctx, "拟合结果").open(open).show(ctx, |ui| {
@@ -45,11 +39,7 @@ impl Dialog {
                         ui.add_space(10.0);
                     }
                 });
-            ui.label(
-                RichText::new("拟合曲线和逐点残差已写入工作簿，拟合曲线加到图形中。")
-                    .small()
-                    .color(pal.weak),
-            );
+            hint(ui, "拟合曲线和逐点残差已写入工作簿，拟合曲线加到图形中。");
             ui.add_space(10.0);
             ui.separator();
             ui.add_space(4.0);

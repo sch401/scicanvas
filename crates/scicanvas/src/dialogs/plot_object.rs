@@ -69,7 +69,7 @@ impl PlotObjectEditor {
                                 }
                             });
                         let text = g.page.text_mut(id).unwrap();
-                        egui::Grid::new("text-object-properties").num_columns(2).show(ui, |ui| {
+                        form(ui, "text-object-properties", |ui| {
                             ui.label("内容");
                             let r = scientific_text_multiline(ui, &mut text.text, &mut text.rich);
                             if edit.focus && edit.target == T::Text(id) {
@@ -156,7 +156,7 @@ impl PlotObjectEditor {
 fn shape_properties(ui: &mut egui::Ui, shape: &mut scicanvas_core::page::ShapeObject, group: &mut Option<egui::Id>) {
     use scicanvas_core::page::ShapeKind;
     let mut candidate = *shape;
-    egui::Grid::new("shape-properties").num_columns(2).show(ui, |ui| {
+    form(ui, "shape-properties", |ui| {
         ui.label("类型");
         egui::ComboBox::from_id_salt("shape-kind")
             .selected_text(candidate.kind.label())

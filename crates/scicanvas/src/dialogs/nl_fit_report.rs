@@ -7,7 +7,6 @@ impl Dialog {
         ctx: &egui::Context,
         pal: &Palette,
         open: &mut bool,
-        _esc: bool,
         project: &scicanvas_core::Project,
     ) -> Action {
         let Self::NlFitReport(reports) = self else {
@@ -15,7 +14,7 @@ impl Dialog {
         };
         let mut action = Action::None;
         window(ctx, "非线性拟合结果")
-            .default_width(520.0)
+            .default_width(crate::theme::dialog::MEDIUM)
             .open(open)
             .show(ctx, |ui| {
                 egui::ScrollArea::both()
@@ -47,12 +46,12 @@ impl Dialog {
                                 ui.label(RichText::new(format!("约束：{c}")).small().color(pal.weak));
                             }
                             if !f.converged {
-                                ui.colored_label(
-                                    pal.error,
-                                    format!(
+                                field_error(
+                                    ui,
+                                    &(format!(
                                         "迭代 {} 次后停止，尚未收敛；可调整初值、参数约束或检查数据",
                                         f.iterations
-                                    ),
+                                    )),
                                 );
                             }
                             for warning in &f.warnings {
@@ -100,7 +99,7 @@ impl Dialog {
                     if ui.add(plain("置信/预测带")).clicked() {
                         action = Action::NlFitBands(reports.clone());
                     }
-                    ui.label(RichText::new("95%").small().color(pal.weak));
+                    hint(ui, "95%");
                 });
                 ui.horizontal_wrapped(|ui| {
                     center_buttons(ui, 2);

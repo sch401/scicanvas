@@ -228,6 +228,7 @@ pub struct SciApp {
     object_editor: Option<ObjectEditor>,
     plot_epoch: u64,
     active_layers: HashMap<u64, usize>,
+    dialog_error: Option<String>,
     pub(crate) plot_draft: Option<scicanvas_core::plotspec::PlotSpec>,
     pub(crate) status: String,
     pub(crate) show_explorer: bool,
@@ -390,6 +391,7 @@ impl SciApp {
             explorer_focus: false,
             props_for: None,
             active_layers: HashMap::new(),
+            dialog_error: None,
             plot_draft: None,
             status: String::new(),
             show_explorer: true,
@@ -1126,6 +1128,7 @@ impl SciApp {
             return;
         }
         let Some(c) = commands::find(id) else { return };
+        self.dialog_error = None;
         self.pending_repaint = true;
         self.finish_edit();
         match (c.when)(self) {
@@ -1216,6 +1219,7 @@ impl SciApp {
                 None
             }
             Err(error) => {
+                self.dialog_error = Some(error.clone());
                 self.status = error.clone();
                 if self.edit_abort.is_none() {
                     self.edit_abort = Some(EditAbort::Failed(error));
@@ -2103,7 +2107,7 @@ impl SciApp {
         if let Some(error) = self.save_error.clone() {
             let choice = modal(ctx, "保存失败", |ui| {
                 ui.colored_label(self.pal.error, error);
-                actions(ui, &[(Primary, "知道了")], dialogs::Keys::Modal)
+                actions(ui, &[(Primary, "知道了")], dialogs::Keys::Modal, Ok(()))
             })
             .flatten();
             if choice.is_some() || ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)) {
@@ -2123,6 +2127,7 @@ impl SciApp {
                     ui,
                     &[(Primary, "保存"), (Danger, "不保存"), (Plain, "取消")],
                     dialogs::Keys::Modal,
+                    Ok(()),
                 )
             })
             .flatten();
@@ -2157,6 +2162,7 @@ impl SciApp {
                     ui,
                     &[(Primary, "恢复"), (Danger, "放弃这份备份"), (Plain, "稍后")],
                     dialogs::Keys::Modal,
+                    Ok(()),
                 )
             })
             .flatten();
@@ -2467,7 +2473,12 @@ impl SciApp {
         let choice = dialogs::modal(ctx, "正在完成", |ui| {
             ui.spinner();
             ui.label("正在完成自动备份和恢复文件清理…");
-            dialogs::actions(ui, &[(dialogs::ActionKind::Plain, "返回项目")], dialogs::Keys::Modal)
+            dialogs::actions(
+                ui,
+                &[(dialogs::ActionKind::Plain, "返回项目")],
+                dialogs::Keys::Modal,
+                Ok(()),
+            )
         })
         .flatten();
         if choice.is_some() {

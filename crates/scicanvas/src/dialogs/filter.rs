@@ -88,7 +88,7 @@ impl FilterDialog {
             if let Some(error) = &self.error {
                 ui.colored_label(ui.visuals().error_fg_color, error);
             }
-            let (ok, cancel) = buttons(ui, "应用");
+            let (ok, cancel) = buttons(ui, "应用", Ok(()));
             if ok {
                 match self.editor.rule() {
                     Ok(rule) => {

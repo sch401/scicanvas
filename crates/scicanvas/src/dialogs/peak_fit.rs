@@ -86,12 +86,11 @@ impl PeakFitEditor {
         });
         self.error = result.err();
     }
-    pub fn show(&mut self, ctx: &egui::Context, pal: &Palette, open: &mut bool) -> Action {
-        let mut action = Action::None;
-        window(ctx, "多峰拟合").default_width(660.).open(open).show(ctx, |ui| {
-            let before = (self.shape, self.count, self.baseline);
-            ui.add_enabled_ui(self.target.is_none(), |ui| {
-                ui.horizontal(|ui| {
+    fn model_form(&mut self, ui: &mut egui::Ui) {
+        let before = (self.shape, self.count, self.baseline);
+        form(ui, "peak-model", |f| {
+            f.row("峰形", |ui| {
+                ui.add_enabled_ui(self.target.is_none(), |ui| {
                     egui::ComboBox::from_id_salt("peak-shape")
                         .selected_text(self.shape.name())
                         .show_ui(ui, |ui| {
@@ -99,10 +98,22 @@ impl PeakFitEditor {
                                 ui.selectable_value(&mut self.shape, shape, shape.name());
                             }
                         });
-                    ui.label("峰数");
-                    ui.add(egui::DragValue::new(&mut self.count).range(1..=10));
+                });
+            });
+            f.row("峰数", |ui| {
+                ui.add_enabled(
+                    self.target.is_none(),
+                    egui::DragValue::new(&mut self.count).range(1..=10),
+                );
+            });
+            f.row("基线", |ui| {
+                ui.add_enabled_ui(self.target.is_none(), |ui| {
                     egui::ComboBox::from_id_salt("peak-baseline")
-                        .selected_text(format!("{:?}", self.baseline))
+                        .selected_text(match self.baseline {
+                            PeakBaseline::None => "无基线",
+                            PeakBaseline::Constant => "常数基线",
+                            PeakBaseline::Linear => "线性基线",
+                        })
                         .show_ui(ui, |ui| {
                             for (baseline, name) in [
                                 (PeakBaseline::None, "无基线"),
@@ -114,105 +125,142 @@ impl PeakFitEditor {
                         });
                 });
             });
-            if before != (self.shape, self.count, self.baseline) {
-                self.initial.clear();
-                self.preview = None;
-                self.limits.clear();
-            }
-            ui.horizontal(|ui| {
-                ui.label("最小突出度（Y 范围比例）");
-                ui.add(egui::DragValue::new(&mut self.prominence).speed(0.01).range(0.0..=1.0));
+            f.row("最小突出度", |ui| {
+                ui.add(egui::DragValue::new(&mut self.prominence).speed(0.01).range(0.0..=1.0))
+                    .on_hover_text("占 Y 范围的比例。");
             });
-            let peak = self.definition().unwrap();
-            if self.limits.len() != peak.params().len() {
-                self.limits = peak.limits();
-            }
-            ui.label("先预览初值，再拟合。");
-            ui.label("初始值（留空为自动寻峰）");
-            if ui.text_edit_multiline(&mut self.initial).changed() {
-                self.preview = None;
-            }
-            if ui.button("预览初值").clicked() {
-                self.preview();
-            }
-            if let Some(points) = &self.preview {
-                preview_plot(ui, &self.xs, &self.ys, points);
-            }
-            egui::ScrollArea::both()
-                .id_salt("peak-parameters")
-                .max_height(200.)
-                .show(ui, |ui| {
-                    egui::Grid::new("peak-limits").show(ui, |ui| {
-                        for label in ["参数", "固定", "下限", "上限"] {
-                            ui.label(label);
-                        }
-                        ui.end_row();
-                        for (name, limit) in peak.params().iter().zip(&mut self.limits) {
-                            ui.label(*name);
-                            for field in [&mut limit.fixed, &mut limit.lower, &mut limit.upper] {
-                                ui.horizontal(|ui| {
-                                    let mut enabled = field.is_some();
-                                    let mut value = field.unwrap_or(0.);
-                                    ui.checkbox(&mut enabled, "");
-                                    ui.add_enabled(enabled, egui::DragValue::new(&mut value).speed(0.01));
-                                    *field = enabled.then_some(value);
-                                });
-                            }
-                            ui.end_row();
+        });
+        if before != (self.shape, self.count, self.baseline) {
+            self.initial.clear();
+            self.preview = None;
+            self.limits.clear();
+        }
+    }
+    pub fn show(&mut self, ctx: &egui::Context, _pal: &Palette, open: &mut bool) -> Action {
+        let mut action = Action::None;
+        window(ctx, "多峰拟合")
+            .centered()
+            .default_width(crate::theme::dialog::LARGE)
+            .open(open)
+            .show(ctx, |ui| {
+                self.model_form(ui);
+                let peak = self.definition().unwrap();
+                if self.limits.len() != peak.params().len() {
+                    self.limits = peak.limits();
+                }
+                hint(ui, "先预览初值，再拟合。");
+                form(ui, "peak-initial", |f| {
+                    f.row("初始值", |ui| {
+                        if multiline(ui, &mut self.initial)
+                            .on_hover_text("留空则自动寻峰。")
+                            .changed()
+                        {
+                            self.preview = None;
                         }
                     });
                 });
-            ui.label("线性参数约束");
-            ui.text_edit_multiline(&mut self.constraints);
-            ui.checkbox(&mut self.weighted, "按 Y 误差加权（1/σ²）");
-            if let Some(error) = &self.error {
-                ui.colored_label(pal.error, error);
-            }
-            let (ok, cancel) = buttons(ui, "拟合");
-            if ok {
-                match self.values() {
-                    Ok(initial) if self.preview.is_some() => {
-                        if let Some(target) = &self.target {
-                            let recipe = target
-                                .recipe(
-                                    FitMethod::PeakSum {
-                                        shape: self.shape,
-                                        count: self.count,
-                                        baseline: self.baseline,
-                                    },
-                                    Some(initial),
-                                    self.limits.clone(),
-                                    self.constraints.clone(),
-                                )
-                                .map(|mut recipe| {
-                                    recipe.weight = FitWeight::from_y_error(self.weighted);
-                                    recipe
-                                });
-                            action = Action::Refit(
-                                Box::new(FitEditTarget {
-                                    report: target.report.clone(),
-                                    before: target.before.clone(),
-                                }),
-                                recipe,
-                            );
-                        } else {
-                            action = Action::PeakFit(Box::new(PeakFitRequest {
-                                source: self.source.clone(),
-                                peak,
-                                initial,
-                                limits: self.limits.clone(),
-                                constraints: self.constraints.clone(),
-                                weighted: self.weighted,
-                            }));
-                        }
-                    }
-                    Ok(_) => self.error = Some("请先预览初值".into()),
-                    Err(error) => self.error = Some(error),
+                if ui.button("预览初值").clicked() {
+                    self.preview();
                 }
-            } else if cancel {
-                action = Action::Close;
-            }
-        });
+                if let Some(points) = &self.preview {
+                    preview_plot(ui, &self.xs, &self.ys, points);
+                }
+                ui.collapsing("参数限制", |ui| {
+                    egui::ScrollArea::both()
+                        .id_salt("peak-parameters")
+                        .max_height(144.)
+                        .show(ui, |ui| {
+                            egui::Grid::new("peak-limits").show(ui, |ui| {
+                                for label in ["参数", "固定", "下限", "上限"] {
+                                    ui.label(label);
+                                }
+                                ui.end_row();
+                                for (name, limit) in peak.params().iter().zip(&mut self.limits) {
+                                    ui.label(*name);
+                                    for field in [&mut limit.fixed, &mut limit.lower, &mut limit.upper] {
+                                        ui.horizontal(|ui| {
+                                            let mut enabled = field.is_some();
+                                            let mut value = field.unwrap_or(0.);
+                                            ui.checkbox(&mut enabled, "");
+                                            ui.add_enabled(enabled, egui::DragValue::new(&mut value).speed(0.01));
+                                            *field = enabled.then_some(value);
+                                        });
+                                    }
+                                    ui.end_row();
+                                }
+                            });
+                        });
+                });
+                form(ui, "peak-constraints", |f| {
+                    f.row("线性约束", |ui| {
+                        multiline(ui, &mut self.constraints);
+                    });
+                });
+                ui.checkbox(&mut self.weighted, "按 Y 误差加权（1/σ²）");
+                if let Some(error) = &self.error {
+                    field_error(ui, error);
+                }
+                let valid = if self.preview.is_some() {
+                    self.values()
+                        .map(|_| ())
+                        .and_then(|_| parameter_bounds(&self.limits))
+                        .and_then(|_| {
+                            scicanvas_core::nlfit::parse_constraints_for_names(&peak.params(), &self.constraints)
+                                .map(|_| ())
+                        })
+                } else {
+                    Err("请先预览初值".into())
+                };
+                if self.error.is_none() {
+                    if let Err(error) = &valid {
+                        field_error(ui, error);
+                    }
+                }
+                let (ok, cancel) = buttons(ui, "拟合", valid);
+                if ok {
+                    match self.values() {
+                        Ok(initial) if self.preview.is_some() => {
+                            if let Some(target) = &self.target {
+                                let recipe = target
+                                    .recipe(
+                                        FitMethod::PeakSum {
+                                            shape: self.shape,
+                                            count: self.count,
+                                            baseline: self.baseline,
+                                        },
+                                        Some(initial),
+                                        self.limits.clone(),
+                                        self.constraints.clone(),
+                                    )
+                                    .map(|mut recipe| {
+                                        recipe.weight = FitWeight::from_y_error(self.weighted);
+                                        recipe
+                                    });
+                                action = Action::Refit(
+                                    Box::new(FitEditTarget {
+                                        report: target.report.clone(),
+                                        before: target.before.clone(),
+                                    }),
+                                    recipe,
+                                );
+                            } else {
+                                action = Action::PeakFit(Box::new(PeakFitRequest {
+                                    source: self.source.clone(),
+                                    peak,
+                                    initial,
+                                    limits: self.limits.clone(),
+                                    constraints: self.constraints.clone(),
+                                    weighted: self.weighted,
+                                }));
+                            }
+                        }
+                        Ok(_) => self.error = Some("请先预览初值".into()),
+                        Err(error) => self.error = Some(error),
+                    }
+                } else if cancel {
+                    action = Action::Close;
+                }
+            });
         action
     }
 }

@@ -1,13 +1,7 @@
 use super::*;
 
 impl Dialog {
-    pub(super) fn show_correlations(
-        &mut self,
-        ctx: &egui::Context,
-        pal: &Palette,
-        open: &mut bool,
-        _esc: bool,
-    ) -> Action {
+    pub(super) fn show_correlations(&mut self, ctx: &egui::Context, pal: &Palette, open: &mut bool) -> Action {
         let Self::Correlations(pairs) = self else {
             unreachable!()
         };

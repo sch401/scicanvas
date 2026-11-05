@@ -27,7 +27,7 @@ pub struct BatchExport {
 impl BatchExport {
     pub(super) fn show(&mut self, ctx: &egui::Context, open: &mut bool) -> Action {
         let mut action = Action::None;
-        window(ctx, "批量导出图形").open(open).show(ctx, |ui| {
+        window(ctx, "批量导出图形").centered().open(open).show(ctx, |ui| {
             ui.label("选择图形：");
             egui::ScrollArea::vertical().max_height(220.0).show(ui, |ui| {
                 for (_, name, selected) in &mut self.graphs {
@@ -53,9 +53,17 @@ impl BatchExport {
             }
             let selected: Vec<_> = self.graphs.iter().filter(|g| g.2).map(|g| g.0).collect();
             if selected.is_empty() {
-                ui.label("请选择至少一张图。");
+                field_error(ui, "请选择至少一张图。");
             }
-            let (ok, cancel) = buttons(ui, "选择目录并导出…");
+            let (ok, cancel) = buttons(
+                ui,
+                "选择目录并导出…",
+                if !selected.is_empty() {
+                    Ok(())
+                } else {
+                    Err("请选择至少一张图".into())
+                },
+            );
             if ok && !selected.is_empty() {
                 action = Action::BatchExport(selected, self.format, self.dpi);
             } else if cancel {

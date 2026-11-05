@@ -6,7 +6,7 @@ impl Dialog {
             unreachable!()
         };
         let mut action = Action::None;
-        window(ctx, "双因素方差分析").open(open).show(ctx, |ui| {
+        window(ctx, "双因素方差分析").centered().open(open).show(ctx, |ui| {
             for (i, label) in ["因子 A", "因子 B", "响应"].iter().enumerate() {
                 ui.horizontal(|ui| {
                     ui.label(*label);
@@ -24,12 +24,20 @@ impl Dialog {
                         });
                 });
             }
-            ui.label("模型含交互项，有缺失值的行跳过。");
+            hint(ui, "模型含交互项，有缺失值的行跳过。");
             let valid = keys[0] != keys[1] && keys[0] != keys[2] && keys[1] != keys[2];
             if !valid {
                 ui.label("请选择三个不同的列");
             }
-            let (ok, cancel) = buttons(ui, "计算");
+            let (ok, cancel) = buttons(
+                ui,
+                "计算",
+                if valid {
+                    Ok(())
+                } else {
+                    Err("请选择三个不同的列".into())
+                },
+            );
             if ok && valid {
                 action = Action::TwoWayAnova(*book, keys.clone());
             } else if cancel {

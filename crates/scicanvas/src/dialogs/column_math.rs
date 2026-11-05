@@ -1,13 +1,7 @@
 use super::*;
 
 impl Dialog {
-    pub(super) fn show_column_math(
-        &mut self,
-        ctx: &egui::Context,
-        pal: &Palette,
-        open: &mut bool,
-        _esc: bool,
-    ) -> Action {
+    pub(super) fn show_column_math(&mut self, ctx: &egui::Context, _pal: &Palette, open: &mut bool) -> Action {
         let Self::ColumnMath {
             a,
             b,
@@ -19,7 +13,7 @@ impl Dialog {
             unreachable!()
         };
         let mut action = Action::None;
-        window(ctx, "列运算").open(open).show(ctx, |ui| {
+        window(ctx, "列运算").centered().open(open).show(ctx, |ui| {
             if b.is_none() {
                 *use_constant = true;
             }
@@ -37,12 +31,8 @@ impl Dialog {
             ui.add_enabled_ui(b.is_some(), |ui| {
                 ui.checkbox(use_constant, "用常数代替第二列");
             });
-            ui.label(
-                RichText::new("两列 X 不同时，先把第二列插值到第一列的 X 上。")
-                    .small()
-                    .color(pal.weak),
-            );
-            let (ok, cancel) = buttons(ui, "计算");
+            hint(ui, "两列 X 不同时，先把第二列插值到第一列的 X 上。");
+            let (ok, cancel) = buttons(ui, "计算", Ok(()));
             if ok {
                 action = Action::ColumnMath(*op, use_constant.then_some(*constant));
             } else if cancel {

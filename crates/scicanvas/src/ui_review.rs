@@ -942,3 +942,23 @@ fn axis_scale_menu_dispatches_registered_choice() {
     let clicked = harness.frame_value(&mut state, vec![crate::test_ui::button(at, false)]);
     assert_eq!(clicked, Some("graph.scale.x.log2"));
 }
+
+#[test]
+fn dialog_code_lines_remain_formatter_friendly() {
+    let dir = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("src/dialogs");
+    for entry in std::fs::read_dir(dir).unwrap() {
+        let path = entry.unwrap().path();
+        if path.extension().is_none_or(|e| e != "rs") {
+            continue;
+        }
+        let text = std::fs::read_to_string(&path).unwrap();
+        for (line, source) in text.lines().enumerate() {
+            assert!(
+                source.chars().count() <= 140 || !rust_ui_literals(source).is_empty(),
+                "{}:{}",
+                path.display(),
+                line + 1
+            );
+        }
+    }
+}

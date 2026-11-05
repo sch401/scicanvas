@@ -43,6 +43,7 @@ impl SciApp {
 
     pub(super) fn generate_dialog_action(&mut self, ctx: &egui::Context) -> Option<DialogFrame> {
         self.sync_dialog_controls();
+        ctx.data_mut(|data| data.insert_temp(egui::Id::new("dialog-execution-error"), self.dialog_error.clone()));
         let caption = self
             .analysis_source()
             .and_then(|source| self.project.resolve(&source).ok())
@@ -132,12 +133,18 @@ impl SciApp {
                 self.create_batch_plots(graph, books);
             }
             dialogs::Action::BatchExport(graphs, format, dpi) => {
-                self.finish_dialog_input();
-                self.export_graphs(graphs, format, dpi);
+                self.finish_edit();
+                if self.export_graphs(graphs, format, dpi) {
+                    self.dialog = None;
+                    self.dialog_error = None;
+                }
             }
             dialogs::Action::ExportXlsx(headers) => {
-                self.finish_dialog_input();
-                self.export_xlsx(headers);
+                self.finish_edit();
+                if self.export_xlsx(headers) {
+                    self.dialog = None;
+                    self.dialog_error = None;
+                }
             }
             dialogs::Action::ReplaceCurrent => self.replace_matches(false),
             dialogs::Action::ReplaceAll => self.replace_matches(true),
@@ -168,8 +175,7 @@ impl SciApp {
                 self.apply_convert_text_action(book, key, row, value)
             }
             dialogs::Action::Fit(order) => {
-                self.finish_dialog_input();
-                self.fit_order(order, "多项式拟合");
+                self.finish_analysis_input(|app| app.fit_order(order, "多项式拟合"));
             }
             dialogs::Action::Ifft(book, re, im, input) => self.apply_ifft_action(book, re, im, input),
             dialogs::Action::Sort(book, keys, within) => self.apply_sort_action(book, keys, within),
@@ -198,16 +204,16 @@ impl SciApp {
                 );
             }
             dialogs::Action::CategoryOrder(book, key, levels) => self.apply_category_order_action(book, key, levels),
-            dialogs::Action::SgDiff(w, order, deriv) => self.apply_sg_diff_action(w, order, deriv),
+            dialogs::Action::SgDiff(w, order, deriv) => {
+                self.finish_analysis_input(|app| app.apply_sg_diff_action(w, order, deriv))
+            }
             dialogs::Action::Smooth(m, w) => {
-                self.finish_dialog_input();
-                self.smooth(m, w);
+                self.finish_analysis_input(|app| app.smooth(m, w));
             }
             dialogs::Action::SignalTools(action) => self.apply_signal_action(*action),
             dialogs::Action::Statistics(action) => self.apply_statistics_action(*action),
             dialogs::Action::Interpolate(method, points, range) => {
-                self.finish_dialog_input();
-                self.interpolate(method, points, range);
+                self.finish_analysis_input(|app| app.interpolate(method, points, range));
             }
             dialogs::Action::TTest(kind, level) => self.run_ttest(kind, level),
             dialogs::Action::NlFit(model, limits, text, weighted) => {
@@ -230,33 +236,26 @@ impl SciApp {
             }
             dialogs::Action::SetValues(formula, keep) => self.apply_set_values_action(formula, keep),
             dialogs::Action::Fill(kind, rows) => {
-                self.finish_dialog_input();
-                self.fill_sequence(kind, rows);
+                self.finish_analysis_input(|app| app.fill_sequence(kind, rows));
             }
             dialogs::Action::FftFilter(kind) => {
-                self.finish_dialog_input();
-                self.fft_filter(kind);
+                self.finish_analysis_input(|app| app.fft_filter(kind));
             }
             dialogs::Action::Baseline(method) => {
-                self.finish_dialog_input();
-                self.subtract_baseline(method);
+                self.finish_analysis_input(|app| app.subtract_baseline(method));
             }
             dialogs::Action::Peaks(min_prominence) => {
-                self.finish_dialog_input();
-                self.find_peaks(min_prominence);
+                self.finish_analysis_input(|app| app.find_peaks(min_prominence));
             }
             dialogs::Action::Fft(window) => {
-                self.finish_dialog_input();
-                self.fft(window);
+                self.finish_analysis_input(|app| app.fft(window));
             }
             dialogs::Action::TwoWayAnova(book, keys) => self.two_way_anova(book, keys),
             dialogs::Action::ColumnMath(op, constant) => {
-                self.finish_dialog_input();
-                self.column_math(op, constant);
+                self.finish_analysis_input(|app| app.column_math(op, constant));
             }
             dialogs::Action::Frequency(bins, range) => {
-                self.finish_dialog_input();
-                self.frequency_counts(bins, range);
+                self.finish_analysis_input(|app| app.frequency_counts(bins, range));
             }
             dialogs::Action::ExportTiff(dpi) => {
                 self.dialog = None;
@@ -267,8 +266,7 @@ impl SciApp {
                 self.export_png(dpi);
             }
             dialogs::Action::Normalize(m) => {
-                self.finish_dialog_input();
-                self.normalize(m);
+                self.finish_analysis_input(|app| app.normalize(m));
             }
         }
         true
@@ -294,6 +292,7 @@ impl SciApp {
             }
         }
         if closing {
+            self.dialog_error = None;
             self.finish_edit();
             self.dialog = None;
             self.book_preview = None;
@@ -303,9 +302,20 @@ impl SciApp {
         }
     }
 
-    fn finish_dialog_input(&mut self) {
-        self.finish_edit();
-        self.dialog = None;
+    pub(super) fn finish_analysis_input(&mut self, operation: impl FnOnce(&mut Self) -> Result<String, String>) {
+        let original = self.dialog.as_ref().map(std::mem::discriminant);
+        match operation(self) {
+            Ok(_) => {
+                self.dialog_error = None;
+                if self.dialog.as_ref().map(std::mem::discriminant) == original {
+                    self.dialog = None;
+                }
+            }
+            Err(error) => {
+                self.status = error.clone();
+                self.dialog_error = Some(error);
+            }
+        }
     }
 
     fn apply_layer_contents_action(&mut self, edit: dialogs::LayerContents) {
@@ -473,8 +483,7 @@ impl SciApp {
         input: scicanvas_core::fft::InverseInput,
     ) {
         self.finish_edit();
-        self.dialog = None;
-        self.edit_with(
+        let result = self.edit_with(
             "IFFT",
             |project| project.ifft(book, &re, im.as_deref(), input).map(Some),
             |app, (b, g)| {
@@ -483,6 +492,10 @@ impl SciApp {
                 app.status = format!("IFFT 结果在 {name}，实部已画成图");
             },
         );
+        if result.is_some() {
+            self.dialog = None;
+            self.dialog_error = None;
+        }
     }
 
     fn apply_sort_action(&mut self, book: u64, keys: Vec<(String, bool)>, within: Option<Vec<String>>) {
@@ -524,18 +537,18 @@ impl SciApp {
         );
     }
 
-    fn apply_sg_diff_action(&mut self, w: usize, order: usize, deriv: usize) {
-        self.finish_edit();
-        self.dialog = None;
-        if let Some(src) = self.analysis_source() {
-            self.edit_with(
-                "SG 平滑求导",
-                |project| project.differentiate_sg(&src, w, order, deriv).map(Some),
-                |app, keys| {
-                    app.status = format!("已求导数，结果在新列 {}", keys.join(", "));
-                },
-            );
-        }
+    fn apply_sg_diff_action(&mut self, w: usize, order: usize, deriv: usize) -> Result<String, String> {
+        let src = self.analysis_source().ok_or("请选择要处理的数据")?;
+        let result = self.edit_with(
+            "SG 平滑求导",
+            |project| project.differentiate_sg(&src, w, order, deriv).map(Some),
+            |app, keys| {
+                app.status = format!("已求导数，结果在新列 {}", keys.join(", "));
+            },
+        );
+        result
+            .map(|_| self.status.to_string())
+            .ok_or_else(|| self.status.to_string())
     }
 
     fn apply_nlfit_action(

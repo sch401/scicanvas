@@ -726,6 +726,7 @@ impl SciApp {
                     (dialogs::ActionKind::Plain, "取消"),
                 ],
                 dialogs::Keys::Modal,
+                Ok(()),
             )
         })
         .flatten();

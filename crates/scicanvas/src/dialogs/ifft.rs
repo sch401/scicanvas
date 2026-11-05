@@ -1,7 +1,7 @@
 use super::*;
 
 impl Dialog {
-    pub(super) fn show_ifft(&mut self, ctx: &egui::Context, _pal: &Palette, open: &mut bool, _esc: bool) -> Action {
+    pub(super) fn show_ifft(&mut self, ctx: &egui::Context, _pal: &Palette, open: &mut bool) -> Action {
         let Self::Ifft {
             book,
             re,
@@ -14,36 +14,33 @@ impl Dialog {
             unreachable!()
         };
         let mut action = Action::None;
-        window(ctx, "IFFT").open(open).show(ctx, |ui| {
-            egui::Grid::new("ifft-grid")
-                .num_columns(2)
-                .spacing([12.0, 8.0])
-                .show(ui, |ui| {
-                    ui.label("实部");
-                    ui.label(&re.1);
-                    ui.end_row();
-                    ui.label("虚部");
-                    ui.label(im.as_ref().map_or("无（按 0）", |c| c.1.as_str()));
-                    ui.end_row();
-                    ui.label("输入");
+        window(ctx, "IFFT").centered().open(open).show(ctx, |ui| {
+            form(ui, "ifft-grid", |ui| {
+                ui.label("实部");
+                ui.label(&re.1);
+                ui.end_row();
+                ui.label("虚部");
+                ui.label(im.as_ref().map_or("无（按 0）", |c| c.1.as_str()));
+                ui.end_row();
+                ui.label("输入");
+                ui.horizontal_wrapped(|ui| {
+                    ui.radio_value(two_sided, false, "单边谱");
+                    ui.radio_value(two_sided, true, "双边谱");
+                });
+                ui.end_row();
+                if !*two_sided {
+                    use scicanvas_core::fft::InverseInput;
+                    ui.label("输出点数");
                     ui.horizontal_wrapped(|ui| {
-                        ui.radio_value(two_sided, false, "单边谱");
-                        ui.radio_value(two_sided, true, "双边谱");
+                        let even = InverseInput::OneSided { odd: false }.points(*rows);
+                        let oddn = InverseInput::OneSided { odd: true }.points(*rows);
+                        ui.radio_value(odd, false, even.to_string());
+                        ui.radio_value(odd, true, oddn.to_string());
                     });
                     ui.end_row();
-                    if !*two_sided {
-                        use scicanvas_core::fft::InverseInput;
-                        ui.label("输出点数");
-                        ui.horizontal_wrapped(|ui| {
-                            let even = InverseInput::OneSided { odd: false }.points(*rows);
-                            let oddn = InverseInput::OneSided { odd: true }.points(*rows);
-                            ui.radio_value(odd, false, even.to_string());
-                            ui.radio_value(odd, true, oddn.to_string());
-                        });
-                        ui.end_row();
-                    }
-                });
-            let (ok, cancel) = buttons(ui, "变换");
+                }
+            });
+            let (ok, cancel) = buttons(ui, "变换", Ok(()));
             if ok {
                 let input = if *two_sided {
                     scicanvas_core::fft::InverseInput::TwoSided

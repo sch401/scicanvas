@@ -55,13 +55,7 @@ impl ColumnEdit {
 }
 
 impl Dialog {
-    pub(super) fn show_column_props(
-        &mut self,
-        ctx: &egui::Context,
-        pal: &Palette,
-        open: &mut bool,
-        _esc: bool,
-    ) -> Action {
+    pub(super) fn show_column_props(&mut self, ctx: &egui::Context, pal: &Palette, open: &mut bool) -> Action {
         let Self::ColumnProps {
             book: _,
             edit,
@@ -76,124 +70,121 @@ impl Dialog {
         use scicanvas_core::{DataKind, Role};
         let title = format!("列属性 — {}", edit.key);
         window(ctx, &title).open(open).show(ctx, |ui| {
-            egui::Grid::new("column-props")
-                .num_columns(2)
-                .spacing([12.0, 8.0])
-                .show(ui, |ui| {
-                    ui.label("短名");
-                    ui.label(RichText::new(edit.key.as_str()).strong())
-                        .on_hover_text("图形通过短名引用列，创建后不再改变");
+            form(ui, "column-props", |ui| {
+                ui.label("短名");
+                ui.label(RichText::new(edit.key.as_str()).strong())
+                    .on_hover_text("图形通过短名引用列，创建后不再改变");
+                ui.end_row();
+                for (label, field) in [
+                    ("长名称", &mut edit.long_name),
+                    ("单位", &mut edit.units),
+                    ("注释", &mut edit.comment),
+                ] {
+                    ui.label(label);
+                    ui.add(egui::TextEdit::singleline(field).desired_width(200.0));
                     ui.end_row();
-                    for (label, field) in [
-                        ("长名称", &mut edit.long_name),
-                        ("单位", &mut edit.units),
-                        ("注释", &mut edit.comment),
-                    ] {
-                        ui.label(label);
-                        ui.add(egui::TextEdit::singleline(field).desired_width(200.0));
-                        ui.end_row();
-                    }
-                    ui.label("列属性");
-                    let roles = [
-                        (Role::X, "X"),
-                        (Role::Y, "Y"),
-                        (Role::XError, "X 误差"),
-                        (Role::YError, "Y 误差"),
-                        (Role::Z, "Z"),
-                        (Role::Label, "标签"),
-                        (Role::Ignore, "忽略"),
-                    ];
-                    let current = roles.iter().find(|(r, _)| *r == edit.role).map_or("Y", |(_, n)| *n);
-                    egui::ComboBox::from_id_salt("column-role")
-                        .selected_text(current)
-                        .show_ui(ui, |ui| {
-                            for (role, name) in roles {
-                                ui.selectable_value(&mut edit.role, role, name);
-                            }
-                        });
+                }
+                ui.label("列属性");
+                let roles = [
+                    (Role::X, "X"),
+                    (Role::Y, "Y"),
+                    (Role::XError, "X 误差"),
+                    (Role::YError, "Y 误差"),
+                    (Role::Z, "Z"),
+                    (Role::Label, "标签"),
+                    (Role::Ignore, "忽略"),
+                ];
+                let current = roles.iter().find(|(r, _)| *r == edit.role).map_or("Y", |(_, n)| *n);
+                egui::ComboBox::from_id_salt("column-role")
+                    .selected_text(current)
+                    .show_ui(ui, |ui| {
+                        for (role, name) in roles {
+                            ui.selectable_value(&mut edit.role, role, name);
+                        }
+                    });
+                ui.end_row();
+                ui.label("数据类型");
+                egui::ComboBox::from_id_salt("column-kind")
+                    .selected_text(edit.kind.label())
+                    .show_ui(ui, |ui| {
+                        for kind in DataKind::ALL {
+                            ui.selectable_value(&mut edit.kind, kind, kind.label());
+                        }
+                    });
+                ui.end_row();
+                if let Some(mode) = &mut edit.recalc {
+                    ui.label("重算方式");
+                    ui.horizontal_wrapped(|ui| {
+                        for m in scicanvas_core::ops::RecalcMode::ALL {
+                            ui.radio_value(mode, m, m.label());
+                        }
+                    });
                     ui.end_row();
-                    ui.label("数据类型");
-                    egui::ComboBox::from_id_salt("column-kind")
-                        .selected_text(edit.kind.label())
-                        .show_ui(ui, |ui| {
-                            for kind in DataKind::ALL {
-                                ui.selectable_value(&mut edit.kind, kind, kind.label());
-                            }
-                        });
-                    ui.end_row();
-                    if let Some(mode) = &mut edit.recalc {
-                        ui.label("重算方式");
+                }
+                ui.label("显示格式");
+                match edit.kind {
+                    DataKind::Num => {
                         ui.horizontal_wrapped(|ui| {
-                            for m in scicanvas_core::ops::RecalcMode::ALL {
-                                ui.radio_value(mode, m, m.label());
-                            }
-                        });
-                        ui.end_row();
-                    }
-                    ui.label("显示格式");
-                    match edit.kind {
-                        DataKind::Num => {
-                            ui.horizontal_wrapped(|ui| {
-                                let mut index = edit.format.number.index();
-                                let mut places = edit.format.number.places();
-                                egui::ComboBox::from_id_salt("column-number-format")
-                                    .selected_text(NumberFormat::KINDS[index])
-                                    .show_ui(ui, |ui| {
-                                        for (i, name) in NumberFormat::KINDS.iter().enumerate() {
-                                            ui.selectable_value(&mut index, i, *name);
-                                        }
-                                    });
-                                ui.add_enabled_ui(index != 0, |ui| {
-                                    ui.label("小数位");
-                                    ui.add(
-                                        egui::DragValue::new(&mut places)
-                                            .range(0..=scicanvas_core::format::MAX_PLACES)
-                                            .speed(0.1),
-                                    );
+                            let mut index = edit.format.number.index();
+                            let mut places = edit.format.number.places();
+                            egui::ComboBox::from_id_salt("column-number-format")
+                                .selected_text(NumberFormat::KINDS[index])
+                                .show_ui(ui, |ui| {
+                                    for (i, name) in NumberFormat::KINDS.iter().enumerate() {
+                                        ui.selectable_value(&mut index, i, *name);
+                                    }
                                 });
-                                edit.format.number = NumberFormat::from_index(index, places);
+                            ui.add_enabled_ui(index != 0, |ui| {
+                                ui.label("小数位");
+                                ui.add(
+                                    egui::DragValue::new(&mut places)
+                                        .range(0..=scicanvas_core::format::MAX_PLACES)
+                                        .speed(0.1),
+                                );
                             });
-                        }
-                        DataKind::DateTime => {
-                            ui.horizontal_wrapped(|ui| {
-                                egui::ComboBox::from_id_salt("column-date-format")
-                                    .selected_text(edit.format.date.label())
-                                    .show_ui(ui, |ui| {
-                                        for f in DateFormat::ALL {
-                                            ui.selectable_value(&mut edit.format.date, f, f.label());
-                                        }
-                                    });
-                                use scicanvas_core::format::{utc_offset_label, utc_offsets};
-                                egui::ComboBox::from_id_salt("column-utc-offset")
-                                    .selected_text(utc_offset_label(edit.format.utc_offset))
-                                    .show_ui(ui, |ui| {
-                                        for m in utc_offsets() {
-                                            ui.selectable_value(&mut edit.format.utc_offset, m, utc_offset_label(m));
-                                        }
-                                    });
-                            });
-                        }
-                        _ => {
-                            ui.label(RichText::new("文本和分类列按原样显示").color(pal.weak));
-                        }
+                            edit.format.number = NumberFormat::from_index(index, places);
+                        });
                     }
+                    DataKind::DateTime => {
+                        ui.horizontal_wrapped(|ui| {
+                            egui::ComboBox::from_id_salt("column-date-format")
+                                .selected_text(edit.format.date.label())
+                                .show_ui(ui, |ui| {
+                                    for f in DateFormat::ALL {
+                                        ui.selectable_value(&mut edit.format.date, f, f.label());
+                                    }
+                                });
+                            use scicanvas_core::format::{utc_offset_label, utc_offsets};
+                            egui::ComboBox::from_id_salt("column-utc-offset")
+                                .selected_text(utc_offset_label(edit.format.utc_offset))
+                                .show_ui(ui, |ui| {
+                                    for m in utc_offsets() {
+                                        ui.selectable_value(&mut edit.format.utc_offset, m, utc_offset_label(m));
+                                    }
+                                });
+                        });
+                    }
+                    _ => {
+                        ui.label(RichText::new("文本和分类列按原样显示").color(pal.weak));
+                    }
+                }
+                ui.end_row();
+                let preview = match (edit.kind, sample) {
+                    (DataKind::Num, Some(v)) => Some(edit.format.number.apply(*v).unwrap_or_else(|| fmt_num(*v))),
+                    (DataKind::DateTime, Some(ms)) => edit.format.date.apply_in(*ms as i64, edit.format.utc_offset),
+                    _ => None,
+                };
+                if let Some(text) = preview {
+                    ui.label("第 1 行显示为");
+                    ui.label(RichText::new(text).monospace());
                     ui.end_row();
-                    let preview = match (edit.kind, sample) {
-                        (DataKind::Num, Some(v)) => Some(edit.format.number.apply(*v).unwrap_or_else(|| fmt_num(*v))),
-                        (DataKind::DateTime, Some(ms)) => edit.format.date.apply_in(*ms as i64, edit.format.utc_offset),
-                        _ => None,
-                    };
-                    if let Some(text) = preview {
-                        ui.label("第 1 行显示为");
-                        ui.label(RichText::new(text).monospace());
-                        ui.end_row();
-                    }
-                });
+                }
+            });
             if let Some(e) = error {
                 ui.add_space(4.0);
                 ui.label(RichText::new(e.as_str()).color(ui.visuals().error_fg_color));
             }
-            ui.label(RichText::new("只改变显示，不改变存储的数值。").small().color(pal.weak));
+            hint(ui, "只改变显示，不改变存储的数值。");
         });
         Action::None
     }

@@ -9,7 +9,7 @@ pub struct BatchPlot {
 impl BatchPlot {
     pub(super) fn show(&mut self, ctx: &egui::Context, open: &mut bool) -> Action {
         let mut action = Action::None;
-        window(ctx, "批量绘图").open(open).show(ctx, |ui| {
+        window(ctx, "批量绘图").centered().open(open).show(ctx, |ui| {
             ui.horizontal(|ui| {
                 ui.label("模板图形");
                 egui::ComboBox::from_id_salt("batch-plot-template")
@@ -34,9 +34,17 @@ impl BatchPlot {
             });
             let books: Vec<_> = self.books.iter().filter(|b| b.2).map(|b| b.0).collect();
             if books.is_empty() {
-                ui.label("请选择至少一个工作簿。");
+                field_error(ui, "请选择至少一个工作簿。");
             }
-            let (ok, cancel) = buttons(ui, "生成图形");
+            let (ok, cancel) = buttons(
+                ui,
+                "生成图形",
+                if !books.is_empty() {
+                    Ok(())
+                } else {
+                    Err("请选择至少一个工作簿".into())
+                },
+            );
             if ok && !books.is_empty() {
                 action = Action::BatchPlot(self.graphs[self.selected_graph].0, books);
             } else if cancel {

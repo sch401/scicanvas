@@ -6,12 +6,12 @@ impl Dialog {
             unreachable!()
         };
         let mut action = Action::None;
-        window(ctx, "导出 Excel").open(open).show(ctx, |ui| {
+        window(ctx, "导出 Excel").centered().open(open).show(ctx, |ui| {
             ui.label("每个工作簿导出为一个工作表。");
             ui.label("日期按列的显示时区导出，Excel 不保存时区。");
             ui.label("非有限数值作为文本导出。");
             ui.checkbox(headers, "包含长名、单位和注释三行表头");
-            let (ok, cancel) = buttons(ui, "导出");
+            let (ok, cancel) = buttons(ui, "导出", Ok(()));
             if ok {
                 action = Action::ExportXlsx(*headers);
             } else if cancel {

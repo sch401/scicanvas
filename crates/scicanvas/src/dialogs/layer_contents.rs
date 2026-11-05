@@ -58,7 +58,7 @@ impl LayerContents {
         let mut open = true;
         window(ctx, "图层内容")
             .open(&mut open)
-            .default_width(360.0)
+            .default_width(crate::theme::dialog::SMALL)
             .default_height(660.0)
             .show(ctx, |ui| {
                 ui.strong(format!(
@@ -167,22 +167,19 @@ impl LayerContents {
                         let plot = plots.iter().find(|plot| &plot.key == key);
                         let mapping = plot.as_ref().map(|p| &p.mapping);
                         let source = mapping.map(|m| &m.y);
-                        egui::Grid::new("contents-source")
-                            .num_columns(2)
-                            .spacing([8.0, 2.0])
-                            .show(ui, |ui| {
-                                ui.label("X 来源");
-                                ui.label(Self::source_name(project, mapping.as_ref().and_then(|m| m.x.as_ref())));
-                                ui.end_row();
-                                ui.label("Y 来源");
-                                ui.label(
-                                    source
-                                        .as_ref()
-                                        .map(|r| Self::source_name(project, Some(r)))
-                                        .unwrap_or_else(|| "未绑定".into()),
-                                );
-                                ui.end_row();
-                            });
+                        form(ui, "contents-source", |ui| {
+                            ui.label("X 来源");
+                            ui.label(Self::source_name(project, mapping.as_ref().and_then(|m| m.x.as_ref())));
+                            ui.end_row();
+                            ui.label("Y 来源");
+                            ui.label(
+                                source
+                                    .as_ref()
+                                    .map(|r| Self::source_name(project, Some(r)))
+                                    .unwrap_or_else(|| "未绑定".into()),
+                            );
+                            ui.end_row();
+                        });
                         ui.separator();
                     });
                 }

@@ -260,3 +260,67 @@ fn capture_u1_tabs() {
         }
     }
 }
+
+#[test]
+#[ignore = "Explicit before/after parameter-dialog screenshots"]
+fn capture_u2_dialogs() {
+    let dir = std::env::var("SCICANVAS_UI_CAPTURE_DIR").expect("capture directory");
+    let directory = std::path::Path::new(&dir);
+    std::fs::create_dir_all(directory).unwrap();
+    let mut capture = Capture::new();
+    for theme in [egui::Theme::Light, egui::Theme::Dark] {
+        for (name, command) in [
+            ("baseline", "signal.baseline"),
+            ("calibration", "fit.calibration"),
+            ("interpolate", "math.interp"),
+            ("peaks", "signal.peaks"),
+            ("global-fit", "fit.global"),
+            ("peak-fit", "fit.peaks"),
+            ("peak-preview", "fit.peaks"),
+            ("t-test", "stats.ttest"),
+            ("invalid-baseline", "signal.baseline"),
+        ] {
+            let ctx = egui::Context::default();
+            crate::theme::install(&ctx);
+            crate::fonts::setup(&ctx);
+            crate::icons::install_loaders(&ctx);
+            ctx.set_theme(theme);
+            let mut app = SciApp::initial(crate::theme::palette(theme));
+            app.active = Some(1);
+            app.selection.insert(
+                1,
+                match name {
+                    "calibration" => vec!["A".into(), "B".into(), "C".into()],
+                    "peak-fit" | "peak-preview" => vec!["B".into()],
+                    _ => vec!["B".into(), "C".into()],
+                },
+            );
+            if name == "peak-preview" {
+                let book = app.project.book_mut(1).unwrap();
+                let x = book.column("A").unwrap().values();
+                book.columns.iter_mut().find(|c| c.key == "B").unwrap().data = x
+                    .iter()
+                    .map(|x| {
+                        (0.3 + 6. * (-0.5 * ((x - 6.) / 1.5).powi(2)).exp()
+                            + 4. * (-0.5 * ((x - 14.) / 2.).powi(2)).exp())
+                        .to_string()
+                    })
+                    .collect();
+            }
+            app.run_command(command);
+            assert!(app.dialog.is_some(), "{command}: {}", app.status);
+            if name == "peak-preview" {
+                if let Some(Dialog::PeakFit(edit)) = &mut app.dialog {
+                    edit.preview();
+                }
+            }
+            if name == "invalid-baseline" {
+                if let Some(Dialog::Baseline { advanced, anchors, .. }) = &mut app.dialog {
+                    *advanced = 1;
+                    *anchors = "bad".into();
+                }
+            }
+            capture.app_capture(&ctx, &mut app, &directory.join(format!("{name}-{theme:?}.png")));
+        }
+    }
+}

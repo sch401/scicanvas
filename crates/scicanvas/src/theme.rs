@@ -411,8 +411,16 @@ mod consistency_tests {
 }
 
 pub mod space {
+    pub const CONTROL_GAP: f32 = 6.;
     pub const XS: f32 = 4.;
     pub const S: f32 = 8.;
     pub const M: f32 = 12.;
     pub const L: f32 = 16.;
+}
+
+pub mod dialog {
+    pub const SMALL: f32 = 360.;
+    pub const MEDIUM: f32 = 480.;
+    pub const LARGE: f32 = 640.;
+    pub const LABEL_WIDTH: f32 = 104.;
 }

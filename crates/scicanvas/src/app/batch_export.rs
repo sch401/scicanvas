@@ -132,9 +132,9 @@ impl SciApp {
         })));
     }
 
-    pub(super) fn export_graphs(&mut self, graphs: Vec<u64>, format: BatchFormat, dpi: u32) {
+    pub(super) fn export_graphs(&mut self, graphs: Vec<u64>, format: BatchFormat, dpi: u32) -> bool {
         let Some(folder) = self.file_dialog().set_title("选择批量导出目录").pick_folder() else {
-            return;
+            return false;
         };
         self.settings.last_dir = Some(folder.clone());
         let (written, errors) = export_graphs_to_folder(&self.project, &graphs, format, dpi, &folder);
@@ -148,6 +148,10 @@ impl SciApp {
                 errors.join("；")
             )
         };
+        if !errors.is_empty() {
+            self.dialog_error = Some(self.status.to_string());
+        }
+        errors.is_empty()
     }
 }
 

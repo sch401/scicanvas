@@ -518,19 +518,30 @@ impl SciApp {
         });
     }
 
-    pub(super) fn fill_sequence(&mut self, kind: scicanvas_core::stats::Sequence, rows: usize) {
-        let Some((id, keys)) = self.ttest_columns() else { return };
-        let Some(target) = keys.first().cloned() else { return };
+    pub(super) fn fill_sequence(
+        &mut self,
+        kind: scicanvas_core::stats::Sequence,
+        rows: usize,
+    ) -> Result<String, String> {
+        let Some((id, keys)) = self.ttest_columns() else {
+            return Err("请选择填充列".into());
+        };
+        let Some(target) = keys.first().cloned() else {
+            return Err("请选择填充列".into());
+        };
         let seed = std::time::SystemTime::now()
             .duration_since(std::time::UNIX_EPOCH)
             .map_or(0, |d| d.as_nanos() as u64);
-        self.edit_with(
+        let result = self.edit_with(
             "填充数据序列",
             |project| project.fill_sequence(id, &target, kind, rows, seed).map(Some),
             |app, ()| {
                 app.status = format!("已填充列 {target}（{rows} 行）");
             },
         );
+        result
+            .map(|_| self.status.to_string())
+            .ok_or_else(|| self.status.to_string())
     }
 
     /// 工作表：列标题、长名称 / 单位 / 注释三行和数据区。

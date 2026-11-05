@@ -36,7 +36,7 @@ impl FindReplace {
         let mut action = Action::None;
         window(ctx, "查找和替换")
             .open(open)
-            .default_width(430.0)
+            .default_width(crate::theme::dialog::MEDIUM)
             .show(ctx, |ui| {
                 ui.horizontal(|ui| {
                     ui.label("查找");

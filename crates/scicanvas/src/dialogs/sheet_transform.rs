@@ -55,7 +55,7 @@ impl SheetTransform {
                     ui.radio_value(&mut self.average, true, "取平均值（忽略缺失和非有限数值）");
                 }
             }
-            let (ok, cancel) = buttons(ui, "确定");
+            let (ok, cancel) = buttons(ui, "确定", Ok(()));
             if ok {
                 let selection = match self.kind {
                     TransformKind::Stack => {

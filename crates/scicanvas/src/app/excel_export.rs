@@ -12,7 +12,7 @@ impl SciApp {
         self.dialog = Some(Dialog::ExportXlsx { headers: true });
     }
 
-    pub(super) fn export_xlsx(&mut self, headers: bool) {
+    pub(super) fn export_xlsx(&mut self, headers: bool) -> bool {
         let Some(path) = self
             .file_dialog()
             .set_title("导出 Excel")
@@ -20,12 +20,19 @@ impl SciApp {
             .set_file_name("SciCanvas.xlsx")
             .save_file()
         else {
-            return;
+            return false;
         };
         self.settings.last_dir = path.parent().map(std::path::Path::to_path_buf);
-        self.status = match scicanvas_core::project_file::save_xlsx_export(&path, &self.project, headers) {
-            Ok(()) => format!("已导出 {}", path.display()),
-            Err(error) => format!("导出失败：{error}"),
-        };
+        match scicanvas_core::project_file::save_xlsx_export(&path, &self.project, headers) {
+            Ok(()) => {
+                self.status = format!("已导出 {}", path.display());
+                true
+            }
+            Err(error) => {
+                self.status = format!("导出失败：{error}");
+                self.dialog_error = Some(self.status.to_string());
+                false
+            }
+        }
     }
 }
