@@ -85,7 +85,9 @@ pub(crate) use plot_object::PlotObjectEditor;
 pub(crate) use scientific_text::{scientific_text, scientific_text_multiline};
 pub(crate) use tables::md_table;
 use tables::{md_cell, md_pairs, table_grid};
-pub(crate) use widgets::{actions, center_buttons, edit_group, plain, primary, ActionKind, Keys, BUTTON};
+pub(crate) use widgets::{
+    actions, axis_scale_options, center_buttons, edit_group, plain, primary, ActionKind, Keys, BUTTON,
+};
 use widgets::{buttons, data_hint};
 pub(crate) use window::{floating_bounds, window};
 

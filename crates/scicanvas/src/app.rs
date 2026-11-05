@@ -1734,6 +1734,15 @@ impl SciApp {
         }
     }
 
+    pub(crate) fn choose_axis_scale(&mut self, x: bool, scale: scicanvas_core::ticks::AxisScale) {
+        let Some(gid) = self.active_graph_id() else { return };
+        let index = self.layer_index(gid);
+        self.status = match self.project.graph_mut(gid).unwrap().page.layers_mut()[index].set_axis_scale(x, scale) {
+            Ok(()) => format!("{} 轴：{}", if x { "X" } else { "Y" }, scale.label()),
+            Err(error) => error,
+        };
+    }
+
     pub(crate) fn toggle_axis_scale(&mut self, x: bool) {
         use scicanvas_core::ticks::AxisScale;
         let Some(gid) = self.active_graph_id() else { return };

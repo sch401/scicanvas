@@ -1360,9 +1360,7 @@ fn scale_selector(
         .width(90.0)
         .selected_text(scale.label())
         .show_ui(ui, |ui| {
-            for kind in AxisScale::ALL {
-                ui.selectable_value(&mut scale, kind, kind.label());
-            }
+            dialogs::axis_scale_options(ui, &mut scale);
         })
         .response;
     edit_group(&response, history_group);

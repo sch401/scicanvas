@@ -19,7 +19,10 @@ macro_rules! example {
             kind: PlotType::$kind,
             plot_command: concat!("plot.", $id),
             command: concat!("example.", $id),
-            label: concat!("打开", $file, "示例"),
+            label: match PlotType::$kind {
+                PlotType::QQ => "打开 Q-Q 图示例",
+                _ => concat!("打开 ", $file, " 示例"),
+            },
             description: $description,
             bytes: include_bytes!(concat!("../../../samples/", $file, ".scv")),
             run: |app| app.open_plot_example(PlotType::$kind),

@@ -7,20 +7,14 @@ pub(super) fn types_and_roles(commands: &mut Vec<Command>) {
         c("col.type.text", "转换为文本列", "props", "", "列", "text type", need_cols, |a| a.set_data_kind(scicanvas_core::DataKind::Text)).modifies(),
         c("col.type.datetime", "转换为日期时间列", "props", "", "列", "datetime UTC type", need_cols, |a| a.set_data_kind(scicanvas_core::DataKind::DateTime)).modifies(),
         c("col.type.category", "转换为分类列", "props", "", "列", "category type", need_cols, |a| a.set_data_kind(scicanvas_core::DataKind::Category)).modifies(),
-        c(
-            "col.props",
-            "列属性",
-            "props",
+        c("col.props", "列属性…", "props",
             "",
             "列",
             "column properties format decimal places scientific engineering percent date 列属性 显示格式 小数位 科学计数 工程单位 百分比 日期格式 长名称 单位",
             need_cols,
             |a| a.open_column_props(),
         ),
-        c(
-            "col.setX",
-            "设为 X",
-            "setx",
+        c("col.setX", "设为 X", "setx",
             "",
             "列",
             "set x column",
@@ -28,10 +22,7 @@ pub(super) fn types_and_roles(commands: &mut Vec<Command>) {
             |a| a.set_role(Role::X),
         )
         .modifies(),
-        c(
-            "col.setY",
-            "设为 Y",
-            "sety",
+        c("col.setY", "设为 Y", "sety",
             "",
             "列",
             "set y column",
@@ -39,10 +30,7 @@ pub(super) fn types_and_roles(commands: &mut Vec<Command>) {
             |a| a.set_role(Role::Y),
         )
         .modifies(),
-        c(
-            "col.setIgnore",
-            "设为忽略",
-            "ignore",
+        c("col.setIgnore", "设为忽略", "ignore",
             "",
             "列",
             "disregard",
@@ -55,10 +43,7 @@ pub(super) fn types_and_roles(commands: &mut Vec<Command>) {
             a.set_role(Role::Label)
         })
         .modifies(),
-        c(
-            "col.setXError",
-            "设为 X 误差",
-            "setx",
+        c("col.setXError", "设为 X 误差", "setx",
             "",
             "列",
             "x error",
@@ -66,10 +51,7 @@ pub(super) fn types_and_roles(commands: &mut Vec<Command>) {
             |a| a.set_role(Role::XError),
         )
         .modifies(),
-        c(
-            "col.setYError",
-            "设为 Y 误差",
-            "sety",
+        c("col.setYError", "设为 Y 误差", "sety",
             "",
             "列",
             "y error",
@@ -198,7 +180,7 @@ pub(super) fn columns(commands: &mut Vec<Command>) {
     commands.extend([
         c(
             "col.fill",
-            "填充序列",
+            "填充序列…",
             "colins",
             "",
             "列",
@@ -208,7 +190,7 @@ pub(super) fn columns(commands: &mut Vec<Command>) {
         ),
         c(
             "col.setvalues",
-            "设置列值",
+            "设置列值…",
             "colins",
             "Ctrl+Q",
             "列",

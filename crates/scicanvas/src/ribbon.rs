@@ -23,6 +23,7 @@ pub enum Item {
     Smalls(&'static [&'static str]),
     /// 展开的图类型画廊（带缩略图）。
     Gallery(&'static [&'static str]),
+    Scale(bool),
 }
 
 pub struct Group {
@@ -40,36 +41,86 @@ pub struct Tab {
 
 use Item::*;
 
-const PLOT_TYPES: &[&str] = &[
+pub(crate) const PLOT_TYPES: &[&str] = &[
+    "plot.linesym",
     "plot.line",
     "plot.scatter",
-    "plot.linesym",
     "plot.bar",
-    "plot.stacked_bar",
-    "plot.percent_stacked_bar",
-    "plot.floating_bar",
-    "plot.horizontal_bar",
-    "plot.area",
     "plot.spline",
     "plot.spline_symbol",
-    "plot.vertical_drop",
     "plot.step_horizontal",
     "plot.step_vertical",
-    "plot.histogram",
-    "plot.qq",
-    "plot.box",
-    "plot.stacked_horizontal_bar",
-    "plot.percent_stacked_horizontal_bar",
-    "plot.stacked_area",
-    "plot.fill_between",
-    "plot.error_band",
+    "plot.offset_line",
+    "plot.waterfall",
+    "plot.line_series",
+    "plot.function",
     "plot.column_scatter",
     "plot.bubble",
     "plot.color_scatter",
     "plot.bubble_color",
-    "plot.offset_line",
-    "plot.waterfall",
-    "plot.line_series",
+    "plot.error_band",
+    "plot.stacked_bar",
+    "plot.percent_stacked_bar",
+    "plot.floating_bar",
+    "plot.horizontal_bar",
+    "plot.stacked_horizontal_bar",
+    "plot.percent_stacked_horizontal_bar",
+    "plot.vertical_drop",
+    "plot.area",
+    "plot.stacked_area",
+    "plot.fill_between",
+    "plot.histogram",
+    "plot.qq",
+    "plot.box",
+    "plot.violin",
+    "plot.pie",
+    "plot.polar_line",
+    "plot.polar_scatter",
+];
+
+pub(crate) const PLOT_CATEGORIES: &[(&str, &[&str])] = &[
+    (
+        "线",
+        &[
+            "plot.line",
+            "plot.linesym",
+            "plot.spline",
+            "plot.spline_symbol",
+            "plot.step_horizontal",
+            "plot.step_vertical",
+            "plot.offset_line",
+            "plot.waterfall",
+            "plot.line_series",
+            "plot.function",
+        ],
+    ),
+    (
+        "点",
+        &[
+            "plot.scatter",
+            "plot.column_scatter",
+            "plot.bubble",
+            "plot.color_scatter",
+            "plot.bubble_color",
+            "plot.error_band",
+        ],
+    ),
+    (
+        "柱/条",
+        &[
+            "plot.bar",
+            "plot.stacked_bar",
+            "plot.percent_stacked_bar",
+            "plot.floating_bar",
+            "plot.horizontal_bar",
+            "plot.stacked_horizontal_bar",
+            "plot.percent_stacked_horizontal_bar",
+            "plot.vertical_drop",
+        ],
+    ),
+    ("面积", &["plot.area", "plot.stacked_area", "plot.fill_between"]),
+    ("统计", &["plot.histogram", "plot.qq", "plot.box", "plot.violin"]),
+    ("专业", &["plot.pie", "plot.polar_line", "plot.polar_scatter"]),
 ];
 
 pub static TABS: &[Tab] = &[
@@ -84,10 +135,11 @@ pub static TABS: &[Tab] = &[
                     Big("book.new"),
                     Smalls(&["note.new", "file.import"]),
                     Smalls(&["file.open", "file.save"]),
+                    Smalls(&["graph.new", "project.folder.new"]),
                 ],
             },
             Group {
-                label: "选区",
+                label: "编辑",
                 items: &[
                     Smalls(&["edit.undo", "edit.redo"]),
                     Smalls(&["edit.copy", "edit.clear"]),
@@ -114,7 +166,7 @@ pub static TABS: &[Tab] = &[
         groups: &[
             Group {
                 label: "二维图",
-                items: &[Gallery(PLOT_TYPES), Big("plot.builder")],
+                items: &[Gallery(PLOT_TYPES), Big("plot.function"), Big("plot.builder")],
             },
             Group {
                 label: "多面板",
@@ -157,11 +209,8 @@ pub static TABS: &[Tab] = &[
                     Big("fit.linear"),
                     Big("fit.poly"),
                     Big("fit.nonlinear"),
-                    Big("fit.compare"),
-                    Big("fit.global"),
-                    Smalls(&["fit.reports"]),
-                    Big("fit.calibration"),
-                    Big("fit.mlr"),
+                    Smalls(&["fit.global", "fit.peaks", "fit.mlr"]),
+                    Smalls(&["fit.compare", "fit.calibration", "fit.reports"]),
                 ],
             },
             Group {
@@ -177,11 +226,8 @@ pub static TABS: &[Tab] = &[
                 items: &[
                     Big("signal.baseline"),
                     Big("signal.peaks"),
-                    Big("signal.fft"),
-                    Big("signal.ifft"),
-                    Big("signal.filter"),
-                    Big("signal.convolve"),
-                    Big("signal.correlate"),
+                    Smalls(&["signal.fft", "signal.ifft", "signal.filter"]),
+                    Smalls(&["signal.convolve", "signal.correlate"]),
                 ],
             },
         ],
@@ -290,12 +336,14 @@ pub static TABS: &[Tab] = &[
             Group {
                 label: "坐标轴",
                 items: &[
-                    Smalls(&["graph.logx", "graph.logy", "graph.grid"]),
+                    Scale(true),
+                    Scale(false),
+                    Smalls(&["graph.grid"]),
                     Smalls(&["graph.reference.vertical", "graph.reference.horizontal"]),
                 ],
             },
             Group {
-                label: "图例",
+                label: "图例与标签",
                 items: &[Big("graph.legend"), Big("graph.labels")],
             },
             Group {
@@ -311,7 +359,7 @@ pub static TABS: &[Tab] = &[
                 items: &[
                     Big("graph.props"),
                     Big("layer.contents"),
-                    Smalls(&["graph.themes"]),
+                    Smalls(&["graph.themes", "graph.style.copy", "graph.style.paste"]),
                     Smalls(&["layer.add", "layer.remove"]),
                 ],
             },
@@ -336,7 +384,7 @@ pub static TABS: &[Tab] = &[
             },
             Group {
                 label: "显示",
-                items: &[Big("view.explorer"), Smalls(&["ribbon.toggle", "project.folder.new"])],
+                items: &[Big("view.explorer"), Smalls(&["ribbon.toggle"])],
             },
             Group {
                 label: "窗口",
@@ -432,6 +480,7 @@ fn visible_tabs(ctx: Option<Ctx>) -> impl Iterator<Item = &'static Tab> {
 
 /// 绘制标题栏、选项卡栏和功能区。被点击的命令写进 `clicked`。
 pub fn show(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palette, clicked: &mut Option<&'static str>) {
+    icons::install_loaders(ctx);
     let active_ctx = app.active_ctx();
     if !visible_tabs(active_ctx).any(|t| t.id == st.tab) {
         st.tab = "home";
@@ -451,7 +500,7 @@ pub fn show(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palette, 
             crate::chrome::store_caption(ctx, title_rect);
             crate::chrome::drag_area(ui, title_rect);
             ui.allocate_ui_with_layout(title_rect.size(), Layout::left_to_right(Align::Center), |ui| {
-                ui.add_space(6.0);
+                ui.add_space(crate::theme::space::S);
                 for id in QAT {
                     if let Some(c) = commands::find(id) {
                         if icon_button(ui, app, c, dark, pal, 18.0).clicked() {
@@ -459,15 +508,15 @@ pub fn show(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palette, 
                         }
                     }
                 }
-                ui.add_space(8.0);
+                ui.add_space(crate::theme::space::S);
                 ui.label(RichText::new("SciCanvas").strong().color(pal.accent));
-                ui.add_space(6.0);
+                ui.add_space(crate::theme::space::S);
                 ui.label(RichText::new(app.doc_title()).color(pal.weak));
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
                     if crate::chrome::buttons(ui, pal) {
                         *clicked = Some("app.quit");
                     }
-                    ui.add_space(12.0);
+                    ui.add_space(crate::theme::space::M);
                     let text = RichText::new("搜索命令            Ctrl K").color(pal.weak);
                     let b = egui::Button::image_and_text(
                         icons::icon("search", dark).fit_to_exact_size(vec2(14.0, 14.0)),
@@ -479,11 +528,11 @@ pub fn show(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palette, 
                     }
                 });
             });
-            ui.add_space(4.0);
+            ui.add_space(crate::theme::space::XS);
 
             // 选项卡栏
             let tabs_resp = ui.horizontal(|ui| {
-                ui.add_space(6.0);
+                ui.add_space(crate::theme::space::S);
                 if file_tab(ui, pal).clicked() {
                     st.backstage = true;
                     st.palette = None;
@@ -501,7 +550,7 @@ pub fn show(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palette, 
                     }
                 }
                 ui.with_layout(Layout::right_to_left(Align::Center), |ui| {
-                    ui.add_space(8.0);
+                    ui.add_space(crate::theme::space::S);
                     let name = if st.collapsed { "chevrondown" } else { "chevron" };
                     let b = egui::ImageButton::new(icons::icon(name, dark).fit_to_exact_size(vec2(14.0, 14.0)))
                         .frame(false);
@@ -638,6 +687,7 @@ fn group(
                         });
                     }
                     Gallery(ids) => plot_gallery(ui, ids, preview_count, app, pal, clicked),
+                    Scale(x) => scale_menu(ui, *x, app, clicked),
                 }
             }
         });
@@ -675,6 +725,7 @@ fn group_width(ui: &egui::Ui, group: &Group, preview_count: usize) -> f32 {
             .filter_map(|id| commands::find(id))
             .map(|c| text_width(ui, c.label, font.clone()) + 34.0)
             .fold(0.0, f32::max),
+        Scale(x) => menu_width(ui, if *x { "X 刻度类型" } else { "Y 刻度类型" }),
         Gallery(ids) => {
             let tiles = ids
                 .iter()
@@ -710,17 +761,13 @@ fn gallery_preview_count(ui: &egui::Ui, tab: &Tab, available: f32) -> usize {
         let width = commands::find(id).map_or(0.0, |command| gallery_tile_width(ui, command) + 2.0);
         cumulative.push(cumulative.last().copied().unwrap_or_default() + width);
     }
-    let preferred = ids.len().min(3);
+    let preferred = ids.len().min(4);
     let budget = if total + cumulative[preferred] <= available {
         available - total
     } else {
         (available - prefix - 117.0).max(0.0)
     };
-    let limit = if total + cumulative[preferred] <= available {
-        ids.len()
-    } else {
-        preferred
-    };
+    let limit = preferred;
     (0..=limit)
         .rev()
         .find(|&count| cumulative[count] <= budget)
@@ -750,8 +797,8 @@ fn plot_gallery(
                     }
                 }
                 ui.vertical(|ui| {
-                    ui.add_space(18.0);
-                    plot_menu(ui, "▾", ids, app, pal, clicked);
+                    ui.add_space(crate::theme::space::L);
+                    plot_menu(ui, ids, app, pal, clicked);
                 });
             });
         });
@@ -764,40 +811,51 @@ fn thumbnail_grid(
     pal: &Palette,
     clicked: &mut Option<&'static str>,
 ) {
-    let height = (ui.ctx().screen_rect().height() - 150.0).clamp(120.0, 380.0);
+    let _ = ids;
+    let height = (ui.ctx().screen_rect().height() - 150.0).clamp(120.0, 540.0);
     egui::ScrollArea::vertical().max_height(height).show(ui, |ui| {
-        egui::Grid::new(("plot-menu-grid", ids.as_ptr() as usize))
-            .num_columns(3)
-            .spacing(vec2(4.0, 4.0))
-            .show(ui, |ui| {
-                for (index, id) in ids.iter().enumerate() {
-                    if let Some(command) = commands::find(id) {
-                        if gallery_tile(ui, app, command, pal, clicked).clicked() {
-                            *clicked = Some(command.id);
+        for (category, ids) in PLOT_CATEGORIES {
+            ui.label(egui::RichText::new(*category).strong());
+            egui::Grid::new(("plot-menu-grid", category))
+                .num_columns(3)
+                .spacing(vec2(crate::theme::space::XS, crate::theme::space::XS))
+                .show(ui, |ui| {
+                    for (index, id) in ids.iter().enumerate() {
+                        if let Some(command) = commands::find(id) {
+                            if gallery_tile(ui, app, command, pal, clicked).clicked() {
+                                *clicked = Some(command.id);
+                            }
+                            if clicked.is_some() {
+                                ui.close_menu();
+                            }
                         }
-                        if clicked.is_some() {
-                            ui.close_menu();
+                        if index % 3 == 2 {
+                            ui.end_row();
                         }
                     }
-                    if index % 3 == 2 {
-                        ui.end_row();
-                    }
-                }
-            });
+                });
+            ui.add_space(crate::theme::space::S);
+        }
     });
 }
 
 fn plot_menu(
     ui: &mut egui::Ui,
-    label: &str,
     ids: &'static [&'static str],
     app: &SciApp,
     pal: &Palette,
     clicked: &mut Option<&'static str>,
 ) {
-    ui.menu_button(label, |ui| thumbnail_grid(ui, ids, app, pal, clicked))
-        .response
-        .on_hover_text("展开全部图形类型");
+    let response = ui
+        .menu_image_button(
+            icons::icon("chevrondown", pal.dark).fit_to_exact_size(vec2(12., 12.)),
+            |ui| thumbnail_grid(ui, ids, app, pal, clicked),
+        )
+        .response;
+    #[cfg(test)]
+    ui.ctx()
+        .data_mut(|data| data.insert_temp(egui::Id::new("ribbon-gallery-menu-rect"), response.rect));
+    response.on_hover_text("展开全部图形类型");
 }
 
 fn overflow_group(
@@ -811,36 +869,41 @@ fn overflow_group(
         ui.spacing_mut().item_spacing = vec2(2.0, 1.0);
         let items = ui.horizontal_top(|ui| {
             ui.set_min_height(72.0);
-            ui.menu_button("更多功能 ▾", |ui| {
-                for group in groups {
-                    ui.menu_button(group.label, |ui| {
-                        for item in group.items {
-                            match item {
-                                Big(id) => {
-                                    if let Some(command) = commands::find(id) {
-                                        if small_button(ui, app, command, pal, clicked).clicked() {
-                                            *clicked = Some(command.id);
-                                        }
-                                    }
-                                }
-                                Smalls(ids) => {
-                                    for id in *ids {
+            ui.menu_image_text_button(
+                icons::icon("chevrondown", pal.dark).fit_to_exact_size(vec2(12., 12.)),
+                "更多功能",
+                |ui| {
+                    for group in groups {
+                        ui.menu_button(group.label, |ui| {
+                            for item in group.items {
+                                match item {
+                                    Big(id) => {
                                         if let Some(command) = commands::find(id) {
                                             if small_button(ui, app, command, pal, clicked).clicked() {
                                                 *clicked = Some(command.id);
                                             }
                                         }
                                     }
+                                    Smalls(ids) => {
+                                        for id in *ids {
+                                            if let Some(command) = commands::find(id) {
+                                                if small_button(ui, app, command, pal, clicked).clicked() {
+                                                    *clicked = Some(command.id);
+                                                }
+                                            }
+                                        }
+                                    }
+                                    Gallery(ids) => thumbnail_grid(ui, ids, app, pal, clicked),
+                                    Scale(x) => scale_menu(ui, *x, app, clicked),
                                 }
-                                Gallery(ids) => thumbnail_grid(ui, ids, app, pal, clicked),
+                                if clicked.is_some() {
+                                    ui.close_menu();
+                                }
                             }
-                            if clicked.is_some() {
-                                ui.close_menu();
-                            }
-                        }
-                    });
-                }
-            });
+                        });
+                    }
+                },
+            );
         });
         let width = items.response.rect.width().max(40.0);
         ui.add_space((72.0 - items.response.rect.height()).max(0.0));
@@ -972,6 +1035,8 @@ fn gallery_tile(
     let kind = c.id.split('.').nth(1).unwrap_or("line");
     let thumb_rect = Rect::from_center_size(egui::pos2(rect.center().x, rect.top() + 24.0), vec2(58.0, 40.0));
     icons::thumb(kind).tint(dim(enabled, pal)).paint_at(ui, thumb_rect);
+    ui.painter()
+        .rect_stroke(thumb_rect, 3.0, Stroke::new(1.0_f32, pal.line));
     ui.painter().text(
         egui::pos2(rect.center().x, rect.bottom() - 9.0),
         Align2::CENTER_CENTER,
@@ -1087,7 +1152,7 @@ pub fn backstage(
             if nav_item(ui, "back", "返回", "Esc", true, pal).clicked() {
                 st.backstage = false;
             }
-            ui.add_space(8.0);
+            ui.add_space(crate::theme::space::S);
             for id in BACKSTAGE_NAV {
                 if let Some(c) = commands::find(id) {
                     let enabled = (c.when)(app).is_ok();
@@ -1132,7 +1197,7 @@ pub fn backstage(
                     .strong()
                     .color(pal.weak),
                 );
-                ui.add_space(6.0);
+                ui.add_space(crate::theme::space::S);
                 ui.horizontal_wrapped(|ui| {
                     ui.spacing_mut().item_spacing = vec2(8.0, 8.0);
                     for b in &app.project.books {
@@ -1159,7 +1224,7 @@ pub fn backstage(
                 });
                 ui.add_space(20.0);
                 ui.label(RichText::new("保存位置").strong().color(pal.weak));
-                ui.add_space(4.0);
+                ui.add_space(crate::theme::space::XS);
                 let where_ = match &app.project_path {
                     Some(p) => format!("当前项目文件：{}", p.display()),
                     None => "当前项目还没有保存。用“保存项目”存为 .scv 文件。".to_string(),
@@ -1167,7 +1232,7 @@ pub fn backstage(
                 ui.label(where_);
                 ui.add_space(20.0);
                 ui.label(RichText::new("常用快捷键").strong().color(pal.weak));
-                ui.add_space(4.0);
+                ui.add_space(crate::theme::space::XS);
                 egui::Grid::new("backstage-keys")
                     .num_columns(2)
                     .spacing([18.0, 4.0])
@@ -1375,7 +1440,7 @@ pub fn palette(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palett
                     }
                 }
             });
-            ui.add_space(4.0);
+            ui.add_space(crate::theme::space::XS);
             ui.label(RichText::new("↑ ↓ 选择 · 回车执行 · Esc 关闭").small().color(pal.weak));
         });
     // 点到面板外面也关闭
@@ -1394,6 +1459,31 @@ pub fn palette(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palett
     if close {
         st.palette = None;
     }
+}
+
+fn scale_menu(ui: &mut egui::Ui, x: bool, app: &SciApp, clicked: &mut Option<&'static str>) {
+    let label = if x { "X 刻度类型" } else { "Y 刻度类型" };
+    ui.add_enabled_ui(
+        app.active_layer()
+            .is_some_and(|layer| !x || layer.projection.is_cartesian()),
+        |ui| {
+            ui.menu_button(label, |ui| {
+                if let Some(layer) = app.active_layer() {
+                    let mut scale = if x {
+                        layer.effective_x_scale()
+                    } else {
+                        layer.effective_y_scale()
+                    };
+                    let before = scale;
+                    crate::dialogs::axis_scale_options(ui, &mut scale);
+                    if scale != before {
+                        *clicked = Some(crate::commands::axis_scale_command(x, scale));
+                        ui.close_menu();
+                    }
+                }
+            });
+        },
+    );
 }
 
 #[cfg(test)]
