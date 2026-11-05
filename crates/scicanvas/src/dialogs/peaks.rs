@@ -2,9 +2,18 @@ use super::*;
 
 impl Dialog {
     pub(super) fn show_peaks(&mut self, ctx: &egui::Context, pal: &Palette, open: &mut bool, _esc: bool) -> Action {
-        let Self::Peaks { percent } = self else { unreachable!() };
+        let Self::Peaks {
+            percent,
+            derivative,
+            window,
+        } = self
+        else {
+            unreachable!()
+        };
         let mut action = Action::None;
-        window(ctx, "寻峰与峰积分").open(open).show(ctx, |ui| {
+        super::window(ctx, "寻峰与峰积分").open(open).show(ctx, |ui| {
+            ui.horizontal(|ui|{ui.radio_value(derivative,false,"局部极大");ui.radio_value(derivative,true,"导数法");});
+            if *derivative{ui.horizontal(|ui|{ui.label("SG 窗口");ui.add(egui::DragValue::new(window).range(3..=501));});}
             ui.horizontal_wrapped(|ui| {
                 ui.label("最小突出度");
                 ui.add(egui::DragValue::new(percent).range(0.1..=100.0).speed(0.2).suffix(" %"));
@@ -19,7 +28,7 @@ impl Dialog {
             );
             let (ok, cancel) = buttons(ui, "寻峰");
             if ok {
-                action = Action::Peaks(*percent / 100.0);
+                action = if *derivative{Action::SignalTools(Box::new(SignalAction::Peaks(*window,*percent/100.)))}else{Action::Peaks(*percent / 100.0)};
             } else if cancel {
                 action = Action::Close;
             }

@@ -922,11 +922,71 @@ def function_plot_cases():
     write("function_plots",cases)
 
 
+def baseline_extension_cases():
+    x=np.linspace(0,12,241);y=.3+.03*x+.003*(x-6)**2+3*np.exp(-((x-3.2)/.5)**2)+2*np.exp(-((x-8.5)/.7)**2)+.003*np.sin(np.arange(len(x))*1.7)
+    cases=[]
+    for manual in [False,True]:
+        if manual:ax=np.array([0.,1.5,5.,7.,10.5,12.]);ay=np.interp(ax,x,y)
+        else:
+            indices=[0,len(x)-1]
+            for i in range(6):
+                selected=np.flatnonzero((x>=12*i/6)&(x<=12*(i+1)/6));indices.append(selected[np.argmin(y[selected])])
+            indices=np.unique(indices);ax=x[indices];ay=y[indices]
+        for spline in [False,True]:
+            result=interpolate.CubicSpline(ax,ay,bc_type="natural")(x) if spline else np.interp(x,ax,ay)
+            cases.append(dict(x=x,y=y,kind="Anchors",count=6,spline=spline,anchors=ax if manual else [],baseline=result))
+    clipped=y.copy()
+    for _ in range(100):
+        result=np.polyval(np.polyfit(x,clipped,2),x);next_=np.minimum(clipped,result);change=np.linalg.norm(next_-clipped);scale=np.linalg.norm(clipped);clipped=next_
+        if change<=1e-6*max(scale,np.finfo(float).tiny):break
+    cases.append(dict(x=x,y=y,kind="Polynomial",order=2,iterations=100,anchors=[],baseline=result))
+    write("baseline_extensions",cases)
+
+def derivative_peak_cases():
+    x=np.linspace(0,12,241);centers=[3.17,8.43];y=.15+.02*x+3*np.exp(-((x-centers[0])/.5)**2)+2*np.exp(-((x-centers[1])/.7)**2)+.002*np.sin(np.arange(len(x))*1.7)
+    first=signal.savgol_filter(y,11,2,deriv=1,delta=x[1]-x[0]);second=signal.savgol_filter(y,11,2,deriv=2,delta=x[1]-x[0]);smooth=signal.savgol_filter(y,11,2);indices=[]
+    for i in range(len(x)-1):
+        if first[i]>=0 and first[i+1]<0:
+            zero=x[i]+(x[i+1]-x[i])*first[i]/(first[i]-first[i+1]);k=i if abs(zero-x[i])<=abs(x[i+1]-zero) else i+1
+            if second[k]>=0:continue
+            top=smooth[k];left=k;right=k
+            j=k
+            while j>=0 and smooth[j]<=top:
+                if smooth[j]<smooth[left]:left=j
+                j-=1
+            j=k
+            while j<len(x) and smooth[j]<=top:
+                if smooth[j]<smooth[right]:right=j
+                j+=1
+            height=y[k]-max(y[left],y[right])
+            if height>=.05*np.ptp(y) and (not indices or indices[-1]!=k):indices.append(k)
+    write("derivative_peaks",[dict(x=x,y=y,window=11,threshold=.05,indices=indices,centers=centers)])
+
+def signal_extension_cases():
+    cases=[]
+    for a,b in [([1.,2.,3.],[.25,.5]),([.5,2.],[1.,2.,3.,4.]),([1.,-2.,4.],[2.])]:
+        for mode in ["full","same","valid"]:cases.append(dict(kind="Convolve",a=a,b=b,mode=mode.capitalize(),result=np.convolve(a,b,mode=mode)))
+    a=np.sin(np.arange(1100)*.13);b=np.exp(-np.arange(1000)*.01);cases.append(dict(kind="Convolve",a=a,b=b,mode="Same",result=np.convolve(a,b,mode="same")))
+    original=np.sin(np.arange(32)*.3)+.1*np.cos(np.arange(32)*.7);h=np.array([1.,.25,.125]);y=np.convolve(original,h)
+    for epsilon in [0.,1e-3]:
+        n=1<<(len(y)+len(h)-2).bit_length();Y=np.fft.fft(y,n);H=np.fft.fft(h,n);power=abs(H)**2;result=np.fft.ifft(Y*np.conj(H)/(power+epsilon*max(power))).real[:len(y)]
+        cases.append(dict(kind="Deconvolve",y=y,h=h,epsilon=epsilon,result=result,original=original))
+    write("signal_extensions",cases)
+
+
+def curve_tool_cases():
+    x=np.array([4.,0.,2.,5.,1.,2.]);y=np.array([4.,0.,2.,50.,10.,20.]);order=np.argsort(x,kind="stable");xx=x[order];yy=y[order];unique=np.unique(xx)
+    cases=[dict(kind="Mean",x=unique,y=[np.mean(yy[xx==v]) for v in unique]),dict(kind="KeepAll",x=xx,y=yy)]
+    at=np.array([2.5,np.nan,.5,1.5]);f=interpolate.interp1d([0.,1.,2.,3.],[0.,2.,4.,6.],fill_value="extrapolate")
+    cases.append(dict(kind="Interpolation",at=at,y=f(at),single_x=1.25,single_y=float(f(1.25))))
+    write("curve_tools",cases)
+
+
 GENERATORS = [
     integrals, normalization, descriptive, column_math, polynomial, statistical_tests, signal_tests,
     interpolation_cases, derivative_cases, peak_cases, constrained_fit_cases, builtin_fit_cases,
     smoothing_cases, percent_bar_cases, fit_report_cases, formula_cases, weighted_fit_cases, qq_cases, box_cases,
-    histogram_option_cases, normality_ks_ad, ks_2samp, two_way_anova, fit_tools, global_fits, extended_fit_cases, inhibition_fits, kde_cases, peak_sum_cases, function_plot_cases,
+    histogram_option_cases, normality_ks_ad, ks_2samp, two_way_anova, fit_tools, global_fits, extended_fit_cases, inhibition_fits, kde_cases, peak_sum_cases, function_plot_cases, baseline_extension_cases, derivative_peak_cases, signal_extension_cases, curve_tool_cases,
 ]
 
 

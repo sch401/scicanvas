@@ -753,6 +753,12 @@ fn migrated_analysis_dialogs_match_core_results_and_undo_as_one_step() {
                 expected.subtract_baseline(&src, BaselineMethod::Line).unwrap();
                 (
                     Dialog::Baseline {
+                        advanced: 0,
+                        count: 10,
+                        spline: false,
+                        order: 2,
+                        iterations: 100,
+                        anchors: String::new(),
                         als: false,
                         log_lambda: 5.0,
                         p: 0.01,
@@ -765,6 +771,11 @@ fn migrated_analysis_dialogs_match_core_results_and_undo_as_one_step() {
                 expected.interpolate(&src, InterpMethod::Linear, 10, None).unwrap();
                 (
                     Dialog::Interpolate {
+                        mode: 0,
+                        target: None,
+                        single: 0.,
+                        result: Vec::new(),
+                        options: Vec::new(),
                         method: InterpMethod::Linear,
                         points: 10,
                         custom: false,
@@ -820,7 +831,15 @@ fn migrated_analysis_dialogs_match_core_results_and_undo_as_one_step() {
             }
             8 => {
                 expected.find_peaks(&src, 0.05).unwrap();
-                (Dialog::Peaks { percent: 5.0 }, "寻峰", "寻峰")
+                (
+                    Dialog::Peaks {
+                        percent: 5.0,
+                        derivative: false,
+                        window: 11,
+                    },
+                    "寻峰",
+                    "寻峰",
+                )
             }
             _ => {
                 expected
@@ -2457,4 +2476,131 @@ fn b5_style_paste_preserves_target_mapping_and_theme_defaults_are_undoable() {
     app.run_command("plot.line");
     assert_eq!(app.project.graphs.last().unwrap().first_layer().line_width, 2.5);
     roundtrip(&mut app, &before);
+}
+
+#[test]
+fn a6_single_interpolation_query_keeps_history_and_target_column_undoes() {
+    use scicanvas_core::{interpolate::InterpMethod, plotspec::DataRef};
+    let mut app = app();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["B".into()]);
+    for (key, values) in [
+        ("A", vec![0., 1., 2., 3.]),
+        ("B", vec![0., 2., 4., 6.]),
+        ("C", vec![2.5, f64::NAN, 0.5, 1.5]),
+    ] {
+        app.project
+            .book_mut(1)
+            .unwrap()
+            .columns
+            .iter_mut()
+            .find(|c| c.key == key)
+            .unwrap()
+            .data = values.iter().map(ToString::to_string).collect();
+    }
+    app.open_interpolate_dialog();
+    let Some(Dialog::Interpolate {
+        mode, single, method, ..
+    }) = &mut app.dialog
+    else {
+        panic!()
+    };
+    *mode = 2;
+    *single = 1.25;
+    *method = InterpMethod::Linear;
+    let before = app.project.clone();
+    let undo = app.history.undo_label().map(str::to_owned);
+    press_dialog_button(&mut app, "查询");
+    assert_eq!(app.project, before);
+    assert_eq!(app.history.undo_label().map(str::to_owned), undo);
+    assert!(matches!(&app.dialog,Some(Dialog::Interpolate{result,..}) if result[0].1==2.5));
+    let Some(Dialog::Interpolate { mode, target, .. }) = &mut app.dialog else {
+        panic!()
+    };
+    *mode = 1;
+    *target = Some(DataRef::new(1, "C"));
+    press_dialog_button(&mut app, "插值");
+    assert_eq!(
+        app.project.book(1).unwrap().columns.len(),
+        before.book(1).unwrap().columns.len() + 1
+    );
+    roundtrip(&mut app, &before);
+}
+#[test]
+fn a6_anchor_signal_and_merge_real_dialogs_are_single_undo_steps() {
+    for operation in 0..4 {
+        let mut app = app();
+        app.active = Some(1);
+        let x: Vec<_> = (0..101).map(|i| i as f64 * 0.1).collect();
+        let y: Vec<_> = x
+            .iter()
+            .map(|x| 0.2 + 3. * (-((x - 3.) / 0.5).powi(2)).exp() + 2. * (-((x - 7.) / 0.6).powi(2)).exp())
+            .collect();
+        for (key, values) in [("A", x), ("B", y), ("C", vec![0.25, 0.5, 0.25])] {
+            app.project
+                .book_mut(1)
+                .unwrap()
+                .columns
+                .iter_mut()
+                .find(|c| c.key == key)
+                .unwrap()
+                .data = values.iter().map(ToString::to_string).collect();
+        }
+        app.selection.insert(
+            1,
+            if operation == 0 || operation == 3 {
+                vec!["B".into()]
+            } else {
+                vec!["B".into(), "C".into()]
+            },
+        );
+        let before = app.project.clone();
+        if operation == 0 {
+            app.open_baseline_dialog();
+            let Some(Dialog::Baseline {
+                advanced,
+                anchors,
+                spline,
+                ..
+            }) = &mut app.dialog
+            else {
+                panic!()
+            };
+            *advanced = 1;
+            *anchors = "0,5,10".into();
+            *spline = true;
+            press_dialog_button(&mut app, "扣除");
+            assert_eq!(
+                app.project.book(1).unwrap().columns.len(),
+                before.book(1).unwrap().columns.len() + 2
+            );
+        } else if operation == 1 {
+            app.open_signal_dialog();
+            assert!(matches!(&app.dialog, Some(Dialog::Signal(_))));
+            press_dialog_button(&mut app, "计算");
+            assert_eq!(
+                app.project.book(1).unwrap().columns.len(),
+                before.book(1).unwrap().columns.len() + 2
+            );
+        } else if operation == 2 {
+            app.open_average_dialog();
+            let Some(Dialog::Average { merge, mean }) = &mut app.dialog else {
+                panic!()
+            };
+            *merge = true;
+            *mean = false;
+            press_dialog_button(&mut app, "计算");
+            assert_eq!(app.project.books.len(), before.books.len() + 1);
+        } else {
+            app.open_peaks_dialog();
+            let Some(Dialog::Peaks { derivative, .. }) = &mut app.dialog else {
+                panic!()
+            };
+            *derivative = true;
+            press_dialog_button(&mut app, "寻峰");
+            assert_eq!(app.project.books.len(), before.books.len() + 1, "{}", app.status);
+            assert_eq!(app.project.books.last().unwrap().columns[0].data.len(), 2);
+        }
+        roundtrip(&mut app, &before);
+    }
 }

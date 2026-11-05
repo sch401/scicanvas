@@ -31,6 +31,7 @@ pub mod presets;
 pub mod project_file;
 pub mod project_tree;
 pub mod scene;
+pub mod signal;
 pub mod spline;
 mod stat;
 pub mod stats;

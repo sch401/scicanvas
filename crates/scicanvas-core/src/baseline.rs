@@ -1,18 +1,35 @@
 //! 基线：两端连线，以及非对称最小二乘（ALS，Eilers & Boelens 2005）自动基线。
+mod methods;
+pub use methods::with_anchors;
 
 #[derive(Clone, Copy, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]
 pub enum BaselineMethod {
+    Anchors {
+        count: u16,
+        spline: bool,
+    },
+    Polynomial {
+        order: u8,
+        iterations: u16,
+    },
     /// 首末两点的连线。
     Line,
     /// 非对称最小二乘：平滑度 λ 与非对称系数 p。
-    Als { lambda: f64, p: f64 },
+    Als {
+        lambda: f64,
+        p: f64,
+    },
 }
 
 impl BaselineMethod {
     pub fn label(&self) -> String {
         match self {
             BaselineMethod::Line => "两端连线".into(),
+            BaselineMethod::Anchors { count, spline } => {
+                format!("锚点基线，{count} 段，{}", if *spline { "自然样条" } else { "线性" })
+            }
+            BaselineMethod::Polynomial { order, iterations } => format!("modpoly，{order} 阶，最多 {iterations} 次"),
             BaselineMethod::Als { lambda, p } => format!("ALS，λ = {lambda:e}，p = {p}"),
         }
     }
@@ -25,6 +42,9 @@ pub fn baseline(xs: &[f64], ys: &[f64], method: BaselineMethod) -> Vec<f64> {
         return vec![];
     }
     match method {
+        BaselineMethod::Anchors { .. } | BaselineMethod::Polynomial { .. } => {
+            with_anchors(xs, ys, method, &[]).unwrap_or_else(|_| vec![f64::NAN; ys.len()])
+        }
         BaselineMethod::Line => {
             let (x0, x1, y0, y1) = (xs[0], xs[n - 1], ys[0], ys[n - 1]);
             xs.iter()

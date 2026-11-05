@@ -23,7 +23,7 @@ impl InterpMethod {
 }
 
 /// 去掉非有限值、按 X 排序；X 重复或有效点少于 2 个时报错。
-fn prepare(xs: &[f64], ys: &[f64]) -> Result<Vec<[f64; 2]>, String> {
+pub(crate) fn prepare(xs: &[f64], ys: &[f64]) -> Result<Vec<[f64; 2]>, String> {
     let mut pts: Vec<[f64; 2]> = xs
         .iter()
         .zip(ys)

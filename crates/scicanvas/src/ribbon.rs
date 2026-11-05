@@ -180,6 +180,7 @@ pub static TABS: &[Tab] = &[
                     Big("signal.fft"),
                     Big("signal.ifft"),
                     Big("signal.filter"),
+                    Big("signal.convolve"),
                     Big("signal.correlate"),
                 ],
             },

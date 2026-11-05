@@ -296,6 +296,12 @@ impl SciApp {
 
     pub(crate) fn open_baseline_dialog(&mut self) {
         self.dialog = Some(Dialog::Baseline {
+            advanced: 0,
+            count: 10,
+            spline: false,
+            order: 2,
+            iterations: 100,
+            anchors: String::new(),
             als: true,
             log_lambda: 5.0,
             p: 0.01,
@@ -315,14 +321,21 @@ impl SciApp {
     }
 
     pub(crate) fn open_peaks_dialog(&mut self) {
-        self.dialog = Some(Dialog::Peaks { percent: 5.0 });
+        self.dialog = Some(Dialog::Peaks {
+            percent: 5.0,
+            derivative: false,
+            window: 11,
+        });
     }
 
     pub(super) fn find_peaks(&mut self, min_prominence: f64) {
+        self.find_peaks_method(min_prominence, None)
+    }
+    pub(super) fn find_peaks_method(&mut self, min_prominence: f64, window: Option<usize>) {
         let Some(src) = self.analysis_source() else { return };
         self.edit_with(
             "寻峰",
-            |project| project.find_peaks(&src, min_prominence).map(Some),
+            |project| project.find_peaks_with_method(&src, min_prominence, window).map(Some),
             |app, made| {
                 let mut parts = vec![];
                 for id in &made {
@@ -334,6 +347,7 @@ impl SciApp {
                     app.show_item(*id);
                 }
                 app.status = format!("峰表在 {}", parts.join("、"));
+                app.dialog = None;
             },
         );
     }
@@ -535,15 +549,7 @@ impl SciApp {
 
     /// 当前图形的各条曲线（或选中的 Y 列）插值到公共 X 上求平均。
     pub(crate) fn average_curves(&mut self) {
-        let Some(src) = self.analysis_source() else { return };
-        match self.project.average_curves(&src) {
-            Ok((bid, gid)) => {
-                let name = self.project.name_of(bid).unwrap_or_default().to_owned();
-                self.show_item(gid);
-                self.status = format!("平均曲线在 {name}（标准差为 Y 误差列）");
-            }
-            Err(e) => self.status = e,
-        }
+        self.run_curve_merge(None);
     }
 
     /// 对点选的各列逐行统计（平行样的均值、标准差等）。
@@ -1096,7 +1102,33 @@ impl SciApp {
             .analysis_source()
             .and_then(|src| self.project.x_range(&src))
             .unwrap_or((0.0, 1.0));
+        let options = self
+            .project
+            .books
+            .iter()
+            .flat_map(|book| {
+                book.columns
+                    .iter()
+                    .filter(|c| {
+                        matches!(
+                            c.data.kind(),
+                            scicanvas_core::DataKind::Num | scicanvas_core::DataKind::DateTime
+                        )
+                    })
+                    .map(|c| {
+                        (
+                            scicanvas_core::plotspec::DataRef::new(book.id, &c.key),
+                            format!("{}:{}", book.name, c.display_name()),
+                        )
+                    })
+            })
+            .collect::<Vec<_>>();
         self.dialog = Some(Dialog::Interpolate {
+            mode: 0,
+            target: options.first().map(|o| o.0.clone()),
+            single: from,
+            result: Vec::new(),
+            options,
             method: scicanvas_core::interpolate::InterpMethod::Spline,
             points: 100,
             custom: false,
