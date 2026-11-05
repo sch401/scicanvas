@@ -107,8 +107,8 @@ pub fn show(ctx: &egui::Context, project: &Project, draft: &mut Option<PlotSpec>
                     .collect();
                 floating_columns(ui, &mut layer, &cols);
                 ui.horizontal_wrapped(|ui| {
-                    ui.selectable_value(&mut layer.color_map, ColorMap::Origin, "默认");
-                    ui.selectable_value(&mut layer.color_map, ColorMap::Viridis, "Viridis");
+                    ui.selectable_value(&mut layer.color_map, ColorMap::Origin, "分类色（Origin）");
+                    ui.selectable_value(&mut layer.color_map, ColorMap::Viridis, "Viridis（连续）");
                     ui.selectable_value(&mut layer.color_map, ColorMap::Colorblind, "色盲友好");
                 });
                 let valid = layer.validate(book).and_then(|_| {

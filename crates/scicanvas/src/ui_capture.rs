@@ -324,3 +324,49 @@ fn capture_u2_dialogs() {
         }
     }
 }
+
+#[test]
+#[ignore = "Explicit before/after property-panel screenshots"]
+fn capture_u3_properties() {
+    let dir = std::env::var("SCICANVAS_UI_CAPTURE_DIR").expect("capture directory");
+    let directory = std::path::Path::new(&dir);
+    std::fs::create_dir_all(directory).unwrap();
+    let mut capture = Capture::new();
+    for theme in [egui::Theme::Light, egui::Theme::Dark] {
+        for color in [false, true] {
+            let ctx = egui::Context::default();
+            crate::theme::install(&ctx);
+            crate::fonts::setup(&ctx);
+            crate::icons::install_loaders(&ctx);
+            ctx.set_theme(theme);
+            let mut app = SciApp::initial(crate::theme::palette(theme));
+            app.active = Some(2);
+            app.props_for = Some(2);
+            if color {
+                let layer = app.project.graph_mut(2).unwrap().first_layer_mut();
+                layer.plot_type = scicanvas_core::PlotType::ColorScatter;
+                layer.edit_styles(|styles| {
+                    styles.entry("B".into()).or_default().color_column = Some("C".into());
+                });
+                layer.color_map = scicanvas_core::colormap::ColorMap::Viridis;
+            }
+            if color {
+                for _ in 0..5 {
+                    capture.app_frame(&ctx, &mut app, vec![]);
+                }
+                let out = capture.app_frame(&ctx, &mut app, vec![]);
+                if let Some(rect) = crate::test_ui::text_rect(&out, "坐标轴") {
+                    let at = rect.center();
+                    capture.app_frame(
+                        &ctx,
+                        &mut app,
+                        vec![egui::Event::PointerMoved(at), crate::test_ui::button(at, true)],
+                    );
+                    capture.app_frame(&ctx, &mut app, vec![crate::test_ui::button(at, false)]);
+                }
+            }
+            let name = if color { "color-properties" } else { "properties" };
+            capture.app_capture(&ctx, &mut app, &directory.join(format!("{name}-{theme:?}.png")));
+        }
+    }
+}

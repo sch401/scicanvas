@@ -30,47 +30,87 @@ impl SciApp {
                 let Some(graph) = project.graphs.iter_mut().find(|graph| graph.id == gid) else {
                     return;
                 };
-                page(ui, graph, history_group);
-                props_layer = page_layout(ui, graph, props_layer, history_group);
-                layer(ui, graph, gid, props_layer, history_group);
+                props_section(ui, "page", "页面与图层", false, |ui| {
+                    page(ui, graph, history_group);
+                    props_layer = page_layout(ui, graph, props_layer, history_group);
+                    layer(ui, graph, gid, props_layer, history_group);
+                });
                 let g = &mut graph.page.layers_mut()[props_layer];
                 let cols = g
                     .book_id
                     .and_then(|id| options.column_options.get(&id))
                     .cloned()
                     .unwrap_or_default();
-                egui::Grid::new(("props-grid", gid, props_layer))
-                    .num_columns(2)
-                    .spacing([8.0, 4.0])
-                    .show(ui, |ui| {
-                        data_source(ui, g, &options.book_specs);
-                        columns(ui, g, &cols);
-                        foreign_curves(
-                            ui,
-                            g,
-                            &options.book_specs,
-                            &options.curve_options,
-                            &options.curve_names,
-                            &lookup,
-                        );
-                        if g.plot_type == PlotType::FloatingBar {
-                            ui.label("浮动柱下端");
-                            crate::builder::floating_columns(ui, g, &cols);
-                            ui.end_row();
+                props_section(ui, "data", "数据", true, |ui| {
+                    data_source(ui, g, &options.book_specs);
+                    columns(ui, g, &cols);
+                    foreign_curves(
+                        ui,
+                        g,
+                        &options.book_specs,
+                        &options.curve_options,
+                        &options.curve_names,
+                        &lookup,
+                    );
+                    if g.plot_type == PlotType::FloatingBar {
+                        ui.label("浮动柱下端");
+                        crate::builder::floating_columns(ui, g, &cols);
+                        ui.end_row();
+                    }
+                });
+                props_section(ui, "axes", "坐标轴", true, |ui| {
+                    titles(ui, g, history_group);
+                    axes(ui, g, history_group);
+                    ui.label("框线");
+                    ui.horizontal_wrapped(|ui| {
+                        ui.checkbox(&mut g.grid, "网格线");
+                        ui.checkbox(&mut g.frame, "四边框");
+                    });
+                    ui.end_row();
+                    ui.label("刻度方向");
+                    ui.horizontal_wrapped(|ui| {
+                        for dir in scicanvas_core::page::TickDir::ALL {
+                            ui.radio_value(&mut g.tick_dir, dir, dir.label());
                         }
-                        titles(ui, g, history_group);
-                        axes(ui, g, history_group);
+                    });
+                    ui.end_row();
+                });
+                let specific = if g.plot_type == PlotType::Histogram {
+                    Some("直方图")
+                } else if g.offset.is_some() || matches!(g.plot_type, PlotType::OffsetLine | PlotType::Waterfall) {
+                    Some("偏移与瀑布")
+                } else if !g.projection.is_cartesian() {
+                    Some("极坐标")
+                } else if matches!(g.plot_type, PlotType::ColorScatter | PlotType::BubbleColor)
+                    || g.styles().values().any(|s| s.color_column.is_some())
+                {
+                    Some("颜色映射")
+                } else {
+                    None
+                };
+                if let Some(title) = specific {
+                    props_section(ui, "specific", title, true, |ui| {
                         histogram_options(ui, g, history_group);
                         curve_offset_options(ui, g, history_group);
                         if let scicanvas_core::page::Projection::Polar { degrees } = &mut g.projection {
-                            edit_group(&ui.checkbox(degrees, "角度单位为度（取消为弧度）"), history_group);
+                            ui.label("角度单位");
+                            edit_group(&ui.checkbox(degrees, "度（取消为弧度）"), history_group);
+                            ui.end_row();
                         }
-                        layer_style(ui, g, history_group);
-                        labels(ui, g, &cols, history_group);
-                        error_bars(ui, g, history_group);
-                        reference_lines(ui, g, gid, history_group);
+                        if title == "颜色映射" {
+                            color_mapping(ui, g, history_group);
+                        }
                     });
+                }
+                props_section(ui, "appearance", "外观", false, |ui| {
+                    layer_style(ui, g, history_group);
+                });
                 curve_style(ui, g, gid, props_layer, &cols, &options, history_group);
+                props_section(ui, "annotations", "标注", false, |ui| {
+                    labels(ui, g, &cols, history_group);
+                    error_bars(ui, g, history_group);
+                    reference_lines(ui, g, gid, history_group);
+                });
                 function_edit = function_properties(ui, g, history_group);
             });
         if self.project.graph(gid).unwrap() != &graph_before {
@@ -89,6 +129,76 @@ impl SciApp {
         if !open {
             self.props_for = None;
         }
+    }
+}
+
+fn props_section(ui: &mut egui::Ui, key: &str, title: &str, open: bool, content: impl FnOnce(&mut egui::Ui)) {
+    egui::CollapsingHeader::new(title)
+        .id_salt(("props-section", key))
+        .default_open(open)
+        .show(ui, |ui| {
+            egui::Grid::new(("props-form", key))
+                .num_columns(2)
+                .spacing([crate::theme::space::M, crate::theme::space::S])
+                .show(ui, content);
+        });
+}
+
+fn color_mapping(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, group: &mut Option<egui::Id>) {
+    use scicanvas_core::{colormap::ColorMap, page::ColorScale};
+    ui.label("色表");
+    let text = match g.color_map {
+        ColorMap::Origin => "分类色（Origin）",
+        ColorMap::Viridis => "Viridis（连续）",
+        ColorMap::Colorblind => "色盲友好",
+    };
+    let response = egui::ComboBox::from_id_salt("props-color-map")
+        .selected_text(text)
+        .show_ui(ui, |ui| {
+            ui.selectable_value(&mut g.color_map, ColorMap::Origin, "分类色（Origin）");
+            ui.selectable_value(&mut g.color_map, ColorMap::Viridis, "Viridis（连续）");
+            ui.selectable_value(&mut g.color_map, ColorMap::Colorblind, "色盲友好");
+        })
+        .response;
+    edit_group(&response, group);
+    ui.end_row();
+    let mut scale = g.color_scale.clone().unwrap_or_default();
+    let before = scale.clone();
+    ui.label("色阶条");
+    edit_group(&ui.checkbox(&mut scale.visible, "显示色阶条"), group);
+    ui.end_row();
+    ui.label("色阶条位置");
+    ui.horizontal(|ui| {
+        let mut manual = scale.position.is_some();
+        if ui.radio_value(&mut manual, false, "自动").changed() {
+            scale.position = None;
+        }
+        if ui.radio_value(&mut manual, true, "手动").changed() {
+            scale.position = Some([0.8, 0.15]);
+        }
+        if manual && ui.small_button("重置为自动").clicked() {
+            scale.position = None;
+        }
+    });
+    ui.end_row();
+    if let Some(pos) = &mut scale.position {
+        ui.label("位置 X / Y");
+        ui.horizontal(|ui| {
+            for value in pos {
+                edit_group(&ui.add(egui::DragValue::new(value).speed(0.01)), group);
+            }
+        });
+        ui.end_row();
+    }
+    ui.label("刻度数字格式");
+    dialogs::hint(ui, "自动");
+    ui.end_row();
+    if scale != before {
+        g.color_scale = if scale == ColorScale::default() {
+            None
+        } else {
+            Some(scale)
+        };
     }
 }
 
@@ -785,19 +895,7 @@ fn layer_style(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_g
         ui.end_row();
     }
     ui.label("显示");
-    ui.horizontal_wrapped(|ui| {
-        ui.checkbox(&mut g.grid, "网格线");
-        ui.checkbox(&mut g.legend, "图例");
-        ui.checkbox(&mut g.labels.visible, "数据标签");
-        ui.checkbox(&mut g.frame, "四边框");
-    });
-    ui.end_row();
-    ui.label("刻度方向");
-    ui.horizontal_wrapped(|ui| {
-        for dir in scicanvas_core::page::TickDir::ALL {
-            ui.radio_value(&mut g.tick_dir, dir, dir.label());
-        }
-    });
+    ui.checkbox(&mut g.legend, "图例");
     ui.end_row();
 }
 
@@ -807,6 +905,9 @@ fn labels(
     cols: &[(String, String)],
     history_group: &mut Option<egui::Id>,
 ) {
+    ui.label("显示");
+    ui.checkbox(&mut g.labels.visible, "数据标签");
+    ui.end_row();
     if g.labels.visible {
         ui.label("标签来源");
         use scicanvas_core::page::LabelSource;
@@ -956,7 +1057,7 @@ fn curve_style(
     let curve_keys = g.plot_sources(false);
     if !curve_keys.is_empty() {
         egui::CollapsingHeader::new("曲线样式")
-            .id_salt(("props-curves", gid, props_layer))
+            .id_salt("props-curves")
             .show(ui, |ui| {
                 use scicanvas_core::page::CurveStyle;
                 let pick_id = egui::Id::new(("props-curve-pick", gid, props_layer));
@@ -1375,8 +1476,13 @@ fn scale_selector(
     if let Some(error) = ui.data(|d| d.get_temp::<String>(id)) {
         ui.colored_label(ui.visuals().error_fg_color, error);
     }
-    if scale == AxisScale::Reciprocal {
-        ui.label("倒数范围不跨零：自动取首个有效点所在侧，手动用同号上下限指定。");
+    let (auto, min, max) = if x {
+        (g.x_auto, g.x_min, g.x_max)
+    } else {
+        (g.y_auto, g.y_min, g.y_max)
+    };
+    if scale == AxisScale::Reciprocal && !auto && min <= 0.0 && max >= 0.0 {
+        dialogs::hint(ui, "倒数轴范围需使用同号上下限。");
     }
 }
 
