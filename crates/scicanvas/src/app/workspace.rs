@@ -106,10 +106,7 @@ impl SciApp {
             self.project.move_project_item(id, parent).unwrap();
             self.show_item(id);
         }
-        self.status = format!(
-            "已打开{}示例；查看数据表的注释行了解各列用法，可撤销本次添加",
-            kind.label()
-        );
+        self.status = format!("已打开{}示例，各列用法见注释行。", kind.label());
     }
 
     pub(super) fn show_item(&mut self, id: u64) {
@@ -155,10 +152,7 @@ impl SciApp {
         let id = self.project.new_book();
         self.project.move_project_item(id, parent).unwrap();
         self.show_item(id);
-        self.status = format!(
-            "已新建 {}，可直接输入数据，或从 Excel 复制一块区域后在单元格里粘贴",
-            self.project.name_of(id).unwrap_or("")
-        );
+        self.status = format!("已新建 {}。", self.project.name_of(id).unwrap_or(""));
     }
 
     pub(super) fn delete_item(&mut self, id: u64) {
@@ -524,9 +518,7 @@ impl SciApp {
                 .map_or_else(|| self.project.folder_of(id), |f| f.parent);
         }
         response.context_menu(|ui| self.project_item_menu(ui, id));
-        response.on_hover_text(
-            "Ctrl+单击添加或取消选择；拖到文件夹或根目录移动所选项；单选后隔 0.5–2 秒再单击名称重命名，也可按 F2",
-        )
+        response.on_hover_text("拖动可移到文件夹，F2 重命名。")
     }
 
     pub(super) fn explorer_drop(&mut self, ui: &mut egui::Ui, response: &egui::Response, destination: Option<u64>) {

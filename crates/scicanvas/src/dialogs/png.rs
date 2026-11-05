@@ -26,11 +26,7 @@ impl Dialog {
                     px(page_mm.0),
                     px(page_mm.1)
                 ));
-                ui.label(
-                    RichText::new("期刊投稿的线条图一般用 600 dpi；图像记录分辨率，插入 Word 时按页面实际尺寸显示。")
-                        .small()
-                        .color(pal.weak),
-                );
+                ui.label(RichText::new("线条图投稿一般用 600 dpi。").small().color(pal.weak));
                 let (ok, cancel) = buttons(ui, "导出…");
                 if ok {
                     action = if is_tiff {

@@ -1681,7 +1681,7 @@ impl SciApp {
         graph.page.columns = (n as f64).sqrt().ceil() as usize;
         self.props_for = Some(id);
         self.active_layers.insert(id, n - 1);
-        self.status = "已添加图层，可在绘图属性中选择各图层的数据和样式".into();
+        self.status = "已添加图层。".into();
     }
 
     pub(crate) fn open_plot_builder(&mut self) {

@@ -44,7 +44,7 @@ fn always(_: &SciApp) -> Result<(), &'static str> {
     Ok(())
 }
 fn need_undo(a: &SciApp) -> Result<(), &'static str> {
-    a.history.undo_label().map(|_| ()).ok_or("当前没有可撤销的操作")
+    a.history.undo_label().map(|_| ()).ok_or("当前没有可撤回的更改")
 }
 fn need_redo(a: &SciApp) -> Result<(), &'static str> {
     a.history.redo_label().map(|_| ()).ok_or("当前没有可重做的操作")

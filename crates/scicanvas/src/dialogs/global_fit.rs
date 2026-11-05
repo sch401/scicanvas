@@ -62,47 +62,78 @@ impl GlobalFitEditor {
     pub fn show(&mut self, ctx: &egui::Context, pal: &Palette, open: &mut bool) -> Action {
         self.sync();
         let mut action = Action::None;
-        window(ctx,"全局拟合").default_width(600.0).open(open).show(ctx,|ui| {
-            ui.label(format!("数据集：{}",self.labels.join("、")));
-            let before=self.model;
-            egui::ComboBox::from_id_salt("global-model").selected_text(self.model.name()).show_ui(ui,|ui| {
-                for model in Model::ALL {ui.selectable_value(&mut self.model,model,model.name());}
-            });
-            if before!=self.model {self.shared=vec![true;self.model.params().len()];self.constraints.clear();self.sync();}
+        window(ctx, "全局拟合").default_width(600.0).open(open).show(ctx, |ui| {
+            ui.label(format!("数据集：{}", self.labels.join("、")));
+            let before = self.model;
+            egui::ComboBox::from_id_salt("global-model")
+                .selected_text(self.model.name())
+                .show_ui(ui, |ui| {
+                    for model in Model::ALL {
+                        ui.selectable_value(&mut self.model, model, model.name());
+                    }
+                });
+            if before != self.model {
+                self.shared = vec![true; self.model.params().len()];
+                self.constraints.clear();
+                self.sync();
+            }
             ui.label(self.model.formula());
             ui.horizontal_wrapped(|ui| {
-                for (i,name) in self.model.params().iter().enumerate() {ui.checkbox(&mut self.shared[i],format!("共享 {name}"));}
+                for (i, name) in self.model.params().iter().enumerate() {
+                    ui.checkbox(&mut self.shared[i], format!("共享 {name}"));
+                }
             });
             self.sync();
-            egui::ScrollArea::both().max_height(300.0).show(ui,|ui| {
-                egui::Grid::new("global-parameters").striped(true).show(ui,|ui| {
-                    for label in ["参数","固定","下限","上限"] {ui.label(label);}ui.end_row();
-                    for (name,limit) in self.names.iter().zip(&mut self.limits) {
+            egui::ScrollArea::both().max_height(300.0).show(ui, |ui| {
+                egui::Grid::new("global-parameters").striped(true).show(ui, |ui| {
+                    for label in ["参数", "固定", "下限", "上限"] {
+                        ui.label(label);
+                    }
+                    ui.end_row();
+                    for (name, limit) in self.names.iter().zip(&mut self.limits) {
                         ui.label(name);
-                        for field in [&mut limit.fixed,&mut limit.lower,&mut limit.upper] {
+                        for field in [&mut limit.fixed, &mut limit.lower, &mut limit.upper] {
                             ui.horizontal(|ui| {
-                                let mut enabled=field.is_some();let mut value=field.unwrap_or(0.0);
-                                ui.checkbox(&mut enabled,"");ui.add_enabled(enabled,egui::DragValue::new(&mut value).speed(0.1));*field=enabled.then_some(value);
+                                let mut enabled = field.is_some();
+                                let mut value = field.unwrap_or(0.0);
+                                ui.checkbox(&mut enabled, "");
+                                ui.add_enabled(enabled, egui::DragValue::new(&mut value).speed(0.1));
+                                *field = enabled.then_some(value);
                             });
                         }
                         ui.end_row();
                     }
                 });
             });
-            if matches!(self.model,Model::CompetitiveInhibition | Model::NoncompetitiveInhibition | Model::UncompetitiveInhibition)
-                && (self.shared[3] || self.names.iter().enumerate().filter(|(_,name)|name.starts_with("I_")).any(|(i,_)|self.limits[i].fixed.is_none())) {
-                ui.colored_label(pal.warn,"请把 I 设为独立参数，并逐组固定为该组抑制剂浓度。");
+            if matches!(
+                self.model,
+                Model::CompetitiveInhibition | Model::NoncompetitiveInhibition | Model::UncompetitiveInhibition
+            ) && (self.shared[3]
+                || self
+                    .names
+                    .iter()
+                    .enumerate()
+                    .filter(|(_, name)| name.starts_with("I_"))
+                    .any(|(i, _)| self.limits[i].fixed.is_none()))
+            {
+                ui.colored_label(pal.warn, "请把 I 设为独立参数，并逐组固定为该组抑制剂浓度。");
             }
-            ui.checkbox(&mut self.weighted,"按各组关联的 Y 误差加权（1/σ²）");
+            ui.checkbox(&mut self.weighted, "按各组关联的 Y 误差加权（1/σ²）");
             if self.weighted && !self.errors_available {
                 self.error = Some("全局拟合中各组需同时提供或同时不提供 Y 误差".into());
             }
-            ui.label("线性约束（展开的参数名可用于等式或不等式）");ui.text_edit_multiline(&mut self.constraints);
-            ui.label("初值自动估计，共享参数取各组中位数。结果曲线和 Note 为一次性快照，暂不支持自动重算。最多 60 个展开参数。");
-            if let Some(error)=&self.error {ui.colored_label(pal.error,error);}
-            let (ok,cancel)=buttons(ui,"拟合");
-            if ok && self.error.is_none() {action=Action::GlobalFit(Box::new(self.clone()));}
-            else if cancel {action=Action::Close;}
+            ui.label("线性约束（展开的参数名可用于等式或不等式）");
+            ui.text_edit_multiline(&mut self.constraints);
+            ui.label("结果不随源数据自动更新。");
+            if let Some(error) = &self.error {
+                ui.colored_label(pal.error, error);
+            }
+            let (ok, cancel) = buttons(ui, "拟合");
+            if ok && self.error.is_none() {
+                action = Action::GlobalFit(Box::new(self.clone()));
+            } else if cancel {
+                action = Action::Close;
+            }
         });
         action
     }

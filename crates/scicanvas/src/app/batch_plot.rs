@@ -230,7 +230,7 @@ mod tests {
     #[test]
     fn batch_plot_foreign_note_follows_selected_graph_in_both_themes() {
         const NOTE: &str = "此图形引用了其他工作簿的列，这些列同样会在所选工作簿中按列名匹配，不会保留原工作簿。";
-        const MATCHING: &str = "各列按长名在所选工作簿中匹配；没有长名的列按列标识（A、B…）匹配。";
+        const MATCHING: &str = "按长名称匹配列，没有长名称时按列标识（A、B…）匹配。";
         for theme in [egui::Theme::Light, egui::Theme::Dark] {
             let ctx = egui::Context::default();
             crate::theme::install(&ctx);

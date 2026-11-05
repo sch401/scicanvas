@@ -127,7 +127,7 @@ impl PeakFitEditor {
             if self.limits.len() != peak.params().len() {
                 self.limits = peak.limits();
             }
-            ui.label("先预览自动初值，再运行拟合。支持最多 10 个峰，Voigt 和 PsdVoigt1 最多 42 个参数。");
+            ui.label("先预览初值，再拟合。");
             ui.label("初始值（留空为自动寻峰）");
             if ui.text_edit_multiline(&mut self.initial).changed() {
                 self.preview = None;

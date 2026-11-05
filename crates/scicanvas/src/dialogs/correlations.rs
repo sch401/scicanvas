@@ -37,7 +37,7 @@ impl Dialog {
             });
             ui.label(
                 RichText::new(
-                    "p 值为双侧。Pearson 和 Spearman 的 p 值用 t 分布，Kendall τ-b 用含并列校正的正态近似；\n只用两列都有数值的行。",
+                    "p 值为双侧，只用两列都有数值的行。",
                 )
                 .small()
                 .color(pal.weak),
@@ -59,7 +59,7 @@ impl Dialog {
                 if ui.add(plain("保存为 Note")).clicked() {
                     let mut rows = vec![correlation_header().map(String::from).to_vec()];
                     rows.extend(correlation_rows(pairs));
-                    let text = format!("## 相关系数\n\n{}", md_table(&rows));
+                    let text = format!("## 相关系数\n\n{}\n\np 值为双侧。Pearson 和 Spearman 用 t 分布，Kendall τ-b 用含并列校正的正态近似；只使用成对有效行。", md_table(&rows));
                     action = Action::SaveNote("相关系数结果".into(), text);
                 }
                 if ui.add(primary(ui, "关闭")).clicked() {

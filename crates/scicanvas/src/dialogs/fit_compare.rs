@@ -41,7 +41,7 @@ impl Dialog {
                     target = (reports[*index].book_id, reports[*index].y_key.clone());
                 }
             }
-            ui.label("K = 自由参数数 + 1（误差方差）。加权拟合使用 χ²。F 检验只对嵌套模型有效，嵌套关系由用户判断。");
+            ui.label("F 检验只适用于嵌套模型。");
             let (ok, cancel) = buttons(ui, "比较");
             if ok {
                 action = Action::CompareFits(Box::new([reports[*first].clone(), reports[*second].clone()]));

@@ -34,11 +34,9 @@ impl Dialog {
                     ui.end_row();
                 });
             ui.label(
-                RichText::new(
-                    "每个选中的列生成一个新表：区间下限、中点、上限、频数、累积频数、相对频率和累积相对频率。\n区间等宽，最后一个区间包含右端点（与 numpy.histogram 相同）；范围外的值不计。",
-                )
-                .small()
-                .color(pal.weak),
+                RichText::new("区间等宽，最后一个区间含右端点。")
+                    .small()
+                    .color(pal.weak),
             );
             let valid = !*custom || (from.is_finite() && to.is_finite() && from < to);
             if !valid {

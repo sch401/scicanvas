@@ -439,7 +439,7 @@ impl SciApp {
                     .map(|b| b.columns[col].key.clone())
                     .unwrap_or_default();
                 self.status = format!(
-                    "已按 {} 列{}排序来源数据，保留 {} 个独立采样结果列的原顺序",
+                    "已按 {} 列{}排序来源数据，保留 {} 个随机数列的原顺序",
                     key,
                     if ascending { "升序" } else { "降序" },
                     self.project
