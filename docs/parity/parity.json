@@ -3317,17 +3317,38 @@
   "feature": "正态性检验（Shapiro-Wilk、KS、Anderson-Darling 等）",
   "ref": "Normality Test",
   "pri": "P1",
-  "status": "部分实现",
-  "how": "统计 → 正态性检验：Shapiro–Wilk（Royston AS R94，3 ≤ N ≤ 5000），每个点选列一行；KS、Anderson–Darling 待做",
-  "verify": "与 SciPy 1.17.1 shapiro 一致（W 1e-6，SciPy 内部为单精度；p 1e-4）",
+  "status": "已实现待验收",
+  "how": "统计 → 正态性检验：每列三行，Shapiro–Wilk、KS（Lilliefors）和 Anderson–Darling；结果表可复制或保存 Note。Lilliefors 按 statsmodels 表插值，AD 显示 SciPy 5% 临界值。",
+  "verify": "SciPy 1.17.1 / statsmodels 0.14.6：统计量 1e-12；p 1e-6；正态、偏态、均匀、重复值、小样本、缺失值、表插值与大样本。浅色/深色 egui 回归。",
   "id": "F179",
   "milestone": "M2 论文全流程",
   "sub_items": {
    "列明的正态性方法": {
     "total": 3,
     "done": 0,
-    "review": 1,
-    "note": "Shapiro–Wilk 已接入；KS、Anderson–Darling 未开始；仅计本条列明方法"
+    "review": 3,
+    "note": "三种检验均已接入，待 Windows 人工验收。"
+   }
+  },
+  "needs": [
+   "auto",
+   "reference",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::normality_three_tests_and_grubbs_report_picked_columns",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::a1_ks_dixon_reports_and_two_way_dialog_save_note_undo"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/normality_ks_ad.json",
+    "crates/scicanvas-core/tests/reference_scipy.rs"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/fitting.md#F179",
+    "result": "待做",
+    "date": "",
+    "build": ""
    }
   }
  },
@@ -3393,17 +3414,38 @@
   "feature": "Grubbs / Dixon Q 异常值检验",
   "ref": "Grubbs' Test",
   "pri": "P1",
-  "status": "部分实现",
-  "how": "统计 → Grubbs 异常值：双侧检验离均值最远的点，给出 G、临界值 G(0.05) 与 p 值；Dixon Q 待做",
-  "verify": "临界值与 p 值与按 scipy.stats.t 计算的 Grubbs 公式一致（1e-9）",
+  "status": "已实现待验收",
+  "how": "统计 → Grubbs 异常值 / Dixon Q 检验。Dixon 按 n=3–7、8–10、11–13、14–30 选 r10/r11/r21/r22，比两端 Q，显示可疑值原行号、Q、α=0.05 临界值及结论；核心支持 α=0.10/0.05/0.01。",
+  "verify": "Grubbs 对照 SciPy t 分布；Dixon 采用 Rorabacher (1991) 表 I、II、V、VI，八个表值由 CRAN outliers 独立抽查；n=5/9/20 手算、输入边界和原行号回归。",
   "id": "F184",
   "milestone": "M2 论文全流程",
   "sub_items": {
    "列明的异常值方法": {
     "total": 2,
     "done": 0,
-    "review": 1,
-    "note": "Grubbs 已接入；Dixon Q 未开始"
+    "review": 2,
+    "note": "Grubbs 与 Dixon 均已接入，待 Windows 人工验收。"
+   }
+  },
+  "needs": [
+   "auto",
+   "reference",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/statistical_tests.rs::dixon_recommended_ratios_original_indices_and_hand_calculations",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::a1_dixon_reports_original_row_inside_selection"
+   ],
+   "reference": [
+    "docs/COPYRIGHT_AUDIT.md",
+    "crates/scicanvas-core/tests/statistical_tests.rs"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/fitting.md#F184",
+    "result": "待做",
+    "date": "",
+    "build": ""
    }
   }
  },
@@ -3507,16 +3549,37 @@
   "ref": "One, Two, and Three Way ANOVA",
   "pri": "P1",
   "status": "部分实现",
-  "how": "统计 → 单因素方差分析：每列一组，ANOVA 表、各组描述统计与 Tukey HSD 多重比较（组大小不等时为 Tukey–Kramer）；双因素、三因素待做",
-  "verify": "与 SciPy 1.17.1 f_oneway、f.sf（1e-9）及 tukey_hsd（置信限 1e-7、p 值 1e-5）、studentized_range 一致",
+  "how": "统计 → 单因素方差分析 / 双因素方差分析。单因素提供 Tukey/Tukey–Kramer；双因素选择两列类别因子和响应，含交互项，使用 Type II 平方和，输出 A、B、A×B、残差、总计，可保存 Note；三因素及双因素多重比较留待后续。",
+  "verify": "新增 statsmodels anova_lm(typ=2) 平衡、不平衡、缺失数据参考；SS/F 1e-9、p 1e-10；空单元格和无重复观测报错，平衡设计 Type I/II 一致，egui 选择与 Note 撤销回归。",
   "id": "F190",
   "milestone": "M2 论文全流程",
   "sub_items": {
    "列明的 ANOVA 维数": {
     "total": 3,
     "done": 0,
-    "review": 1,
-    "note": "单因素及 Tukey/Tukey–Kramer 已接入；双因素、三因素未开始"
+    "review": 2,
+    "note": "单因素与双因素已接入；三因素及双因素多重比较未实现，整项保留部分实现。"
+   }
+  },
+  "needs": [
+   "auto",
+   "reference",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/statistical_tests.rs::balanced_two_way_type_ii_main_effects_equal_sequential_type_i",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::a1_ks_dixon_reports_and_two_way_dialog_save_note_undo"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/two_way_anova.json",
+    "crates/scicanvas-core/tests/reference_scipy.rs"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/fitting.md#F190",
+    "result": "待做",
+    "date": "",
+    "build": ""
    }
   }
  },
@@ -7795,10 +7858,31 @@
   "feature": "双样本 Kolmogorov–Smirnov 检验",
   "ref": "Statistics / Two-Sample KS Test",
   "pri": "P1",
-  "status": "未开始",
-  "how": "A8 双样本统计量与 p 值",
-  "verify": "SciPy/R 对照、重复值和小样本",
-  "milestone": "M2 论文全流程"
+  "status": "已实现待验收",
+  "how": "统计 → KS 双样本检验，恰好选两列，显示 D、双侧 p、有效样本数与精确/渐近方法；两组均 ≤10000 点时精确路径概率，其余为有限样本 kstwo 渐近规则。",
+  "verify": "SciPy 1.17.1 ks_2samp(auto)：等长、不等长、并列、完全相同、分离样本、小尾概率和渐近分支；D 精确相等，p 绝对容差 1e-10。",
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/statistical_tests.rs::normality_and_ks_input_limits",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::a1_ks_dixon_reports_and_two_way_dialog_save_note_undo"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/ks_2samp.json",
+    "crates/scicanvas-core/tests/reference_scipy.rs"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/fitting.md#F507",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "id": "F508",

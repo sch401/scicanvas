@@ -55,6 +55,7 @@ mod t_test;
 mod t_test_report;
 mod table;
 mod tables;
+mod two_way_anova;
 mod widgets;
 mod window;
 
@@ -160,6 +161,11 @@ pub enum Dialog {
         custom: bool,
         from: f64,
         to: f64,
+    },
+    TwoWayAnova {
+        book: u64,
+        columns: Vec<(String, String)>,
+        keys: [String; 3],
     },
     /// 单因素方差分析结果和各组（列）名称。
     Anova {
@@ -307,6 +313,7 @@ pub enum Action {
     ExportTiff(u32),
     Interpolate(InterpMethod, usize, Option<(f64, f64)>),
     TTest(TTestKind, f64),
+    TwoWayAnova(u64, [String; 3]),
     Frequency(Option<usize>, Option<(f64, f64)>),
     Fft(FftWindow),
     /// 最小突出度（占 Y 范围的比例）。
@@ -360,6 +367,7 @@ impl Dialog {
             Self::FitReport(..) => self.show_fit_report(ctx, pal, &mut open, esc),
             Self::Areas(..) => self.show_areas(ctx, pal, &mut open, esc),
             Self::Interpolate { .. } => self.show_interpolate(ctx, pal, &mut open, esc),
+            Self::TwoWayAnova { .. } => self.show_two_way_anova(ctx, &mut open),
             Self::Anova { .. } => self.show_anova(ctx, pal, &mut open, esc),
             Self::Correlations(..) => self.show_correlations(ctx, pal, &mut open, esc),
             Self::NlFit { .. } => self.show_nl_fit(ctx, pal, &mut open, esc),

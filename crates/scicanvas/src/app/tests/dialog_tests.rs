@@ -584,17 +584,17 @@ fn row_stats_and_fft_filter_add_columns_in_one_undo_step() {
 }
 
 #[test]
-fn normality_and_grubbs_report_one_row_per_picked_column() {
+fn normality_three_tests_and_grubbs_report_picked_columns() {
     let mut app = app();
     app.active = Some(1);
     app.selection.insert(1, vec!["B".into(), "C".into()]);
     app.normality();
     match &app.dialog {
         Some(Dialog::Table { rows, .. }) => {
-            assert_eq!(rows.len(), 3);
+            assert_eq!(rows.len(), 7);
             let w = scicanvas_core::stats::shapiro_wilk(&app.project.book(1).unwrap().column("B").unwrap().values())
                 .unwrap();
-            assert_eq!(rows[1][2], fmt_num(round_sig(w.w, 6)));
+            assert_eq!(rows[1][3], fmt_num(round_sig(w.w, 6)));
         }
         _ => panic!("normality report should open"),
     }
@@ -1948,4 +1948,84 @@ fn ifft_rejects_filtered_spectra_when_only_visible_rows_are_selected() {
     app.open_ifft_dialog();
     assert!(app.dialog.is_none());
     assert!(app.status.contains("IFFT 需要完整频谱"));
+}
+
+#[test]
+fn a1_ks_dixon_reports_and_two_way_dialog_save_note_undo() {
+    use scicanvas_core::ColumnData;
+    for theme in [egui::Theme::Light, egui::Theme::Dark] {
+        let mut app = SciApp::initial(theme::palette(theme));
+        app.active = Some(1);
+        app.selection.insert(1, vec!["B".into(), "C".into()]);
+        app.run_command("stats.ks2");
+        assert!(matches!(&app.dialog,Some(Dialog::Table { rows,.. }) if rows.len()==2 && rows[1][6]=="精确"));
+        press_dialog_button(&mut app, "关闭");
+        let book = app.project.book_mut(1).unwrap();
+        book.columns[0].data = ColumnData::Text(
+            ["low", "low", "low", "low", "high", "high", "high", "high"]
+                .map(str::to_string)
+                .to_vec(),
+        )
+        .into();
+        book.columns[1].data = ColumnData::Text(
+            ["left", "left", "right", "right", "left", "left", "right", "right"]
+                .map(str::to_string)
+                .to_vec(),
+        )
+        .into();
+        book.columns[2].data = [1., 2., 4., 5., 3., 5., 8., 9.]
+            .iter()
+            .map(|v| v.to_string())
+            .collect::<Vec<_>>()
+            .into();
+        let before = app.project.clone();
+        app.selection.insert(1, vec!["C".into()]);
+        app.run_command("stats.dixon");
+        assert!(matches!(&app.dialog,Some(Dialog::Table { rows,.. }) if rows.len()==2 && rows[0].len()==8));
+        press_dialog_button(&mut app, "关闭");
+        app.selection.insert(1, vec!["C".into(), "A".into()]);
+        app.run_command("stats.ks2");
+        assert!(app.status.contains("有效数值"));
+        app.selection.insert(1, vec!["C".into()]);
+        app.run_command("stats.ks2");
+        assert!(app.status.contains("恰好"));
+        app.run_command("stats.normality");
+        assert!(matches!(&app.dialog,Some(Dialog::Table { rows,.. }) if rows.len()==4));
+        press_dialog_button(&mut app, "关闭");
+        app.selection.insert(1, vec!["A".into(), "B".into(), "C".into()]);
+        app.run_command("stats.anova2");
+        assert!(matches!(&app.dialog,Some(Dialog::TwoWayAnova { keys,.. }) if keys== &["A","B","C"]));
+        press_dialog_button(&mut app, "计算");
+        assert!(
+            matches!(&app.dialog,Some(Dialog::Table { rows,note,.. }) if rows.len()==6 && note.contains("N = 8")),
+            "{}",
+            app.status
+        );
+        assert_eq!(app.project, before);
+        press_dialog_button(&mut app, "保存为 Note");
+        assert!(app.project.notes.last().unwrap().text.contains("Type II"));
+        roundtrip(&mut app, &before);
+    }
+}
+
+#[test]
+fn a1_dixon_reports_original_row_inside_selection() {
+    let mut app = app();
+    app.active = Some(1);
+    let book = app.project.book_mut(1).unwrap();
+    book.columns[1].data = ["99", "99", "1", "2", "3", "4", "50"]
+        .map(str::to_string)
+        .to_vec()
+        .into();
+    app.selection.remove(&1);
+    app.sheets.entry(1).or_default().range = Some(crate::sheet::Range {
+        a: crate::sheet::Cell { c: 1, r: 2 },
+        b: crate::sheet::Cell { c: 1, r: 6 },
+    });
+    app.run_command("stats.dixon");
+    assert!(
+        matches!(&app.dialog,Some(Dialog::Table { rows,.. }) if rows[1][4]=="7"),
+        "{}",
+        app.status
+    );
 }

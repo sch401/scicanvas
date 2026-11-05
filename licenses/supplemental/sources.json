@@ -595,5 +595,11 @@
     "url": "https://raw.githubusercontent.com/gfx-rs/wgpu/9993f5c9eceb91f9bb6b9c5c6994f35f50e5f378/LICENSE.APACHE",
     "sha256": "a6cba85bc92e0cff7a450b1d873c0eaa2e9fc96bf472df0247a26bec77bf3ff9",
     "group": "wgpu-9993"
+  },
+  {
+    "path": "licenses/supplemental/statsmodels-0.14.6/LICENSE.txt",
+    "url": "https://raw.githubusercontent.com/statsmodels/statsmodels/v0.14.6/LICENSE.txt",
+    "sha256": "1ca78e1dec9dcebc55f3b96a862317f23e76422c5fc943568d955aad1f6b5fad",
+    "group": "statsmodels-0.14.6"
   }
 ]

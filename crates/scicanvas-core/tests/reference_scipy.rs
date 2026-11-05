@@ -16,6 +16,9 @@ fn cases(name: &str) -> Vec<Value> {
     assert_eq!(data["generator"], "tools/reference/gen_scipy.py");
     assert_eq!(data["versions"]["NumPy"], "2.4.4");
     assert_eq!(data["versions"]["SciPy"], "1.17.1");
+    if matches!(name, "normality_ks_ad" | "two_way_anova") {
+        assert_eq!(data["versions"]["statsmodels"], "0.14.6");
+    }
     if name == "box" {
         assert_eq!(data["versions"]["matplotlib"], "3.11.2");
     }
@@ -701,5 +704,62 @@ fn formula_catalog_matches_generated_python_scipy_reference() {
     }
     for function in FUNCTIONS {
         assert!(covered.contains(function.name), "missing {}", function.name);
+    }
+}
+
+#[test]
+fn normality_ks_ad_match_statsmodels_and_scipy() {
+    use scicanvas_core::stats;
+    for case in cases("normality_ks_ad") {
+        let name = case["name"].as_str().unwrap();
+        let input = numbers(&case["input"]);
+        let ks = stats::lilliefors(&input).unwrap();
+        let ad = stats::anderson_normal(&input).unwrap();
+        near(ks.d, &case["d"], 1e-12, name);
+        near(ks.p, &case["ks_p"], 1e-6, name);
+        near(ad.a2, &case["a2"], 1e-12, name);
+        near(ad.adjusted, &case["adjusted"], 1e-12, name);
+        near(ad.p, &case["ad_p"], 1e-6, name);
+        near(ad.critical_5, &case["critical_5"], 1e-12, name);
+    }
+}
+
+#[test]
+fn ks_2samp_matches_scipy_exact_and_finite_sample_asymptotic() {
+    for case in cases("ks_2samp") {
+        let name = case["name"].as_str().unwrap();
+        let ks = scicanvas_core::stats::ks_2samp(&numbers(&case["a"]), &numbers(&case["b"])).unwrap();
+        assert_eq!(ks.d, case["statistic"].as_f64().unwrap(), "{name}");
+        assert!(
+            (ks.p - case["pvalue"].as_f64().unwrap()).abs() <= 1e-10,
+            "{name}: {} != {}",
+            ks.p,
+            case["pvalue"]
+        );
+        assert_eq!(ks.method, case["method"].as_str().unwrap(), "{name}");
+    }
+}
+
+#[test]
+fn two_way_anova_matches_statsmodels_type_ii() {
+    let strings = |v: &Value| {
+        v.as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_str().unwrap().to_owned())
+            .collect::<Vec<_>>()
+    };
+    for case in cases("two_way_anova") {
+        let name = case["name"].as_str().unwrap();
+        let result =
+            scicanvas_core::stats::two_way_anova(&strings(&case["a"]), &strings(&case["b"]), &numbers(&case["y"]))
+                .unwrap();
+        assert_eq!(result.n, case["n"].as_u64().unwrap() as usize);
+        for (actual, expected) in result.rows.iter().zip(case["rows"].as_array().unwrap()) {
+            assert_eq!(actual.df, expected["df"].as_u64().unwrap() as usize);
+            near(actual.ss, &expected["ss"], 1e-9, name);
+            near(actual.f, &expected["f"], 1e-9, name);
+            near(actual.p, &expected["p"], 1e-10, name);
+        }
     }
 }

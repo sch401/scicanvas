@@ -684,11 +684,80 @@ def histogram_option_cases():
     write("histogram_options", cases)
 
 
+
+def normality_ks_ad():
+    import statsmodels
+    from statsmodels.stats.diagnostic import lilliefors, normal_ad
+    rng = np.random.default_rng(20261104)
+    cases = []
+    for name, raw in [
+        ("normal", rng.normal(size=40)), ("skew", rng.exponential(size=45)),
+        ("uniform", np.linspace(-2, 2, 31)), ("ties", [1,1,2,2,2,3,3,3,4,9]),
+        ("n5", [1,2,3,4,8]), ("missing", [1,np.nan,2,3,np.inf,4,8]),
+        ("interpolated-n", rng.normal(size=65)), ("large-n", rng.normal(size=2000)),
+    ]:
+        x = np.asarray(raw, dtype=float)
+        x = x[np.isfinite(x)]
+        ks = lilliefors(x, pvalmethod="table")
+        ad = stats.anderson(x, dist="norm")
+        ad_p = normal_ad(x)[1]
+        cases.append(dict(name=name, input=raw, d=ks[0], ks_p=ks[1], a2=ad.statistic,
+            adjusted=ad.statistic*(1+.75/len(x)+2.25/len(x)**2), ad_p=ad_p, critical_5=ad.critical_values[2]))
+    write("normality_ks_ad", cases, {"statsmodels": statsmodels.__version__})
+
+
+def ks_2samp():
+    rng = np.random.default_rng(20261104)
+    cases = []
+    for name, a, b in [
+        ("equal-n", [1,2,3,4,5], [2,3,4,5,7]),
+        ("unequal-n", [1,2,4,6], [2,3,5,7,8,9,10]),
+        ("ties", [1,1,2,2,3], [1,2,2,4]),
+        ("identical", [1,2,3], [1,2,3]),
+        ("disjoint", [1,2,3], [4,5,6]),
+        ("small-tail", np.arange(120), np.arange(150)+110),
+        ("missing", [np.nan,1,3,7], [2,np.inf,4,8]),
+        ("asymptotic", rng.normal(size=10001), rng.normal(.025, 1, 11000)),
+        ("asymptotic-tail", rng.normal(size=10001), rng.normal(.15, 1, 12000)),
+        ("asymptotic-small-other", np.arange(10001)/10001, [.2,.25,.3,.31,.4,.41,.5]),
+        ("asymptotic-durbin", np.arange(10001)/10001, (np.arange(40)+.5)/40),
+    ]:
+        aa, bb = np.asarray(a,dtype=float), np.asarray(b,dtype=float)
+        aa, bb = aa[np.isfinite(aa)], bb[np.isfinite(bb)]
+        result = stats.ks_2samp(aa,bb,method="auto")
+        cases.append(dict(name=name,a=a,b=b,statistic=result.statistic,pvalue=result.pvalue,
+            method="exact" if max(len(aa),len(bb)) <= 10000 else "asymptotic"))
+    write("ks_2samp", cases)
+
+
+def two_way_anova():
+    import statsmodels, pandas as pd
+    from statsmodels.formula.api import ols
+    from statsmodels.stats.anova import anova_lm
+    cases = []
+    for name in ["balanced", "unbalanced", "missing"]:
+        a,b,y = [],[],[]
+        for i in range(2):
+            for j in range(3):
+                for k in range(4 if name == "balanced" else 2+i+j):
+                    a.append(str(i)); b.append(str(j)); y.append(2*i+3*j+2*i*j+.3*k+(-1)**k)
+        if name == "missing":
+            a.extend(["", "0", "1"]);b.extend(["1", "", "2"]);y.extend([30,40,np.nan])
+        frame = pd.DataFrame(dict(A=a,B=b,y=y))
+        frame = frame[(frame.A != "") & (frame.B != "")].dropna()
+        model = ols("y ~ C(A) + C(B) + C(A):C(B)", frame).fit()
+        table = anova_lm(model,typ=2)
+        rows = [dict(ss=r.sum_sq,df=int(r.df),f=r.F,p=r['PR(>F)']) for _,r in table.iterrows()]
+        rows.append(dict(ss=((frame.y-frame.y.mean())**2).sum(),df=len(frame)-1,f=np.nan,p=np.nan))
+        cases.append(dict(name=name,a=a,b=b,y=y,n=len(frame),rows=rows))
+    write("two_way_anova", cases, {"statsmodels":statsmodels.__version__})
+
+
 GENERATORS = [
     integrals, normalization, descriptive, column_math, polynomial, statistical_tests, signal_tests,
     interpolation_cases, derivative_cases, peak_cases, constrained_fit_cases, builtin_fit_cases,
     smoothing_cases, percent_bar_cases, fit_report_cases, formula_cases, weighted_fit_cases, qq_cases, box_cases,
-    histogram_option_cases,
+    histogram_option_cases, normality_ks_ad, ks_2samp, two_way_anova,
 ]
 
 
