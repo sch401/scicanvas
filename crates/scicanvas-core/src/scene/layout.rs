@@ -216,7 +216,9 @@ pub(super) fn compose<'a>(
             scene
         })
         .collect();
-    compose_page(g, scenes, manual_legends, w, h, paper)
+    let mut page = compose_page(g, scenes, manual_legends, w, h, paper);
+    super::color_scale::append(&mut page, g, others);
+    page
 }
 
 fn compose_page(

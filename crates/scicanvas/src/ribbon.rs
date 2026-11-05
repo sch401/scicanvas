@@ -62,6 +62,11 @@ const PLOT_TYPES: &[&str] = &[
     "plot.percent_stacked_horizontal_bar",
     "plot.stacked_area",
     "plot.fill_between",
+    "plot.error_band",
+    "plot.column_scatter",
+    "plot.bubble",
+    "plot.color_scatter",
+    "plot.bubble_color",
 ];
 
 pub static TABS: &[Tab] = &[

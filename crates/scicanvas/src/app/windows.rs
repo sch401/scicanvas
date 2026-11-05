@@ -284,6 +284,10 @@ impl SciApp {
             let page = &self.project.graph(graph).unwrap().page;
             let changed = match target {
                 T::Text(id) => page.text(id).is_some_and(|t| t.position != position),
+                T::ColorScale(index) => page
+                    .layers()
+                    .get(index)
+                    .is_some_and(|l| l.color_scale.as_ref().and_then(|c| c.position) != Some(position)),
                 T::Legend(index) => page
                     .layers()
                     .get(index)
@@ -295,6 +299,12 @@ impl SciApp {
                     match target {
                         T::Text(id) => page.text_mut(id).unwrap().position = position,
                         T::Legend(index) => page.layers_mut()[index].legend_position = Some(position),
+                        T::ColorScale(index) => {
+                            page.layers_mut()[index]
+                                .color_scale
+                                .get_or_insert_with(Default::default)
+                                .position = Some(position)
+                        }
                     }
                 });
             }
@@ -306,6 +316,7 @@ impl SciApp {
                 A::AddText(position)=>Some(page.add_text(position)?),
                 A::Delete(T::Text(id))=>{page.annotations.retain(|t|t.id!=id);None},
                 A::Delete(T::Legend(index))=>{if let Some(l)=page.layers_mut().get_mut(index){l.legend=false;}None},
+                A::Delete(T::ColorScale(index))=>{if let Some(l)=page.layers_mut().get_mut(index){l.color_scale.get_or_insert_with(Default::default).visible=false;}None},
                 A::AutoLegend(index)=>{if let Some(l)=page.layers_mut().get_mut(index){l.legend=true;l.legend_position=None;}None},
                 _=>None,
             };
@@ -549,6 +560,11 @@ impl SciApp {
         let valid = match edit.target {
             T::Text(id) => before.page.text(id).is_some(),
             T::Legend(i) => before.page.layers().get(i).is_some_and(|l| l.legend),
+            T::ColorScale(i) => before
+                .page
+                .layers()
+                .get(i)
+                .is_some_and(|l| !l.color_scale.as_ref().is_some_and(|c| !c.visible)),
         };
         if !valid {
             self.object_editor = None;

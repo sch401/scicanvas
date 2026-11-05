@@ -3,7 +3,7 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-pub const PROJECT_VERSION: u32 = 30;
+pub const PROJECT_VERSION: u32 = 31;
 pub const GRAPH_TEMPLATE_VERSION: u32 = 1;
 
 /// 列的绘图角色，对应 Origin 里的 X / Y / 忽略。
@@ -495,10 +495,15 @@ pub enum PlotType {
     PercentStackedHorizontalBar,
     StackedArea,
     FillBetween,
+    ErrorBand,
+    ColumnScatter,
+    Bubble,
+    ColorScatter,
+    BubbleColor,
 }
 
 impl PlotType {
-    pub const ALL: [PlotType; 21] = [
+    pub const ALL: [PlotType; 26] = [
         PlotType::Line,
         PlotType::Scatter,
         PlotType::LineSymbol,
@@ -520,6 +525,11 @@ impl PlotType {
         PlotType::PercentStackedHorizontalBar,
         PlotType::StackedArea,
         PlotType::FillBetween,
+        PlotType::ErrorBand,
+        PlotType::ColumnScatter,
+        PlotType::Bubble,
+        PlotType::ColorScatter,
+        PlotType::BubbleColor,
     ];
 
     pub fn label(self) -> &'static str {
@@ -545,6 +555,11 @@ impl PlotType {
             PlotType::PercentStackedHorizontalBar => "百分比堆叠条形图",
             PlotType::StackedArea => "堆叠面积图",
             PlotType::FillBetween => "两曲线间填充",
+            PlotType::ErrorBand => "误差带图",
+            PlotType::ColumnScatter => "列散点图",
+            PlotType::Bubble => "气泡图",
+            PlotType::ColorScatter => "颜色映射散点图",
+            PlotType::BubbleColor => "气泡颜色映射图",
         }
     }
 
@@ -830,7 +845,7 @@ impl Project {
         let id = self.alloc_id();
         let mut graph = Graph::new(id, self.unique_name("Graph"));
         graph.first_layer_mut().spec = spec.into();
-        if graph.first_layer().plot_type == PlotType::Box {
+        if matches!(graph.first_layer().plot_type, PlotType::Box | PlotType::ColumnScatter) {
             graph.first_layer_mut().legend = false;
         }
         self.graphs.push(graph);

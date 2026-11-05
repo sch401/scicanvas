@@ -63,7 +63,7 @@ def generate(source):
     fig = plt.figure(figsize=(page["w"]/96, page["h"]/96))
     output = dict(case=doc["case"], page=page, data=doc["data"], versions=VERSIONS, layers=[])
     for layer in doc["layers"]:
-        statistical = layer["kind"] in ("Histogram", "QQ", "Box")
+        statistical = layer["kind"] in ("Histogram", "QQ", "Box", "ColumnScatter")
         date = source_date and not statistical
         category = None if statistical else source_category
         left, top, width, height = layer["plot"]
@@ -118,11 +118,63 @@ def generate(source):
         for si, (key, y) in enumerate(zip(keys, arrays)):
             target = right if key in layer["right_keys"] else ax
             valid = np.isfinite(y)
-            if kind not in ("QQ", "Box", "Histogram"):
+            if kind not in ("QQ", "Box", "Histogram", "ColumnScatter"):
                 valid &= np.isfinite(x)
             if layer["rows"] is not None:
                 lo, hi = layer["rows"]
                 valid &= (np.arange(len(x)) >= lo) & (np.arange(len(x)) <= hi)
+            if kind == "ColumnScatter":
+                center=si+1
+                xx=center+.15*(2*(np.arange(np.count_nonzero(valid))*.618034 % 1)-1)
+                scatter=target.scatter(xx,y[valid],s=10)
+                marks["symbols"].extend(target.transAxes.inverted().transform(scatter.get_offset_transform().transform(scatter.get_offsets())).tolist())
+                mean=np.mean(y[valid])
+                line,=target.plot([center-.2,center+.2],[mean,mean])
+                marks["polylines"].append(artist_points(line,target).tolist())
+                continue
+            if kind in ("Bubble", "ColorScatter", "BubbleColor"):
+                palette_values=np.array([[15,77,146],[182,67,66],[66,148,158],[154,77,142],[118,118,118],[46,158,68],[39,39,39],[55,117,186],[233,166,161]])
+                if kind != "Bubble":
+                    vv=raw("D" if kind=="BubbleColor" else "C")
+                    lo,hi=np.nanmin(vv),np.nanmax(vv)
+                    t=(vv-lo)/(hi-lo) if hi>lo else np.full(len(vv),.5)
+                    rgb=palette_values[np.floor(np.clip(t,0,1)*8+.5).astype(int)]
+                else:
+                    rgb=np.tile(palette_values[0],(len(x),1))
+                size=raw("C") if kind!="ColorScatter" else np.ones(len(x))
+                diameter=12*np.sqrt(np.maximum(size,0)/np.nanmax(size)) if kind!="ColorScatter" else np.full(len(x),4.5)
+                scatter=target.scatter(xconvert(x[valid]),y[valid],s=(diameter[valid]*72/96)**2,c=rgb[valid]/255)
+                marks["symbols"].extend(target.transAxes.inverted().transform(scatter.get_offset_transform().transform(scatter.get_offsets())).tolist())
+                marks["colors"].extend(rgb[valid].tolist())
+                if kind!="ColorScatter":
+                    marks["size_ratios"]=(diameter[valid]/diameter[valid].max()).tolist()
+                if kind!="Bubble":
+                    sample=np.linspace(0,1,257)
+                    palette=colors.ListedColormap(palette_values[np.floor(sample*8+.5).astype(int)]/255)
+                    cax=fig.add_axes([(left+width+14*page["w"]/(89*96/25.4))/page["w"],1-(top+height)/page["h"],.04,height/page["h"]])
+                    bar=fig.colorbar(matplotlib.cm.ScalarMappable(norm=colors.Normalize(lo,hi),cmap=palette),cax=cax)
+                    ticks=[float(v) for v in bar.get_ticks() if lo<=v<=hi]
+                    scale_colors=np.floor(palette((np.arange(64)+.5)/64)[:,:3]*255+.5).astype(int).tolist()
+                    color_scale=dict(colors=scale_colors,ticks=ticks)
+                continue
+            if kind == "ErrorBand":
+                errors=raw("C")
+                band_valid=valid & np.isfinite(errors) & (errors>=0)
+                band=np.column_stack([x,y+errors,y-errors]);band[~band_valid]=np.nan
+                for run in runs(band):
+                    if len(run)<2:
+                        continue
+                    target.fill_between(xconvert(run[:,0]),run[:,1],run[:,2],alpha=.3)
+                    for xx,upper,lower in run:
+                        a,b=transform([[xx,lower],[xx,upper]],target)
+                        marks["area"].append([a[0],min(a[1],b[1]),max(a[1],b[1])])
+                points=np.column_stack([x,y]);points[~valid]=np.nan
+                for run in runs(points):
+                    if len(run)>1:
+                        line,=target.plot(xconvert(run[:,0]),run[:,1])
+                        marks["polylines"].append(artist_points(line,target).tolist())
+                marks["area"].sort(key=lambda p:p[0])
+                continue
             if kind == "Box":
                 if not np.any(valid):
                     continue
@@ -358,6 +410,8 @@ def generate(source):
             marks["segments"].append(sorted(artist_points(line).tolist()))
         copy = {k: v for k, v in layer.items() if k != "marks"}
         copy["marks"] = marks
+        if kind in ("ColorScatter","BubbleColor"):
+            copy["color_scale"]=color_scale
         output["layers"].append(copy)
     fig.savefig(source.with_name("matplotlib.png"), dpi=300, transparent=True)
     plt.close(fig)

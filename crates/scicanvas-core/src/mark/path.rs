@@ -58,7 +58,7 @@ pub(super) fn draw(
             );
         }
     }
-    if recipe.path == Path::Natural || style.kind == crate::PlotType::QQ {
+    if recipe.path == Path::Natural || matches!(style.kind, crate::PlotType::QQ | crate::PlotType::ColumnScatter) {
         if mapped_color {
             let segments = colored_spline_segments(ctx, series, style, splines, color);
             if !segments.is_empty() {

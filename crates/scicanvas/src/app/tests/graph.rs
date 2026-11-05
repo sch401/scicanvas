@@ -92,6 +92,7 @@ fn object_creation_live_edit_drag_delete_and_auto_legend_are_undoable() {
         match target {
             T::Text(id) => assert!(app.project.graph(2).unwrap().page.text(id).is_none()),
             T::Legend(_) => assert!(!app.project.graph(2).unwrap().first_layer().legend),
+            T::ColorScale(_) => unreachable!(),
         }
         roundtrip(&mut app, &before);
     }

@@ -20,3 +20,8 @@ stacked-horizontal-bar,堆叠条形图,StackedHorizontalBar,Bar,Stack,Horizontal
 percent-stacked-horizontal-bar,百分比堆叠条形图,PercentStackedHorizontalBar,Bar,PercentStack,Horizontal,Straight
 stacked-area,堆叠面积图,StackedArea,Area,Stack,Vertical,Straight
 fill-between,两曲线间填充,FillBetween,Area,Identity,Vertical,Straight
+error-band,误差带图,ErrorBand,Line,Identity,Vertical,Straight
+column-scatter,列散点图,ColumnScatter,Symbol,Identity,Vertical,Straight
+bubble,气泡图,Bubble,Symbol,Identity,Vertical,Straight
+color-scatter,颜色映射散点图,ColorScatter,Symbol,Identity,Vertical,Straight
+bubble-color,气泡颜色映射图,BubbleColor,Symbol,Identity,Vertical,Straight

@@ -36,6 +36,8 @@ impl PlotObjectEditor {
         let edit = self;
         let title = if matches!(edit.target, T::Text(_)) {
             "文字标注"
+        } else if matches!(edit.target, T::ColorScale(_)) {
+            "色阶条"
         } else {
             "图例"
         };
@@ -99,6 +101,18 @@ impl PlotObjectEditor {
                             page_position_editor(ui, &mut text.position, history_group);
                             ui.end_row();
                         });
+                    }
+                    T::ColorScale(index) => {
+                        let color = g.page.layers_mut()[index]
+                            .color_scale
+                            .get_or_insert_with(Default::default);
+                        ui.checkbox(&mut color.visible, "显示色阶条");
+                        if let Some(position) = &mut color.position {
+                            page_position_editor(ui, position, history_group);
+                        }
+                        if ui.button("恢复自动位置").clicked() {
+                            color.position = None;
+                        }
                     }
                     T::Legend(index) => {
                         ui.label(format!("图层 {}", index + 1));

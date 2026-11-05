@@ -28,7 +28,8 @@ pub use recalc::{FitBands, FitMethod, FitWeight, NonlinearRecipe, OpKind, Operat
 pub use resolve::{get_xy, AnalysisColumn, Item, Resolved, Source};
 
 use columns::{analysis_plot, ResultLink};
-use resolve::{name_of, x_for, y_errors};
+pub(crate) use resolve::y_errors;
+use resolve::{name_of, x_for};
 
 #[cfg(test)]
 mod tests {

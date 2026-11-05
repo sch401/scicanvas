@@ -982,6 +982,11 @@ impl SciApp {
                 ColAction::Plot(PlotType::PercentStackedHorizontalBar) => "plot.percent_stacked_horizontal_bar",
                 ColAction::Plot(PlotType::StackedArea) => "plot.stacked_area",
                 ColAction::Plot(PlotType::FillBetween) => "plot.fill_between",
+                ColAction::Plot(PlotType::ErrorBand) => "plot.error_band",
+                ColAction::Plot(PlotType::ColumnScatter) => "plot.column_scatter",
+                ColAction::Plot(PlotType::Bubble) => "plot.bubble",
+                ColAction::Plot(PlotType::ColorScatter) => "plot.color_scatter",
+                ColAction::Plot(PlotType::BubbleColor) => "plot.bubble_color",
 
                 ColAction::AddToGraph(_) => unreachable!(),
             };

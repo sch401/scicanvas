@@ -77,6 +77,7 @@ fn samples() -> Vec<(String, Project)> {
     cases.extend(sample_group_3());
     cases.extend(sample_group_4());
     cases.extend(sample_group_b1());
+    cases.extend(sample_group_b2());
     // 提交的示例是 v8 兼容样本，当时默认页面为 89 × 66.75 mm；已保存的项目保留自己的页面尺寸
     cases
         .into_iter()
@@ -532,7 +533,18 @@ fn every_plot_type_has_a_sample_with_one_table_and_one_graph() {
             book.columns
                 .iter()
                 .filter(|c| c.role == Role::Y)
-                .all(|c| spec.draft().y_keys.contains(&c.key) || spec.draft().base_by_y.values().any(|b| *b == c.key)),
+                .all(|c| spec.draft().y_keys.contains(&c.key)
+                    || spec.draft().base_by_y.values().any(|b| *b == c.key)
+                    || layer
+                        .plots_in(&|id| p.book(id))
+                        .iter()
+                        .any(|plot| plot.style.as_ref().is_some_and(|s| [
+                            &s.color_column,
+                            &s.size_column,
+                            &s.symbol_column
+                        ]
+                        .into_iter()
+                        .any(|k| k.as_deref() == Some(c.key.as_str()))))),
             "{name} plots every Y column"
         );
         assert!(readme.contains(name.as_str()), "samples/README.md lists {name}");
@@ -680,6 +692,124 @@ fn sample_group_b1() -> Vec<Project> {
 #[ignore = "维护者显式生成 B1 新示例"]
 fn update_b1_samples() {
     for (name, p) in samples().into_iter().skip(17) {
+        fs::write(directory().join(name), project_file::to_scv(&p).unwrap()).unwrap();
+    }
+}
+
+fn sample_group_b2() -> Vec<Project> {
+    vec![
+        sample(
+            PlotType::ErrorBand,
+            "误差带图",
+            vec![
+                (Role::X, "时间", "h", "X 列：自变量", numbers(6)),
+                (
+                    Role::Y,
+                    "响应",
+                    "mg/L",
+                    "Y 列：响应数据",
+                    list(&[2., 4., 3., 6., 4., 5.]),
+                ),
+                (
+                    Role::YError,
+                    "误差",
+                    "",
+                    "关联到 Y 的误差列",
+                    list(&[1., 2., 3., 4., 5., 6.]),
+                ),
+            ],
+        ),
+        sample(
+            PlotType::ColumnScatter,
+            "列散点图",
+            vec![
+                (Role::X, "时间", "h", "X 列：自变量", numbers(6)),
+                (
+                    Role::Y,
+                    "响应",
+                    "mg/L",
+                    "Y 列：响应数据",
+                    list(&[2., 4., 3., 6., 4., 5.]),
+                ),
+                (
+                    Role::Y,
+                    "映射值",
+                    "",
+                    "大小或颜色映射列",
+                    list(&[1., 2., 3., 4., 5., 6.]),
+                ),
+            ],
+        ),
+        sample(
+            PlotType::Bubble,
+            "气泡图",
+            vec![
+                (Role::X, "时间", "h", "X 列：自变量", numbers(6)),
+                (
+                    Role::Y,
+                    "响应",
+                    "mg/L",
+                    "Y 列：响应数据",
+                    list(&[2., 4., 3., 6., 4., 5.]),
+                ),
+                (
+                    Role::Y,
+                    "映射值",
+                    "",
+                    "大小或颜色映射列",
+                    list(&[1., 2., 3., 4., 5., 6.]),
+                ),
+            ],
+        ),
+        sample(
+            PlotType::ColorScatter,
+            "颜色映射散点图",
+            vec![
+                (Role::X, "时间", "h", "X 列：自变量", numbers(6)),
+                (
+                    Role::Y,
+                    "响应",
+                    "mg/L",
+                    "Y 列：响应数据",
+                    list(&[2., 4., 3., 6., 4., 5.]),
+                ),
+                (
+                    Role::Y,
+                    "映射值",
+                    "",
+                    "大小或颜色映射列",
+                    list(&[1., 2., 3., 4., 5., 6.]),
+                ),
+            ],
+        ),
+        sample(
+            PlotType::BubbleColor,
+            "气泡颜色映射图",
+            vec![
+                (Role::X, "时间", "h", "X 列：自变量", numbers(6)),
+                (
+                    Role::Y,
+                    "响应",
+                    "mg/L",
+                    "Y 列：响应数据",
+                    list(&[2., 4., 3., 6., 4., 5.]),
+                ),
+                (
+                    Role::Y,
+                    "映射值",
+                    "",
+                    "大小或颜色映射列",
+                    list(&[1., 2., 3., 4., 5., 6.]),
+                ),
+                (Role::Y, "颜色值", "", "颜色映射列", list(&[0., 0.2, 0.4, 0.6, 0.8, 1.])),
+            ],
+        ),
+    ]
+}
+#[test]
+#[ignore = "维护者显式生成 B2 新示例"]
+fn update_b2_samples() {
+    for (name, p) in samples().into_iter().skip(21) {
         fs::write(directory().join(name), project_file::to_scv(&p).unwrap()).unwrap();
     }
 }
