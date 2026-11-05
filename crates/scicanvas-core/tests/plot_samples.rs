@@ -76,6 +76,7 @@ fn samples() -> Vec<(String, Project)> {
     cases.extend(sample_group_2(&years, &months));
     cases.extend(sample_group_3());
     cases.extend(sample_group_4());
+    cases.extend(sample_group_b1());
     // 提交的示例是 v8 兼容样本，当时默认页面为 89 × 66.75 mm；已保存的项目保留自己的页面尺寸
     cases
         .into_iter()
@@ -583,5 +584,102 @@ fn update_plot_samples() {
     fs::create_dir_all(directory()).unwrap();
     for (name, project) in samples() {
         project_file::save(&directory().join(name), &project).unwrap();
+    }
+}
+
+fn sample_group_b1() -> Vec<Project> {
+    vec![
+        sample(
+            PlotType::StackedHorizontalBar,
+            "堆叠条形图",
+            vec![
+                (Role::X, "时间", "h", "X 列：共同时间或类别", numbers(6)),
+                (
+                    Role::Y,
+                    "处理 A",
+                    "mg/L",
+                    "Y 列：第一条曲线",
+                    list(&[2., 4., 3., 6., 4., 5.]),
+                ),
+                (
+                    Role::Y,
+                    "处理 B",
+                    "mg/L",
+                    "Y 列：第二条曲线",
+                    list(&[1., 2., 5., 3., 6., 2.]),
+                ),
+            ],
+        ),
+        sample(
+            PlotType::PercentStackedHorizontalBar,
+            "百分比堆叠条形图",
+            vec![
+                (Role::X, "时间", "h", "X 列：共同时间或类别", numbers(6)),
+                (
+                    Role::Y,
+                    "处理 A",
+                    "mg/L",
+                    "Y 列：第一条曲线",
+                    list(&[2., 4., 3., 6., 4., 5.]),
+                ),
+                (
+                    Role::Y,
+                    "处理 B",
+                    "mg/L",
+                    "Y 列：第二条曲线",
+                    list(&[1., 2., 5., 3., 6., 2.]),
+                ),
+            ],
+        ),
+        sample(
+            PlotType::StackedArea,
+            "堆叠面积图",
+            vec![
+                (Role::X, "时间", "h", "X 列：共同时间或类别", numbers(6)),
+                (
+                    Role::Y,
+                    "处理 A",
+                    "mg/L",
+                    "Y 列：第一条曲线",
+                    list(&[2., 4., 3., 6., 4., 5.]),
+                ),
+                (
+                    Role::Y,
+                    "处理 B",
+                    "mg/L",
+                    "Y 列：第二条曲线",
+                    list(&[1., 2., 5., 3., 6., 2.]),
+                ),
+            ],
+        ),
+        sample(
+            PlotType::FillBetween,
+            "两曲线间填充",
+            vec![
+                (Role::X, "时间", "h", "X 列：共同时间或类别", numbers(6)),
+                (
+                    Role::Y,
+                    "处理 A",
+                    "mg/L",
+                    "Y 列：第一条曲线",
+                    list(&[2., 4., 3., 6., 4., 5.]),
+                ),
+                (
+                    Role::Y,
+                    "处理 B",
+                    "mg/L",
+                    "Y 列：第二条曲线",
+                    list(&[1., 2., 5., 3., 6., 2.]),
+                ),
+            ],
+        ),
+    ]
+}
+
+#[test]
+#[ignore = "维护者显式生成 B1 新示例"]
+fn update_b1_samples() {
+    for (name, p) in samples().into_iter().skip(17) {
+        fs::write(directory().join(name), project_file::to_scv(&p).unwrap()).unwrap();
     }
 }

@@ -105,7 +105,7 @@ def generate(source):
                     else:
                         tick["position"] = transform([[axes["x"]["lo"], value]], target)[0][1]
         kind = layer["kind"]
-        horizontal = kind == "HorizontalBar"
+        horizontal = kind in ("HorizontalBar", "StackedHorizontalBar", "PercentStackedHorizontalBar")
         keys = layer["y_keys"]
         arrays = [raw(k) for k in keys]
         if kind == "Box":
@@ -196,17 +196,52 @@ def generate(source):
                     line, = target.plot(xx, yy)
                     marks["polylines"].append(artist_points(line, target).tolist())
                 continue
-            if kind in ("Bar", "HorizontalBar", "StackedBar", "PercentStackedBar", "FloatingBar"):
+            if kind in ("StackedArea", "FillBetween"):
+                base = np.zeros(len(x))
+                upper = y.copy()
+                filled = kind == "StackedArea" or key in layer["base_by_y"]
+                if kind == "StackedArea":
+                    for i in np.flatnonzero(valid):
+                        sign = int(y[i] < 0)
+                        base[i] = sums[sign,i]
+                        sums[sign,i] += y[i]
+                        upper[i] = sums[sign,i]
+                elif filled:
+                    base = raw(layer["base_by_y"][key])
+                    valid &= np.isfinite(base)
+                points = np.column_stack([x,upper,base])
+                points[~valid] = np.nan
+                for run in runs(points):
+                    run = run[np.argsort(run[:,0],kind="stable")]
+                    if len(run) < 2:
+                        continue
+                    xx,yy,bb = run.T
+                    if filled:
+                        target.fill_between(xconvert(xx),yy,bb,alpha=.35)
+                        boundary = list(run)
+                        for a,b in zip(run[:-1],run[1:]):
+                            da,db = a[1]-a[2],b[1]-b[2]
+                            if da*db < 0:
+                                t=da/(da-db)
+                                cross=a+t*(b-a)
+                                boundary.append(cross)
+                        for xx_,yy_,bb_ in boundary:
+                            a,b=transform([[xx_,bb_],[xx_,yy_]],target)
+                            marks["area"].append([a[0],min(a[1],b[1]),max(a[1],b[1])])
+                    line,=target.plot(xconvert(xx),yy)
+                    marks["polylines"].append(artist_points(line,target).tolist())
+                continue
+            if kind in ("Bar", "HorizontalBar", "StackedBar", "PercentStackedBar", "FloatingBar", "StackedHorizontalBar", "PercentStackedHorizontalBar"):
                 base = np.zeros(len(x))
                 values = y.copy()
                 if kind == "FloatingBar":
                     base = raw(layer["base_by_y"][key])
                     valid &= np.isfinite(base)
-                elif kind in ("StackedBar", "PercentStackedBar"):
+                elif kind in ("StackedBar", "PercentStackedBar", "StackedHorizontalBar", "PercentStackedHorizontalBar"):
                     for i in np.flatnonzero(valid):
                         sign = int(y[i] < 0)
                         value = y[i]
-                        if kind == "PercentStackedBar":
+                        if kind in ("PercentStackedBar", "PercentStackedHorizontalBar"):
                             value = value/totals[sign, i]*100 if totals[sign, i] else 0
                         base[i] = sums[sign, i]
                         sums[sign, i] += value
@@ -305,6 +340,15 @@ def generate(source):
                     bars = target.errorbar(xconvert([x[i]])[0], y[i], xerr=xerr[i], yerr=yerr[i] if np.isfinite(yerr[i]) else None, fmt="none", capsize=0)[2]
                     for collection in bars:
                         marks["segments"].extend(sorted(transform(segment, target, convert_x=False)) for segment in collection.get_segments())
+        if kind in ("StackedArea", "FillBetween"):
+            merged=[]
+            for bound in sorted(marks["area"],key=lambda p:p[0]):
+                if merged and abs(merged[-1][0]-bound[0]) < 1e-10:
+                    merged[-1][1]=min(merged[-1][1],bound[1])
+                    merged[-1][2]=max(merged[-1][2],bound[2])
+                else:
+                    merged.append(bound)
+            marks["area"]=merged
         for reference in layer["reference_lines"]:
             value = reference["value"]
             if reference["axis"] == "X":

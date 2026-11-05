@@ -66,6 +66,10 @@ pub(super) fn draw(
         super::path::draw_paths(ctx, style, paths, items);
         return true;
     }
+    if matches!(style.kind, crate::PlotType::StackedArea | crate::PlotType::FillBetween) {
+        super::band::draw(ctx, series, style, items);
+        return true;
+    }
     if super::contains(style.kind, Kind::Area) {
         let axis = ctx.y_axis(style.y_axis);
         let base = ctx.py(

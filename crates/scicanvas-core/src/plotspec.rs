@@ -395,6 +395,17 @@ impl PlotSpec {
         if self.plot_type == kind {
             return Ok(());
         }
+        if kind == PlotType::FillBetween {
+            let keys: Vec<_> = self
+                .y_keys
+                .iter()
+                .filter(|k| !self.line_only.contains(k))
+                .cloned()
+                .collect();
+            for pair in keys.as_chunks::<2>().0 {
+                self.base_by_y.insert(pair[0].clone(), pair[1].clone());
+            }
+        }
         if kind == PlotType::FloatingBar {
             let keys: Vec<_> = self
                 .y_keys
@@ -580,7 +591,10 @@ impl PlotSpec {
             }
             let foreign = cbook.id != book.id;
             let yv = c;
-            let base_values = if self.plot_type == PlotType::FloatingBar && !mapping.line_only {
+            let base_values = if (self.plot_type == PlotType::FloatingBar
+                || (self.plot_type == PlotType::FillBetween && mapping.base.is_some()))
+                && !mapping.line_only
+            {
                 let Some(base) = mapping
                     .base
                     .as_ref()
@@ -664,7 +678,10 @@ impl PlotSpec {
             }
             // 浮动柱表示下端到上端的范围，图例写出两列
             let mut name = match base_values {
-                Some(base) => format!("{} – {}", base.display_name(), c.display_name()),
+                Some(base) if self.plot_type == PlotType::FloatingBar => {
+                    format!("{} – {}", base.display_name(), c.display_name())
+                }
+                Some(_) => c.display_name().to_string(),
                 None => c.display_name().to_string(),
             };
             // 同一图层混合了多个工作簿时，图例带上工作簿名以便区分

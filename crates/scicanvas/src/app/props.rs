@@ -1228,7 +1228,7 @@ mod histogram_tests {
         assert!(plots[0].series.points.windows(2).all(|p| p[0][1] <= p[1][1]));
         let loaded = project_file::from_scv(&project_file::to_scv(&app.project).unwrap()).unwrap();
         assert_eq!(loaded, app.project);
-        assert_eq!(loaded.version, 28);
+        assert_eq!(loaded.version, scicanvas_core::PROJECT_VERSION);
         harness.click_text(&mut app, &output, "指定区间数");
         let output = harness.frame(&mut app, vec![]);
         harness.click_text(&mut app, &output, "指定宽度");

@@ -3,7 +3,7 @@
 #[cfg(feature = "serde")]
 use serde::{Deserialize, Serialize};
 
-pub const PROJECT_VERSION: u32 = 28;
+pub const PROJECT_VERSION: u32 = 29;
 pub const GRAPH_TEMPLATE_VERSION: u32 = 1;
 
 /// 列的绘图角色，对应 Origin 里的 X / Y / 忽略。
@@ -491,10 +491,14 @@ pub enum PlotType {
     Histogram,
     QQ,
     Box,
+    StackedHorizontalBar,
+    PercentStackedHorizontalBar,
+    StackedArea,
+    FillBetween,
 }
 
 impl PlotType {
-    pub const ALL: [PlotType; 17] = [
+    pub const ALL: [PlotType; 21] = [
         PlotType::Line,
         PlotType::Scatter,
         PlotType::LineSymbol,
@@ -512,6 +516,10 @@ impl PlotType {
         PlotType::Histogram,
         PlotType::QQ,
         PlotType::Box,
+        PlotType::StackedHorizontalBar,
+        PlotType::PercentStackedHorizontalBar,
+        PlotType::StackedArea,
+        PlotType::FillBetween,
     ];
 
     pub fn label(self) -> &'static str {
@@ -533,6 +541,10 @@ impl PlotType {
             PlotType::Histogram => "直方图",
             PlotType::QQ => "Q-Q 图",
             PlotType::Box => "箱线图",
+            PlotType::StackedHorizontalBar => "堆叠条形图",
+            PlotType::PercentStackedHorizontalBar => "百分比堆叠条形图",
+            PlotType::StackedArea => "堆叠面积图",
+            PlotType::FillBetween => "两曲线间填充",
         }
     }
 

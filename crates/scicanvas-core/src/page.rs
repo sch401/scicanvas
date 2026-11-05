@@ -774,6 +774,9 @@ impl Layer {
                         }
                     }
                 }
+                if self.plot_type == crate::PlotType::FillBetween && plot.mapping.base.is_none() {
+                    style.kind = crate::PlotType::Line;
+                }
                 PreparedPlot {
                     plot,
                     series,
@@ -886,11 +889,23 @@ impl Layer {
             return Ok(self.plot_keys(true).len() - before);
         }
         let before = self.plot_keys(true).len();
+        let bands: Vec<_> = if self.plot_type == crate::PlotType::FillBetween {
+            keys.as_chunks::<2>()
+                .0
+                .iter()
+                .map(|pair| (self.result_key(book.id, pair[0]), self.result_key(book.id, pair[1])))
+                .collect()
+        } else {
+            Vec::new()
+        };
         for key in keys {
             let key = self.spec.add_curve(book, key)?;
             if keep_layer_x {
                 self.spec.clear_plot_x(&key);
             }
+        }
+        for (upper, lower) in bands {
+            self.set_plot_base_key(&upper, lower);
         }
         Ok(self.plot_keys(true).len() - before)
     }
@@ -951,9 +966,15 @@ impl Layer {
         if self.plot_type == crate::PlotType::QQ {
             return "理论分位数".into();
         }
+        if self.plot_type == crate::PlotType::PercentStackedHorizontalBar {
+            return "百分比 (%)".into();
+        }
         if matches!(
             self.plot_type,
-            crate::PlotType::HorizontalBar | crate::PlotType::Histogram
+            crate::PlotType::HorizontalBar
+                | crate::PlotType::StackedHorizontalBar
+                | crate::PlotType::PercentStackedHorizontalBar
+                | crate::PlotType::Histogram
         ) {
             return self
                 .plot_keys(true)
@@ -984,7 +1005,12 @@ impl Layer {
             }
             .into();
         }
-        if self.plot_type == crate::PlotType::HorizontalBar {
+        if matches!(
+            self.plot_type,
+            crate::PlotType::HorizontalBar
+                | crate::PlotType::StackedHorizontalBar
+                | crate::PlotType::PercentStackedHorizontalBar
+        ) {
             return book
                 .and_then(|b| self.x_key.as_deref().and_then(|k| b.column(k)))
                 .map(|c| c.axis_label())

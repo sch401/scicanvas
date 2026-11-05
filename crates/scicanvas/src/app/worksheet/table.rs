@@ -571,6 +571,10 @@ impl SheetFrame {
             ("plot.histogram", "直方图"),
             ("plot.qq", "Q-Q 图"),
             ("plot.box", "箱线图"),
+            ("plot.stacked_horizontal_bar", "堆叠条形图"),
+            ("plot.percent_stacked_horizontal_bar", "百分比堆叠条形图"),
+            ("plot.stacked_area", "堆叠面积图"),
+            ("plot.fill_between", "两曲线间填充"),
         ] {
             if cid.is_empty() {
                 ui.separator();

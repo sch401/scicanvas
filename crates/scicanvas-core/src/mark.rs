@@ -7,6 +7,7 @@ use crate::scene::{Item, Prim};
 use crate::ticks::Axis;
 
 pub(crate) mod annotations;
+pub(crate) mod band;
 pub(crate) mod bars;
 pub(crate) mod box_plot;
 pub(crate) mod path;

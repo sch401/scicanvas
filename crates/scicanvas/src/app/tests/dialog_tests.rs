@@ -2029,3 +2029,26 @@ fn a1_dixon_reports_original_row_inside_selection() {
         app.status
     );
 }
+
+#[test]
+fn b1_new_plot_commands_create_and_undo_in_one_step() {
+    for command in [
+        "plot.stacked_horizontal_bar",
+        "plot.percent_stacked_horizontal_bar",
+        "plot.stacked_area",
+        "plot.fill_between",
+    ] {
+        let mut app = app();
+        app.active = Some(1);
+        app.selection.insert(1, vec!["B".into(), "C".into()]);
+        let before = app.project.clone();
+        app.run_command(command);
+        assert_eq!(
+            app.project.graphs.len(),
+            before.graphs.len() + 1,
+            "{command}: {}",
+            app.status
+        );
+        roundtrip(&mut app, &before);
+    }
+}

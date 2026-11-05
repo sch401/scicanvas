@@ -1,5 +1,9 @@
 # 项目文件格式
 
+## v29 横向堆叠与带状填充
+
+新增 StackedHorizontalBar、PercentStackedHorizontalBar、StackedArea、FillBetween 图型。FillBetween 复用每条曲线现有 base 列映射保存下边界，原 Y 列顺序保留，奇数末列只画线。新文件 v29，读取 v0–v28，SCV 容器版本保持 1。
+
 ## v28 直方图设置
 
 Layer 新增可选 `histogram`：`bins` 为 `Auto`、`{"Count": n}` 或 `{"Width": w}`，`range` 为 `[lo, hi]` 或 null，`cumulative`、`normal_curve` 为布尔值。默认值为自动区间、自动范围和两个 false，整组默认设置不写入文件，旧项目读取相同默认值。固定宽度边界为 lo+k·w，最后边界不小于 hi，手动范围外样本从柱计数排除。曲线使用当前取样的全部有限值和样本标准差。无效区间设置在核心回退自动，区间数上限 10000，宽度推导过多区间时用自动区间数。单个区间的宽度与派生曲线均为运行时数据。新文件为 v28，读取 v0–v27，SCV 容器版本保持 1。

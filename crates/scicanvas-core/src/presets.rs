@@ -61,6 +61,11 @@ fn entries() -> &'static [(Preset, Recipe)] {
                     "Histogram" => PlotType::Histogram,
                     "QQ" => PlotType::QQ,
                     "Box" => PlotType::Box,
+                    "StackedHorizontalBar" => PlotType::StackedHorizontalBar,
+                    "PercentStackedHorizontalBar" => PlotType::PercentStackedHorizontalBar,
+                    "StackedArea" => PlotType::StackedArea,
+                    "FillBetween" => PlotType::FillBetween,
+
                     _ => unreachable!("built-in preset type"),
                 };
                 let marks = columns
