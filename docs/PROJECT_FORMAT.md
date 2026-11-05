@@ -1,5 +1,9 @@
 # 项目文件格式
 
+## v38 坐标轴类型
+
+Layer 新增可选 x_scale/y_scale，缺省 None 且省略，沿用 x_log/y_log 回退为 Linear/Log10。运行时 Axis 只保存 AxisScale，正逆映射共用 forward/inverse。设置和保存 Log10 继续写旧 log 标志；其余类型使用显式枚举。Probability 为 0–100 百分数，Logit 为 0–1。倒数范围需同号，自动按首个有效点取侧，左右 Y 独立。新文件 v38，读取 v0–v37，SCV 容器版本保持 1。
+
 ## v37 基线锚点与多项式方法
 
 BaselineMethod 新增 Copy 变体 Anchors { count, spline }、Polynomial { order, iterations }。OpKind::Baseline 和 BaselineSubtracted 新增 anchors: Vec<f64>，缺省空且省略。手动 X 列表与自动分段设置在重算时复用，旧两端连线及 ALS 保持原输出。信号、目标插值和合并结果为普通结果列或工作簿。新文件 v37，读取 v0–v36，SCV 容器版本保持 1。

@@ -271,11 +271,52 @@ fn cases() -> Vec<(String, Project, Graph)> {
     g.first_layer_mut().histogram.bins = scicanvas_core::page::HistogramBins::Width(2.0);
     g.first_layer_mut().histogram.normal_curve = true;
     cases.push(("histogram-options".into(), p, g));
+    cases.extend(axis_cases());
     cases
 }
 
+fn axis_cases() -> Vec<(String, Project, Graph)> {
+    use scicanvas_core::ticks::AxisScale;
+    [
+        ("axis-log2", AxisScale::Log2, vec![1., 2., 4., 8., 16.]),
+        ("axis-ln", AxisScale::Ln, (0..5).map(|i| (i as f64).exp()).collect()),
+        ("axis-reciprocal", AxisScale::Reciprocal, vec![1., 2., 3., 5., 10.]),
+        (
+            "axis-probability",
+            AxisScale::Probability,
+            vec![0.1, 5., 50., 95., 99.9],
+        ),
+        ("axis-logit", AxisScale::Logit, vec![0.001, 0.05, 0.5, 0.95, 0.999]),
+    ]
+    .into_iter()
+    .map(|(name, scale, data)| {
+        let (_, mut p, mut g) = case(name, PlotType::LineSymbol);
+        for col in &mut p.book_mut(1).unwrap().columns {
+            col.data = data.iter().map(ToString::to_string).collect();
+        }
+        let layer = g.first_layer_mut();
+        layer.x_auto = false;
+        layer.y_auto = false;
+        layer.x_min = data[0];
+        layer.y_min = data[0];
+        layer.x_max = data[data.len() - 1];
+        layer.y_max = data[data.len() - 1];
+        layer.set_axis_scale(true, scale).unwrap();
+        layer.set_axis_scale(false, scale).unwrap();
+        (name.into(), p, g)
+    })
+    .collect()
+}
+
 fn axis(a: &Axis) -> Value {
-    json!({"lo":a.lo,"hi":a.hi,"log":a.log,"ticks":a.ticks.iter().map(|v|json!({"value":v,"position":a.frac(*v)})).collect::<Vec<_>>(),"minor":a.minor.iter().map(|v|json!({"value":v,"position":a.frac(*v)})).collect::<Vec<_>>()})
+    let mut value = json!({"lo":a.lo,"hi":a.hi,"log":a.is_log(),"ticks":a.ticks.iter().map(|v|json!({"value":v,"position":a.frac(*v)})).collect::<Vec<_>>(),"minor":a.minor.iter().map(|v|json!({"value":v,"position":a.frac(*v)})).collect::<Vec<_>>()});
+    if !matches!(
+        a.scale,
+        scicanvas_core::ticks::AxisScale::Linear | scicanvas_core::ticks::AxisScale::Log10
+    ) {
+        value["scale"] = serde_json::to_value(a.scale).unwrap();
+    }
+    value
 }
 
 fn point([x, y]: [f64; 2], [l, t, w, h]: [f64; 4]) -> [f64; 2] {

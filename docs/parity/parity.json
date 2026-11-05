@@ -1731,11 +1731,39 @@
   "feature": "其他坐标类型：倒数、概率、log2、ln、Logit",
   "ref": "Axes Dialog Reference",
   "pri": "P1",
-  "status": "未开始",
-  "how": "",
-  "verify": "与 Origin 比较",
+  "status": "已实现待验收",
+  "how": "属性轴类型下拉：Linear、Log10、Log2、Ln、Reciprocal、Probability、Logit。统一正逆变换、定义域、取样、刻度、拾取和缩放；Ln 标签 e^k。概率为百分数，Logit 按方法卡为 0–1。倒数自动取首个有效点所在同号分支，手动范围需同号，左右 Y 分支独立。",
+  "verify": "NumPy/SciPy 七种变换与刻度位置 1e-12；往返、原值拾取、定义域及保存回归；真实下拉及撤销、各类型缩放平移；新增五个 matplotlib 位置对照 1e-6。现有 SVG 和视觉基线保持。",
   "id": "F094",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "visual",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/axis_scales.rs::b6_all_transforms_inverse_ticks_and_numpy_positions",
+    "crates/scicanvas-core/tests/axis_scales.rs::b6_probability_domains_reciprocal_branches_and_right_axis_pick",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::b6_axis_scale_combo_real_window_undo",
+    "crates/scicanvas/src/plot.rs::b6_view_changes_use_each_transform_space"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/axis_scales.json",
+    "docs/parity/visual/axis-probability/matplotlib.json"
+   ],
+   "visual": [
+    "docs/parity/visual/axis-probability/README.md",
+    "docs/parity/visual/axis-reciprocal/README.md"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/plotting.md#F094",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "绘图基础",

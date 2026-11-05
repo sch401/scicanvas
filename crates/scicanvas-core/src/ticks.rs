@@ -1,6 +1,8 @@
 //! 坐标轴范围与刻度：自动范围会扩展到整刻度，这和 Origin 的“重新调整刻度”一致。
 
 use crate::model::round_sig;
+mod scales;
+pub use scales::{axis_scaled, AxisScale};
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Axis {
@@ -8,25 +10,28 @@ pub struct Axis {
     pub hi: f64,
     pub ticks: Vec<f64>,
     pub minor: Vec<f64>,
-    pub log: bool,
+    pub scale: AxisScale,
 }
 
 impl Axis {
-    /// 数据值映射到 0..1。
-    pub fn frac(&self, v: f64) -> f64 {
-        if self.log {
-            (v.log10() - self.lo.log10()) / (self.hi.log10() - self.lo.log10())
-        } else {
-            (v - self.lo) / (self.hi - self.lo)
-        }
+    pub fn is_log(&self) -> bool {
+        self.scale.is_log()
     }
-
-    /// frac 的反函数：0..1 映射回数据值。
+    pub fn frac(&self, v: f64) -> f64 {
+        (self.scale.forward(v) - self.scale.forward(self.lo))
+            / (self.scale.forward(self.hi) - self.scale.forward(self.lo))
+    }
     pub fn value(&self, f: f64) -> f64 {
-        if self.log {
-            10f64.powf(self.lo.log10() + f * (self.hi.log10() - self.lo.log10()))
+        self.scale
+            .inverse(self.scale.forward(self.lo) + f * (self.scale.forward(self.hi) - self.scale.forward(self.lo)))
+    }
+    pub fn clip_domain(&self, v: f64) -> f64 {
+        if self.scale == AxisScale::Log10 {
+            v.max(self.lo)
+        } else if self.scale != AxisScale::Linear {
+            v.clamp(self.lo, self.hi)
         } else {
-            self.lo + f * (self.hi - self.lo)
+            v
         }
     }
 }
@@ -110,7 +115,7 @@ pub fn axis(vals: &[f64], auto: bool, min: f64, max: f64, log: bool, force_zero:
             hi,
             ticks,
             minor,
-            log: true,
+            scale: AxisScale::Log10,
         };
     }
 
@@ -140,7 +145,7 @@ pub fn axis(vals: &[f64], auto: bool, min: f64, max: f64, log: bool, force_zero:
             hi: b,
             ticks,
             minor,
-            log: false,
+            scale: AxisScale::Linear,
         };
     }
     let (lo, hi, step) = nice(a, b, 5);
@@ -151,7 +156,7 @@ pub fn axis(vals: &[f64], auto: bool, min: f64, max: f64, log: bool, force_zero:
         hi,
         ticks,
         minor,
-        log: false,
+        scale: AxisScale::Linear,
     }
 }
 
@@ -214,7 +219,7 @@ pub fn date_axis(lo: f64, hi: f64, auto: bool) -> (Axis, DateUnit) {
             hi,
             ticks,
             minor,
-            log: false,
+            scale: AxisScale::Linear,
         }
     };
     if let Some(&(step, unit)) = fixed.iter().find(|(step, _)| span / step <= 5.0) {
@@ -282,6 +287,7 @@ pub fn format_date_tick(ms: f64, unit: DateUnit) -> String {
 /// 一个坐标轴的刻度标签写法：数字格式（Auto 为默认写法）、日期或分类（第 k 个类别在 k 处）。
 #[derive(Clone, Debug, PartialEq)]
 pub enum TickLabel {
+    NaturalLog,
     Number(crate::format::NumberFormat),
     /// 日期：时间单位与时区偏移（毫秒）。
     Date(DateUnit, f64),
@@ -291,6 +297,7 @@ pub enum TickLabel {
 impl TickLabel {
     pub fn text(&self, v: f64) -> String {
         match self {
+            TickLabel::NaturalLog => format!("e^{}", v.ln().round() as i32),
             TickLabel::Number(f) => f.apply(v).unwrap_or_else(|| format_tick(v)),
             TickLabel::Date(unit, offset) => format_date_tick(v + offset, *unit),
             TickLabel::Category(names) => {
@@ -313,7 +320,7 @@ pub fn category_axis(count: usize) -> Axis {
         hi: k as f64 + 0.5,
         ticks: (1..=k).map(|i| i as f64).collect(),
         minor: vec![],
-        log: false,
+        scale: AxisScale::Linear,
     }
 }
 

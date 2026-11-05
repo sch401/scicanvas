@@ -1712,6 +1712,27 @@ impl SciApp {
         }
     }
 
+    pub(crate) fn toggle_axis_scale(&mut self, x: bool) {
+        use scicanvas_core::ticks::AxisScale;
+        let Some(gid) = self.active_graph_id() else { return };
+        let index = self.layer_index(gid);
+        let layer = &mut self.project.graph_mut(gid).unwrap().page.layers_mut()[index];
+        let old = if x {
+            layer.effective_x_scale()
+        } else {
+            layer.effective_y_scale()
+        };
+        let scale = if old.is_log() {
+            AxisScale::Linear
+        } else {
+            AxisScale::Log10
+        };
+        self.status = match layer.set_axis_scale(x, scale) {
+            Ok(()) => format!("{} 轴：{}", if x { "X" } else { "Y" }, scale.label()),
+            Err(error) => error,
+        };
+    }
+
     pub(crate) fn toggle_graph(&mut self, field: fn(&mut scicanvas_core::page::Layer) -> &mut bool, label: &str) {
         let Some(gid) = self.active_graph_id() else { return };
         let index = self.layer_index(gid);
@@ -1730,13 +1751,15 @@ impl SciApp {
             self.status = "请先把一条曲线设置为右 Y 轴".into();
             return;
         }
-        let log = match axis {
-            scicanvas_core::page::ReferenceAxis::X => layer.x_log,
-            scicanvas_core::page::ReferenceAxis::YLeft | scicanvas_core::page::ReferenceAxis::YRight => layer.y_log,
+        let scale = match axis {
+            scicanvas_core::page::ReferenceAxis::X => layer.effective_x_scale(),
+            scicanvas_core::page::ReferenceAxis::YLeft | scicanvas_core::page::ReferenceAxis::YRight => {
+                layer.effective_y_scale()
+            }
         };
         layer.reference_lines.push(scicanvas_core::page::ReferenceLine {
             axis,
-            value: if log { 1.0 } else { 0.0 },
+            value: scale.default_value(),
             ..Default::default()
         });
         self.status = format!("已添加{}参考线", axis.label());

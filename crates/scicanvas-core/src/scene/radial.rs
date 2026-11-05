@@ -72,8 +72,17 @@ pub(super) fn build(ctx: &LayerContext<'_, '_, '_>) -> Scene {
         .flat_map(|p| p.series.points.iter().map(|p| p[1]))
         .filter(|v| *v >= 0.)
         .collect();
-    let mut r = axis(&values, layer.y_auto, 0., layer.y_max, false, true);
-    r.lo = 0.;
+    let mut r = axis_scaled(
+        &values,
+        layer.y_auto,
+        layer.y_min,
+        layer.y_max,
+        layer.effective_y_scale(),
+        true,
+    );
+    if r.scale == AxisScale::Linear {
+        r.lo = 0.;
+    }
     let axes = crate::coord::AxisSet {
         x: axis(&[], false, 0., 360., false, false),
         left_y: r,

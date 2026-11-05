@@ -216,6 +216,19 @@ impl Page {
             }
         }
         for layer in &self.layers {
+            for (scale, auto, lo, hi) in [
+                (layer.x_scale, layer.x_auto, layer.x_min, layer.x_max),
+                (layer.y_scale, layer.y_auto, layer.y_min, layer.y_max),
+            ] {
+                if scale.is_some_and(|s| !auto && !s.range_ok(lo, hi)) {
+                    return Err("非线性轴手动范围应在定义域内且递增，倒数范围需同号".into());
+                }
+            }
+            if layer.y_scale.is_some_and(|s| {
+                layer.has_right_axis_style() && !layer.y2_auto && !s.range_ok(layer.y2_min, layer.y2_max)
+            }) {
+                return Err("右 Y 非线性手动范围无效".into());
+            }
             for function in &layer.functions {
                 function.validate()?;
             }
@@ -293,6 +306,10 @@ pub struct Layer {
     pub y_auto: bool,
     pub y_min: f64,
     pub y_max: f64,
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Option::is_none"))]
+    pub x_scale: Option<crate::ticks::AxisScale>,
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Option::is_none"))]
+    pub y_scale: Option<crate::ticks::AxisScale>,
     pub x_log: bool,
     pub y_log: bool,
     pub line_width: f32,
@@ -607,6 +624,8 @@ impl Default for Layer {
             y_auto: true,
             y_min: 0.0,
             y_max: 10.0,
+            x_scale: None,
+            y_scale: None,
             x_log: false,
             y_log: false,
             line_width: 1.0,
@@ -1150,6 +1169,49 @@ impl Layer {
         } else {
             Projection::Cartesian
         };
+        Ok(())
+    }
+}
+
+impl Layer {
+    pub fn effective_x_scale(&self) -> crate::ticks::AxisScale {
+        self.x_scale.unwrap_or(if self.x_log {
+            crate::ticks::AxisScale::Log10
+        } else {
+            crate::ticks::AxisScale::Linear
+        })
+    }
+    pub fn effective_y_scale(&self) -> crate::ticks::AxisScale {
+        self.y_scale.unwrap_or(if self.y_log {
+            crate::ticks::AxisScale::Log10
+        } else {
+            crate::ticks::AxisScale::Linear
+        })
+    }
+    pub fn set_axis_scale(&mut self, x: bool, scale: crate::ticks::AxisScale) -> Result<(), String> {
+        let (auto, lo, hi) = if x {
+            (self.x_auto, self.x_min, self.x_max)
+        } else {
+            (self.y_auto, self.y_min, self.y_max)
+        };
+        if !auto && !scale.range_ok(lo, hi) {
+            return Err("轴范围应递增且位于该变换定义域，倒数轴范围需同号".into());
+        }
+        if !x && !self.y2_auto && self.has_right_axis_style() && !scale.range_ok(self.y2_min, self.y2_max) {
+            return Err("右 Y 手动范围也应位于所选变换定义域".into());
+        }
+        let explicit = if matches!(scale, crate::ticks::AxisScale::Linear | crate::ticks::AxisScale::Log10) {
+            None
+        } else {
+            Some(scale)
+        };
+        if x {
+            self.x_log = scale == crate::ticks::AxisScale::Log10;
+            self.x_scale = explicit;
+        } else {
+            self.y_log = scale == crate::ticks::AxisScale::Log10;
+            self.y_scale = explicit;
+        }
         Ok(())
     }
 }

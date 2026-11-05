@@ -86,8 +86,42 @@ def generate_b4(source,doc):
     fig.savefig(source.with_name("matplotlib.png"),dpi=300,transparent=True);plt.close(fig)
     source.with_name("matplotlib.json").write_text(json.dumps(output,ensure_ascii=False,indent=2,allow_nan=False)+"\n",encoding="utf-8",newline="\n")
 
+def generate_axis_scales(source,doc):
+    import copy
+    from scipy import special
+    layer=doc["layers"][0];page=doc["page"];l,t,w,h=layer["plot"]
+    fig=plt.figure(figsize=(page["w"]/96,page["h"]/96));ax=fig.add_axes([l/page["w"],1-(t+h)/page["h"],w/page["w"],h/page["h"]])
+    for direction in ["x","y"]:
+        scale=layer["axes"][direction]["scale"];setscale=getattr(ax,"set_"+direction+"scale")
+        if scale=="Log2":setscale("log",base=2)
+        elif scale=="Ln":setscale("log",base=np.e)
+        elif scale=="Reciprocal":setscale("function",functions=(lambda x:1/x,lambda x:1/x))
+        elif scale=="Probability":setscale("function",functions=(lambda x:special.ndtri(x/100),lambda x:100*special.ndtr(x)))
+        else:setscale("logit")
+        axis=layer["axes"][direction];getattr(ax,"set_"+direction+"lim")(axis["lo"],axis["hi"]);ticks=[p["value"] for p in axis["ticks"]];getattr(ax,"set_"+direction+"ticks")(ticks)
+        if scale=="Reciprocal":getattr(ax,"invert_"+direction+"axis")()
+        getattr(ax,"set_"+direction+"ticklabels")([f"e^{round(np.log(v))}" for v in ticks] if scale=="Ln" else [f"{v:g}" for v in ticks])
+        getattr(ax,direction+"axis").set_minor_locator(matplotlib.ticker.NullLocator())
+    columns={c["key"]:np.asarray(c["values"],dtype=float) for c in doc["data"]};x=columns["A"];y=columns["B"]
+    line,=ax.plot(x,y);dots=ax.scatter(x,y,s=10);fig.canvas.draw()
+    points=ax.transAxes.inverted().transform(ax.transData.transform(np.column_stack([x,y]))).tolist()
+    marks=dict(symbols=points,polylines=[points],bars=[],segments=[],area=[],colors=[])
+    layer=copy.deepcopy(layer);layer["marks"]=marks
+    for direction in ["x","y"]:
+        axis=layer["axes"][direction]
+        for kind in ["ticks","minor"]:
+            for tick in axis[kind]:
+                p=[tick["value"],layer["axes"]["y"]["lo"]] if direction=="x" else [layer["axes"]["x"]["lo"],tick["value"]]
+                tick["position"]=float(ax.transAxes.inverted().transform(ax.transData.transform(p))[0 if direction=="x" else 1])
+    output=dict(case=doc["case"],page=page,data=doc["data"],versions=VERSIONS,layers=[layer])
+    fig.savefig(source.with_name("matplotlib.png"),dpi=300,transparent=True);plt.close(fig)
+    source.with_name("matplotlib.json").write_text(json.dumps(output,ensure_ascii=False,indent=2,allow_nan=False)+"\n",encoding="utf-8",newline="\n")
+
+
 def generate(source):
     doc = json.loads(source.read_text(encoding="utf-8"))
+    if "scale" in doc["layers"][0]["axes"]["x"]:
+        return generate_axis_scales(source,doc)
     if doc["layers"][0]["kind"] in ("Pie","Violin","PolarLine","PolarScatter"):
         return generate_b4(source,doc)
     columns = {c["key"]: c for c in doc["data"]}

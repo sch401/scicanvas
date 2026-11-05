@@ -467,10 +467,10 @@ pub(super) fn graph(commands: &mut Vec<Command>) {
             "图形",
             "log scale x",
             need_graph,
-            |a| a.toggle_graph(|g| &mut g.x_log, "X 轴对数刻度"),
+            |a| a.toggle_axis_scale(true),
         )
         .modifies()
-        .checked(|a| graph_flag(a, |g| g.x_log)),
+        .checked(|a| graph_flag(a, |g| g.effective_x_scale().is_log())),
         c(
             "graph.logy",
             "Y 对数",
@@ -479,10 +479,10 @@ pub(super) fn graph(commands: &mut Vec<Command>) {
             "图形",
             "log scale y",
             need_graph,
-            |a| a.toggle_graph(|g| &mut g.y_log, "Y 轴对数刻度"),
+            |a| a.toggle_axis_scale(false),
         )
         .modifies()
-        .checked(|a| graph_flag(a, |g| g.y_log)),
+        .checked(|a| graph_flag(a, |g| g.effective_y_scale().is_log())),
         c(
             "graph.grid",
             "网格线",

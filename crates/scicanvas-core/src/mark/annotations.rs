@@ -17,7 +17,7 @@ pub(super) fn errors(ctx: &Context<'_, '_, '_, '_>, plots: &[PreparedPlot], item
             if let Some(error) = errors[0] {
                 let ends = [x - error, x + error];
                 let yy = ctx.py(y, style.y_axis);
-                if (!axis.log || y > 0.0) && ends[1] >= ctx.axes.x.lo && ends[0] <= ctx.axes.x.hi {
+                if axis.scale.domain_ok(y) && ends[1] >= ctx.axes.x.lo && ends[0] <= ctx.axes.x.hi {
                     segs.push([
                         ctx.px(ends[0].clamp(ctx.axes.x.lo, ctx.axes.x.hi)),
                         yy,

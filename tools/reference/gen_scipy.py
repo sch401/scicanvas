@@ -982,11 +982,26 @@ def curve_tool_cases():
     write("curve_tools",cases)
 
 
+def axis_scale_cases():
+    cases=[]
+    for name,values,ticks,function in [
+        ("Linear",np.array([0.,1.,2.,5.,10.]),np.arange(0.,11.,2.),lambda x:x),
+        ("Log10",np.array([.1,.5,1.,10.,100.]),np.array([.1,1.,10.,100.]),np.log10),
+        ("Log2",np.array([1.,2.,4.,8.,16.]),2.**np.arange(5),np.log2),
+        ("Ln",np.exp(np.arange(5.)),np.exp(np.arange(5.)),np.log),
+        ("Reciprocal",np.array([1.,2.,3.,5.,10.]),np.array([1.,2.,5.,10.]),lambda x:1/x),
+        ("Probability",np.array([.1,5.,50.,95.,99.9]),np.array([.1,1.,5.,10.,20.,30.,50.,70.,80.,90.,95.,99.,99.9]),lambda x:special.ndtri(x/100)),
+        ("Logit",np.array([.001,.05,.5,.95,.999]),np.array([.001,.01,.05,.1,.25,.5,.75,.9,.95,.99,.999]),special.logit)]:
+        lo,hi=float(values[0]),float(values[-1]);transform=lambda x:(function(x)-function(lo))/(function(hi)-function(lo))
+        cases.append(dict(scale=name,values=values,lo=lo,hi=hi,ticks=ticks,fractions=transform(values),tick_fractions=transform(ticks)))
+    write("axis_scales",cases)
+
+
 GENERATORS = [
     integrals, normalization, descriptive, column_math, polynomial, statistical_tests, signal_tests,
     interpolation_cases, derivative_cases, peak_cases, constrained_fit_cases, builtin_fit_cases,
     smoothing_cases, percent_bar_cases, fit_report_cases, formula_cases, weighted_fit_cases, qq_cases, box_cases,
-    histogram_option_cases, normality_ks_ad, ks_2samp, two_way_anova, fit_tools, global_fits, extended_fit_cases, inhibition_fits, kde_cases, peak_sum_cases, function_plot_cases, baseline_extension_cases, derivative_peak_cases, signal_extension_cases, curve_tool_cases,
+    histogram_option_cases, normality_ks_ad, ks_2samp, two_way_anova, fit_tools, global_fits, extended_fit_cases, inhibition_fits, kde_cases, peak_sum_cases, function_plot_cases, baseline_extension_cases, derivative_peak_cases, signal_extension_cases, curve_tool_cases, axis_scale_cases,
 ]
 
 
