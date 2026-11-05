@@ -3616,11 +3616,31 @@
   "feature": "整表统计",
   "ref": "Statistics on Whole Sheet",
   "pri": "P1",
-  "status": "未开始",
-  "how": "statrs 分布函数 + 自写检验",
-  "verify": "与 Origin 及 SciPy / R 结果比较（统计量、p 值）",
+  "status": "已实现待验收",
+  "how": "统计 → 整表统计。选区内的数值列合并为样本；无选区时取整表数值单元格，含矩形范围内缺失。标准差 n−1，分位数线性插值；结果窗口提供写入新表。",
+  "verify": "NumPy mean/std(ddof=1)/percentile(method=linear) 对照 1e-12；空组和单点统计、选区缺失、表/箱线图/Note 的真实窗口一步撤销和保存往返；摘要组合图独立 matplotlib 参考。",
   "id": "F176",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/statistical_reports.rs::a7_whole_and_side_by_side_statistics_match_numpy",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::a7_reports_real_write_compare_and_summary_undo"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/statistical_reports.json"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/analysis.md#F176",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "统计",
@@ -8611,10 +8631,35 @@
   "feature": "图形摘要报告",
   "ref": "Statistics / Graphical Summary",
   "pri": "P1",
-  "status": "未开始",
-  "how": "描述统计与分布图组合报告",
-  "verify": "参考统计值与图形、报告往返",
-  "milestone": "M2 论文全流程"
+  "status": "已实现待验收",
+  "how": "统计 → 图形摘要报告。一列生成 Histogram、Box、QQ 三层与右下象限描述统计、Shapiro–Wilk/AD p 值，同时生成 Note。复用 Page 图层，不增加数据列；统计文字为生成时快照，源变化后重新生成。",
+  "verify": "NumPy mean/std(ddof=1)/percentile(method=linear) 对照 1e-12；空组和单点统计、选区缺失、表/箱线图/Note 的真实窗口一步撤销和保存往返；摘要组合图独立 matplotlib 参考。",
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "manual",
+   "visual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/statistical_reports.rs::a7_comparison_table_box_and_graphical_summary_save_together",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::a7_reports_real_write_compare_and_summary_undo"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/statistical_reports.json",
+    "docs/parity/visual/graphical-summary/matplotlib.json"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/analysis.md#F505",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   },
+   "visual": [
+    "docs/parity/visual/graphical-summary/README.md"
+   ]
+  }
  },
  {
   "id": "F506",
@@ -8622,10 +8667,30 @@
   "feature": "并排统计比较",
   "ref": "Statistics / Side-by-Side Statistics",
   "pri": "P1",
-  "status": "未开始",
-  "how": "多组数据统计与并列结果",
-  "verify": "SciPy/R 数值对照与缺失值处理",
-  "milestone": "M2 论文全流程"
+  "status": "已实现待验收",
+  "how": "统计 → 并排统计比较。多列的 N、均值、样本 SD、SE、极值、Q1/中位数/Q3 和缺失数并排输出工作簿，可同时生成引用原始列的箱线图；表与图共用一次历史。",
+  "verify": "NumPy mean/std(ddof=1)/percentile(method=linear) 对照 1e-12；空组和单点统计、选区缺失、表/箱线图/Note 的真实窗口一步撤销和保存往返；摘要组合图独立 matplotlib 参考。",
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/statistical_reports.rs::a7_whole_and_side_by_side_statistics_match_numpy",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::a7_reports_real_write_compare_and_summary_undo"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/statistical_reports.json"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/analysis.md#F506",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "id": "F507",
@@ -8666,8 +8731,8 @@
   "ref": "Statistics / Running Nonparametric Tests",
   "pri": "P1",
   "status": "未开始",
-  "how": "A8 窗口范围、方法选择和结果列",
-  "verify": "窗口边界、缺失值、SciPy/R 对照",
+  "how": "按方法卡暂缓，需用户确认具体检验统计量、分组及窗口规则。清单 ref 为 Running Nonparametric Tests；Origin 官方 Randomness Tests App 提供序列随机性的 Runs Test，Moving Average 帮助提供移动窗口统计。来源：https://www.originlab.com/fileExchange/details.aspx?fid=377；https://www.originlab.com/videos/details.aspx?id=257",
+  "verify": "需要用户确认定义后，补窗口边界、缺失值及所选检验的独立参考；状态保持未开始。",
   "milestone": "M2 论文全流程"
  },
  {

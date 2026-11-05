@@ -2634,3 +2634,39 @@ fn b6_axis_scale_combo_real_window_undo() {
     );
     roundtrip(&mut app, &before);
 }
+
+#[test]
+fn a7_reports_real_write_compare_and_summary_undo() {
+    let mut app = app();
+    app.active = Some(1);
+    app.selection.remove(&1);
+    let before = app.project.clone();
+    let undo = app.history.undo_label().map(str::to_owned);
+    app.run_command("stats.whole");
+    assert_eq!(app.project, before);
+    assert_eq!(app.history.undo_label().map(str::to_owned), undo);
+    assert!(matches!(&app.dialog,Some(Dialog::Table{title,..}) if title=="整表统计"));
+    press_dialog_button(&mut app, "写入新表");
+    assert_eq!(app.project.books.len(), before.books.len() + 1);
+    roundtrip(&mut app, &before);
+    app.active = Some(1);
+    app.selection.insert(1, vec!["B".into(), "C".into()]);
+    let before = app.project.clone();
+    app.run_command("stats.compare");
+    let Some(Dialog::StatisticsCompare { boxes, .. }) = &mut app.dialog else {
+        panic!()
+    };
+    *boxes = true;
+    press_dialog_button(&mut app, "生成");
+    assert_eq!(app.project.books.len(), before.books.len() + 1);
+    assert_eq!(app.project.graphs.len(), before.graphs.len() + 1);
+    roundtrip(&mut app, &before);
+    app.active = Some(1);
+    app.selection.insert(1, vec!["B".into()]);
+    let before = app.project.clone();
+    app.run_command("stats.summary");
+    assert_eq!(app.project.graphs.len(), before.graphs.len() + 1);
+    assert_eq!(app.project.notes.len(), before.notes.len() + 1);
+    assert_eq!(app.project.graphs.last().unwrap().page.layers().len(), 3);
+    roundtrip(&mut app, &before);
+}

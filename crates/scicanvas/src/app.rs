@@ -13,6 +13,7 @@ mod notes;
 mod peak_fit;
 mod props;
 mod signal_tools;
+mod statistical_reports;
 mod tiff_export;
 mod windows;
 mod worksheet;

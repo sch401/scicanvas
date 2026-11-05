@@ -118,6 +118,20 @@ def generate_axis_scales(source,doc):
     source.with_name("matplotlib.json").write_text(json.dumps(output,ensure_ascii=False,indent=2,allow_nan=False)+"\n",encoding="utf-8",newline="\n")
 
 
+def draw_summary_annotations(fig,doc,output):
+    import statsmodels
+    from statsmodels.stats.diagnostic import normal_ad
+    layer=doc["layers"][0];column=next(c for c in doc["data"] if c["key"]==layer["y_keys"][0]);raw=np.asarray(column["values"],dtype=float)
+    if layer["rows"] is not None:raw=raw[layer["rows"][0]:layer["rows"][1]+1]
+    v=raw[np.isfinite(raw)];n=len(v);sd=np.std(v,ddof=1);q=np.percentile(v,[25,50,75],method="linear");num=lambda v:f"{v:.8g}"
+    sw=stats.shapiro(v).pvalue;ad=normal_ad(v)[1]
+    text=f"描述统计\nN = {n}，缺失 = {len(raw)-n}\n均值 = {num(np.mean(v))}\nSD = {num(sd)}，SE = {num(sd/np.sqrt(n))}\n最小 = {num(np.min(v))}，最大 = {num(np.max(v))}\nQ1 = {num(q[0])}，中位数 = {num(q[1])}\nQ3 = {num(q[2])}，总和 = {num(np.sum(v))}\nShapiro–Wilk p = {num(sw)}\nAnderson–Darling p = {num(ad)}"
+    output["versions"]=VERSIONS|{"statsmodels":statsmodels.__version__};output["annotations"]=[]
+    for annotation in doc["annotations"]:
+        x,y=annotation["position"];fig.text(x,1-y,text,fontsize=annotation["size_pt"],va="top",ha="left",color=np.asarray(annotation["color"])/255)
+        output["annotations"].append(dict(position=[x,y],text=text))
+
+
 def generate(source):
     doc = json.loads(source.read_text(encoding="utf-8"))
     if "scale" in doc["layers"][0]["axes"]["x"]:
@@ -516,6 +530,7 @@ def generate(source):
         if kind in ("ColorScatter","BubbleColor"):
             copy["color_scale"]=color_scale
         output["layers"].append(copy)
+    if doc.get("annotations"):draw_summary_annotations(fig,doc,output)
     fig.savefig(source.with_name("matplotlib.png"), dpi=300, transparent=True)
     plt.close(fig)
     source.with_name("matplotlib.json").write_text(json.dumps(output, ensure_ascii=False, indent=2, allow_nan=False)+"\n", encoding="utf-8", newline="\n")

@@ -272,6 +272,19 @@ fn cases() -> Vec<(String, Project, Graph)> {
     g.first_layer_mut().histogram.normal_curve = true;
     cases.push(("histogram-options".into(), p, g));
     cases.extend(axis_cases());
+    let (_, mut p, _) = case("graphical-summary", PlotType::LineSymbol);
+    let column = p
+        .analysis_columns(&scicanvas_core::ops::Source::Book {
+            id: 1,
+            selected: vec!["B".into()],
+            rows: None,
+        })
+        .unwrap()
+        .remove(0);
+    let (id, _) = p.graphical_summary(&column).unwrap();
+    let mut g = p.graph(id).unwrap().clone();
+    g.name = "graphical-summary".into();
+    cases.push(("graphical-summary".into(), p, g));
     cases
 }
 
@@ -451,10 +464,12 @@ fn export(p: &Project, g: &Graph) -> (Value, String) {
         let category=if let ColumnData::Category {codes,levels,..}=&*c.data {Some(json!({"codes":codes,"levels":levels}))}else{None};
         json!({"key":c.key,"role":format!("{:?}",c.role),"kind":format!("{:?}",c.data.kind()),"values":c.values(),"category":category,"utc_offset":c.format.utc_offset})
     }).collect();
-    (
-        json!({"case":g.name,"page":{"w":scene.w,"h":scene.h},"data":data,"layers":layers}),
-        svg::render_page(g, p),
-    )
+    let mut document = json!({"case":g.name,"page":{"w":scene.w,"h":scene.h},"data":data,"layers":layers});
+    if !g.page.annotations.is_empty() {
+        document["annotations"] = serde_json::to_value(&g.page.annotations).unwrap();
+        document["annotation_columns"] = json!(g.page.columns);
+    }
+    (document, svg::render_page(g, p))
 }
 
 #[test]

@@ -997,11 +997,24 @@ def axis_scale_cases():
     write("axis_scales",cases)
 
 
+def statistical_report_cases():
+    groups=[("组1",[1.,2.,4.,5.,8.]),("组2",[2.,np.nan,6.,8.,12.]),("空组",[np.nan,np.nan]),("单点",[3.])]
+    def describe(a):
+        a=np.asarray(a,dtype=float);v=a[np.isfinite(a)];n=len(v)
+        if not n:return dict(n=0,mean=None,sd=None,se=None,min=None,q1=None,median=None,q3=None,max=None,missing=len(a),sum=0.)
+        sd=np.std(v,ddof=1) if n>1 else None;q=np.percentile(v,[25,50,75],method="linear")
+        return dict(n=n,mean=np.mean(v),sd=sd,se=sd/np.sqrt(n) if sd is not None else None,min=np.min(v),q1=q[0],median=q[1],q3=q[2],max=np.max(v),missing=len(a)-n,sum=np.sum(v))
+    columns=[np.arange(5.)]+[np.asarray(values) for _,values in groups];matrix=np.full((5,len(columns)),np.nan)
+    for i,column in enumerate(columns):matrix[:len(column),i]=column
+    cases=[dict(kind="groups",groups=[dict(name=name,values=values,stats=describe(values)) for name,values in groups]),dict(kind="whole",stats=describe(matrix.ravel())),dict(kind="selection",stats=describe(matrix[1:4,1:3].ravel()))]
+    write("statistical_reports",cases)
+
+
 GENERATORS = [
     integrals, normalization, descriptive, column_math, polynomial, statistical_tests, signal_tests,
     interpolation_cases, derivative_cases, peak_cases, constrained_fit_cases, builtin_fit_cases,
     smoothing_cases, percent_bar_cases, fit_report_cases, formula_cases, weighted_fit_cases, qq_cases, box_cases,
-    histogram_option_cases, normality_ks_ad, ks_2samp, two_way_anova, fit_tools, global_fits, extended_fit_cases, inhibition_fits, kde_cases, peak_sum_cases, function_plot_cases, baseline_extension_cases, derivative_peak_cases, signal_extension_cases, curve_tool_cases, axis_scale_cases,
+    histogram_option_cases, normality_ks_ad, ks_2samp, two_way_anova, fit_tools, global_fits, extended_fit_cases, inhibition_fits, kde_cases, peak_sum_cases, function_plot_cases, baseline_extension_cases, derivative_peak_cases, signal_extension_cases, curve_tool_cases, axis_scale_cases, statistical_report_cases,
 ]
 
 

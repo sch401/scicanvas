@@ -1,6 +1,6 @@
 # matplotlib 同数据位置对照
 
-本组比较数据位置与刻度映射，不比较默认页边距、字号、图例或线宽。52 个样例由测试中的 Project + Graph 生成；单层使用 Scene.plot，多层逐层使用 Scene.layer_plots。SciCanvas 页面坐标换算成框内 (fx, fy)，Y 轴朝上。JSON 记录原始列数据、类别顺序 / UTC 毫秒 / 时区、轴范围和图元。
+本组比较数据位置与刻度映射，不比较默认页边距、字号、图例或线宽。53 个样例由测试中的 Project + Graph 生成；单层使用 Scene.plot，多层逐层使用 Scene.layer_plots。SciCanvas 页面坐标换算成框内 (fx, fy)，Y 轴朝上。JSON 记录原始列数据、类别顺序 / UTC 毫秒 / 时区、轴范围和图元。
 
 ```powershell
 python -m venv .venv-ref
