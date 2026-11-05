@@ -86,8 +86,8 @@ pub(crate) use scientific_text::{scientific_text, scientific_text_multiline};
 pub(crate) use tables::md_table;
 use tables::{md_cell, md_pairs, table_grid};
 pub(crate) use widgets::{
-    actions, axis_scale_options, center_buttons, edit_group, field_error, form, hint, mark_multiline, multiline,
-    multiline_editor, parameter_bounds, plain, primary, ActionKind, Keys, BUTTON,
+    actions, axis_scale_options, begin_keyboard_frame, center_buttons, edit_group, field_error, form, hint,
+    mark_multiline, multiline, multiline_editor, parameter_bounds, plain, primary, ActionKind, Keys, BUTTON,
 };
 use widgets::{buttons, data_hint};
 pub(crate) use window::{floating_bounds, window};
@@ -414,8 +414,8 @@ pub fn show(ctx: &egui::Context, dialog: &mut Dialog, pal: &Palette, project: &s
 impl Dialog {
     fn show(&mut self, ctx: &egui::Context, pal: &Palette, project: &scicanvas_core::Project) -> Action {
         widgets::prepare_submission(ctx);
+        ctx.data_mut(|d| d.insert_temp(egui::Id::new("rendering-dialog-window"), true));
         let mut open = true;
-        let esc = ctx.input(|i| i.key_pressed(egui::Key::Escape)) && ctx.memory(|m| m.focused().is_none());
         let mut action = match self {
             Self::LayerContents(contents) => contents.show(ctx, project, pal),
             Self::FindReplace(state) => state.show(ctx, &mut open),
@@ -426,7 +426,7 @@ impl Dialog {
             Self::ImportWizard(wizard) => wizard.show(ctx, pal, &mut open),
             Self::AnalysisCurves { .. } => self.show_analysis_curves(ctx, pal, &mut open),
             Self::ColumnProps { .. } => self.show_column_props(ctx, pal, &mut open),
-            Self::ConvertText { .. } => self.show_convert_text(ctx, pal, &mut open, esc),
+            Self::ConvertText { .. } => self.show_convert_text(ctx, pal, &mut open),
             Self::Poly { .. } => self.show_poly(ctx, pal, &mut open),
             Self::Smooth { .. } => self.show_smooth(ctx, pal, &mut open),
             Self::CategoryOrder { .. } => self.show_category_order(ctx, pal, &mut open),
@@ -466,7 +466,10 @@ impl Dialog {
             Self::TTestReport { .. } => self.show_t_test_report(ctx, pal, &mut open),
             Self::Png { .. } | Self::Tiff { .. } => self.show_png(ctx, pal, &mut open),
         };
-        if !open || (esc && matches!(action, Action::None)) {
+        ctx.data_mut(|d| d.insert_temp(egui::Id::new("rendering-dialog-window"), false));
+        let escape =
+            ctx.data(|d| d.get_temp::<u64>(egui::Id::new("dialog-window-escape"))) == Some(ctx.cumulative_pass_nr());
+        if !open || (escape && matches!(action, Action::None)) {
             action = Action::Close;
         }
         action

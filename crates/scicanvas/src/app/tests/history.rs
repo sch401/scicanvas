@@ -1153,6 +1153,9 @@ fn modal_keyboard_saves_or_cancels_without_committing_cancelled_drafts() {
         for _ in 0..4 {
             h.frame(&mut app, vec![]);
         }
+        let output = h.frame(&mut app, vec![]);
+        let at = crate::test_ui::text_rect(&output, "取消").unwrap().center();
+        h.frame(&mut app, vec![egui::Event::PointerMoved(at)]);
         let key = if save { egui::Key::Enter } else { egui::Key::Escape };
         h.frame(
             &mut app,
@@ -1225,6 +1228,9 @@ fn delete_confirmation_requires_a_click_when_no_button_has_focus() {
     assert_eq!(app.confirm_delete, Some(1));
     assert_eq!(app.project, original);
     assert_eq!(app.history.generation(), generation);
+    let output = h.frame(&mut app, vec![]);
+    let at = crate::test_ui::text_rect(&output, "取消").unwrap().center();
+    h.frame(&mut app, vec![egui::Event::PointerMoved(at)]);
     h.frame(&mut app, vec![key(egui::Key::Escape)]);
     assert!(app.confirm_delete.is_none());
     assert_eq!(app.project, original);

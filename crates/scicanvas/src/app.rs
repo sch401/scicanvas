@@ -231,6 +231,7 @@ pub struct SciApp {
     plot_epoch: u64,
     active_layers: HashMap<u64, usize>,
     dialog_error: Option<String>,
+    dialog_error_for: Option<std::mem::Discriminant<Dialog>>,
     pub(crate) plot_draft: Option<scicanvas_core::plotspec::PlotSpec>,
     pub(crate) status: Status,
     status_messages: std::collections::VecDeque<(String, Status)>,
@@ -402,6 +403,7 @@ impl SciApp {
             props_for: None,
             active_layers: HashMap::new(),
             dialog_error: None,
+            dialog_error_for: None,
             plot_draft: None,
             status: Status::default(),
             status_messages: Default::default(),
@@ -1297,7 +1299,6 @@ impl SciApp {
                 None
             }
             Err(error) => {
-                self.dialog_error = Some(error.clone());
                 self.status_err(error.clone());
                 if self.edit_abort.is_none() {
                     self.edit_abort = Some(EditAbort::Failed(error));
@@ -1926,6 +1927,7 @@ impl eframe::App for SciApp {
 
 impl SciApp {
     fn ui_frame(&mut self, ctx: &egui::Context) {
+        dialogs::begin_keyboard_frame(ctx);
         if self.closing_frame(ctx) {
             return;
         }

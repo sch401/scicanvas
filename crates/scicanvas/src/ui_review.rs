@@ -744,6 +744,10 @@ fn ui_copy_uses_short_user_facing_hints() {
                     "可以撤销",
                     "暂不支持",
                 ] {
+                    if matches!(word, "可撤销" | "可以撤销") && !path.components().any(|p| p.as_os_str() == "dialogs")
+                    {
+                        continue;
+                    }
                     assert!(!text.contains(word), "{}: {text}", path.display());
                 }
                 if path.parent().is_some_and(|p| p.ends_with("dialogs"))

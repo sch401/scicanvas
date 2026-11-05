@@ -166,7 +166,7 @@ pub static TABS: &[Tab] = &[
         groups: &[
             Group {
                 label: "二维图",
-                items: &[Gallery(PLOT_TYPES), Big("plot.function"), Big("plot.builder")],
+                items: &[Gallery(PLOT_TYPES), Big("plot.builder")],
             },
             Group {
                 label: "多面板",

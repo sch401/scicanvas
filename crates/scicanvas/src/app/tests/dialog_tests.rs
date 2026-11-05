@@ -816,18 +816,7 @@ fn migrated_analysis_dialogs_match_core_results_and_undo_as_one_step() {
                 )
             }
             6 => {
-                let made = expected.fft(&src, Window::Rect).unwrap();
-                for (book, _) in made {
-                    expected
-                        .book_mut(book)
-                        .unwrap()
-                        .columns
-                        .iter_mut()
-                        .find(|c| c.long_name == "幅值")
-                        .unwrap()
-                        .comment
-                        .push_str("。幅值按正弦振幅归一，加窗时按窗函数相干增益补偿。");
-                }
+                expected.fft(&src, Window::Rect).unwrap();
                 (Dialog::Fft { window: Window::Rect }, "变换", "FFT")
             }
             7 => {
@@ -1008,6 +997,13 @@ fn close_generates_live_action_before_clearing_dialog_and_preview() {
         Some(egui::vec2(1400.0, 1000.0)),
         |app: &mut SciApp, ctx: &egui::Context| app.generate_dialog_action(ctx),
     );
+    for _ in 0..4 {
+        harness.frame_value(&mut app, vec![]);
+    }
+    let rect = ctx
+        .memory(|m| m.area_rect(egui::Id::new(("scicanvas-dialog", "列属性 — B"))))
+        .unwrap();
+    harness.frame_value(&mut app, vec![egui::Event::PointerMoved(rect.center())]);
     let frame = harness
         .frame_value(
             &mut app,
@@ -1613,13 +1609,19 @@ fn analysis_dialog_enter_submits_valid_input_and_escape_closes() {
         modifiers: egui::Modifiers::NONE,
     };
     let mut h = crate::test_ui::Harness::new(
-        ctx,
+        ctx.clone(),
         Some(egui::vec2(1280., 900.)),
         |a: &mut SciApp, c: &egui::Context| a.dialogs(c),
     );
     for _ in 0..3 {
         h.frame(&mut app, vec![]);
     }
+    let at = ctx
+        .data(|d| d.get_temp::<(egui::Rect, egui::WidgetInfo)>(egui::Id::new(("dialog-primary", "拟合"))))
+        .unwrap()
+        .0
+        .center();
+    h.frame(&mut app, vec![egui::Event::PointerMoved(at)]);
     h.frame(&mut app, vec![key(egui::Key::Escape)]);
     assert!(app.dialog.is_none());
     app.active = Some(1);
@@ -1630,6 +1632,12 @@ fn analysis_dialog_enter_submits_valid_input_and_escape_closes() {
     }
     let before = app.project.clone();
     let generation = app.history.generation();
+    let at = ctx
+        .data(|d| d.get_temp::<(egui::Rect, egui::WidgetInfo)>(egui::Id::new(("dialog-primary", "拟合"))))
+        .unwrap()
+        .0
+        .center();
+    h.frame(&mut app, vec![egui::Event::PointerMoved(at)]);
     h.frame(&mut app, vec![key(egui::Key::Enter)]);
     assert!(matches!(app.dialog, Some(Dialog::FitReport(..))));
     assert_ne!(app.project, before);
@@ -2964,13 +2972,30 @@ fn u2_enter_submits_poly_smooth_and_interpolation_once() {
         let ctx = egui::Context::default();
         crate::fonts::setup(&ctx);
         let mut h = crate::test_ui::Harness::new(
-            ctx,
+            ctx.clone(),
             Some(egui::vec2(1280., 820.)),
             |a: &mut SciApp, c: &egui::Context| a.dialogs(c),
         );
         for _ in 0..5 {
             h.frame(&mut app, vec![]);
         }
+        let at = ctx
+            .data(|d| {
+                d.get_temp::<(egui::Rect, egui::WidgetInfo)>(egui::Id::new((
+                    "dialog-primary",
+                    if command == "fit.poly" {
+                        "拟合"
+                    } else if command == "math.smooth" {
+                        "平滑"
+                    } else {
+                        "插值"
+                    },
+                )))
+            })
+            .unwrap()
+            .0
+            .center();
+        h.frame(&mut app, vec![egui::Event::PointerMoved(at)]);
         h.key(egui::Key::Enter, |ctx| app.dialogs(ctx));
         assert_ne!(app.project, before, "{command}: {}", app.status);
         assert_eq!(app.history.generation(), generation + 1, "{command}");
@@ -3025,13 +3050,16 @@ fn u2_control_enter_submits_multiline_formula() {
     let ctx = egui::Context::default();
     crate::fonts::setup(&ctx);
     let mut h = crate::test_ui::Harness::new(
-        ctx,
+        ctx.clone(),
         Some(egui::vec2(1280., 820.)),
         |a: &mut SciApp, c: &egui::Context| a.dialogs(c),
     );
     for _ in 0..5 {
         h.frame(&mut app, vec![]);
     }
+    let out = h.frame(&mut app, vec![]);
+    let at = crate::test_ui::text_rect(&out, "A*2").unwrap().center();
+    h.click(&mut app, at);
     h.frame(
         &mut app,
         vec![egui::Event::Key {
@@ -3076,4 +3104,104 @@ fn u2_parameter_window_centers_once_and_remembers_drag() {
     }
     assert_eq!(ctx.memory(|m| m.area_rect(id)).unwrap().min, moved.min);
     assert!(moved.center().distance(rect.center()) > 40.);
+}
+
+#[test]
+fn r16_sheet_enter_and_escape_do_not_trigger_parameter_window() {
+    for theme in [egui::Theme::Light, egui::Theme::Dark] {
+        for key in [egui::Key::Enter, egui::Key::Escape] {
+            let ctx = egui::Context::default();
+            crate::theme::install(&ctx);
+            crate::fonts::setup(&ctx);
+            ctx.set_theme(theme);
+            let mut app = app();
+            app.active = Some(1);
+            app.selection.insert(1, vec!["C".into()]);
+            app.run_command("fit.poly");
+            let mut h = crate::test_ui::Harness::new(
+                ctx.clone(),
+                Some(egui::vec2(1280., 820.)),
+                |a: &mut SciApp, c: &egui::Context| a.ui_frame(c),
+            );
+            for _ in 0..6 {
+                h.frame(&mut app, vec![]);
+            }
+            let before = app.project.clone();
+            app.sheets.entry(1).or_default().edit = Some(Edit {
+                cell: Cell { c: 0, r: 0 },
+                buf: "123".into(),
+                focused: false,
+            });
+            for _ in 0..2 {
+                h.frame(&mut app, vec![]);
+            }
+            let focus = ctx.memory(|m| m.focused()).expect("worksheet editor has focus");
+            assert!(ctx.read_response(focus).is_some());
+            let out = h.frame(
+                &mut app,
+                vec![egui::Event::Key {
+                    key,
+                    physical_key: None,
+                    pressed: true,
+                    repeat: false,
+                    modifiers: egui::Modifiers::NONE,
+                }],
+            );
+            assert!(
+                matches!(app.dialog, Some(Dialog::Poly { .. })),
+                "{key:?}: {}",
+                app.status
+            );
+            assert!(app.sheets[&1].edit.is_none());
+            let mut expected = before;
+            if key == egui::Key::Enter {
+                expected.book_mut(1).unwrap().columns[0].set(0, "123".into());
+            }
+            assert_eq!(app.project, expected);
+            assert!(out
+                .shapes
+                .iter()
+                .any(|s| matches!(&s.shape,egui::Shape::Text(t) if t.galley.job.text=="多项式拟合")));
+        }
+    }
+}
+
+#[test]
+fn r16_whole_statistics_keep_method_in_note_and_sheet_errors_outside_dialog() {
+    let mut app = app();
+    app.active = Some(1);
+    app.whole_table_statistics();
+    let Some(Dialog::Table { rows, note, .. }) = &app.dialog else {
+        panic!("statistics result");
+    };
+    assert!(!rows.iter().flatten().any(|s| s == "说明"));
+    assert!(note.contains("n−1"));
+    app.selection.insert(1, vec!["B".into()]);
+    app.run_command("fit.poly");
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut h = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1280., 820.)),
+        |a: &mut SciApp, c: &egui::Context| a.ui_frame(c),
+    );
+    for _ in 0..5 {
+        h.frame(&mut app, vec![]);
+    }
+    let before = app.project.clone();
+    assert!(!app.set_column_values("unknown(", false));
+    let error = app.status.to_string();
+    assert!(app.dialog_error.is_none());
+    h.frame(&mut app, vec![]);
+    assert!(matches!(app.dialog, Some(Dialog::Poly { .. })));
+    assert_eq!(app.project, before);
+    assert!(app.dialog_error.is_none());
+    assert!(!dialog_rendered_texts(&mut app).iter().any(|s| s == &error));
+    app.record_dialog_error("old dialog error".into());
+    app.dialog = Some(Dialog::Smooth {
+        method: scicanvas_core::analysis::SmoothMethod::MovingAverage,
+        window: 5,
+    });
+    h.frame(&mut app, vec![]);
+    assert!(app.dialog_error.is_none());
 }

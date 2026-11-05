@@ -405,16 +405,6 @@ impl SciApp {
             "FFT",
             |project| {
                 let made = project.fft(&src, window)?;
-                for (book, _) in &made {
-                    if let Some(column) = project
-                        .book_mut(*book)
-                        .and_then(|book| book.columns.iter_mut().find(|c| c.long_name == "幅值"))
-                    {
-                        column
-                            .comment
-                            .push_str("。幅值按正弦振幅归一，加窗时按窗函数相干增益补偿。");
-                    }
-                }
                 Ok(Some(made))
             },
             |app, made| {

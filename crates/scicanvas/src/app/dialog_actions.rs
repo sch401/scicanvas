@@ -43,6 +43,10 @@ impl SciApp {
 
     pub(super) fn generate_dialog_action(&mut self, ctx: &egui::Context) -> Option<DialogFrame> {
         self.sync_dialog_controls();
+        if self.dialog_error_for != self.dialog.as_ref().map(std::mem::discriminant) {
+            self.dialog_error = None;
+            self.dialog_error_for = None;
+        }
         ctx.data_mut(|data| data.insert_temp(egui::Id::new("dialog-execution-error"), self.dialog_error.clone()));
         let caption = self
             .analysis_source()
@@ -302,6 +306,11 @@ impl SciApp {
         }
     }
 
+    pub(super) fn record_dialog_error(&mut self, error: String) {
+        self.dialog_error_for = self.dialog.as_ref().map(std::mem::discriminant);
+        self.dialog_error = Some(error);
+    }
+
     pub(super) fn finish_analysis_input(&mut self, operation: impl FnOnce(&mut Self) -> Result<String, String>) {
         let original = self.dialog.as_ref().map(std::mem::discriminant);
         match operation(self) {
@@ -313,7 +322,7 @@ impl SciApp {
             }
             Err(error) => {
                 self.status_err(error.clone());
-                self.dialog_error = Some(error);
+                self.record_dialog_error(error);
             }
         }
     }
@@ -512,7 +521,7 @@ impl SciApp {
                     let text: String = match &within {
                         Some(cols) => format!("已按 {} 排序 {} 列，其余列不动", names.join("、"), cols.join("、")),
                         None => format!(
-                            "已按 {} 排序整张工作表，保留 {} 个随机数列的原顺序",
+                            "已按 {} 排序整张工作表，保留 {} 个计算结果列（如拟合曲线）的原顺序",
                             names.join("、"),
                             app.project.book(book).map_or(0, |b| b
                                 .columns

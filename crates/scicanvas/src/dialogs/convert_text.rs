@@ -1,13 +1,7 @@
 use super::*;
 
 impl Dialog {
-    pub(super) fn show_convert_text(
-        &mut self,
-        ctx: &egui::Context,
-        pal: &Palette,
-        open: &mut bool,
-        esc: bool,
-    ) -> Action {
+    pub(super) fn show_convert_text(&mut self, ctx: &egui::Context, pal: &Palette, open: &mut bool) -> Action {
         let Self::ConvertText { book, key, row, value } = self else {
             unreachable!()
         };
@@ -30,7 +24,10 @@ impl Dialog {
                 if ui.add(primary(ui, "转换为文本并写入").min_size(wide)).clicked() {
                     action = Action::ConvertText(*book, key.clone(), *row, value.clone());
                 }
-                if ui.add(plain("取消")).clicked() || esc {
+                if ui.add(plain("取消")).clicked()
+                    || (super::widgets::owns_keyboard(ui)
+                        && ui.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape)))
+                {
                     action = Action::Close;
                 }
             });
