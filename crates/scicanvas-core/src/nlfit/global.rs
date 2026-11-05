@@ -102,6 +102,10 @@ pub fn fit_global(
     limits: &[ParamLimits],
     constraints: &str,
 ) -> Result<GlobalFit, String> {
+    let weighted = spec.groups.iter().filter(|g| g.2.is_some()).count();
+    if weighted != 0 && weighted != spec.groups.len() {
+        return Err("全局拟合中各组需同时提供或同时不提供 Y 误差".into());
+    }
     if spec.base == FitFunction::Builtin(Model::SineDamp) {
         let origin = spec
             .groups
@@ -149,6 +153,16 @@ pub fn fit_global(
         )?;
         return split_result(spec, &layout, joint);
     }
+    fit_indexed(spec, initial, limits, constraints)
+}
+
+pub(crate) fn fit_indexed(
+    mut spec: GlobalSpec,
+    initial: Option<&[f64]>,
+    limits: &[ParamLimits],
+    constraints: &str,
+) -> Result<GlobalFit, String> {
+    let layout = global_layout(&spec.base, spec.groups.len(), &spec.shared)?;
     for group in &mut spec.groups {
         let (x, y, w) = spec.base.points(&group.0, &group.1, group.2.as_deref())?;
         if x.is_empty() {
@@ -237,4 +251,68 @@ fn split_result(spec: GlobalSpec, layout: &GlobalLayout, joint: NlFit) -> Result
         per_group.push(fit);
     }
     Ok(GlobalFit { per_group, joint })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn review_indexed_matches_ordinary_weighted_and_unweighted() {
+        for weighted in [false, true] {
+            for count in [1, 2] {
+                let mut groups = Vec::new();
+                let mut direct = Vec::new();
+                for group in 0..count {
+                    let x: Vec<_> = (0..41).map(|i| i as f64 * 0.2).collect();
+                    let y: Vec<_> = x
+                        .iter()
+                        .enumerate()
+                        .map(|(i, x)| {
+                            0.3 + group as f64 * 0.2
+                                + (5. + group as f64) * (-x / (1.7 + group as f64 * 0.1)).exp()
+                                + 0.01 * (i as f64).sin()
+                        })
+                        .collect();
+                    let sigma = weighted.then(|| x.iter().map(|x| 0.05 + 0.01 * x).collect::<Vec<_>>());
+                    direct.push(
+                        fit_function_weighted(
+                            FitFunction::Builtin(Model::ExpDec1),
+                            &x,
+                            &y,
+                            sigma.as_deref(),
+                            Some(&[0.2, 4., 1.5]),
+                            &[],
+                            &[],
+                        )
+                        .unwrap(),
+                    );
+                    groups.push((x, y, sigma));
+                }
+                let base = FitFunction::Builtin(Model::ExpDec1);
+                let shared = vec![false; 3];
+                let layout = global_layout(&base, count, &shared).unwrap();
+                let mut initial = vec![0.; layout.names.len()];
+                for indices in &layout.indices {
+                    for (&i, value) in indices.iter().zip([0.2, 4., 1.5]) {
+                        initial[i] = value;
+                    }
+                }
+                let result = fit_indexed(GlobalSpec { base, groups, shared }, Some(&initial), &[], "").unwrap();
+                for (actual, expected) in result.per_group.iter().zip(&direct) {
+                    for (a, b) in actual.params.iter().zip(&expected.params) {
+                        assert!(
+                            (a - b).abs() / b.abs().max(1e-12) < 1e-10,
+                            "weighted={weighted} count={count}: {a} != {b}"
+                        );
+                    }
+                }
+                let rss: f64 = direct.iter().map(|f| f.rss).sum();
+                assert!(
+                    (result.joint.rss - rss).abs() / rss < 1e-10,
+                    "weighted={weighted} count={count}: {} != {rss}",
+                    result.joint.rss
+                );
+            }
+        }
+    }
 }

@@ -107,3 +107,102 @@ fn b2_color_scale_position_visibility_and_format_roundtrip() {
     assert!(hidden.plot[2] > before.plot[2]);
     assert!(hidden.objects.iter().all(|o| o.target != ObjectTarget::ColorScale(0)));
 }
+
+#[test]
+fn color_scale_stays_inside_page() {
+    for kind in [PlotType::ColorScatter, PlotType::BubbleColor] {
+        for narrow in [false, true] {
+            let mut p = project(kind);
+            if narrow {
+                p.graphs[0].first_layer_mut().placement = Some(scicanvas_core::page::LayerRect {
+                    x: 0.75,
+                    y: 0.,
+                    width: 0.25,
+                    height: 1.,
+                });
+            }
+            let sc = scene::layout_page(&p.graphs[0], &p, &[]);
+            let object = sc
+                .objects
+                .iter()
+                .find(|o| o.target == ObjectTarget::ColorScale(0))
+                .unwrap();
+            let [x, y, w, h] = object.bounds;
+            assert!(
+                x >= -1e-9 && y >= -1e-9 && x + w <= sc.w + 1e-9 && y + h <= sc.h + 1e-9,
+                "{kind:?} narrow={narrow}: {:?} page={}x{}",
+                object.bounds,
+                sc.w,
+                sc.h
+            );
+            let mut blocks = Vec::new();
+            for item in &sc.items[object.items.clone()] {
+                match &item.prim {
+                    Prim::Text { x, y, text, size, .. } => {
+                        let layout = scicanvas_core::text::layout(text, *size, false);
+                        assert!(
+                            *x >= 0.
+                                && *x + layout.width <= sc.w + 1e-9
+                                && *y - layout.height / 2. >= -1e-9
+                                && *y + layout.height / 2. <= sc.h + 1e-9,
+                            "{text}: {x},{y}"
+                        );
+                    }
+                    Prim::Rect {
+                        y, h, fill: Some(_), ..
+                    } => blocks.push((*y, *h)),
+                    _ => {}
+                }
+            }
+            assert_eq!(blocks.len(), 64);
+            blocks.sort_by(|a, b| a.0.total_cmp(&b.0));
+            assert!(blocks.windows(2).all(|p| p[0].0 + p[0].1 > p[1].0));
+        }
+    }
+}
+
+#[test]
+fn review_new_colormaps_are_continuous_and_manual_mapping_is_retained() {
+    use scicanvas_core::colormap::ColorMap;
+    for kind in [PlotType::ColorScatter, PlotType::BubbleColor] {
+        let mut p = project(kind);
+        assert_eq!(p.graphs[0].first_layer().color_map, ColorMap::Viridis);
+        let mut draft = scicanvas_core::plotspec::PlotSpec::from_selection(&p.books[0], &[], kind).unwrap();
+        draft.color_map = ColorMap::Colorblind;
+        let explicit: scicanvas_core::page::LayerSpec = draft.into();
+        assert_eq!(explicit.color_map, ColorMap::Colorblind);
+        p.graphs[0].first_layer_mut().color_map = ColorMap::Origin;
+        p.graphs[0].first_layer_mut().edit_draft(|d| d.rows = Some((0, 2)));
+        assert_eq!(p.graphs[0].first_layer().color_map, ColorMap::Origin);
+        #[cfg(feature = "serde")]
+        {
+            let json = scicanvas_core::project_file::to_json(&p).unwrap();
+            assert_eq!(p, scicanvas_core::project_file::from_json(&json).unwrap());
+        }
+    }
+}
+
+#[test]
+fn review_dataset_color_size_mapping() {
+    use scicanvas_core::{colormap::ColorMap, page::CurveStyle};
+    let mut p = project(PlotType::Scatter);
+    let layer = p.graphs[0].first_layer_mut();
+    layer.edit_draft(|d| d.y_keys = vec!["B".into()]);
+    layer.color_map = ColorMap::Viridis;
+    layer.set_plot_style(
+        "B",
+        Some(CurveStyle {
+            color_column: Some("C".into()),
+            size_column: Some("C".into()),
+            size_range: Some([2., 10.]),
+            ..Default::default()
+        }),
+    );
+    let (_, plots) = p.graphs[0].first_layer().prepared_plots_in(&p.books[0], &|_| None);
+    let points = &plots[0].series;
+    assert_eq!(points.points, vec![[1., 2.], [2., 4.], [3., 3.], [4., 5.]]);
+    assert_eq!(points.point_styles.first().unwrap().size, Some(2.));
+    assert_eq!(points.point_styles.last().unwrap().size, Some(10.));
+    assert_eq!(points.point_styles.first().unwrap().color, Some([68, 1, 84]));
+    assert_eq!(points.point_styles.last().unwrap().color, Some([253, 231, 37]));
+}

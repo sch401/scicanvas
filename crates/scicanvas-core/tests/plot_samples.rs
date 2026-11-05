@@ -44,6 +44,10 @@ fn sample(kind: PlotType, book_name: &str, columns: Vec<Spec>) -> Project {
     }
     p.books.push(book);
     let (graph, _) = p.plot_from_selection(id, &[], kind).unwrap();
+    if matches!(kind, PlotType::ColorScatter | PlotType::BubbleColor) {
+        // 已发布示例保留原色表；新图默认 Viridis 在 scatter_variants 中单独验证。
+        p.graph_mut(graph).unwrap().first_layer_mut().color_map = scicanvas_core::colormap::ColorMap::Origin;
+    }
     p.rename_project_item(graph, kind.label()).unwrap();
     p
 }

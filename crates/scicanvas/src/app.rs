@@ -507,6 +507,9 @@ impl SciApp {
                     Ok(()) => format!("{} 已改为{}", g.name, t.label()),
                     Err(e) => e,
                 };
+                if t == PlotType::Pie {
+                    self.append_pie_skipped(id);
+                }
                 return;
             }
         }
@@ -529,9 +532,22 @@ impl SciApp {
         }
         if t == PlotType::Pie {
             if let Some(g) = self.active.and_then(|id| self.project.graph(id)) {
-                let skipped = scicanvas_core::scene::pie_skipped(g.first_layer(), &|id| self.project.book(id));
-                self.status.push_str(&format!("；跳过 {skipped} 行非正值或缺失值"));
+                let id = g.id;
+                self.append_pie_skipped(id);
             }
+        }
+    }
+
+    fn append_pie_skipped(&mut self, id: u64) {
+        if let Some(g) = self.project.graph(id) {
+            let skipped: usize = g
+                .page
+                .layers()
+                .iter()
+                .filter(|l| l.plot_type == PlotType::Pie)
+                .map(|l| scicanvas_core::scene::pie_skipped(l, &|id| self.project.book(id)))
+                .sum();
+            self.status.push_str(&format!("；跳过 {skipped} 行非正值或缺失值"));
         }
     }
 

@@ -124,3 +124,28 @@ fn a3_layout_limits_and_once_only_project_output() {
         scicanvas_core::project_file::from_json(&scicanvas_core::project_file::to_json(&p).unwrap()).unwrap()
     );
 }
+
+#[test]
+fn review_global_rejects_mixed_weights_before_both_solver_paths() {
+    for shared in [vec![true; 3], vec![false; 3]] {
+        for reverse in [false, true] {
+            let (x, y, s) = data();
+            let mut groups = vec![(x.clone(), y.clone(), Some(s)), (x, y, None)];
+            if reverse {
+                groups.reverse();
+            }
+            let error = nlfit::fit_global(
+                GlobalSpec {
+                    base: FitFunction::Builtin(Model::ExpDec1),
+                    groups,
+                    shared: shared.clone(),
+                },
+                None,
+                &[],
+                "",
+            )
+            .unwrap_err();
+            assert_eq!(error, "全局拟合中各组需同时提供或同时不提供 Y 误差");
+        }
+    }
+}

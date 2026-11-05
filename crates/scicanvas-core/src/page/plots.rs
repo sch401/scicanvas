@@ -86,7 +86,19 @@ impl Default for LayerSpec {
 }
 impl From<PlotSpec> for LayerSpec {
     fn from(spec: PlotSpec) -> Self {
-        Self::from_draft(spec, BTreeMap::new())
+        let mut layer = Self::from_draft(spec, BTreeMap::new());
+        if matches!(
+            layer.plot_type,
+            crate::PlotType::ColorScatter | crate::PlotType::BubbleColor
+        ) && layer.color_map == crate::colormap::ColorMap::Origin
+            && layer
+                .plots
+                .iter()
+                .any(|p| p.style.as_ref().is_some_and(|s| s.color_column.is_some()))
+        {
+            layer.color_map = crate::colormap::ColorMap::Viridis;
+        }
+        layer
     }
 }
 impl LayerSpec {
@@ -1024,16 +1036,19 @@ impl<'de> serde::Deserialize<'de> for LayerSpec {
         let draft: PlotSpec = serde_json::from_value(value.clone()).map_err(D::Error::custom)?;
         if let Some(plots) = plots {
             let plots: Vec<StoredCurve> = serde_json::from_value(plots).map_err(D::Error::custom)?;
-            let mut result = Self::from(PlotSpec {
-                book_id: draft.book_id,
-                x_key: draft.x_key,
-                plot_type: draft.plot_type,
-                rows: draft.rows,
-                visible_only: draft.visible_only,
-                transform: draft.transform,
-                color_map: draft.color_map,
-                ..Default::default()
-            });
+            let mut result = Self::from_draft(
+                PlotSpec {
+                    book_id: draft.book_id,
+                    x_key: draft.x_key,
+                    plot_type: draft.plot_type,
+                    rows: draft.rows,
+                    visible_only: draft.visible_only,
+                    transform: draft.transform,
+                    color_map: draft.color_map,
+                    ..Default::default()
+                },
+                BTreeMap::new(),
+            );
             let mut seen = std::collections::BTreeSet::new();
             for (order, p) in plots.into_iter().enumerate() {
                 p.mapping.validate().map_err(D::Error::custom)?;

@@ -89,6 +89,8 @@ class ParityTests(unittest.TestCase):
         build_parity.validate(rows)
         self.assertEqual(sum(r["status"] == "已完成" for r in rows), 82)
         self.assertEqual(sum(r["status"] == "已实现待验收" for r in rows), 100)
+        self.assertEqual(sum(r["status"] == "部分实现" for r in rows), 8)
+        self.assertEqual(sum(r["status"] == "未开始" for r in rows), 312)
         for row in rows:
             if row["status"] in ("已完成", "已实现待验收"):
                 self.assertTrue(row.get("needs"), row["id"])
