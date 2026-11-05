@@ -40,6 +40,13 @@ def runs(points):
     return result
 
 
+def sample_palette_rgb(palette, values):
+    # Independent Matplotlib registry samples, quantized to the application's u8 RGB contract.
+    colors_rgb = np.floor(palette(np.linspace(0, 1, palette.N))[:, :3]*255+.5)
+    positions = np.linspace(0, 1, palette.N)
+    return np.floor(np.column_stack([np.interp(np.clip(values, 0, 1), positions, colors_rgb[:, c]) for c in range(3)])+.5).astype(int)
+
+
 def generate_b4(source,doc):
     layer=doc["layers"][0];kind=layer["kind"];page=doc["page"]
     columns={c["key"]:np.asarray(c["values"],dtype=float) for c in doc["data"]}
@@ -261,10 +268,8 @@ def generate(source):
                     vv=raw("D" if kind=="BubbleColor" else "C")
                     lo,hi=np.nanmin(vv),np.nanmax(vv)
                     t=(vv-lo)/(hi-lo) if hi>lo else np.full(len(vv),.5)
-                    nodes=np.array([[68,1,84],[59,82,139],[33,145,140],[94,201,98],[253,231,37]])
-                    def viridis_rgb(values):
-                        return np.floor(np.column_stack([np.interp(np.clip(values,0,1),np.linspace(0,1,5),nodes[:,c]) for c in range(3)])+.5).astype(int)
-                    rgb=viridis_rgb(t)
+                    palette=matplotlib.colormaps["viridis"]
+                    rgb=sample_palette_rgb(palette,t)
                 else:
                     rgb=np.tile(palette_values[0],(len(x),1))
                 size=raw("C") if kind!="ColorScatter" else np.ones(len(x))
@@ -275,7 +280,6 @@ def generate(source):
                 if kind!="ColorScatter":
                     marks["size_ratios"]=(diameter[valid]/diameter[valid].max()).tolist()
                 if kind!="Bubble":
-                    palette=colors.LinearSegmentedColormap.from_list("five-node-viridis",nodes/255,N=65537)
                     scale=page["w"]/(89*96/25.4);font=8.5*scale
                     bar_top=max(top,font*1.2+4*scale);bar_bottom=top+height
                     bar_width=.04*page["w"];label_width=font*len(f"{hi:g}")*.65
@@ -286,7 +290,7 @@ def generate(source):
                     cax.set_title("D" if kind=="BubbleColor" else "C",loc="left",fontsize=font*72/96,pad=3*scale)
                     cax.tick_params(labelsize=font*72/96,length=4*scale*72/96,width=.6*scale*72/96)
                     ticks=[float(v) for v in bar.get_ticks() if lo<=v<=hi]
-                    scale_colors=viridis_rgb((np.arange(64)+.5)/64).tolist()
+                    scale_colors=sample_palette_rgb(palette,(np.arange(64)+.5)/64).tolist()
                     color_scale=dict(colors=scale_colors,ticks=ticks)
                 continue
             if kind == "ErrorBand":
@@ -497,14 +501,15 @@ def generate(source):
             if kind in ("Scatter", "LineSymbol", "SplineSymbol", "VerticalDrop"):
                 if doc["case"] == "color-size-shape-map":
                     normalize = colors.Normalize(vmin=0, vmax=1)
-                    palette = colors.LinearSegmentedColormap.from_list("scicanvas-five-node-viridis", np.array([[68, 1, 84], [59, 82, 139], [33, 145, 140], [94, 201, 98], [253, 231, 37]])/255, N=257)
-                    rgba = palette(normalize(raw("C")[valid]))
+                    palette = matplotlib.colormaps["viridis"]
+                    rgb = sample_palette_rgb(palette, normalize(raw("C")[valid]))
+                    rgba = np.column_stack([rgb/255, np.ones(len(rgb))])
                     codes = np.asarray(columns["D"]["category"]["codes"])[valid]
                     sizes = 2+8*normalize(raw("C")[valid])
                     for xx, yy, color, code, size in zip(xconvert(x[valid]), y[valid], rgba, codes, sizes):
                         scatter = target.scatter([xx], [yy], c=[color], s=(size*72/96)**2, marker=["o", "s", "^"][code])
                         marks["symbols"].extend(target.transAxes.inverted().transform(scatter.get_offset_transform().transform(scatter.get_offsets())).tolist())
-                    marks["colors"].extend(np.floor(rgba[:, :3]*255+.5).astype(int).tolist())
+                    marks["colors"].extend(rgb.tolist())
                 elif doc["case"] == "symbol-fill-border":
                     # 只比较位置与内部填充；边框颜色和线宽只在并排图中展示。
                     fill = None if key == "B" else [31, 119, 180]
