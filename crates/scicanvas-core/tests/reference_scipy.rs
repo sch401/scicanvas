@@ -918,3 +918,58 @@ fn a3_global_fit_parameters_chi_square_and_se_match_scipy() {
         }
     }
 }
+
+#[test]
+fn a4_extended_models_and_inhibition_global_fits_match_scipy() {
+    use scicanvas_core::nlfit::{self, FitFunction, GlobalSpec, Model, ParamLimits};
+    for case in cases("builtin_fits")
+        .into_iter()
+        .filter(|c| !c["extra_initial"].is_null())
+    {
+        let name = case["name"].as_str().unwrap();
+        let model = Model::ALL
+            .into_iter()
+            .find(|m| m.name() == case["model"].as_str().unwrap())
+            .unwrap();
+        for initial in [None, Some(numbers(&case["extra_initial"]))] {
+            let fit = nlfit::fit(
+                model,
+                &numbers(&case["x"]),
+                &numbers(&case["y"]),
+                initial.as_deref(),
+                &[],
+            )
+            .unwrap();
+            assert!(fit.converged, "{name}: {:?}", fit.params);
+            array(&fit.params, &case["params"], 1e-6, name);
+            near(fit.rss, &case["rss"], 1e-6, name);
+        }
+    }
+    for case in cases("inhibition_fits") {
+        let name = case["name"].as_str().unwrap();
+        let model = Model::ALL.into_iter().find(|m| m.name() == name).unwrap();
+        let groups: Vec<nlfit::FitData> = case["groups"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|g| (numbers(&g["x"]), numbers(&g["y"]), None))
+            .collect();
+        let limits: Vec<ParamLimits> = serde_json::from_value(case["limits"].clone()).unwrap();
+        for initial in [None, Some(numbers(&case["initial"]))] {
+            let fit = nlfit::fit_global(
+                GlobalSpec {
+                    base: FitFunction::Builtin(model),
+                    groups: groups.clone(),
+                    shared: vec![true, true, true, false],
+                },
+                initial.as_deref(),
+                &limits,
+                "",
+            )
+            .unwrap();
+            assert!(fit.joint.converged, "{name}");
+            array(&fit.joint.params, &case["params"], 1e-6, name);
+            near(fit.joint.rss, &case["rss"], 1e-6, name);
+        }
+    }
+}

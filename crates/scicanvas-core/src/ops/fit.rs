@@ -399,7 +399,7 @@ impl Project {
             let [kx, ky]: [String; 2] = result.columns.try_into().unwrap();
             let mut operation = Operation {
                 kind: OpKind::Nonlinear(Box::new(NonlinearRecipe {
-                    function: FitMethod::from_function(&function),
+                    function: FitMethod::from_function(&fit.model),
                     initial: initial.map(<[f64]>::to_vec),
                     limits: limits.to_vec(),
                     constraints: constraints
@@ -597,6 +597,9 @@ impl Project {
         mut outputs: Vec<(String, crate::ColumnData)>,
         fit: crate::nlfit::NlFit,
     ) -> Result<(), String> {
+        if let OpKind::Nonlinear(recipe) = &mut op.kind {
+            recipe.function = FitMethod::from_function(&fit.model);
+        }
         outputs.last_mut().unwrap().0 = key.into();
         let book = self.book(book_id).ok_or("找不到工作簿")?;
         if outputs.iter().any(|(k, _)| book.column(k).is_none()) {

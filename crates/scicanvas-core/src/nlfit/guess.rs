@@ -24,6 +24,16 @@ impl Model {
             | Model::Freundlich
             | Model::PseudoFirstOrder
             | Model::PseudoSecondOrder => self.guess_adsorption(xs, ys, hi),
+            Model::Sine
+            | Model::SineDamp
+            | Model::Pulse
+            | Model::SubstrateInhibition
+            | Model::CompetitiveInhibition
+            | Model::NoncompetitiveInhibition
+            | Model::UncompetitiveInhibition
+            | Model::BET
+            | Model::TwoSiteBind
+            | Model::OneSiteTotal => self.guess_extended(xs, ys),
             Model::Rational1 | Model::Rational12 | Model::Rational22 | Model::Rational33 => self.guess_rational(xs, ys),
         }
     }
@@ -353,7 +363,7 @@ fn crossing(xs: &[f64], ys: &[f64], level: f64) -> f64 {
 }
 
 /// 最小二乘直线 (斜率, 截距)；点数不足或 x 不变时返回 (NaN, NaN)。
-fn linreg(points: impl Iterator<Item = (f64, f64)>) -> (f64, f64) {
+pub(super) fn linreg(points: impl Iterator<Item = (f64, f64)>) -> (f64, f64) {
     let pts: Vec<(f64, f64)> = points.filter(|(x, y)| x.is_finite() && y.is_finite()).collect();
     if pts.len() < 2 {
         return (f64::NAN, f64::NAN);

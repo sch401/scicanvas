@@ -157,6 +157,9 @@ fn nlfit_stats(f: &scicanvas_core::nlfit::NlFit) -> Vec<(&'static str, String)> 
         ("数据点数 N", f.n.to_string()),
         ("迭代次数", f.iterations.to_string()),
     ];
+    if let scicanvas_core::nlfit::FitFunction::SineDamp { origin } = f.model {
+        stats.push(("固定时间原点 x₀", fmt_num(origin)));
+    }
     if f.weighted {
         stats.insert(0, ("权重", "Y 误差（1/σ²）".into()));
     }

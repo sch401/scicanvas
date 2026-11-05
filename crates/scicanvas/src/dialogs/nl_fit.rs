@@ -28,7 +28,13 @@ impl FitEditTarget {
             unreachable!()
         };
         let mut recipe = *recipe.clone();
-        recipe.function = function;
+        recipe.function = match (function, &recipe.function) {
+            (
+                scicanvas_core::ops::FitMethod::Builtin(Model::SineDamp),
+                scicanvas_core::ops::FitMethod::SineDamp { origin },
+            ) => scicanvas_core::ops::FitMethod::SineDamp { origin: *origin },
+            (function, _) => function,
+        };
         recipe.initial = initial;
         recipe.limits = limits;
         recipe.constraints = constraints;
@@ -221,6 +227,10 @@ impl Dialog {
                 .small()
                 .color(pal.weak),
             );
+            if matches!(*model,Model::CompetitiveInhibition | Model::NoncompetitiveInhibition | Model::UncompetitiveInhibition)
+                && limits.get(3).is_none_or(|limit|!limit.0) {
+                ui.colored_label(pal.warn,"I 为抑制剂浓度，需要固定；请用全局拟合同时拟合多个固定浓度。");
+            }
             if let Some(target) = target {
                 ui.label(format!("更新 Book {} 的结果列 {}", target.report.book_id, target.report.curve.1));
                 ui.label("初始值（留空为自动估计）");
@@ -228,6 +238,7 @@ impl Dialog {
             }
             ui.add_space(4.0);
             limits.resize(model.params().len(), (false, 0.0, false, 0.0, false, 1.0));
+            egui::ScrollArea::vertical().id_salt("builtin-fit-parameters").max_height(300.0).show(ui, |ui| {
             for (name, (fix, fv, has_lo, lo, has_hi, hi)) in model.params().iter().zip(limits.iter_mut()) {
                 ui.strong(*name);
                 let free = !*fix;
@@ -239,6 +250,7 @@ impl Dialog {
                     }
                 });
             }
+            });
             ui.add_space(4.0);
             ui.label(RichText::new("参数约束").color(pal.weak));
             ui.add(

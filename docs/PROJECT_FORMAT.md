@@ -1,5 +1,9 @@
 # 项目文件格式
 
+## v33 波形、抑制与结合模型
+
+Model 追加 10 个内置模型。FitMethod 新增 SineDamp { origin }，保存首次拟合有效数据最小 X，作为固定时间原点，重算和重新编辑保留此值；它不占自由参数。新文件 v33，读取 v0–v32，SCV 容器版本保持 1。普通参数上限 12 和全局上限 60 保持原值。
+
 ## v32 曲线偏移与按行系列
 
 新增 OffsetLine、Waterfall、LineSeries 图型。Layer 新增可选 offset：dx、dy 为数据坐标偏移，auto 控制自动规则；缺省 None 不写入，普通旧图没有偏移。实际每曲线偏移仅保存在 PreparedPlot 运行时数据中，拾取和标签还原原值。LineSeries 仍引用原始列，不生成隐藏数据表。新文件 v32，读取 v0–v31，SCV 容器版本保持 1。

@@ -1204,7 +1204,12 @@ impl SciApp {
             report: report.clone(),
             before: op.clone(),
         }));
-        match &recipe.function {
+        let editing_function = if matches!(recipe.function, scicanvas_core::ops::FitMethod::SineDamp { .. }) {
+            scicanvas_core::ops::FitMethod::Builtin(scicanvas_core::nlfit::Model::SineDamp)
+        } else {
+            recipe.function.clone()
+        };
+        match &editing_function {
             scicanvas_core::ops::FitMethod::Builtin(model) => {
                 let mut limits = vec![(false, 0.0, false, 0.0, false, 1.0); model.params().len()];
                 for (ui, limit) in limits.iter_mut().zip(&recipe.limits) {
@@ -1230,6 +1235,7 @@ impl SciApp {
                     target,
                 });
             }
+            scicanvas_core::ops::FitMethod::SineDamp { .. } => unreachable!("阻尼模型已归入内置编辑器"),
             scicanvas_core::ops::FitMethod::Custom {
                 name,
                 formula,

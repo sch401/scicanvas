@@ -34,13 +34,23 @@ pub enum Model {
     Rational12,
     Rational22,
     Rational33,
+    Sine,
+    SineDamp,
+    Pulse,
+    SubstrateInhibition,
+    CompetitiveInhibition,
+    NoncompetitiveInhibition,
+    UncompetitiveInhibition,
+    BET,
+    TwoSiteBind,
+    OneSiteTotal,
 }
 
 /// 内置 / 自定义拟合共用的参数个数上限。
 pub const MAX_PARAMS: usize = 12;
 
 impl Model {
-    pub const ALL: [Model; 28] = [
+    pub const ALL: [Model; 38] = [
         Model::Gauss,
         Model::Lorentz,
         Model::Voigt,
@@ -69,10 +79,20 @@ impl Model {
         Model::Rational12,
         Model::Rational22,
         Model::Rational33,
+        Model::Sine,
+        Model::SineDamp,
+        Model::Pulse,
+        Model::SubstrateInhibition,
+        Model::CompetitiveInhibition,
+        Model::NoncompetitiveInhibition,
+        Model::UncompetitiveInhibition,
+        Model::BET,
+        Model::TwoSiteBind,
+        Model::OneSiteTotal,
     ];
 
     /// 对话框里的类别顺序。
-    pub const CATEGORIES: [&'static str; 8] = [
+    pub const CATEGORIES: [&'static str; 10] = [
         "峰函数",
         "指数",
         "S 形",
@@ -81,6 +101,8 @@ impl Model {
         "吸附动力学",
         "酶动力学",
         "有理函数",
+        "波形",
+        "结合",
     ];
 
     pub fn name(self) -> &'static str {
@@ -113,6 +135,16 @@ impl Model {
             Model::Rational12 => "Rational12",
             Model::Rational22 => "Rational22",
             Model::Rational33 => "Rational33",
+            Model::Sine => "Sine",
+            Model::SineDamp => "SineDamp",
+            Model::Pulse => "Pulse",
+            Model::SubstrateInhibition => "SubstrateInhibition",
+            Model::CompetitiveInhibition => "CompetitiveInhibition",
+            Model::NoncompetitiveInhibition => "NoncompetitiveInhibition",
+            Model::UncompetitiveInhibition => "UncompetitiveInhibition",
+            Model::BET => "BET",
+            Model::TwoSiteBind => "TwoSiteBind",
+            Model::OneSiteTotal => "OneSiteTotal",
         }
     }
 
@@ -126,6 +158,16 @@ impl Model {
             Model::PseudoFirstOrder | Model::PseudoSecondOrder => "吸附动力学",
             Model::MichaelisMenten => "酶动力学",
             Model::Rational1 | Model::Rational12 | Model::Rational22 | Model::Rational33 => "有理函数",
+            Model::Sine => "波形",
+            Model::SineDamp => "波形",
+            Model::Pulse => "波形",
+            Model::SubstrateInhibition => "酶动力学",
+            Model::CompetitiveInhibition => "酶动力学",
+            Model::NoncompetitiveInhibition => "酶动力学",
+            Model::UncompetitiveInhibition => "酶动力学",
+            Model::BET => "吸附等温线",
+            Model::TwoSiteBind => "结合",
+            Model::OneSiteTotal => "结合",
         }
     }
 
@@ -159,6 +201,16 @@ impl Model {
             Model::Rational12 => "y = (a0 + a1·x)/(1 + b1·x + b2·x²)",
             Model::Rational22 => "y = (a0 + a1·x + a2·x²)/(1 + b1·x + b2·x²)",
             Model::Rational33 => "y = (a0 + a1·x + a2·x² + a3·x³)/(1 + b1·x + b2·x² + b3·x³)",
+            Model::Sine => "y = y0 + A·sin(2π(x − xc)/T)",
+            Model::SineDamp => "y = y0 + A·exp(−(x − x₀)/t0)·sin(2π(x − xc)/T)，x₀ 为固定数据起点",
+            Model::Pulse => "x ≥ x0: y = y0 + A·(1 − exp(−(x − x0)/t1))^p·exp(−(x − x0)/t2)，其余 y0",
+            Model::SubstrateInhibition => "y = Vmax·x / (Km + x·(1 + x/Ki))",
+            Model::CompetitiveInhibition => "y = Vmax·x / (Km·(1 + I/Ki) + x)；I 需固定，请用全局拟合多个浓度",
+            Model::NoncompetitiveInhibition => "y = Vmax·x / ((1 + I/Ki)·(Km + x))；I 需固定，请用全局拟合多个浓度",
+            Model::UncompetitiveInhibition => "y = Vmax·x / (Km + x·(1 + I/Ki))；I 需固定，请用全局拟合多个浓度",
+            Model::BET => "y = qm·C·x / ((1 − x)·(1 − x + C·x))，0 < x < 1",
+            Model::TwoSiteBind => "y = Bmax1·x/(Kd1 + x) + Bmax2·x/(Kd2 + x)",
+            Model::OneSiteTotal => "y = Bmax·x/(Kd + x) + NS·x + Bkg；单位点结合可用 Langmuir",
         }
     }
 
@@ -191,6 +243,16 @@ impl Model {
             Model::Rational12 => &["a0", "a1", "b1", "b2"],
             Model::Rational22 => &["a0", "a1", "a2", "b1", "b2"],
             Model::Rational33 => &["a0", "a1", "a2", "a3", "b1", "b2", "b3"],
+            Model::Sine => &["y0", "A", "xc", "T"],
+            Model::SineDamp => &["y0", "A", "xc", "T", "t0"],
+            Model::Pulse => &["y0", "A", "x0", "t1", "t2", "p"],
+            Model::SubstrateInhibition => &["Vmax", "Km", "Ki"],
+            Model::CompetitiveInhibition => &["Vmax", "Km", "Ki", "I"],
+            Model::NoncompetitiveInhibition => &["Vmax", "Km", "Ki", "I"],
+            Model::UncompetitiveInhibition => &["Vmax", "Km", "Ki", "I"],
+            Model::BET => &["qm", "C"],
+            Model::TwoSiteBind => &["Bmax1", "Kd1", "Bmax2", "Kd2"],
+            Model::OneSiteTotal => &["Bmax", "Kd", "NS", "Bkg"],
         }
     }
 
@@ -306,6 +368,28 @@ impl Model {
                     numerator / denominator
                 }
             }
+            Model::Sine => p[0] + p[1] * (2.0 * PI * (x - p[2]) / p[3]).sin(),
+            Model::SineDamp => p[0] + p[1] * (-x / p[4]).exp() * (2.0 * PI * (x - p[2]) / p[3]).sin(),
+            Model::Pulse => {
+                if x < p[2] {
+                    p[0]
+                } else {
+                    p[0] + p[1] * (1.0 - (-(x - p[2]) / p[3]).exp()).powf(p[5]) * (-(x - p[2]) / p[4]).exp()
+                }
+            }
+            Model::SubstrateInhibition => p[0] * x / (p[1] + x * (1.0 + x / p[2])),
+            Model::CompetitiveInhibition => p[0] * x / (p[1] * (1.0 + p[3] / p[2]) + x),
+            Model::NoncompetitiveInhibition => p[0] * x / ((1.0 + p[3] / p[2]) * (p[1] + x)),
+            Model::UncompetitiveInhibition => p[0] * x / (p[1] + x * (1.0 + p[3] / p[2])),
+            Model::BET => {
+                if x > 0.0 && x < 1.0 {
+                    p[0] * p[1] * x / ((1.0 - x) * (1.0 - x + p[1] * x))
+                } else {
+                    f64::NAN
+                }
+            }
+            Model::TwoSiteBind => p[0] * x / (p[1] + x) + p[2] * x / (p[3] + x),
+            Model::OneSiteTotal => p[0] * x / (p[1] + x) + p[2] * x + p[3],
         }
     }
 }

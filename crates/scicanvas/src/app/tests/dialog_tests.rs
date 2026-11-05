@@ -2252,3 +2252,48 @@ fn b3_new_commands_create_offset_or_row_series_and_undo() {
         roundtrip(&mut app, &before);
     }
 }
+
+#[test]
+fn a4_damped_model_real_report_reedit_preserves_fixed_origin() {
+    use scicanvas_core::nlfit::Model;
+    let mut app = app();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["B".into()]);
+    let x: Vec<_> = (0..201).map(|i| 5. + i as f64 * 0.05).collect();
+    let y: Vec<_> = x
+        .iter()
+        .map(|x| 0.3 + 3. * (-(x - 5.) / 6.).exp() * (std::f64::consts::TAU * (x - 5.3) / 2.5).sin())
+        .collect();
+    for (key, values) in [("A", x), ("B", y)] {
+        app.project
+            .book_mut(1)
+            .unwrap()
+            .columns
+            .iter_mut()
+            .find(|c| c.key == key)
+            .unwrap()
+            .data = values.iter().map(ToString::to_string).collect();
+    }
+    let before = app.project.clone();
+    app.nlfit(Model::SineDamp, &[], &[]);
+    let Some(Dialog::NlFitReport(reports)) = &app.dialog else {
+        panic!("{}", app.status)
+    };
+    assert!(reports[0].fit.converged);
+    assert!(matches!(reports[0].fit.model,scicanvas_core::nlfit::FitFunction::SineDamp{origin} if origin==5.));
+    press_dialog_button(&mut app, "重新编辑拟合设置");
+    assert!(matches!(
+        &app.dialog,
+        Some(Dialog::NlFit {
+            model: Model::SineDamp,
+            target: Some(_),
+            ..
+        })
+    ));
+    press_dialog_button(&mut app, "拟合");
+    let Some(Dialog::NlFitReport(reports)) = &app.dialog else {
+        panic!("{}", app.status)
+    };
+    assert!(matches!(reports[0].fit.model,scicanvas_core::nlfit::FitFunction::SineDamp{origin} if origin==5.));
+    assert_ne!(app.project, before);
+}

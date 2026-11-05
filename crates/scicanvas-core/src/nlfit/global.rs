@@ -102,6 +102,15 @@ pub fn fit_global(
     limits: &[ParamLimits],
     constraints: &str,
 ) -> Result<GlobalFit, String> {
+    if spec.base == FitFunction::Builtin(Model::SineDamp) {
+        let origin = spec
+            .groups
+            .iter()
+            .map(|(x, y, s)| super::extended::data_origin(x, y, s.as_deref()))
+            .min_by(f64::total_cmp)
+            .unwrap_or(0.0);
+        spec.base = FitFunction::SineDamp { origin };
+    }
     let layout = global_layout(&spec.base, spec.groups.len(), &spec.shared)?;
     if spec
         .groups
@@ -141,7 +150,7 @@ pub fn fit_global(
         return split_result(spec, &layout, joint);
     }
     for group in &mut spec.groups {
-        let (x, y, w) = weighted_points(&group.0, &group.1, group.2.as_deref())?;
+        let (x, y, w) = spec.base.points(&group.0, &group.1, group.2.as_deref())?;
         if x.is_empty() {
             return Err("每个数据集至少需要一个有效点".into());
         }
@@ -189,7 +198,7 @@ pub fn fit_global(
 fn split_result(spec: GlobalSpec, layout: &GlobalLayout, joint: NlFit) -> Result<GlobalFit, String> {
     let mut per_group = Vec::new();
     for (i, (x, y, sigma)) in spec.groups.iter().enumerate() {
-        let (x, y, w) = weighted_points(x, y, sigma.as_deref())?;
+        let (x, y, w) = spec.base.points(x, y, sigma.as_deref())?;
         if x.is_empty() {
             return Err("数据集中没有有效点".into());
         }
