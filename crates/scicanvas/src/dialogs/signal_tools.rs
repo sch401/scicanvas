@@ -95,7 +95,6 @@ impl Dialog {
         let mut action = Action::None;
         window(ctx, "曲线平均与合并").centered().open(open).show(ctx, |ui| {
             data_hint(ui);
-            data_hint(ui);
             ui.horizontal(|ui| {
                 ui.radio_value(merge, false, "插值平均");
                 ui.radio_value(merge, true, "直接合并");

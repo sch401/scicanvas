@@ -212,6 +212,13 @@ fn view_id(graph: u64) -> egui::Id {
     egui::Id::new(("scicanvas-plot-view", graph))
 }
 
+pub(crate) fn current_view(ctx: &egui::Context, graph: u64, index: usize) -> Option<View> {
+    ctx.data(|d| d.get_temp::<Vec<Option<Saved>>>(view_id(graph)))?
+        .get(index)?
+        .as_ref()
+        .map(|saved| saved.view)
+}
+
 /// 恢复原始范围（例如改了坐标轴设置之后）。
 pub fn reset_view(ctx: &egui::Context, graph: u64, index: usize) {
     ctx.data_mut(|d| {

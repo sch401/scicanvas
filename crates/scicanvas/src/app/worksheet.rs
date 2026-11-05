@@ -586,7 +586,15 @@ impl SciApp {
         let focus_id = egui::Id::new(("sheet-focus", id));
         let edit_id = egui::Id::new(("sheet-edit", id));
         let selected = self.selected_keys(id);
-        let menu = crate::menus::MenuState::new(self);
+        let menu_open = ui
+            .data(|d| d.get_temp::<egui::Id>(egui::Id::new(("sheet-menu-response", id))))
+            .and_then(|id| ui.ctx().read_response(id))
+            .is_some_and(|response| response.context_menu_opened());
+        let opening = ui.input(|i| i.pointer.button_released(egui::PointerButton::Secondary))
+            && ui.rect_contains_pointer(ui.max_rect());
+        let menu = (menu_open || opening).then(|| crate::menus::MenuState::new(self));
+        #[cfg(test)]
+        ui.data_mut(|d| d.insert_temp(egui::Id::new(("sheet-menu-built", id)), menu.is_some()));
         let mut st = self.sheets.remove(&id).unwrap_or_default();
         let visible_rows = self.project.book(id).and_then(|book| st.filtered_rows(book));
         if let Some(rows) = &visible_rows {
@@ -991,23 +999,23 @@ impl SciApp {
 
     /// 表格有键盘焦点时的按键：方向键移动（Shift 扩展选区）、Tab / 回车移动、
     /// Delete 清除、Ctrl+C / Ctrl+X / Ctrl+V、Ctrl+A 全选、Esc 取消选区、F2 或直接打字开始编辑。
-    pub(super) fn sheet_keys(&mut self, ctx: &egui::Context, id: u64, st: &mut SheetState) {
-        use egui::{Event, Key};
-        // 项目管理器先于子窗口绘制：最后一次点击落在项目管理器时，按键不属于工作表。
-        if self.explorer_focus {
-            return;
-        }
-        let Some(book) = self.project.book(id) else { return };
+    pub(crate) fn paste_available(&self) -> Result<(), &'static str> {
+        let id = self.active_book_id().ok_or("请先单击一个工作簿窗口")?;
+        self.sheet_anchor(id, self.sheets.get(&id).unwrap_or(&SheetState::default()), true)
+            .map(|_| ())
+            .ok_or("请先选择单元格或列")
+    }
+
+    fn sheet_anchor(&self, id: u64, st: &SheetState, has_paste: bool) -> Option<Range> {
+        let book = self.project.book(id)?;
         if book.columns.is_empty() {
-            return;
+            return None;
         }
         let visible_rows = st.cached_rows();
         if visible_rows.as_ref().is_some_and(|rows| rows.is_empty()) {
-            return;
+            return None;
         }
-        let has_paste = ctx.input(|i| i.events.iter().any(|e| matches!(e, Event::Paste(_))));
-        let anchor = st
-            .edit
+        st.edit
             .as_ref()
             .filter(|_| has_paste)
             .map(|e| Range::single(e.cell.c, e.cell.r))
@@ -1031,7 +1039,38 @@ impl SciApp {
                             })
                     })
                     .flatten()
-            });
+            })
+    }
+
+    fn present_sheet_result(
+        &mut self,
+        ctx: &egui::Context,
+        id: u64,
+        (status, copy, pasted): (Option<SheetMessage>, Option<String>, bool),
+    ) {
+        if pasted {
+            if matches!(self.dialog, Some(Dialog::ConvertText { .. })) {
+                self.dialog = None;
+            }
+            self.selection.remove(&id);
+            ctx.memory_mut(|m| m.request_focus(egui::Id::new(("sheet-focus", id))));
+        }
+        if let Some(text) = copy {
+            ctx.copy_text(text);
+        }
+        if let Some((kind, text)) = status {
+            self.set_status(kind, text);
+        }
+    }
+
+    pub(super) fn sheet_keys(&mut self, ctx: &egui::Context, id: u64, st: &mut SheetState) {
+        use egui::{Event, Key};
+        // 项目管理器先于子窗口绘制：最后一次点击落在项目管理器时，按键不属于工作表。
+        if self.explorer_focus {
+            return;
+        }
+        let has_paste = ctx.input(|i| i.events.iter().any(|e| matches!(e, Event::Paste(_))));
+        let anchor = self.sheet_anchor(id, st, has_paste);
         let Some(g) = anchor else { return };
         let events = sheet_events(ctx);
         if events.is_empty() {
@@ -1052,21 +1091,7 @@ impl SciApp {
             let book = project.book_mut(id).unwrap();
             apply_sheet_events(book, st, g, events).map(|result| Some((result.1, result.2, result.3)))
         };
-        let show = |app: &mut Self, (status, copy, pasted): (Option<SheetMessage>, Option<String>, bool)| {
-            if pasted {
-                if matches!(app.dialog, Some(Dialog::ConvertText { .. })) {
-                    app.dialog = None;
-                }
-                app.selection.remove(&id);
-                ctx.memory_mut(|m| m.request_focus(egui::Id::new(("sheet-focus", id))));
-            }
-            if let Some(t) = copy {
-                ctx.copy_text(t);
-            }
-            if let Some((kind, text)) = status {
-                app.set_status(kind, text);
-            }
-        };
+        let show = |app: &mut Self, result| app.present_sheet_result(ctx, id, result);
         if writes {
             self.edit_with("编辑工作表", apply, show);
         } else if let Some(result) = apply(&mut self.project).unwrap() {
@@ -1382,16 +1407,16 @@ fn sheet_events(ctx: &egui::Context) -> Vec<egui::Event> {
 impl SciApp {
     pub(crate) fn paste_range(&mut self) {
         match arboard::Clipboard::new().and_then(|mut c| c.get_text()) {
-            Ok(text) => self.paste_text(text),
+            Ok(text) => self.pending_paste = Some(text),
             Err(e) => self.status_err(format!("读取剪贴板失败：{e}")),
         }
     }
-    pub(super) fn paste_text(&mut self, text: String) {
+    pub(super) fn paste_text(&mut self, ctx: &egui::Context, text: String) {
         let Some(id) = self.active_book_id() else {
             return;
         };
         let mut state = self.sheets.remove(&id).unwrap_or_default();
-        if let Some(range) = state.range {
+        if let Some(range) = self.sheet_anchor(id, &state, true) {
             self.edit_with(
                 "粘贴",
                 |project| {
@@ -1403,12 +1428,10 @@ impl SciApp {
                     )
                     .map(Some)
                 },
-                |app, (_, message, _, _)| {
-                    if let Some((kind, text)) = message {
-                        app.set_status(kind, text);
-                    }
-                },
+                |app, (_, status, copy, pasted)| app.present_sheet_result(ctx, id, (status, copy, pasted)),
             );
+        } else {
+            self.status_warn("请先选择单元格或列".into());
         }
         self.sheets.insert(id, state);
     }

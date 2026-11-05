@@ -240,6 +240,7 @@ pub struct SciApp {
     pub(crate) sheets: HashMap<u64, SheetState>,
     /// 命令要复制到剪贴板的文字（命令拿不到 egui 上下文，在帧末尾交给 egui）。
     pub(crate) pending_copy: Option<String>,
+    pending_paste: Option<String>,
     pub(crate) style_clipboard: Option<scicanvas_core::graph_theme::StyleClip>,
     pub(crate) style_target: Option<(u64, usize, Option<String>)>,
     /// 下一帧要提到最前面的窗口。
@@ -410,6 +411,7 @@ impl SciApp {
             confirm_delete: None,
             sheets: HashMap::new(),
             pending_copy: None,
+            pending_paste: None,
             style_clipboard: None,
             style_target: None,
             raise: None,
@@ -517,7 +519,7 @@ impl SciApp {
                 {
                     let mut status_kind = StatusKind::Success;
                     let text: String = match g.page.layers_mut()[index].set_plot_type(t) {
-                        Ok(()) => format!("{} 已改为{}", g.name, t.label()),
+                        Ok(()) => format!("已把“{}”改为{}（Ctrl+Z 撤销）", g.name, t.label()),
                         Err(e) => {
                             status_kind = StatusKind::Error;
                             e
@@ -1835,34 +1837,6 @@ impl SciApp {
         };
     }
 
-    pub(crate) fn toggle_axis_scale(&mut self, x: bool) {
-        use scicanvas_core::ticks::AxisScale;
-        let Some(gid) = self.active_graph_id() else { return };
-        let index = self.layer_index(gid);
-        let layer = &mut self.project.graph_mut(gid).unwrap().page.layers_mut()[index];
-        let old = if x {
-            layer.effective_x_scale()
-        } else {
-            layer.effective_y_scale()
-        };
-        let scale = if old.is_log() {
-            AxisScale::Linear
-        } else {
-            AxisScale::Log10
-        };
-        {
-            let mut status_kind = StatusKind::Success;
-            let text: String = match layer.set_axis_scale(x, scale) {
-                Ok(()) => format!("{} 轴：{}", if x { "X" } else { "Y" }, scale.label()),
-                Err(error) => {
-                    status_kind = StatusKind::Error;
-                    error
-                }
-            };
-            self.set_status(status_kind, text);
-        };
-    }
-
     pub(crate) fn toggle_graph(&mut self, field: fn(&mut scicanvas_core::page::Layer) -> &mut bool, label: &str) {
         let Some(gid) = self.active_graph_id() else { return };
         let index = self.layer_index(gid);
@@ -1968,6 +1942,7 @@ impl SciApp {
             dialogs::reset_docks(ctx);
             ctx.memory_mut(|memory| memory.reset_areas());
         }
+        dialogs::begin_settings(ctx);
         dialogs::begin_docks(ctx);
         crate::chrome::edges(ctx, &self.pal);
         if !self.background_blocked {
@@ -2077,6 +2052,9 @@ impl SciApp {
             }
         }
         self.prepare_modal_focus(ctx);
+        if let Some(text) = self.pending_paste.take() {
+            self.paste_text(ctx, text);
+        }
         if let Some(t) = self.pending_copy.take() {
             ctx.copy_text(t);
         }
@@ -2100,6 +2078,7 @@ impl SciApp {
             self.finish_frame_edit(self.history_group);
         }
         self.status_messages_window(ctx);
+        dialogs::raise_settings(ctx);
         if std::mem::take(&mut self.pending_repaint) {
             ctx.request_repaint();
         }

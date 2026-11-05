@@ -88,12 +88,12 @@ pub(crate) use scientific_text::{scientific_text, scientific_text_multiline};
 pub(crate) use tables::md_table;
 use tables::{md_cell, md_pairs, table_grid};
 pub(crate) use widgets::{
-    actions, axis_scale_options, begin_keyboard_frame, center_buttons, edit_group, field_error, form, hint, live_hint,
-    mark_multiline, multiline, multiline_editor, odd_window, parameter_bounds, parameter_table, plain, primary,
-    weighted_checkbox, ActionKind, Keys, BUTTON, CONSTRAINT_HINT,
+    actions, axis_scale_options, begin_keyboard_frame, center_buttons, edit_group, effective_limits, field_error, form,
+    hint, live_hint, mark_multiline, multiline, multiline_editor, odd_window, parameter_bounds, parameter_table, plain,
+    primary, weighted_checkbox, ActionKind, Keys, BUTTON, CONSTRAINT_HINT,
 };
 use widgets::{buttons, data_hint};
-pub(crate) use window::{floating_bounds, window};
+pub(crate) use window::{begin_settings, floating_bounds, raise_settings, window};
 
 pub(crate) use sheet_transform::TransformKind;
 pub use sheet_transform::{SheetTransform, TransformAction};

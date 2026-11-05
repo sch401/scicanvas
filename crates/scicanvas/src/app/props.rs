@@ -661,7 +661,9 @@ fn range_controls(
     group: &mut Option<egui::Id>,
 ) {
     ui.horizontal_wrapped(|ui| {
-        ui.checkbox(auto, "自动");
+        if ui.checkbox(auto, "自动").changed() && !*auto {
+            [*min, *max] = current;
+        }
         let step = ((if *auto { current[1] - current[0] } else { *max - *min }).abs() / 200.).max(f64::MIN_POSITIVE);
         if *auto {
             let mut values = current;
@@ -1762,5 +1764,34 @@ mod detail_tests {
             .map(|label| crate::test_ui::text_rect(&out, label).unwrap().center().y)
             .collect();
         assert!(ys.windows(2).all(|v| v[0] < v[1]));
+    }
+}
+
+#[cfg(test)]
+mod range_review_tests {
+    use super::*;
+
+    #[test]
+    fn p10_manual_range_starts_at_the_current_auto_range() {
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        let mut values = (true, -100., 100.);
+        let mut h = crate::test_ui::Harness::new(
+            ctx,
+            Some(egui::vec2(600., 200.)),
+            |values: &mut (bool, f64, f64), ctx: &egui::Context| {
+                egui::CentralPanel::default().show(ctx, |ui| {
+                    egui::Grid::new("range-review").show(ui, |ui| {
+                        range_controls(ui, &mut values.0, &mut values.1, &mut values.2, [2., 8.], &mut None)
+                    });
+                });
+            },
+        );
+        for _ in 0..3 {
+            h.frame(&mut values, vec![]);
+        }
+        let out = h.frame(&mut values, vec![]);
+        h.click_text(&mut values, &out, "自动");
+        assert_eq!(values, (false, 2., 8.));
     }
 }

@@ -48,24 +48,34 @@ impl SciApp {
             .memory(|m| m.focused())
             .is_some_and(|id| egui::TextEdit::load_state(ctx, id).is_some());
         let shifted = ctx.input(|i| (i.modifiers.command || i.modifiers.ctrl) && i.modifiers.shift);
+        let sheet_focus = !self.explorer_focus
+            && self.active_book_id().is_some_and(|id| {
+                ctx.memory(|m| {
+                    m.focused().is_some_and(|focused| {
+                        focused == egui::Id::new(("sheet-focus", id)) || focused == egui::Id::new(("sheet-edit", id))
+                    })
+                })
+            });
+        let available = |id| commands::find(id).is_some_and(|c| (c.when)(self).is_ok());
         let mut clipboard = None;
         let mut paste = None;
         if self.ui.palette.is_none() {
             ctx.input_mut(|i| {
                 i.events.retain(|event| match event {
-                    egui::Event::Copy if shifted => {
+                    egui::Event::Copy if shifted && available("graph.style.copy") => {
                         clipboard = Some("graph.style.copy");
                         false
                     }
-                    egui::Event::Paste(_) if shifted => {
+                    egui::Event::Paste(_) if shifted && available("graph.style.paste") => {
                         clipboard = Some("graph.style.paste");
                         false
                     }
-                    egui::Event::Copy if !text_focus => {
+                    egui::Event::Copy if sheet_focus && !text_focus && available("edit.copy") => {
                         clipboard = Some("edit.copy");
                         false
                     }
-                    egui::Event::Paste(text) if !text_focus => {
+                    egui::Event::Paste(_) if shifted && sheet_focus => false,
+                    egui::Event::Paste(text) if sheet_focus && !text_focus => {
                         paste = Some(text.clone());
                         false
                     }
@@ -83,10 +93,10 @@ impl SciApp {
             if ctx.data(|d| d.get_temp::<bool>(egui::Id::new("shortcut-probe"))) == Some(true) {
                 self.shortcut_command(ctx, "edit.paste");
             } else {
-                self.paste_text(text);
+                self.paste_text(ctx, text);
             }
             #[cfg(not(test))]
-            self.paste_text(text);
+            self.paste_text(ctx, text);
         }
         for command in commands::commands().iter().filter(|c| !c.keys.is_empty()) {
             if self.ui.palette.is_some() && command.id != "win.reset" {
@@ -97,6 +107,11 @@ impl SciApp {
                     command.id,
                     "edit.undo" | "edit.redo" | "edit.copy" | "edit.paste" | "edit.clear"
                 )
+            {
+                continue;
+            }
+            if (command.when)(self).is_err()
+                || (matches!(command.id, "edit.copy" | "edit.paste" | "edit.clear") && !sheet_focus)
             {
                 continue;
             }
@@ -511,7 +526,7 @@ impl SciApp {
             ui.painter().text(
                 rect.right_bottom() + egui::vec2(-8.0, -6.0),
                 egui::Align2::RIGHT_BOTTOM,
-                "双击恢复原始范围",
+                "双击恢复原始范围 · 导出按坐标轴范围",
                 egui::FontId::proportional(crate::theme::size::LABEL),
                 plot::PAGE_HINT_WEAK,
             );
@@ -529,6 +544,21 @@ impl SciApp {
             self.active = Some(id);
             self.run_command(cid);
         }
+    }
+
+    pub(super) fn commit_view_range(&mut self, ctx: &egui::Context, id: u64, index: usize) {
+        let Some(view) = plot::current_view(ctx, id, index) else {
+            return;
+        };
+        self.edit_grouped("将当前视图设为坐标范围", None, |project| {
+            let layer = &mut project.graph_mut(id).unwrap().page.layers_mut()[index];
+            (layer.x_min, layer.x_max) = view.x;
+            (layer.y_min, layer.y_max) = view.y;
+            layer.x_auto = false;
+            layer.y_auto = false;
+        });
+        plot::reset_view(ctx, id, index);
+        self.status_ok("已将当前视图设为坐标范围（Ctrl+Z 撤销）".into());
     }
 
     fn graph_context_menu(
@@ -664,6 +694,12 @@ impl SciApp {
                 }
             });
             ui.separator();
+            let layer = self.layer_index(id);
+            if plot::current_view(ui.ctx(), id, layer).is_some() && ui.button("将当前视图设为坐标范围").clicked()
+            {
+                self.commit_view_range(ui.ctx(), id, layer);
+                ui.close_menu();
+            }
             if ui.button("恢复原始范围").clicked() {
                 plot::reset_view(ui.ctx(), id, self.layer_index(id));
                 ui.close_menu();

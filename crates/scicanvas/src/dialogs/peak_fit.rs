@@ -223,7 +223,7 @@ impl PeakFitEditor {
                                             baseline: self.baseline,
                                         },
                                         Some(initial),
-                                        self.limits.clone(),
+                                        effective_limits(&self.limits),
                                         self.constraints.clone(),
                                     )
                                     .map(|mut recipe| {
@@ -242,7 +242,7 @@ impl PeakFitEditor {
                                     source: self.source.clone(),
                                     peak,
                                     initial,
-                                    limits: self.limits.clone(),
+                                    limits: effective_limits(&self.limits),
                                     constraints: self.constraints.clone(),
                                     weighted: self.weighted,
                                 }));

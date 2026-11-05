@@ -154,7 +154,9 @@ impl GlobalFitEditor {
                 }
                 let (ok, cancel) = buttons(ui, "拟合", valid);
                 if ok && self.error.is_none() {
-                    action = Action::GlobalFit(Box::new(self.clone()));
+                    let mut fit = self.clone();
+                    fit.limits = effective_limits(&fit.limits);
+                    action = Action::GlobalFit(Box::new(fit));
                 } else if cancel {
                     action = Action::Close;
                 }

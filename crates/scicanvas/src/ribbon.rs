@@ -280,9 +280,9 @@ pub static TABS: &[Tab] = &[
             Group {
                 label: "列角色",
                 items: &[
-                    Smalls(&["col.setX", "col.setY", "col.setIgnore"]),
-                    Smalls(&["col.setXError", "col.setYError", "col.setZ"]),
-                    Smalls(&["col.setLabel"]),
+                    Smalls(&["col.setX", "col.setY", "col.setZ"]),
+                    Smalls(&["col.setXError", "col.setYError", "col.setLabel"]),
+                    Smalls(&["col.setIgnore"]),
                 ],
             },
             Group {
@@ -295,9 +295,8 @@ pub static TABS: &[Tab] = &[
                     Big("col.props"),
                     Big("col.setvalues"),
                     Big("col.fill"),
-                    Smalls(&["data.recalc"]),
-                    Smalls(&["col.insert", "col.delete", "col.clear"]),
-                    Smalls(&["col.left", "col.right"]),
+                    Smalls(&["col.insert", "col.delete", "data.recalc"]),
+                    Smalls(&["col.clear", "col.left", "col.right"]),
                 ],
             },
             Group {
@@ -432,6 +431,9 @@ const BACKSTAGE_NAV: &[&str] = &[
     "",
     "help.show",
     "help.about",
+    "",
+    "project.reset",
+    "app.quit",
 ];
 
 pub struct PaletteState {
