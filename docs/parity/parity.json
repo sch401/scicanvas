@@ -2652,11 +2652,33 @@
   "feature": "全局拟合（多组数据共享参数）",
   "ref": "Multiple Curves/Multiple Peaks",
   "pri": "P1",
-  "status": "未开始",
-  "how": "",
-  "verify": "与 Origin 比较",
+  "status": "已实现待验收",
+  "how": "分析 → 全局拟合，当前图层或点选多个 Y 列；逐参数共享/独立，独立参数可逐组固定，支持上下限、线性约束及 Y 误差加权。联合求解复用 FitSession，输出每组曲线、参数/SE 结果表和 Note。首版为一次性结果，暂不支持自动重算。",
+  "verify": "单组与全部共享分别与普通/合并数据拟合逐字节一致；SciPy least_squares 对照三组共享衰减时间、两组共享峰位/宽度及逐组固定值，参数 1e-8，SE 1e-6；真实窗口一步撤销和项目保存回归。",
   "id": "F141",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/global_fit.rs::a3_single_group_and_all_shared_are_byte_identical_to_ordinary_fit",
+    "crates/scicanvas-core/tests/global_fit.rs::a3_layout_limits_and_once_only_project_output",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::a3_global_fit_real_dialog_writes_curves_note_and_undoes_once"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/global_fits.json",
+    "crates/scicanvas-core/tests/reference_scipy.rs"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/fitting.md#F141",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "回归与拟合",

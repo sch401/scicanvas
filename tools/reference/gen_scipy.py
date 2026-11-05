@@ -784,11 +784,54 @@ def fit_tools():
     write("fit_tools",cases)
 
 
+
+def global_fits():
+    cases=[]
+    def layout(shared,n,p):
+        indices=np.zeros((n,p),dtype=int);total=0
+        for j,s in enumerate(shared):
+            if s:
+                indices[:,j]=total;total+=1
+            else:
+                for i in range(n):
+                    indices[i,j]=total;total+=1
+        return indices,total
+    for name,model,shared,truths,weighted,fixed in [
+        ("exp-shared-tau","ExpDec1",[False,False,True],[[.2,4,1.7],[.4,5,1.7],[.6,6,1.7]],True,False),
+        ("gauss-shared-center-width","Gauss",[False,True,True,False],[[.1,.6,1.7,5],[.3,.6,1.7,8]],False,False),
+        ("independent-fixed-values","ExpDec1",[False,False,True],[[.2,4,1.7],[.4,5,1.7],[.6,6,1.7]],True,True),
+    ]:
+        indices,total=layout(shared,len(truths),len(shared))
+        def function(x,p):
+            return p[0]+p[1]*np.exp(-x/p[2]) if model=="ExpDec1" else p[0]+p[3]/(p[2]*np.sqrt(np.pi/2))*np.exp(-2*((x-p[1])/p[2])**2)
+        groups=[];initial=np.zeros(total)
+        for i,p in enumerate(truths):
+            x=np.linspace(0,6,41) if model=="ExpDec1" else np.linspace(-4,5,61)
+            y=function(x,p)+(.02 if weighted else .005)*np.sin(np.arange(len(x))*1.7+i)
+            sigma=.05+.01*x if weighted else None
+            groups.append(dict(x=x,y=y,sigma=sigma))
+            initial[indices[i]]=np.asarray(p)*1.1
+        limits=[dict(fixed=None,lower=None,upper=None) for _ in range(total)]
+        if fixed:
+            for i,p in enumerate(truths):
+                limits[indices[i,0]]["fixed"]=p[0];initial[indices[i,0]]=p[0]
+        free=np.array([i for i,v in enumerate(limits) if v['fixed'] is None])
+        def residual(values):
+            p=initial.copy();p[free]=values
+            return np.concatenate([(function(g['x'],p[indices[i]])-g['y'])/(g['sigma'] if weighted else 1) for i,g in enumerate(groups)])
+        result=optimize.least_squares(residual,initial[free],method="lm",jac="3-point",ftol=1e-13,xtol=1e-13,gtol=1e-13,max_nfev=100000)
+        params=initial.copy();params[free]=result.x
+        rss=float(np.dot(result.fun,result.fun));n=sum(len(g['x']) for g in groups);dof=n-len(free)
+        cov=np.zeros((total,total));cov[np.ix_(free,free)]=np.linalg.inv(result.jac.T@result.jac)*rss/dof
+        cases.append(dict(name=name,model=model,shared=shared,groups=groups,initial=initial,limits=limits,params=params,rss=rss,n=n,dof=dof,se=np.sqrt(np.diag(cov))))
+    write("global_fits",cases)
+
+
 GENERATORS = [
     integrals, normalization, descriptive, column_math, polynomial, statistical_tests, signal_tests,
     interpolation_cases, derivative_cases, peak_cases, constrained_fit_cases, builtin_fit_cases,
     smoothing_cases, percent_bar_cases, fit_report_cases, formula_cases, weighted_fit_cases, qq_cases, box_cases,
-    histogram_option_cases, normality_ks_ad, ks_2samp, two_way_anova, fit_tools,
+    histogram_option_cases, normality_ks_ad, ks_2samp, two_way_anova, fit_tools, global_fits,
 ]
 
 

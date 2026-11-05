@@ -2211,3 +2211,31 @@ fn b2_color_scale_actual_pointer_drag_is_undoable() {
         .is_some_and(|c| c.position.is_some()));
     roundtrip(&mut app, &before);
 }
+
+#[test]
+fn a3_global_fit_real_dialog_writes_curves_note_and_undoes_once() {
+    let mut app = app();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["B".into(), "C".into()]);
+    let x: Vec<_> = (0..41).map(|i| i as f64 * 0.2).collect();
+    let book = app.project.book_mut(1).unwrap();
+    for (key, values) in [
+        ("A", x.clone()),
+        ("B", x.iter().map(|x| 0.2 + 4.0 * (-x / 1.7).exp()).collect()),
+        ("C", x.iter().map(|x| 0.4 + 6.0 * (-x / 1.7).exp()).collect()),
+    ] {
+        book.columns.iter_mut().find(|c| c.key == key).unwrap().data = values.iter().map(ToString::to_string).collect();
+    }
+    app.run_command("fit.global");
+    let Some(Dialog::GlobalFit(edit)) = &mut app.dialog else {
+        panic!("{}", app.status)
+    };
+    edit.shared = vec![false, false, true];
+    let before = app.project.clone();
+    let count = before.book(1).unwrap().columns.len();
+    press_dialog_button(&mut app, "拟合");
+    assert_eq!(app.project.book(1).unwrap().columns.len(), count + 4, "{}", app.status);
+    assert_eq!(app.project.notes.len(), before.notes.len() + 1);
+    assert!(matches!(&app.dialog,Some(Dialog::Table{rows,note,..}) if rows.len()==3 && note.contains("t1")));
+    roundtrip(&mut app, &before);
+}

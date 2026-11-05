@@ -3,8 +3,12 @@
 
 use crate::analysis::mat_inv;
 
+mod global;
 mod guess;
 mod model;
+pub use global::{
+    fit_global, global_layout, FitData, GlobalFit, GlobalLayout, GlobalSpec, IndexedModel, MAX_GLOBAL_PARAMS,
+};
 pub use model::{voigt_profile, Model, MAX_PARAMS};
 
 /// 可保存、跨项目交换的函数定义；语法树在使用时重新解析。
@@ -227,6 +231,8 @@ impl CustomFitFunction {
 pub enum FitFunction {
     Builtin(Model),
     Custom(CustomFitFunction),
+    #[doc(hidden)]
+    Indexed(std::sync::Arc<IndexedModel>),
 }
 
 impl FitFunction {
@@ -234,6 +240,7 @@ impl FitFunction {
         match self {
             Self::Builtin(model) => model.name(),
             Self::Custom(function) => &function.name,
+            Self::Indexed(function) => function.base.name(),
         }
     }
 
@@ -241,6 +248,7 @@ impl FitFunction {
         match self {
             Self::Builtin(model) => model.formula(),
             Self::Custom(function) => &function.formula,
+            Self::Indexed(function) => function.base.formula(),
         }
     }
 
@@ -248,6 +256,7 @@ impl FitFunction {
         match self {
             Self::Builtin(model) => model.params().to_vec(),
             Self::Custom(function) => function.parameters.iter().map(String::as_str).collect(),
+            Self::Indexed(function) => function.names.iter().map(String::as_str).collect(),
         }
     }
 
@@ -255,6 +264,7 @@ impl FitFunction {
         match self {
             Self::Builtin(model) => model.eval(x, params),
             Self::Custom(function) => function.eval(x, params),
+            Self::Indexed(function) => function.eval(x, params),
         }
     }
 
@@ -262,6 +272,7 @@ impl FitFunction {
         match self {
             Self::Builtin(model) => Some(model.guess(xs, ys)),
             Self::Custom(_) => None,
+            Self::Indexed(function) => Some(function.initial.clone()),
         }
     }
 }

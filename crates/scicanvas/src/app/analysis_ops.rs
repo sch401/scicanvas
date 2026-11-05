@@ -860,6 +860,67 @@ impl SciApp {
         });
     }
 
+    pub(crate) fn open_global_fit(&mut self) {
+        let Some(source) = self.analysis_source() else {
+            return;
+        };
+        match self.project.resolve(&source) {
+            Ok(resolved) => {
+                let labels = resolved
+                    .items
+                    .iter()
+                    .map(|item| {
+                        format!(
+                            "{}：{}",
+                            self.project.name_of(item.book_id).unwrap_or(""),
+                            self.project
+                                .book(item.book_id)
+                                .unwrap()
+                                .column(&item.y)
+                                .unwrap()
+                                .display_name()
+                        )
+                    })
+                    .collect();
+                self.dialog = Some(Dialog::GlobalFit(Box::new(dialogs::GlobalFitEditor::new(
+                    source, labels,
+                ))));
+            }
+            Err(error) => self.status = error,
+        }
+    }
+    pub(super) fn run_global_fit(&mut self, edit: dialogs::GlobalFitEditor) {
+        let weight = if edit.weighted {
+            scicanvas_core::ops::FitWeight::YError
+        } else {
+            scicanvas_core::ops::FitWeight::None
+        };
+        self.edit_with(
+            "全局拟合",
+            |project| {
+                project
+                    .global_fit(
+                        &edit.source,
+                        scicanvas_core::nlfit::FitFunction::Builtin(edit.model),
+                        &edit.shared,
+                        &edit.limits,
+                        &edit.constraints,
+                        weight,
+                    )
+                    .map(Some)
+            },
+            |app, report| {
+                app.show_item(report.graph);
+                app.dialog = Some(Dialog::Table {
+                    title: "全局拟合结果".into(),
+                    rows: report.rows(),
+                    note: report.note(),
+                });
+                app.status = "已生成全局拟合曲线和 Note".into();
+            },
+        );
+    }
+
     pub(crate) fn open_fit_compare(&mut self) {
         let reports: Vec<_> = self.project.nlfit_reports().into_iter().filter(|r| r.current).collect();
         if reports.len() < 2 {

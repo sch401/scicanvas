@@ -863,3 +863,58 @@ fn a2_fit_comparison_inverse_and_forward_match_scipy() {
         }
     }
 }
+
+#[test]
+fn a3_global_fit_parameters_chi_square_and_se_match_scipy() {
+    use scicanvas_core::nlfit::{self, FitFunction, GlobalSpec, Model, ParamLimits};
+    for case in cases("global_fits") {
+        let name = case["name"].as_str().unwrap();
+        let model = if case["model"] == "Gauss" {
+            Model::Gauss
+        } else {
+            Model::ExpDec1
+        };
+        let groups: Vec<nlfit::FitData> = case["groups"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|g| {
+                (
+                    numbers(&g["x"]),
+                    numbers(&g["y"]),
+                    if g["sigma"].is_null() {
+                        None
+                    } else {
+                        Some(numbers(&g["sigma"]))
+                    },
+                )
+            })
+            .collect();
+        let shared: Vec<bool> = case["shared"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .map(|v| v.as_bool().unwrap())
+            .collect();
+        let limits: Vec<ParamLimits> = serde_json::from_value(case["limits"].clone()).unwrap();
+        for initial in [Some(numbers(&case["initial"])), None] {
+            let fit = nlfit::fit_global(
+                GlobalSpec {
+                    base: FitFunction::Builtin(model),
+                    groups: groups.clone(),
+                    shared: shared.clone(),
+                },
+                initial.as_deref(),
+                &limits,
+                "",
+            )
+            .unwrap();
+            assert!(fit.joint.converged, "{name}");
+            array(&fit.joint.params, &case["params"], 1e-8, name);
+            near(fit.joint.rss, &case["rss"], 1e-8, name);
+            array(&fit.joint.se, &case["se"], 1e-6, name);
+            assert_eq!(fit.joint.n, case["n"].as_u64().unwrap() as usize);
+            assert_eq!(fit.joint.dof, case["dof"].as_u64().unwrap() as usize);
+        }
+    }
+}
