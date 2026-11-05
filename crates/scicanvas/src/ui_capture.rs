@@ -370,3 +370,34 @@ fn capture_u3_properties() {
         }
     }
 }
+
+#[test]
+#[ignore = "Explicit before/after status screenshots"]
+fn capture_u4_status() {
+    let dir = std::env::var("SCICANVAS_UI_CAPTURE_DIR").expect("capture directory");
+    let directory = std::path::Path::new(&dir);
+    std::fs::create_dir_all(directory).unwrap();
+    let mut capture = Capture::new();
+    for theme in [egui::Theme::Light, egui::Theme::Dark] {
+        for name in ["error", "success", "history"] {
+            let ctx = egui::Context::default();
+            crate::theme::install(&ctx);
+            crate::fonts::setup(&ctx);
+            crate::icons::install_loaders(&ctx);
+            ctx.set_theme(theme);
+            let mut app = SciApp::initial(crate::theme::palette(theme));
+            app.active = Some(2);
+            app.status_info("就绪".into());
+            app.status_warn("已跳过 3 行缺失值".into());
+            if name == "error" {
+                app.status_err("拟合失败：有效数据点不足".into());
+            } else {
+                app.status_ok("已生成拟合曲线和报告".into());
+            }
+            if name == "history" {
+                app.show_status_messages = true;
+            }
+            capture.app_capture(&ctx, &mut app, &directory.join(format!("{name}-{theme:?}.png")));
+        }
+    }
+}

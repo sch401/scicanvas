@@ -14,6 +14,8 @@ mod peak_fit;
 mod props;
 mod signal_tools;
 mod statistical_reports;
+mod status;
+use status::{Status, StatusKind};
 mod tiff_export;
 mod windows;
 mod worksheet;
@@ -230,7 +232,11 @@ pub struct SciApp {
     active_layers: HashMap<u64, usize>,
     dialog_error: Option<String>,
     pub(crate) plot_draft: Option<scicanvas_core::plotspec::PlotSpec>,
-    pub(crate) status: String,
+    pub(crate) status: Status,
+    status_messages: std::collections::VecDeque<(String, Status)>,
+    show_status_messages: bool,
+    busy_action: Option<dialog_actions::DialogFrame>,
+    busy_presented: bool,
     pub(crate) show_explorer: bool,
     pub(crate) show_help: bool,
     pub(crate) show_about: bool,
@@ -317,7 +323,7 @@ impl SciApp {
                 .collect();
         }
         if !has_cjk {
-            app.status = "系统缺少中文字体，可通过 SCICANVAS_FONT 指定字体文件".into();
+            app.status_warn("系统缺少中文字体，可通过 SCICANVAS_FONT 指定字体文件".into());
         }
         #[cfg(windows)]
         if let Some(render) = cc.wgpu_render_state.as_ref() {
@@ -328,10 +334,14 @@ impl SciApp {
             );
             scicanvas_core::project_file::session::write_startup_log(&format!("图形后端：{}", app.renderer_info));
             if let Some(notice) = renderer_notice(info.device_type) {
-                app.status = if app.status.is_empty() {
-                    notice.into()
-                } else {
-                    format!("{}；{notice}", app.status)
+                {
+                    let status_kind = StatusKind::Warn;
+                    let text: String = if app.status.is_empty() {
+                        notice.into()
+                    } else {
+                        format!("{}；{notice}", app.status)
+                    };
+                    app.set_status(status_kind, text);
                 };
             }
         }
@@ -393,7 +403,11 @@ impl SciApp {
             active_layers: HashMap::new(),
             dialog_error: None,
             plot_draft: None,
-            status: String::new(),
+            status: Status::default(),
+            status_messages: Default::default(),
+            show_status_messages: false,
+            busy_action: None,
+            busy_presented: false,
             show_explorer: true,
             show_help: false,
             show_about: false,
@@ -418,7 +432,7 @@ impl SciApp {
             ws: egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1000.0, 650.0)),
         };
         app.load_project(Project::sample(), None);
-        app.status = "就绪".into();
+        app.status_info("就绪".into());
         app
     }
 
@@ -475,7 +489,7 @@ impl SciApp {
         match self.active {
             Some(id) if self.project.book(id).is_some() => Some(id),
             _ => {
-                self.status = "请先单击一个工作簿窗口，使它成为当前窗口".into();
+                self.status_warn("请先单击一个工作簿窗口，使它成为当前窗口".into());
                 None
             }
         }
@@ -496,7 +510,7 @@ impl SciApp {
             .find(|g| self.open.get(&g.id).copied().unwrap_or(false))
             .map(|g| g.id);
         if found.is_none() {
-            self.status = "请先打开一个图形窗口".into();
+            self.status_warn("请先打开一个图形窗口".into());
         }
         found
     }
@@ -505,9 +519,16 @@ impl SciApp {
         if let Some(id) = self.active {
             let index = self.layer_index(id);
             if let Some(g) = self.project.graph_mut(id) {
-                self.status = match g.page.layers_mut()[index].set_plot_type(t) {
-                    Ok(()) => format!("{} 已改为{}", g.name, t.label()),
-                    Err(e) => e,
+                {
+                    let mut status_kind = StatusKind::Success;
+                    let text: String = match g.page.layers_mut()[index].set_plot_type(t) {
+                        Ok(()) => format!("{} 已改为{}", g.name, t.label()),
+                        Err(e) => {
+                            status_kind = StatusKind::Error;
+                            e
+                        }
+                    };
+                    self.set_status(status_kind, text);
                 };
                 if t == PlotType::Pie {
                     self.append_pie_skipped(id);
@@ -525,12 +546,16 @@ impl SciApp {
                     g.first_layer_mut().visible_only = visible_only;
                 }
                 self.show_item(gid);
-                self.status = match rows {
-                    Some((a, b)) => format!("{}（第 {}–{} 行）", msg, a + 1, b + 1),
-                    None => msg,
+                {
+                    let status_kind = StatusKind::Success;
+                    let text: String = match rows {
+                        Some((a, b)) => format!("{}（第 {}–{} 行）", msg, a + 1, b + 1),
+                        None => msg,
+                    };
+                    self.set_status(status_kind, text);
                 };
             }
-            Err(e) => self.status = e,
+            Err(e) => self.status_err(e),
         }
         if t == PlotType::Pie {
             if let Some(g) = self.active.and_then(|id| self.project.graph(id)) {
@@ -549,7 +574,7 @@ impl SciApp {
                 .filter(|l| l.plot_type == PlotType::Pie)
                 .map(|l| scicanvas_core::scene::pie_skipped(l, &|id| self.project.book(id)))
                 .sum();
-            self.status.push_str(&format!("；跳过 {skipped} 行非正值或缺失值"));
+            self.status_warn(format!("{}；跳过 {skipped} 行非正值或缺失值", self.status));
         }
     }
 
@@ -567,9 +592,9 @@ impl SciApp {
                     }
                 }
                 self.show_item(gid);
-                self.status = msg;
+                self.status_ok(msg);
             }
-            Err(e) => self.status = e,
+            Err(e) => self.status_err(e),
         }
     }
 
@@ -595,7 +620,7 @@ impl SciApp {
                 Ok(bytes) => {
                     self.dialog = Some(Dialog::ImportWizard(Box::new(dialogs::ImportWizard::new(path, bytes))))
                 }
-                Err(e) => self.status = format!("无法读取文件：{e}"),
+                Err(e) => self.status_err(format!("无法读取文件：{e}")),
             }
         }
     }
@@ -636,7 +661,7 @@ impl SciApp {
             },
             |app, id| {
                 app.show_item(id);
-                app.status = format!("已导入 {}", path.display());
+                app.status_ok(format!("已导入 {}", path.display()));
             },
         );
         self.dialog = None;
@@ -658,22 +683,33 @@ impl SciApp {
             |project| {
                 let mut shown = Vec::new();
                 let mut messages = Vec::new();
+                let mut failed = 0;
                 for path in paths {
                     match Self::import_into(project, path, parent) {
                         Ok((id, message)) => {
                             shown.push(id);
                             messages.push(message);
                         }
-                        Err(error) => messages.push(error),
+                        Err(error) => {
+                            failed += 1;
+                            messages.push(error);
+                        }
                     }
                 }
-                Ok(Some((shown, messages)))
+                Ok(Some((shown, messages, failed)))
             },
-            |app, (shown, messages)| {
+            |app, (shown, messages, failed)| {
+                let kind = if failed == 0 {
+                    StatusKind::Success
+                } else if shown.is_empty() {
+                    StatusKind::Error
+                } else {
+                    StatusKind::Warn
+                };
                 for id in shown {
                     app.show_item(id);
                 }
-                app.status = messages.join("；");
+                app.set_status(kind, messages.join("；"));
             },
         );
     }
@@ -794,7 +830,7 @@ impl SciApp {
         let template = match scicanvas_core::project_file::graph_template_from_graph(&graph, &self.project) {
             Ok(template) => template,
             Err(error) => {
-                self.status = error;
+                self.status_err(error);
                 return;
             }
         };
@@ -807,9 +843,16 @@ impl SciApp {
         else {
             return;
         };
-        self.status = match scicanvas_core::project_file::save_graph_template(&path, &template) {
-            Ok(()) => format!("已保存图形模板 {}", path.display()),
-            Err(error) => format!("保存图形模板失败：{error}"),
+        {
+            let mut status_kind = StatusKind::Success;
+            let text: String = match scicanvas_core::project_file::save_graph_template(&path, &template) {
+                Ok(()) => format!("已保存图形模板 {}", path.display()),
+                Err(error) => {
+                    status_kind = StatusKind::Error;
+                    format!("保存图形模板失败：{error}")
+                }
+            };
+            self.set_status(status_kind, text);
         };
     }
 
@@ -827,7 +870,7 @@ impl SciApp {
             Ok(template) => {
                 self.apply_graph_template_to_book(template, book_id);
             }
-            Err(error) => self.status = format!("无法应用图形模板：{error}"),
+            Err(error) => self.status_err(format!("无法应用图形模板：{error}")),
         }
     }
 
@@ -842,7 +885,7 @@ impl SciApp {
             |project| project.apply_graph_template(&template, book_id).map(Some),
             move |app, id| {
                 app.show_item(id);
-                app.status = format!("已应用图形模板：{template_name}");
+                app.status_ok(format!("已应用图形模板：{template_name}"));
                 id
             },
         )
@@ -859,7 +902,7 @@ impl SciApp {
                         self.apply_graph_template_to_book(template, id);
                     }
                 }
-                Err(error) => self.status = format!("无法应用图形模板：{error}"),
+                Err(error) => self.status_err(format!("无法应用图形模板：{error}")),
             }
         } else if ext.eq_ignore_ascii_case("scfn") {
             self.import_custom_fit_function(path);
@@ -876,9 +919,9 @@ impl SciApp {
                 self.load_project(p, Some(path.to_path_buf()));
                 self.settings.remember(path);
                 self.persist_settings();
-                self.status = format!("已打开 {}", path.display());
+                self.status_ok(format!("已打开 {}", path.display()));
             }
-            Err(e) => self.status = format!("无法打开项目：{}", e),
+            Err(e) => self.status_err(format!("无法打开项目：{}", e)),
         }
     }
 
@@ -893,7 +936,7 @@ impl SciApp {
         if let Some(project) = paths.iter().find(|p| Self::is_project_file(p)) {
             self.open_path(project);
             if paths.len() > 1 {
-                self.status.push_str("（一次只打开一个项目，其余文件已忽略）");
+                self.status_warn(format!("{}（一次只打开一个项目，其余文件已忽略）", self.status));
             }
             return;
         }
@@ -994,11 +1037,11 @@ impl SciApp {
                 self.persist_settings();
                 self.clear_recovery();
                 self.save_error = None;
-                self.status = format!("已保存到 {}", path.display());
+                self.status_ok(format!("已保存到 {}", path.display()));
                 true
             }
             Err(e) => {
-                self.status = format!("保存失败：{e}");
+                self.status_err(format!("保存失败：{e}"));
                 self.save_error = Some(e);
                 false
             }
@@ -1021,9 +1064,16 @@ impl SciApp {
             return;
         };
         self.settings.last_dir = path.parent().map(std::path::Path::to_path_buf);
-        self.status = match scicanvas_core::project_file::write_file_atomic(&path, content.as_bytes()) {
-            Ok(()) => format!("已导出 {}", path.display()),
-            Err(e) => format!("导出失败：{}", e),
+        {
+            let mut status_kind = StatusKind::Success;
+            let text: String = match scicanvas_core::project_file::write_file_atomic(&path, content.as_bytes()) {
+                Ok(()) => format!("已导出 {}", path.display()),
+                Err(e) => {
+                    status_kind = StatusKind::Error;
+                    format!("导出失败：{}", e)
+                }
+            };
+            self.set_status(status_kind, text);
         };
     }
 
@@ -1043,9 +1093,16 @@ impl SciApp {
         // Finish conversion and font checks before opening/replacing the chosen output file.
         let result = crate::export::pdf_bytes(&svg::render_page(g, &self.project))
             .and_then(|bytes| scicanvas_core::project_file::write_file_atomic(&path, &bytes));
-        self.status = match result {
-            Ok(()) => format!("已导出 {}（矢量 PDF，已嵌入字体）", path.display()),
-            Err(e) => format!("导出失败：{e}"),
+        {
+            let mut status_kind = StatusKind::Success;
+            let text: String = match result {
+                Ok(()) => format!("已导出 {}（矢量 PDF，已嵌入字体）", path.display()),
+                Err(e) => {
+                    status_kind = StatusKind::Error;
+                    format!("导出失败：{e}")
+                }
+            };
+            self.set_status(status_kind, text);
         };
     }
 
@@ -1077,9 +1134,16 @@ impl SciApp {
             scicanvas_core::project_file::write_file_atomic(&path, &bytes)?;
             Ok((pixmap.width(), pixmap.height()))
         });
-        self.status = match result {
-            Ok((w, h)) => format!("已导出 {}（{w} × {h} 像素，{dpi} dpi）", path.display()),
-            Err(e) => format!("导出失败：{e}"),
+        {
+            let mut status_kind = StatusKind::Success;
+            let text: String = match result {
+                Ok((w, h)) => format!("已导出 {}（{w} × {h} 像素，{dpi} dpi）", path.display()),
+                Err(e) => {
+                    status_kind = StatusKind::Error;
+                    format!("导出失败：{e}")
+                }
+            };
+            self.set_status(status_kind, text);
         };
     }
 
@@ -1099,9 +1163,16 @@ impl SciApp {
             return;
         };
         self.settings.last_dir = path.parent().map(std::path::Path::to_path_buf);
-        self.status = match scicanvas_core::project_file::write_file_atomic(&path, content.as_bytes()) {
-            Ok(()) => format!("已导出 {}（{rows} 行 × {cols} 列）", path.display()),
-            Err(e) => format!("导出失败：{e}"),
+        {
+            let mut status_kind = StatusKind::Success;
+            let text: String = match scicanvas_core::project_file::write_file_atomic(&path, content.as_bytes()) {
+                Ok(()) => format!("已导出 {}（{rows} 行 × {cols} 列）", path.display()),
+                Err(e) => {
+                    status_kind = StatusKind::Error;
+                    format!("导出失败：{e}")
+                }
+            };
+            self.set_status(status_kind, text);
         };
     }
 
@@ -1114,9 +1185,16 @@ impl SciApp {
         let dpi = crate::export::CLIPBOARD_DPI;
         let result = crate::export::rasterize(&svg::render_page(&g, &self.project), dpi)
             .and_then(|pixmap| crate::export::copy_to_clipboard(&pixmap));
-        self.status = match result {
-            Ok(()) => format!("已复制 {}（{dpi} dpi 位图），可粘贴到 Word、PPT", g.name),
-            Err(e) => format!("复制失败：{e}"),
+        {
+            let mut status_kind = StatusKind::Success;
+            let text: String = match result {
+                Ok(()) => format!("已复制 {}（{dpi} dpi 位图），可粘贴到 Word、PPT", g.name),
+                Err(e) => {
+                    status_kind = StatusKind::Error;
+                    format!("复制失败：{e}")
+                }
+            };
+            self.set_status(status_kind, text);
         };
     }
 
@@ -1124,7 +1202,7 @@ impl SciApp {
 
     /// 执行一条命令（功能区、快捷键、命令面板都走这里）。不能执行时在状态栏说明原因。
     pub(crate) fn run_command(&mut self, id: &str) {
-        if self.background_blocked {
+        if self.background_blocked || self.busy_action.is_some() {
             return;
         }
         let Some(c) = commands::find(id) else { return };
@@ -1155,7 +1233,7 @@ impl SciApp {
                     (c.run)(self);
                 }
             }
-            Err(why) => self.status = why.to_string(),
+            Err(why) => self.status_err(why.to_string()),
         }
     }
 
@@ -1220,7 +1298,7 @@ impl SciApp {
             }
             Err(error) => {
                 self.dialog_error = Some(error.clone());
-                self.status = error.clone();
+                self.status_err(error.clone());
                 if self.edit_abort.is_none() {
                     self.edit_abort = Some(EditAbort::Failed(error));
                 }
@@ -1232,7 +1310,7 @@ impl SciApp {
                 self.project = self.history.rollback().unwrap();
                 self.recalc_inputs = Some(RecalcInputs::of(&self.project));
                 if let EditAbort::Failed(error) = abort {
-                    self.status = error;
+                    self.status_err(error);
                 }
             } else {
                 self.finish_edit();
@@ -1311,10 +1389,18 @@ impl SciApp {
     pub(crate) fn recalc_all(&mut self) {
         let problems = self.project.recalc_computed(true);
         self.recalc_inputs = Some(RecalcInputs::of(&self.project));
-        self.status = if problems.is_empty() {
-            "已重算公式列和分析结果".into()
-        } else {
-            format!("重算出错：{}", problems.join("；"))
+        {
+            let status_kind = if problems.is_empty() {
+                StatusKind::Success
+            } else {
+                StatusKind::Error
+            };
+            let text: String = if problems.is_empty() {
+                "已重算公式列和分析结果".into()
+            } else {
+                format!("重算出错：{}", problems.join("；"))
+            };
+            self.set_status(status_kind, text);
         };
     }
 
@@ -1324,7 +1410,7 @@ impl SciApp {
             let problems = self.project.recalc_computed(false);
             self.recalc_inputs = Some(RecalcInputs::of(&self.project));
             if !problems.is_empty() {
-                self.status = format!("公式重算出错：{}", problems.join("；"));
+                self.status_err(format!("公式重算出错：{}", problems.join("；")));
             }
         }
     }
@@ -1344,7 +1430,7 @@ impl SciApp {
         let label = self.history.undo_label().unwrap_or("").to_string();
         if let Some(project) = self.history.undo(&self.project) {
             self.restore_history(project);
-            self.status = format!("已撤销：{label}");
+            self.status_ok(format!("已撤销：{label}"));
         }
     }
 
@@ -1353,7 +1439,7 @@ impl SciApp {
         let label = self.history.redo_label().unwrap_or("").to_string();
         if let Some(project) = self.history.redo(&self.project) {
             self.restore_history(project);
-            self.status = format!("已重做：{label}");
+            self.status_ok(format!("已重做：{label}"));
         }
     }
 
@@ -1659,7 +1745,7 @@ impl SciApp {
             selected.retain(|reference| edit.draft.plot(reference, &|id| self.project.book(id)).is_some());
         }
         self.show_item(edit.graph);
-        self.status = "图层内容已更新".into();
+        self.status_ok("图层内容已更新".into());
         Ok(())
     }
 
@@ -1685,7 +1771,7 @@ impl SciApp {
         graph.page.columns = (n as f64).sqrt().ceil() as usize;
         self.props_for = Some(id);
         self.active_layers.insert(id, n - 1);
-        self.status = "已添加图层。".into();
+        self.status_ok("已添加图层。".into());
     }
 
     pub(crate) fn open_plot_builder(&mut self) {
@@ -1701,7 +1787,7 @@ impl SciApp {
                     spec.visible_only = self.project.book(id).is_some_and(|book| book.uses_visible_rows());
                     self.plot_draft = Some(spec);
                 }
-                Err(e) => self.status = e,
+                Err(e) => self.status_err(e),
             }
         } else if let Some(id) = self.active_graph_id() {
             self.plot_draft = Some(self.project.graph(id).unwrap().page.layers()[self.layer_index(id)].draft());
@@ -1714,9 +1800,9 @@ impl SciApp {
             Ok(id) => {
                 self.show_item(id);
                 self.plot_draft = None;
-                self.status = "已按作图描述创建图形".into();
+                self.status_ok("已按作图描述创建图形".into());
             }
-            Err(e) => self.status = e,
+            Err(e) => self.status_err(e),
         }
     }
 
@@ -1732,18 +1818,26 @@ impl SciApp {
                 });
                 self.analysis_curves.retain(|(graph_id, _), _| *graph_id != id);
                 self.active_layers.insert(id, index.min(graph.page.layers().len() - 1));
-                self.status = "已删除图层".into();
+                self.status_ok("已删除图层".into());
             }
-            Err(e) => self.status = e,
+            Err(e) => self.status_err(e),
         }
     }
 
     pub(crate) fn choose_axis_scale(&mut self, x: bool, scale: scicanvas_core::ticks::AxisScale) {
         let Some(gid) = self.active_graph_id() else { return };
         let index = self.layer_index(gid);
-        self.status = match self.project.graph_mut(gid).unwrap().page.layers_mut()[index].set_axis_scale(x, scale) {
-            Ok(()) => format!("{} 轴：{}", if x { "X" } else { "Y" }, scale.label()),
-            Err(error) => error,
+        {
+            let mut status_kind = StatusKind::Success;
+            let text: String =
+                match self.project.graph_mut(gid).unwrap().page.layers_mut()[index].set_axis_scale(x, scale) {
+                    Ok(()) => format!("{} 轴：{}", if x { "X" } else { "Y" }, scale.label()),
+                    Err(error) => {
+                        status_kind = StatusKind::Error;
+                        error
+                    }
+                };
+            self.set_status(status_kind, text);
         };
     }
 
@@ -1762,9 +1856,16 @@ impl SciApp {
         } else {
             AxisScale::Log10
         };
-        self.status = match layer.set_axis_scale(x, scale) {
-            Ok(()) => format!("{} 轴：{}", if x { "X" } else { "Y" }, scale.label()),
-            Err(error) => error,
+        {
+            let mut status_kind = StatusKind::Success;
+            let text: String = match layer.set_axis_scale(x, scale) {
+                Ok(()) => format!("{} 轴：{}", if x { "X" } else { "Y" }, scale.label()),
+                Err(error) => {
+                    status_kind = StatusKind::Error;
+                    error
+                }
+            };
+            self.set_status(status_kind, text);
         };
     }
 
@@ -1774,7 +1875,8 @@ impl SciApp {
         if let Some(g) = self.project.graph_mut(gid) {
             let v = field(&mut g.page.layers_mut()[index]);
             *v = !*v;
-            self.status = format!("{}：{}", label, if *v { "开" } else { "关" });
+            let message = format!("{}：{}", label, if *v { "开" } else { "关" });
+            self.status_ok(message);
         }
     }
 
@@ -1783,7 +1885,7 @@ impl SciApp {
         let index = self.layer_index(gid);
         let layer = &mut self.project.graph_mut(gid).unwrap().page.layers_mut()[index];
         if axis == scicanvas_core::page::ReferenceAxis::YRight && !layer.has_right_axis_style() {
-            self.status = "请先把一条曲线设置为右 Y 轴".into();
+            self.status_warn("请先把一条曲线设置为右 Y 轴".into());
             return;
         }
         let scale = match axis {
@@ -1797,18 +1899,22 @@ impl SciApp {
             value: scale.default_value(),
             ..Default::default()
         });
-        self.status = format!("已添加{}参考线", axis.label());
+        self.status_ok(format!("已添加{}参考线", axis.label()));
     }
 
     pub(crate) fn set_theme(&mut self, pref: egui::ThemePreference) {
         self.theme_pref = pref;
         self.pending_theme = Some(pref);
-        self.status = match pref {
-            egui::ThemePreference::Light => "已切换到浅色主题",
-            egui::ThemePreference::Dark => "已切换到深色主题",
-            egui::ThemePreference::System => "主题跟随系统",
-        }
-        .into();
+        {
+            let status_kind = StatusKind::Success;
+            let text: String = match pref {
+                egui::ThemePreference::Light => "已切换到浅色主题",
+                egui::ThemePreference::Dark => "已切换到深色主题",
+                egui::ThemePreference::System => "主题跟随系统",
+            }
+            .into();
+            self.set_status(status_kind, text);
+        };
     }
 }
 
@@ -2005,6 +2111,7 @@ impl SciApp {
         if !self.background_blocked {
             self.finish_frame_edit(self.history_group);
         }
+        self.status_messages_window(ctx);
         if std::mem::take(&mut self.pending_repaint) {
             ctx.request_repaint();
         }
@@ -2067,13 +2174,13 @@ impl SciApp {
             PendingDiscard::OpenDialog => self.pick_project(),
             PendingDiscard::Reset => {
                 self.load_project(Project::sample(), None);
-                self.status = "已恢复示例项目，撤销历史已清空".into();
+                self.status_ok("已恢复示例项目，撤销历史已清空".into());
             }
             PendingDiscard::New => {
                 let mut p = Project::default();
                 p.new_book();
                 self.load_project(p, None);
-                self.status = "已新建空白项目".into();
+                self.status_ok("已新建空白项目".into());
             }
         }
     }
@@ -2088,7 +2195,7 @@ impl SciApp {
         }
         .into();
         if let Err(error) = scicanvas_core::project_file::session::save_settings(&self.settings) {
-            self.status = error;
+            self.status_err(error);
         }
     }
     fn finish_backup(&mut self) -> Result<(), String> {
@@ -2175,7 +2282,7 @@ impl SciApp {
                     Ok(()) => {
                         self.recovery_candidates.remove(0);
                     }
-                    Err(error) => self.status = error,
+                    Err(error) => self.status_err(error),
                 },
                 Some(2) => self.recovery_candidates.clear(),
                 _ => {}
@@ -2194,10 +2301,10 @@ impl SciApp {
                 self.saved_generation = None;
                 self.recovery_file = Some(path.to_path_buf());
                 self.recovery_lock = Some(lock);
-                self.status = "已恢复自动备份，请保存项目".into();
+                self.status_ok("已恢复自动备份，请保存项目".into());
             }
-            (_, Err(error)) => self.status = format!("恢复失败：{error}"),
-            (Err(error), _) => self.status = format!("恢复文件正在使用：{error}"),
+            (_, Err(error)) => self.status_err(format!("恢复失败：{error}")),
+            (Err(error), _) => self.status_err(format!("恢复文件正在使用：{error}")),
         }
     }
     fn backup_recovery(&mut self) -> Result<(), String> {
@@ -2249,7 +2356,7 @@ impl SciApp {
         self.check_window_position(ctx);
         if self.backup_job.as_ref().is_some_and(|j| j.is_finished()) {
             if let Err(error) = self.finish_backup() {
-                self.status = error;
+                self.status_err(error);
             }
         }
         if self.backup_job.is_some() {
@@ -2269,7 +2376,7 @@ impl SciApp {
             let elapsed = self.last_recovery.elapsed();
             if elapsed >= interval {
                 if let Err(error) = self.backup_recovery() {
-                    self.status = error;
+                    self.status_err(error);
                 }
                 self.last_recovery = std::time::Instant::now();
             }
@@ -2296,7 +2403,7 @@ impl SciApp {
                         value: edit.buf.clone(),
                     });
                     self.pending_discard = None;
-                    self.status = "请先确认当前单元格的类型转换".into();
+                    self.status_warn("请先确认当前单元格的类型转换".into());
                     return false;
                 }
             }
@@ -2425,7 +2532,7 @@ impl SciApp {
                 });
                 self.pending_repaint = true;
             }
-            Err(error) => self.status = format!("启动退出清理失败：{error}"),
+            Err(error) => self.status_err(format!("启动退出清理失败：{error}")),
         }
         self.last_recovery = std::time::Instant::now();
     }
@@ -2436,7 +2543,7 @@ impl SciApp {
             .join()
             .unwrap_or_else(|_| Err("恢复文件清理任务中断".into()))
         {
-            self.status = error;
+            self.status_err(error);
         }
         self.last_recovery = std::time::Instant::now();
         if let Some(action) = self.deferred_discard.take() {

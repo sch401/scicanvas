@@ -512,7 +512,7 @@ fn transaction_success_presentation_precedes_formula_diagnostics_and_is_not_run_
             project.delete_columns(1, &["B".into()]);
             Ok(Some(()))
         },
-        |app, ()| app.status = "成功提示".into(),
+        |app, ()| app.status_ok("成功提示".into()),
     );
     assert!(app.status.starts_with("公式重算出错："));
     roundtrip(&mut app, &before);

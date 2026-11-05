@@ -89,7 +89,7 @@ fn plot_for_books(project: &mut Project, graph_id: u64, books: &[u64]) -> Result
 impl SciApp {
     pub(crate) fn open_batch_plot(&mut self) {
         if self.project.graphs.is_empty() || self.project.books.is_empty() {
-            self.status = "需要至少一个图形和工作簿".into();
+            self.status_warn("需要至少一个图形和工作簿".into());
             return;
         }
         let selected_graph = self
@@ -130,7 +130,7 @@ impl SciApp {
                 if let Some(id) = ids.last() {
                     app.show_item(*id);
                 }
-                app.status = format!("已生成 {} 张图", ids.len());
+                app.status_ok(format!("已生成 {} 张图", ids.len()));
                 app.dialog = None;
                 ids
             },

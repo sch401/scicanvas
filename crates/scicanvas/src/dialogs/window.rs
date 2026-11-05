@@ -10,7 +10,7 @@ pub(crate) struct SettingsWindow<'open> {
 }
 
 impl<'open> SettingsWindow<'open> {
-    pub(super) fn centered(mut self) -> Self {
+    pub(crate) fn centered(mut self) -> Self {
         self.centered = true;
         self
     }

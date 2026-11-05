@@ -117,7 +117,7 @@ pub(super) fn export_graphs_to_folder(
 impl SciApp {
     pub(crate) fn open_batch_export(&mut self) {
         if self.project.graphs.is_empty() {
-            self.status = "项目没有图形".into();
+            self.status_warn("项目没有图形".into());
             return;
         }
         self.dialog = Some(Dialog::BatchExport(Box::new(BatchExport {
@@ -134,19 +134,30 @@ impl SciApp {
 
     pub(super) fn export_graphs(&mut self, graphs: Vec<u64>, format: BatchFormat, dpi: u32) -> bool {
         let Some(folder) = self.file_dialog().set_title("选择批量导出目录").pick_folder() else {
+            self.status_info("已取消导出".into());
             return false;
         };
         self.settings.last_dir = Some(folder.clone());
         let (written, errors) = export_graphs_to_folder(&self.project, &graphs, format, dpi, &folder);
-        self.status = if errors.is_empty() {
-            format!("已导出 {} 张图到 {}", written.len(), folder.display())
-        } else {
-            format!(
-                "已导出 {} 张；{} 张失败：{}",
-                written.len(),
-                errors.len(),
-                errors.join("；")
-            )
+        {
+            let status_kind = if errors.is_empty() {
+                StatusKind::Success
+            } else if written.is_empty() {
+                StatusKind::Error
+            } else {
+                StatusKind::Warn
+            };
+            let text: String = if errors.is_empty() {
+                format!("已导出 {} 张图到 {}", written.len(), folder.display())
+            } else {
+                format!(
+                    "已导出 {} 张；{} 张失败：{}",
+                    written.len(),
+                    errors.len(),
+                    errors.join("；")
+                )
+            };
+            self.set_status(status_kind, text);
         };
         if !errors.is_empty() {
             self.dialog_error = Some(self.status.to_string());

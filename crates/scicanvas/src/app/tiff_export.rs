@@ -29,9 +29,16 @@ impl SciApp {
             scicanvas_core::project_file::write_file_atomic(&path, &bytes)?;
             Ok((pixmap.width(), pixmap.height()))
         });
-        self.status = match result {
-            Ok((width, height)) => format!("已导出 {}（{width} × {height} 像素，{dpi} dpi）", path.display()),
-            Err(error) => format!("导出失败：{error}"),
+        {
+            let mut status_kind = StatusKind::Success;
+            let text: String = match result {
+                Ok((width, height)) => format!("已导出 {}（{width} × {height} 像素，{dpi} dpi）", path.display()),
+                Err(error) => {
+                    status_kind = StatusKind::Error;
+                    format!("导出失败：{error}")
+                }
+            };
+            self.set_status(status_kind, text);
         };
     }
 }

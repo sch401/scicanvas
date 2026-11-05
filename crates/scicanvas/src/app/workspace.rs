@@ -82,7 +82,7 @@ impl SciApp {
         let mut sample = match scicanvas_core::project_file::from_scv(example.bytes) {
             Ok(project) => project,
             Err(error) => {
-                self.status = format!("打开示例失败：{error}");
+                self.status_err(format!("打开示例失败：{error}"));
                 return;
             }
         };
@@ -106,7 +106,7 @@ impl SciApp {
             self.project.move_project_item(id, parent).unwrap();
             self.show_item(id);
         }
-        self.status = format!("已打开{}示例，各列用法见注释行。", kind.label());
+        self.status_ok(format!("已打开{}示例，各列用法见注释行。", kind.label()));
     }
 
     pub(super) fn show_item(&mut self, id: u64) {
@@ -144,7 +144,7 @@ impl SciApp {
             .push(scicanvas_core::Graph::new(id, self.project.unique_name("Graph")));
         self.project.move_project_item(id, parent).unwrap();
         self.show_item(id);
-        self.status = "已新建空白图形，可在绘图属性中选择数据".into();
+        self.status_ok("已新建空白图形，可在绘图属性中选择数据".into());
     }
 
     pub(crate) fn new_book(&mut self) {
@@ -152,7 +152,7 @@ impl SciApp {
         let id = self.project.new_book();
         self.project.move_project_item(id, parent).unwrap();
         self.show_item(id);
-        self.status = format!("已新建 {}。", self.project.name_of(id).unwrap_or(""));
+        self.status_ok(format!("已新建 {}。", self.project.name_of(id).unwrap_or("")));
     }
 
     pub(super) fn delete_item(&mut self, id: u64) {
@@ -175,7 +175,7 @@ impl SciApp {
                     app.props_for = None;
                 }
                 app.sheets.remove(&id);
-                app.status = format!("已删除 {}", name);
+                app.status_ok(format!("已删除 {}", name));
             },
         );
     }
@@ -198,18 +198,25 @@ impl SciApp {
         match self.project.add_folder(self.current_folder()) {
             Ok(id) => {
                 self.select_project_item(id, false);
-                self.status = "已新建文件夹，可在右键菜单中重命名".into();
+                self.status_ok("已新建文件夹，可在右键菜单中重命名".into());
                 self.project_name = self.project.name_of(id).unwrap_or("").to_string();
             }
-            Err(e) => self.status = e,
+            Err(e) => self.status_err(e),
         }
     }
 
     pub(crate) fn rename_project_target(&mut self) {
         if let Some(id) = self.project_target() {
-            self.status = match self.project.rename_project_item(id, &self.project_name) {
-                Ok(()) => "已重命名".into(),
-                Err(e) => e,
+            {
+                let mut status_kind = StatusKind::Success;
+                let text: String = match self.project.rename_project_item(id, &self.project_name) {
+                    Ok(()) => "已重命名".into(),
+                    Err(e) => {
+                        status_kind = StatusKind::Error;
+                        e
+                    }
+                };
+                self.set_status(status_kind, text);
             };
         }
     }
@@ -222,25 +229,32 @@ impl SciApp {
             for source in roots {
                 if let Err(error) = self.project.move_project_item(source, self.folder_destination) {
                     self.project.folders = before;
-                    self.status = error;
+                    self.status_err(error);
                     return;
                 }
             }
-            self.status = "已移动所选项目对象".into();
+            self.status_ok("已移动所选项目对象".into());
         }
     }
 
     pub(crate) fn remove_project_folder(&mut self) {
         if let Some(id) = self.project_target() {
             let parent = self.project.folder(id).and_then(|f| f.parent);
-            self.status = match self.project.remove_folder(id) {
-                Ok(()) => {
-                    self.explorer_target = parent;
-                    self.explorer_selection = parent.into_iter().collect();
-                    self.project_name = parent.and_then(|id| self.project.name_of(id)).unwrap_or("").to_string();
-                    "已删除文件夹，内容已移到上级".into()
-                }
-                Err(e) => e,
+            {
+                let mut status_kind = StatusKind::Success;
+                let text: String = match self.project.remove_folder(id) {
+                    Ok(()) => {
+                        self.explorer_target = parent;
+                        self.explorer_selection = parent.into_iter().collect();
+                        self.project_name = parent.and_then(|id| self.project.name_of(id)).unwrap_or("").to_string();
+                        "已删除文件夹，内容已移到上级".into()
+                    }
+                    Err(e) => {
+                        status_kind = StatusKind::Error;
+                        e
+                    }
+                };
+                self.set_status(status_kind, text);
             };
         }
     }
@@ -254,7 +268,7 @@ impl SciApp {
             if self.props_for == Some(id) {
                 self.props_for = None;
             }
-            self.status = "窗口已隐藏，可从项目管理器重新打开".into();
+            self.status_ok("窗口已隐藏，可从项目管理器重新打开".into());
         }
     }
 

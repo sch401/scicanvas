@@ -34,7 +34,7 @@ impl SciApp {
         let curve = match edit.curve() {
             Ok(curve) => curve,
             Err(error) => {
-                self.status = error;
+                self.status_err(error);
                 return;
             }
         };
@@ -53,7 +53,7 @@ impl SciApp {
             },
             |app, gid| {
                 app.show_item(gid);
-                app.status = "函数图已更新".into();
+                app.status_ok("函数图已更新".into());
                 app.dialog = None;
             },
         );
@@ -81,12 +81,12 @@ impl SciApp {
         self.edit_with(
             "保存图形主题",
             |p| p.save_graph_theme(theme).map(|_| Some(())),
-            |app, ()| app.status = "主题已保存到项目".into(),
+            |app, ()| app.status_ok("主题已保存到项目".into()),
         );
     }
     pub(super) fn apply_graph_theme(&mut self, theme: GraphTheme) {
         let Some(gid) = self.target_graph() else {
-            self.status = "请选择图形".into();
+            self.status_warn("请选择图形".into());
             return;
         };
         let index = self.layer_index(gid);
@@ -97,14 +97,14 @@ impl SciApp {
                 theme.apply(&mut p.graph_mut(gid).unwrap().page.layers_mut()[index]);
                 Ok(Some(()))
             },
-            |app, ()| app.status = "已应用主题".into(),
+            |app, ()| app.status_ok("已应用主题".into()),
         );
     }
     pub(super) fn remove_graph_theme(&mut self, name: &str) {
         self.edit_with(
             "删除图形主题",
             |p| p.remove_graph_theme(name).map(|_| Some(())),
-            |app, ()| app.status = "主题已删除".into(),
+            |app, ()| app.status_ok("主题已删除".into()),
         );
     }
     pub(super) fn import_graph_theme(&mut self) {
@@ -116,14 +116,14 @@ impl SciApp {
             .and_then(|text| GraphTheme::from_json(&text))
         {
             Ok(theme) => self.save_graph_theme(theme),
-            Err(error) => self.status = error,
+            Err(error) => self.status_err(error),
         }
     }
     pub(super) fn export_graph_theme(&mut self, theme: GraphTheme) {
         let data = match theme.to_json() {
             Ok(text) => text,
             Err(error) => {
-                self.status = error;
+                self.status_err(error);
                 return;
             }
         };
@@ -135,9 +135,16 @@ impl SciApp {
         else {
             return;
         };
-        self.status = match scicanvas_core::project_file::write_file_atomic(&path, data.as_bytes()) {
-            Ok(()) => "主题已导出".into(),
-            Err(error) => error,
+        {
+            let mut status_kind = StatusKind::Success;
+            let text: String = match scicanvas_core::project_file::write_file_atomic(&path, data.as_bytes()) {
+                Ok(()) => "主题已导出".into(),
+                Err(error) => {
+                    status_kind = StatusKind::Error;
+                    error
+                }
+            };
+            self.set_status(status_kind, text);
         };
     }
     fn style_target(&mut self) -> Option<(u64, usize, Option<String>)> {
@@ -169,7 +176,7 @@ impl SciApp {
         } else {
             StyleClip::Layer(GraphTheme::capture(layer))
         });
-        self.status = "格式已复制".into();
+        self.status_ok("格式已复制".into());
     }
     pub(crate) fn paste_style(&mut self) {
         let (Some((gid, index, key)), Some(clip)) = (self.style_target(), self.style_clipboard.clone()) else {
@@ -193,7 +200,7 @@ impl SciApp {
                 }
                 Ok(Some(()))
             },
-            |app, ()| app.status = "格式已粘贴".into(),
+            |app, ()| app.status_ok("格式已粘贴".into()),
         );
     }
 }
@@ -210,12 +217,12 @@ impl SciApp {
             A::Default(theme) => {
                 if let Some(t) = &theme {
                     if let Err(error) = t.validate() {
-                        self.status = error;
+                        self.status_err(error);
                         return;
                     }
                 }
                 self.settings.default_graph_theme = theme;
-                self.status = "新图主题偏好已更新".into();
+                self.status_ok("新图主题偏好已更新".into());
             }
         }
     }

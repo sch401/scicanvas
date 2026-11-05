@@ -18,8 +18,8 @@ impl SciApp {
                     epsilon: 1e-3,
                 })));
             }
-            Ok(_) => self.status = "请依次选择信号和卷积核两个 Y 列".into(),
-            Err(error) => self.status = error,
+            Ok(_) => self.status_warn("请依次选择信号和卷积核两个 Y 列".into()),
+            Err(error) => self.status_err(error),
         }
     }
     pub(crate) fn open_average_dialog(&mut self) {
@@ -46,7 +46,7 @@ impl SciApp {
             |app, (book, graph)| {
                 app.show_item(graph);
                 app.dialog = None;
-                app.status = format!("结果已写入 {}", app.project.name_of(book).unwrap_or(""));
+                app.status_ok(format!("结果已写入 {}", app.project.name_of(book).unwrap_or("")));
             },
         );
     }
@@ -59,7 +59,7 @@ impl SciApp {
                     "扣除基线",
                     |p| p.subtract_baseline_with_anchors(&source, method, &anchors).map(Some),
                     |app, keys| {
-                        app.status = format!("已扣除基线，生成 {} 组结果", keys.len());
+                        app.status_ok(format!("已扣除基线，生成 {} 组结果", keys.len()));
                         app.dialog = None;
                     },
                 );
@@ -73,7 +73,7 @@ impl SciApp {
                     "目标 X 插值",
                     |p| p.interpolate_at(&source, method, &target).map(Some),
                     |app, keys| {
-                        app.status = format!("结果在目标 X 右侧 {}", keys.join("、"));
+                        app.status_ok(format!("结果在目标 X 右侧 {}", keys.join("、")));
                         app.dialog = None;
                     },
                 );
@@ -87,7 +87,7 @@ impl SciApp {
                     |p| p.signal_operation(&source, operation).map(Some),
                     |app, (graph, keys)| {
                         app.show_item(graph);
-                        app.status = format!("结果在新列 {}", keys.join("、"));
+                        app.status_ok(format!("结果在新列 {}", keys.join("、")));
                         app.dialog = None;
                     },
                 );
@@ -101,9 +101,9 @@ impl SciApp {
                 if let Some(Dialog::Interpolate { result, .. }) = &mut self.dialog {
                     *result = values;
                 }
-                self.status = "已查询单点插值".into();
+                self.status_ok("已查询单点插值".into());
             }
-            Err(error) => self.status = error,
+            Err(error) => self.status_err(error),
         }
     }
 }

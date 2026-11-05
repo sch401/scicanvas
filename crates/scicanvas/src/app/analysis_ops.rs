@@ -23,7 +23,7 @@ impl SciApp {
             |project| project.fit_poly(&src, order).map(Some),
             |app, (gid, reports)| {
                 app.after_analysis(Some(gid));
-                app.status = format!("已完成 {} 条数据的{}", reports.len(), reports[0].kind);
+                app.status_ok(format!("已完成 {} 条数据的{}", reports.len(), reports[0].kind));
                 app.dialog = Some(Dialog::FitReport(reports));
             },
         );
@@ -74,8 +74,9 @@ impl SciApp {
             |project| project.save_fit_function(before.as_ref(), definition).map(Some),
             |app, id| {
                 let saved = app.project.fit_functions.iter().find(|entry| entry.id == id).unwrap();
-                app.status = format!("已保存函数：{}", saved.definition.name);
+                let message = format!("已保存函数：{}", saved.definition.name);
                 app.dialog = Some(Dialog::CustomNlFit(dialogs::CustomFitEditor::saved(saved)));
+                app.status_ok(message);
             },
         )
         .is_some()
@@ -85,7 +86,7 @@ impl SciApp {
         let definition = match scicanvas_core::project_file::load_fit_function(path) {
             Ok(definition) => definition,
             Err(error) => {
-                self.status = error;
+                self.status_err(error);
                 return false;
             }
         };
@@ -96,7 +97,7 @@ impl SciApp {
             .any(|entry| entry.definition.name == definition.name)
         {
             self.edit_custom_fit_definition(definition);
-            self.status = "已载入同名函数，保存函数后更新当前项目".into();
+            self.status_ok("已载入同名函数，保存函数后更新当前项目".into());
             true
         } else {
             self.save_custom_fit_definition(None, definition)
@@ -109,7 +110,7 @@ impl SciApp {
             CustomFitAction::Save { before, definition } => match definition {
                 Ok(definition) => self.save_custom_fit_definition(before, definition),
                 Err(error) => {
-                    self.status = error;
+                    self.status_err(error);
                     false
                 }
             },
@@ -132,7 +133,7 @@ impl SciApp {
                 let definition = match definition {
                     Ok(definition) => definition,
                     Err(error) => {
-                        self.status = error;
+                        self.status_err(error);
                         return false;
                     }
                 };
@@ -147,11 +148,11 @@ impl SciApp {
                 };
                 match scicanvas_core::project_file::save_fit_function(&path, &definition) {
                     Ok(()) => {
-                        self.status = format!("已导出函数：{}", path.display());
+                        self.status_ok(format!("已导出函数：{}", path.display()));
                         true
                     }
                     Err(error) => {
-                        self.status = error;
+                        self.status_err(error);
                         false
                     }
                 }
@@ -194,10 +195,18 @@ impl SciApp {
             |app, (gid, reports)| {
                 app.after_analysis(Some(gid));
                 let unconverged = reports.iter().filter(|r| !r.fit.converged).count();
-                app.status = if unconverged == 0 {
-                    format!("已完成 {} 条数据的 {} 拟合", reports.len(), model.name())
-                } else {
-                    format!("{} 拟合有 {unconverged} 条未收敛，请查看结果", model.name())
+                {
+                    let status_kind = if unconverged == 0 {
+                        StatusKind::Success
+                    } else {
+                        StatusKind::Warn
+                    };
+                    let text: String = if unconverged == 0 {
+                        format!("已完成 {} 条数据的 {} 拟合", reports.len(), model.name())
+                    } else {
+                        format!("{} 拟合有 {unconverged} 条未收敛，请查看结果", model.name())
+                    };
+                    app.set_status(status_kind, text);
                 };
                 app.dialog = Some(Dialog::NlFitReport(reports));
             },
@@ -212,7 +221,7 @@ impl SciApp {
         constraints: Vec<scicanvas_core::nlfit::LinearConstraint>,
     ) -> bool {
         let Some(src) = self.analysis_source() else {
-            self.status = "请选择要拟合的数据曲线".into();
+            self.status_warn("请选择要拟合的数据曲线".into());
             return false;
         };
         let function_name = function.name().to_owned();
@@ -226,10 +235,18 @@ impl SciApp {
             move |app, (gid, reports)| {
                 app.after_analysis(Some(gid));
                 let unconverged = reports.iter().filter(|report| !report.fit.converged).count();
-                app.status = if unconverged == 0 {
-                    format!("已完成 {} 条数据的 {} 拟合", reports.len(), function_name)
-                } else {
-                    format!("{} 拟合有 {unconverged} 条未收敛，请查看结果", function_name)
+                {
+                    let status_kind = if unconverged == 0 {
+                        StatusKind::Success
+                    } else {
+                        StatusKind::Warn
+                    };
+                    let text: String = if unconverged == 0 {
+                        format!("已完成 {} 条数据的 {} 拟合", reports.len(), function_name)
+                    } else {
+                        format!("{} 拟合有 {unconverged} 条未收敛，请查看结果", function_name)
+                    };
+                    app.set_status(status_kind, text);
                 };
                 app.dialog = Some(Dialog::NlFitReport(reports));
             },
@@ -246,7 +263,7 @@ impl SciApp {
         let Some(id) = self.active_book() else { return };
         let Some(book) = self.project.book(id) else { return };
         if book.uses_visible_rows() {
-            self.status = "IFFT 需要完整频谱，请取消只使用可见行后重试".into();
+            self.status_warn("IFFT 需要完整频谱，请取消只使用可见行后重试".into());
             return;
         }
         let named = |name: &str| book.columns.iter().find(|c| c.long_name == name).map(|c| c.key.clone());
@@ -257,7 +274,7 @@ impl SciApp {
             (sel.first().cloned(), sel.get(1).cloned())
         };
         let Some(re) = re else {
-            self.status = "请选中实部列（和虚部列），或在 FFT 结果表里运行".into();
+            self.status_warn("请选中实部列（和虚部列），或在 FFT 结果表里运行".into());
             return;
         };
         let label = |k: &String| {
@@ -325,7 +342,11 @@ impl SciApp {
             |project| project.subtract_baseline(&src, method).map(Some),
             |app, made| {
                 let keys: Vec<&str> = made.iter().map(|(_, k)| k.as_str()).collect();
-                app.status = format!("已扣除基线（{}），结果在新列 {}", method.label(), keys.join(", "));
+                app.status_ok(format!(
+                    "已扣除基线（{}），结果在新列 {}",
+                    method.label(),
+                    keys.join(", ")
+                ));
             },
         );
         result
@@ -361,7 +382,7 @@ impl SciApp {
                 if let Some(id) = made.last() {
                     app.show_item(*id);
                 }
-                app.status = format!("峰表在 {}", parts.join("、"));
+                app.status_ok(format!("峰表在 {}", parts.join("、")));
                 app.dialog = None;
             },
         );
@@ -404,7 +425,7 @@ impl SciApp {
                 if let Some((_, g)) = made.last() {
                     app.show_item(*g);
                 }
-                app.status = format!("FFT 结果在 {}，幅值谱已画成图", names.join("、"));
+                app.status_ok(format!("FFT 结果在 {}，幅值谱已画成图", names.join("、")));
             },
         );
         result
@@ -417,7 +438,7 @@ impl SciApp {
         let Some(book) = self.project.book(id) else { return };
         let name = |k: Option<&String>| k.and_then(|k| book.column(k)).map(|c| c.display_name().to_owned());
         let Some(a) = name(keys.first()) else {
-            self.status = "请先单击列标题选中一列或两列".into();
+            self.status_warn("请先单击列标题选中一列或两列".into());
             return;
         };
         let b = name(keys.get(1));
@@ -446,7 +467,7 @@ impl SciApp {
             (Some(c), _) => Operand::Constant(c),
             (None, Some(b)) => Operand::Column(b.clone()),
             (None, None) => {
-                self.status = "请再选中第二列，或改用常数".into();
+                self.status_warn("请再选中第二列，或改用常数".into());
                 return Err(self.status.to_string());
             }
         };
@@ -458,7 +479,7 @@ impl SciApp {
                     .column_math_with_visibility(id, &a, op, &operand, visible_only)
                     .map(Some)
             },
-            |app, key| app.status = format!("列运算结果在新列 {key}"),
+            |app, key| app.status_ok(format!("列运算结果在新列 {key}")),
         );
         result
             .map(|_| self.status.to_string())
@@ -499,7 +520,7 @@ impl SciApp {
                 if let Some(last) = ids.last() {
                     app.show_item(*last);
                 }
-                app.status = format!("频数统计结果在 {}", names.join("、"));
+                app.status_ok(format!("频数统计结果在 {}", names.join("、")));
             },
         );
         result
@@ -530,7 +551,7 @@ impl SciApp {
                     .collect();
                 self.dialog = Some(Dialog::AnalysisCurves { graph, layer, curves });
             }
-            Err(error) => self.status = error,
+            Err(error) => self.status_err(error),
         }
     }
 
@@ -584,7 +605,13 @@ impl SciApp {
         let result = self.edit_with(
             "FFT 滤波",
             |project| project.fft_filter(&src, kind).map(Some),
-            |app, keys| app.status = format!("已 FFT 滤波（{}），结果在新列 {}", kind.label(), keys.join(", ")),
+            |app, keys| {
+                app.status_ok(format!(
+                    "已 FFT 滤波（{}），结果在新列 {}",
+                    kind.label(),
+                    keys.join(", ")
+                ))
+            },
         );
         result
             .map(|_| self.status.to_string())
@@ -602,9 +629,9 @@ impl SciApp {
             Ok((bid, gid)) => {
                 let name = self.project.name_of(bid).unwrap_or_default().to_owned();
                 self.show_item(gid);
-                self.status = format!("相关函数结果在 {name}，已画成图");
+                self.status_ok(format!("相关函数结果在 {name}，已画成图"));
             }
-            Err(e) => self.status = e,
+            Err(e) => self.status_err(e),
         }
     }
 
@@ -618,8 +645,8 @@ impl SciApp {
         let Some((id, keys)) = self.ttest_columns() else { return };
         let visible_only = self.project.book(id).is_some_and(|book| book.uses_visible_rows());
         match self.project.row_stats_with_visibility(id, &keys, visible_only) {
-            Ok(made) => self.status = format!("行统计结果在新列 {}（标准差已设为 Y 误差列）", made.join(", ")),
-            Err(e) => self.status = format!("{e}：请 Ctrl+单击选中平行样的各列"),
+            Ok(made) => self.status_ok(format!("行统计结果在新列 {}（标准差已设为 Y 误差列）", made.join(", "))),
+            Err(e) => self.status_err(format!("{e}：请 Ctrl+单击选中平行样的各列")),
         }
     }
 
@@ -627,7 +654,7 @@ impl SciApp {
     pub(crate) fn regression(&mut self) {
         let Some((id, keys)) = self.ttest_columns() else { return };
         if keys.len() < 2 {
-            self.status = "请先点选自变量列，最后点选因变量（Y）列".into();
+            self.status_warn("请先点选自变量列，最后点选因变量（Y）列".into());
             return;
         }
         let book = self.project.book(id).unwrap();
@@ -666,14 +693,14 @@ impl SciApp {
                     fmt_num(round_sig(r.f, 6)),
                     fmt_num(round_sig(r.f_p, 6))
                 );
-                self.status = format!("多元线性回归：R² = {}", fmt_num(round_sig(r.r2, 6)));
+                self.status_ok(format!("多元线性回归：R² = {}", fmt_num(round_sig(r.r2, 6))));
                 self.dialog = Some(Dialog::Table {
                     title: "多元线性回归".into(),
                     rows,
                     note,
                 });
             }
-            Err(e) => self.status = e,
+            Err(e) => self.status_err(e),
         }
     }
 
@@ -684,7 +711,7 @@ impl SciApp {
             return;
         };
         if columns.is_empty() {
-            self.status = "请先在工作表里单击选中要检验的列".into();
+            self.status_warn("请先在工作表里单击选中要检验的列".into());
             return;
         }
         let mut rows = vec![["列", "N", "检验", "统计量", "p", "结论（α = 0.05）"]
@@ -720,7 +747,7 @@ impl SciApp {
                 }
             }
         }
-        self.status = format!("已对 {} 列做正态性检验", columns.len());
+        self.status_ok(format!("已对 {} 列做正态性检验", columns.len()));
         self.dialog = Some(Dialog::Table {
             title: "正态性检验".into(),
             rows,
@@ -733,7 +760,7 @@ impl SciApp {
             return;
         };
         if columns.is_empty() {
-            self.status = "请选中要检验的列".into();
+            self.status_warn("请选中要检验的列".into());
             return;
         }
         let mut rows = vec![
@@ -779,7 +806,7 @@ impl SciApp {
             return;
         };
         if columns.len() != 2 {
-            self.status = "请 Ctrl+单击恰好选中两列做 KS 双样本检验".into();
+            self.status_warn("请 Ctrl+单击恰好选中两列做 KS 双样本检验".into());
             return;
         }
         match scicanvas_core::stats::ks_2samp(&columns[0].values, &columns[1].values) {
@@ -791,7 +818,7 @@ impl SciApp {
                     note:"原假设：两组独立样本来自同一连续分布。双侧检验，缺失值已跳过；两组均不超过 10000 点时采用精确路径概率，其余采用有限样本 kstwo 渐近规则。有并列值时结果按相同规则计算，连续分布的 p 值解释需结合数据测量精度。".into(),
                 });
             }
-            Err(error) => self.status = error,
+            Err(error) => self.status_err(error),
         }
     }
 
@@ -800,7 +827,7 @@ impl SciApp {
             return;
         };
         if book.columns.len() < 3 {
-            self.status = "双因素方差分析需要两列因子和一列响应".into();
+            self.status_warn("双因素方差分析需要两列因子和一列响应".into());
             return;
         }
         let columns: Vec<_> = book
@@ -870,7 +897,7 @@ impl SciApp {
                     note,
                 });
             }
-            Err(error) => self.status = error,
+            Err(error) => self.status_err(error),
         }
     }
 
@@ -880,7 +907,7 @@ impl SciApp {
             return;
         };
         if columns.is_empty() {
-            self.status = "请先在工作表里单击选中要检验的列".into();
+            self.status_warn("请先在工作表里单击选中要检验的列".into());
             return;
         }
         let mut rows = vec![["列", "N", "可疑值", "所在行", "G", "临界值 G(0.05)", "p", "结论"]
@@ -908,13 +935,21 @@ impl SciApp {
             }
         }
         if rows.len() == 1 {
-            self.status = problems.join("；");
+            self.status_warn(problems.join("；"));
             return;
         }
-        self.status = if problems.is_empty() {
-            format!("已对 {} 列做 Grubbs 检验", rows.len() - 1)
-        } else {
-            problems.join("；")
+        {
+            let status_kind = if problems.is_empty() {
+                StatusKind::Success
+            } else {
+                StatusKind::Warn
+            };
+            let text: String = if problems.is_empty() {
+                format!("已对 {} 列做 Grubbs 检验", rows.len() - 1)
+            } else {
+                problems.join("；")
+            };
+            self.set_status(status_kind, text);
         };
         self.dialog = Some(Dialog::Table {
             title: "Grubbs 异常值检验".into(),
@@ -959,7 +994,7 @@ impl SciApp {
                     errors_available,
                 ))));
             }
-            Err(error) => self.status = error,
+            Err(error) => self.status_err(error),
         }
     }
     pub(super) fn run_global_fit(&mut self, edit: dialogs::GlobalFitEditor) {
@@ -989,7 +1024,7 @@ impl SciApp {
                     rows: report.rows(),
                     note: report.note(),
                 });
-                app.status = "已生成全局拟合曲线和 Note".into();
+                app.status_ok("已生成全局拟合曲线和 Note".into());
             },
         );
     }
@@ -997,7 +1032,7 @@ impl SciApp {
     pub(crate) fn open_fit_compare(&mut self) {
         let reports: Vec<_> = self.project.nlfit_reports().into_iter().filter(|r| r.current).collect();
         if reports.len() < 2 {
-            self.status = "请先对同一 Y 列完成至少两个非线性拟合".into();
+            self.status_warn("请先对同一 Y 列完成至少两个非线性拟合".into());
             return;
         }
         self.dialog = Some(Dialog::FitCompare {
@@ -1033,7 +1068,7 @@ impl SciApp {
                 };
                 self.dialog=Some(Dialog::Table {title:"拟合比较".into(),rows,note:format!("K = 自由参数数 + 1（误差方差）；加权时使用 χ²。AICc 需 n > K+1。\nF = {}，p = {}；{conclusion}。F 检验只对嵌套模型有效，嵌套关系由用户判断。",fmt_num(comparison.f),fmt_num(comparison.p))});
             }
-            Err(error) => self.status = error,
+            Err(error) => self.status_err(error),
         }
     }
 
@@ -1043,7 +1078,7 @@ impl SciApp {
             return;
         };
         if keys.len() != 3 {
-            self.status = "请按顺序 Ctrl+单击选中三列：标准 X、标准 Y、样品".into();
+            self.status_warn("请按顺序 Ctrl+单击选中三列：标准 X、标准 Y、样品".into());
             return;
         }
         let columns = self
@@ -1071,22 +1106,22 @@ impl SciApp {
             return;
         };
         if columns.len() < 2 {
-            self.status = "请先在工作表里单击选中至少两列（每列一组）".into();
+            self.status_warn("请先在工作表里单击选中至少两列（每列一组）".into());
             return;
         }
         let groups: Vec<Vec<f64>> = columns.iter().map(|c| c.values.clone()).collect();
         let names: Vec<String> = columns.iter().map(|c| c.name.clone()).collect();
         match scicanvas_core::stats::one_way_anova(&groups) {
             Ok(result) => {
-                self.status = format!(
+                self.status_ok(format!(
                     "单因素方差分析：F = {}，p = {}",
                     round_sig(result.f, 4),
                     round_sig(result.p, 4)
-                );
+                ));
                 let tukey = scicanvas_core::stats::tukey_hsd(&result, 0.95);
                 self.dialog = Some(Dialog::Anova { result, names, tukey });
             }
-            Err(e) => self.status = e,
+            Err(e) => self.status_err(e),
         }
     }
 
@@ -1097,7 +1132,7 @@ impl SciApp {
             return;
         };
         if columns.len() < 2 {
-            self.status = "请先在工作表里单击选中至少两列（Ctrl+单击多选）".into();
+            self.status_warn("请先在工作表里单击选中至少两列（Ctrl+单击多选）".into());
             return;
         }
         let mut pairs = vec![];
@@ -1116,13 +1151,21 @@ impl SciApp {
             }
         }
         if pairs.is_empty() {
-            self.status = problems.join("；");
+            self.status_warn(problems.join("；"));
             return;
         }
-        self.status = if problems.is_empty() {
-            format!("已计算 {} 对列的相关系数", pairs.len())
-        } else {
-            format!("已计算 {} 对列；{}", pairs.len(), problems.join("；"))
+        {
+            let status_kind = if problems.is_empty() {
+                StatusKind::Success
+            } else {
+                StatusKind::Warn
+            };
+            let text: String = if problems.is_empty() {
+                format!("已计算 {} 对列的相关系数", pairs.len())
+            } else {
+                format!("已计算 {} 对列；{}", pairs.len(), problems.join("；"))
+            };
+            self.set_status(status_kind, text);
         };
         self.dialog = Some(Dialog::Correlations(pairs));
     }
@@ -1152,15 +1195,15 @@ impl SciApp {
         let b = columns.get(1).map(|c| &c.values).unwrap_or(&empty);
         match scicanvas_core::stats::t_test(kind, a, b, level) {
             Ok(result) => {
-                self.status = format!(
+                self.status_ok(format!(
                     "{}：t = {}，p = {}",
                     kind.label(),
                     round_sig(result.t, 4),
                     round_sig(result.p, 4)
-                );
+                ));
                 self.dialog = Some(Dialog::TTestReport { result, names });
             }
-            Err(e) => self.status = e,
+            Err(e) => self.status_err(e),
         }
     }
 
@@ -1218,7 +1261,7 @@ impl SciApp {
             |project| project.interpolate(&src, method, points, range).map(Some),
             |app, (gid, keys)| {
                 app.show_item(gid);
-                app.status = format!("已{}插值，结果在新列 {}", method.label(), keys.join(", "));
+                app.status_ok(format!("已{}插值，结果在新列 {}", method.label(), keys.join(", ")));
             },
         );
         result
@@ -1239,7 +1282,7 @@ impl SciApp {
         let result = self.edit_with(
             "平滑",
             |project| project.smooth(&src, method, window).map(Some),
-            |app, keys| app.status = format!("已平滑，结果在新列 {}", keys.join(", ")),
+            |app, keys| app.status_ok(format!("已平滑，结果在新列 {}", keys.join(", "))),
         );
         result
             .map(|_| self.status.to_string())
@@ -1249,8 +1292,8 @@ impl SciApp {
     pub(crate) fn differentiate(&mut self) {
         let Some(src) = self.analysis_source() else { return };
         match self.project.differentiate(&src) {
-            Ok(keys) => self.status = format!("已求导数，结果在新列 {}", keys.join(", ")),
-            Err(e) => self.status = e,
+            Ok(keys) => self.status_ok(format!("已求导数，结果在新列 {}", keys.join(", "))),
+            Err(e) => self.status_err(e),
         }
     }
 
@@ -1258,10 +1301,10 @@ impl SciApp {
         let Some(src) = self.analysis_source() else { return };
         match self.project.integrate(&src) {
             Ok((keys, areas)) => {
-                self.status = format!("已积分，累积积分在新列 {}", keys.join(", "));
+                self.status_ok(format!("已积分，累积积分在新列 {}", keys.join(", ")));
                 self.dialog = Some(Dialog::Areas(areas));
             }
-            Err(e) => self.status = e,
+            Err(e) => self.status_err(e),
         }
     }
 
@@ -1272,7 +1315,7 @@ impl SciApp {
         let result = self.edit_with(
             "归一化",
             |project| project.normalize(&src, method).map(Some),
-            |app, keys| app.status = format!("已归一化，结果在新列 {}", keys.join(", ")),
+            |app, keys| app.status_ok(format!("已归一化，结果在新列 {}", keys.join(", "))),
         );
         result
             .map(|_| self.status.to_string())
@@ -1285,9 +1328,9 @@ impl SciApp {
             Ok(id) => {
                 let name = self.project.name_of(id).unwrap_or("").to_string();
                 self.show_item(id);
-                self.status = format!("统计结果在 {}（标准差为样本标准差，分位数用线性插值）", name);
+                self.status_ok(format!("统计结果在 {}（标准差为样本标准差，分位数用线性插值）", name));
             }
-            Err(e) => self.status = e,
+            Err(e) => self.status_err(e),
         }
     }
 }
@@ -1296,7 +1339,7 @@ impl SciApp {
     pub(crate) fn open_nlfit_reports(&mut self) {
         let reports = self.project.nlfit_reports();
         if reports.is_empty() {
-            self.status = "项目中尚无保存的非线性拟合报告".into();
+            self.status_warn("项目中尚无保存的非线性拟合报告".into());
         } else {
             self.dialog = Some(Dialog::NlFitReport(reports));
         }
@@ -1307,7 +1350,7 @@ impl SciApp {
         let op = match self.project.nlfit_operation(&report) {
             Ok(op) => op.clone(),
             Err(e) => {
-                self.status = e;
+                self.status_err(e);
                 return;
             }
         };
@@ -1326,7 +1369,7 @@ impl SciApp {
         if let scicanvas_core::ops::FitMethod::PeakSum { shape, count, baseline } = editing_function {
             match scicanvas_core::nlfit::PeakSum::new(shape, count, baseline) {
                 Ok(peak) => self.edit_peak_fit(report, op, peak),
-                Err(error) => self.status = error,
+                Err(error) => self.status_err(error),
             }
             return;
         }
@@ -1386,7 +1429,7 @@ impl SciApp {
         let recipe = match recipe {
             Ok(r) => r,
             Err(e) => {
-                self.status = e;
+                self.status_err(e);
                 return false;
             }
         };
@@ -1400,7 +1443,7 @@ impl SciApp {
                 project.edit_nlfit(&reference, recipe).map(Some)
             },
             |app, report| {
-                app.status = "已原位更新拟合曲线和报告".into();
+                app.status_ok("已原位更新拟合曲线和报告".into());
                 app.dialog = Some(Dialog::NlFitReport(vec![report]));
             },
         )
