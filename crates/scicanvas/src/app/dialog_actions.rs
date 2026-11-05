@@ -198,7 +198,7 @@ impl SciApp {
                         .map(Some)
                     },
                     |app, keys| {
-                        app.status = format!("已生成列 {}", keys.join("、"));
+                        app.status_ok(format!("已生成列 {}", keys.join("、")));
                         app.dialog = None;
                     },
                 );
@@ -312,7 +312,7 @@ impl SciApp {
                 }
             }
             Err(error) => {
-                self.status = error.clone();
+                self.status_err(error.clone());
                 self.dialog_error = Some(error);
             }
         }
@@ -345,7 +345,7 @@ impl SciApp {
             },
             |app, id| {
                 app.show_item(id);
-                app.status = "Note 已添加到项目，保存项目即可保留内容".into();
+                app.status_ok("Note 已添加到项目，保存项目即可保留内容".into());
             },
         );
         self.dialog = None;
@@ -362,7 +362,7 @@ impl SciApp {
                     .map(Some)
             },
             |app, _| {
-                app.status = "已写入 95% 置信带和预测带，并加到图中".into();
+                app.status_ok("已写入 95% 置信带和预测带，并加到图中".into());
             },
         );
     }
@@ -378,7 +378,7 @@ impl SciApp {
                     .map(Some)
             },
             |app, _| {
-                app.status = "已写入 95% 置信带和预测带，并加到图中".into();
+                app.status_ok("已写入 95% 置信带和预测带，并加到图中".into());
             },
         );
     }
@@ -414,7 +414,7 @@ impl SciApp {
             },
             |app, keys| {
                 app.dialog = None;
-                app.status = format!("标准曲线结果在新列 {}", keys.join("、"));
+                app.status_ok(format!("标准曲线结果在新列 {}", keys.join("、")));
             },
         );
     }
@@ -425,7 +425,7 @@ impl SciApp {
             |project| project.residual_plot(&reports).map(Some),
             |app, id| {
                 app.show_item(id);
-                app.status = "已生成残差图（残差 = Y − 拟合值）".into();
+                app.status_ok("已生成残差图（残差 = Y − 拟合值）".into());
             },
         );
     }
@@ -470,7 +470,7 @@ impl SciApp {
                 column.set(row, value);
                 Ok(Some(()))
             },
-            |app, ()| app.status = format!("列 {key} 已转换为文本；已有内容保留"),
+            |app, ()| app.status_ok(format!("列 {key} 已转换为文本；已有内容保留")),
         );
         self.dialog = None;
     }
@@ -489,7 +489,7 @@ impl SciApp {
             |app, (b, g)| {
                 app.show_item(g);
                 let name = app.project.name_of(b).unwrap_or("").to_string();
-                app.status = format!("IFFT 结果在 {name}，实部已画成图");
+                app.status_ok(format!("IFFT 结果在 {name}，实部已画成图"));
             },
         );
         if result.is_some() {
@@ -507,15 +507,21 @@ impl SciApp {
                     .iter()
                     .map(|(k, asc)| format!("{k}{}", if *asc { "升序" } else { "降序" }))
                     .collect();
-                app.status = match &within {
-                    Some(cols) => format!("已按 {} 排序 {} 列，其余列不动", names.join("、"), cols.join("、")),
-                    None => format!(
-                        "已按 {} 排序整张工作表，保留 {} 个随机数列的原顺序",
-                        names.join("、"),
-                        app.project
-                            .book(book)
-                            .map_or(0, |b| b.columns.iter().filter(|c| c.independent_rows).count())
-                    ),
+                {
+                    let status_kind = StatusKind::Success;
+                    let text: String = match &within {
+                        Some(cols) => format!("已按 {} 排序 {} 列，其余列不动", names.join("、"), cols.join("、")),
+                        None => format!(
+                            "已按 {} 排序整张工作表，保留 {} 个随机数列的原顺序",
+                            names.join("、"),
+                            app.project.book(book).map_or(0, |b| b
+                                .columns
+                                .iter()
+                                .filter(|c| c.independent_rows)
+                                .count())
+                        ),
+                    };
+                    app.set_status(status_kind, text);
                 };
                 app.dialog = None;
             },
@@ -533,7 +539,7 @@ impl SciApp {
                     .and_then(|c| c.data.set_category_order(&levels))
                     .map(Some)
             },
-            |app, ()| app.status = format!("已设置 {key} 列的类别顺序"),
+            |app, ()| app.status_ok(format!("已设置 {key} 列的类别顺序")),
         );
     }
 
@@ -543,7 +549,7 @@ impl SciApp {
             "SG 平滑求导",
             |project| project.differentiate_sg(&src, w, order, deriv).map(Some),
             |app, keys| {
-                app.status = format!("已求导数，结果在新列 {}", keys.join(", "));
+                app.status_ok(format!("已求导数，结果在新列 {}", keys.join(", ")));
             },
         );
         result
@@ -562,7 +568,7 @@ impl SciApp {
             Ok(c) => c,
             Err(e) => {
                 // 约束写错时保留对话框，方便修改
-                self.status = e;
+                self.status_err(e);
                 return false;
             }
         };
@@ -610,7 +616,7 @@ impl SciApp {
         let (function, values, constraints) = match result {
             Ok(result) => result,
             Err(error) => {
-                self.status = error;
+                self.status_err(error);
                 return false;
             }
         };

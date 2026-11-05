@@ -12,8 +12,8 @@ impl SciApp {
                 let (x, y, _) = scicanvas_core::ops::get_xy(self.project.book(item.book_id).unwrap(), item);
                 self.dialog = Some(Dialog::PeakFit(Box::new(dialogs::PeakFitEditor::new(source, x, y))));
             }
-            Ok(_) => self.status = "多峰拟合请选一条 Y 曲线".into(),
-            Err(error) => self.status = error,
+            Ok(_) => self.status_warn("多峰拟合请选一条 Y 曲线".into()),
+            Err(error) => self.status_err(error),
         }
     }
     pub(super) fn run_peak_fit(&mut self, request: dialogs::PeakFitRequest) {
@@ -21,7 +21,7 @@ impl SciApp {
         let constraints = match scicanvas_core::nlfit::parse_constraints_for_function(&function, &request.constraints) {
             Ok(c) => c,
             Err(error) => {
-                self.status = error;
+                self.status_err(error);
                 return;
             }
         };
@@ -41,7 +41,7 @@ impl SciApp {
             },
             |app, (graph, reports)| {
                 app.show_item(graph);
-                app.status = "已生成总拟合与分量，支持自动重算".into();
+                app.status_ok("已生成总拟合与分量，支持自动重算".into());
                 app.dialog = Some(Dialog::NlFitReport(reports));
             },
         );

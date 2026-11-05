@@ -2,8 +2,36 @@ use super::*;
 
 impl SciApp {
     pub(super) fn dialogs(&mut self, ctx: &egui::Context) {
-        let Some(frame) = self.generate_dialog_action(ctx) else {
-            return;
+        let frame = if let Some(frame) = self.busy_action.take() {
+            if !self.busy_presented {
+                self.busy_presented = true;
+                self.busy_action = Some(frame);
+                ctx.set_cursor_icon(egui::CursorIcon::Progress);
+                ctx.request_repaint();
+                if let Some(dialog) = &mut self.dialog {
+                    let _ = dialogs::show(ctx, dialog, &self.pal, &self.project);
+                }
+                return;
+            }
+            self.busy_presented = false;
+            frame
+        } else {
+            let Some(frame) = self.generate_dialog_action(ctx) else {
+                return;
+            };
+            let message = match &frame.action {
+                dialogs::Action::GlobalFit(_) | dialogs::Action::PeakFit(_) => Some("正在拟合…"),
+                dialogs::Action::BatchExport(..) => Some("正在导出…"),
+                _ => None,
+            };
+            if let Some(message) = message {
+                self.status_info(message.into());
+                self.busy_action = Some(frame);
+                ctx.set_cursor_icon(egui::CursorIcon::Progress);
+                ctx.request_repaint();
+                return;
+            }
+            frame
         };
         if !self.apply_dialog_action(ctx, frame.action) {
             return;
@@ -114,7 +142,7 @@ impl SciApp {
     pub(super) fn status_bar(&mut self, ui: &mut egui::Ui) {
         let stats = self.stats_text();
         ui.horizontal(|ui| {
-            ui.label(self.status.as_str());
+            self.status_feedback(ui);
             ui.with_layout(egui::Layout::right_to_left(egui::Align::Center), |ui| {
                 ui.label(RichText::new(stats).monospace().weak());
             });
@@ -230,7 +258,7 @@ impl SciApp {
             self.adding_text = Some(id);
             self.shape_tool = None;
             self.object_editor = None;
-            self.status = "单击页面放置文字，Esc 取消".into();
+            self.status_info("单击页面放置文字，Esc 取消".into());
         }
     }
 
@@ -243,7 +271,7 @@ impl SciApp {
                     focus: true,
                 });
             } else {
-                self.status = "当前图形没有文字标注".into();
+                self.status_warn("当前图形没有文字标注".into());
             }
         }
     }
@@ -605,10 +633,14 @@ impl SciApp {
             "添加曲线",
             |project| project.add_curves(gid, layer, book_id, &keys).map(Some),
             |app, n| {
-                app.status = if n > 0 {
-                    format!("已添加 {n} 条曲线")
-                } else {
-                    "这些列已在图层里".into()
+                {
+                    let status_kind = if n > 0 { StatusKind::Success } else { StatusKind::Info };
+                    let text: String = if n > 0 {
+                        format!("已添加 {n} 条曲线")
+                    } else {
+                        "这些列已在图层里".into()
+                    };
+                    app.set_status(status_kind, text);
                 };
                 app.show_item(gid);
             },
@@ -626,7 +658,7 @@ impl SciApp {
             self.finish_edit();
             return;
         }
-        self.status = "已移除曲线".into();
+        self.status_ok("已移除曲线".into());
         self.edit("移除曲线", |project| {
             project.graph_mut(gid).unwrap().page.layers_mut()[layer].remove_curve(key);
             Ok(Some(()))
@@ -751,6 +783,6 @@ impl SciApp {
         self.adding_text = None;
         self.shape_tool = Some((graph, kind));
         self.object_editor = None;
-        self.status = format!("在页面按下拖动画{}；Esc 取消", kind.label());
+        self.status_info(format!("在页面按下拖动画{}；Esc 取消", kind.label()));
     }
 }

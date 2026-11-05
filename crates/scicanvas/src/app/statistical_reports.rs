@@ -9,14 +9,14 @@ impl SciApp {
                 method[0] = "说明".into();
                 method[1] = "样本标准差使用 n−1，分位数按线性插值，缺失和非有限值不计入 N。".into();
                 rows.push(method);
-                self.status = "已汇总所选数值单元格".into();
+                self.status_ok("已汇总所选数值单元格".into());
                 self.dialog = Some(Dialog::Table {
                     title: "整表统计".into(),
                     rows,
                     note: "未选区时取整表。".into(),
                 });
             }
-            Err(error) => self.status = error,
+            Err(error) => self.status_err(error),
         }
     }
     pub(crate) fn open_statistics_compare(&mut self) {
@@ -29,8 +29,8 @@ impl SciApp {
                     boxes: false,
                 })
             }
-            Ok(_) => self.status = "并排比较请点选至少两列".into(),
-            Err(error) => self.status = error,
+            Ok(_) => self.status_warn("并排比较请点选至少两列".into()),
+            Err(error) => self.status_err(error),
         }
     }
     pub(crate) fn graphical_summary(&mut self) {
@@ -38,7 +38,7 @@ impl SciApp {
             return;
         };
         if columns.len() != 1 {
-            self.status = "图形摘要请选择一列数据".into();
+            self.status_warn("图形摘要请选择一列数据".into());
             return;
         }
         let column = &columns[0];
@@ -47,7 +47,7 @@ impl SciApp {
             |p| p.graphical_summary(column).map(Some),
             |app, (graph, _)| {
                 app.show_item(graph);
-                app.status = "已生成三幅分布图、统计注释和 Note".into();
+                app.status_ok("已生成三幅分布图、统计注释和 Note".into());
                 app.dialog = None;
             },
         );
@@ -64,7 +64,7 @@ impl SciApp {
                             app.show_item(graph);
                         }
                         app.dialog = None;
-                        app.status = "并排统计表已生成".into();
+                        app.status_ok("并排统计表已生成".into());
                     },
                 );
             }
@@ -79,7 +79,7 @@ impl SciApp {
                     },
                     |app, id| {
                         app.show_item(id);
-                        app.status = "统计结果已写入新表".into();
+                        app.status_ok("统计结果已写入新表".into());
                     },
                 );
             }

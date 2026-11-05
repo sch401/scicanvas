@@ -15,7 +15,7 @@ impl SciApp {
         let id = self.project.add_note(title, text);
         self.project.move_project_item(id, parent).unwrap();
         self.show_item(id);
-        self.status = "Note 已添加到项目，保存项目即可保留内容".into();
+        self.status_ok("Note 已添加到项目，保存项目即可保留内容".into());
     }
 
     pub(crate) fn export_note(&mut self) {
@@ -28,9 +28,16 @@ impl SciApp {
             .add_filter("UTF-8 文本", &["txt"])
             .save_file()
         {
-            self.status = match std::fs::write(path, &note.text) {
-                Ok(()) => "已导出 Note".into(),
-                Err(error) => format!("导出失败：{error}"),
+            {
+                let mut status_kind = StatusKind::Success;
+                let text: String = match std::fs::write(path, &note.text) {
+                    Ok(()) => "已导出 Note".into(),
+                    Err(error) => {
+                        status_kind = StatusKind::Error;
+                        format!("导出失败：{error}")
+                    }
+                };
+                self.set_status(status_kind, text);
             };
         }
     }

@@ -10,7 +10,7 @@ impl SciApp {
         let Some(book_id) = self.active_book_id() else { return };
         let Some(book) = self.project.book(book_id) else { return };
         if book.columns.is_empty() {
-            self.status = "工作表没有列".into();
+            self.status_warn("工作表没有列".into());
             return;
         }
         let selected = self.selected_keys(book_id);
@@ -55,17 +55,17 @@ impl SciApp {
         let count = (index + 1).min(book.columns.len());
         let state = self.sheets.entry(id).or_default();
         if state.viewport_width > 0.0 && 58.0 + 96.0 * count as f32 + 70.0 > state.viewport_width {
-            self.status = "窗口宽度不足，请选择更少的列或放大窗口".into();
+            self.status_warn("窗口宽度不足，请选择更少的列或放大窗口".into());
             return;
         }
         state.frozen_columns = count;
-        self.status = format!("已冻结前 {count} 列和行号");
+        self.status_ok(format!("已冻结前 {count} 列和行号"));
     }
 
     pub(crate) fn unfreeze_columns(&mut self) {
         let Some(id) = self.active_book_id() else { return };
         self.sheets.entry(id).or_default().frozen_columns = 0;
-        self.status = "已取消冻结列".into();
+        self.status_ok("已取消冻结列".into());
     }
 
     pub(crate) fn save_workbook_template(&mut self) {
@@ -84,9 +84,16 @@ impl SciApp {
         else {
             return;
         };
-        self.status = match scicanvas_core::project_file::save_workbook_template(&path, &template) {
-            Ok(()) => format!("已保存工作簿模板 {}", path.display()),
-            Err(error) => format!("保存工作簿模板失败：{error}"),
+        {
+            let mut status_kind = StatusKind::Success;
+            let text: String = match scicanvas_core::project_file::save_workbook_template(&path, &template) {
+                Ok(()) => format!("已保存工作簿模板 {}", path.display()),
+                Err(error) => {
+                    status_kind = StatusKind::Error;
+                    format!("保存工作簿模板失败：{error}")
+                }
+            };
+            self.set_status(status_kind, text);
         };
     }
 
@@ -103,7 +110,7 @@ impl SciApp {
             Ok(template) => {
                 self.create_book_from_template(template);
             }
-            Err(error) => self.status = format!("无法打开工作簿模板：{error}"),
+            Err(error) => self.status_err(format!("无法打开工作簿模板：{error}")),
         }
     }
 
@@ -116,7 +123,7 @@ impl SciApp {
             |project| scicanvas_core::project_file::create_book_from_template(project, &template).map(Some),
             |app, id| {
                 app.show_item(id);
-                app.status = "已从模板新建工作簿".into();
+                app.status_ok("已从模板新建工作簿".into());
                 id
             },
         )
@@ -132,7 +139,7 @@ impl SciApp {
             |project| project.transpose_book(id).map(Some),
             |app, output| {
                 app.show_item(output);
-                app.status = "已创建转置工作簿".into();
+                app.status_ok("已创建转置工作簿".into());
             },
         );
     }
@@ -168,7 +175,7 @@ impl SciApp {
     pub(crate) fn copy_range(&mut self) {
         let Some(bid) = self.active_book() else { return };
         let Some(r) = self.sheets.get(&bid).and_then(|s| s.range) else {
-            self.status = "请先选择单元格".into();
+            self.status_warn("请先选择单元格".into());
             return;
         };
         if let Some(b) = self.project.book(bid) {
@@ -178,19 +185,19 @@ impl SciApp {
             } else {
                 r.rows()
             };
-            self.status = format!("已复制 {} 行 × {} 列，可直接粘贴到 Excel", rows, r.cols());
+            self.status_ok(format!("已复制 {} 行 × {} 列，可直接粘贴到 Excel", rows, r.cols()));
         }
     }
 
     pub(crate) fn clear_range(&mut self) {
         let Some(bid) = self.active_book() else { return };
         let Some(r) = self.sheets.get(&bid).and_then(|s| s.range) else {
-            self.status = "请先选择单元格".into();
+            self.status_warn("请先选择单元格".into());
             return;
         };
         if let Some(b) = self.project.book_mut(bid) {
             let rows = b.clear_visible_range(r.c0(), r.c1(), r.r0(), r.r1());
-            self.status = format!("已清除 {} 行 × {} 列", rows, r.cols());
+            self.status_ok(format!("已清除 {} 行 × {} 列", rows, r.cols()));
         }
     }
 
@@ -198,28 +205,32 @@ impl SciApp {
     pub(crate) fn insert_rows(&mut self) {
         let Some(bid) = self.active_book() else { return };
         let Some(r) = self.sheets.get(&bid).and_then(|s| s.range) else {
-            self.status = "请先选择单元格".into();
+            self.status_warn("请先选择单元格".into());
             return;
         };
         self.project.insert_rows(bid, r.r0(), r.rows());
-        self.status = format!("已在第 {} 行上方插入 {} 行", r.r0() + 1, r.rows());
+        self.status_ok(format!("已在第 {} 行上方插入 {} 行", r.r0() + 1, r.rows()));
     }
 
     /// 删除选区覆盖的整行（所有列）。
     pub(crate) fn delete_rows(&mut self) {
         let Some(bid) = self.active_book() else { return };
         let Some(r) = self.sheets.get(&bid).and_then(|s| s.range) else {
-            self.status = "请先选择单元格".into();
+            self.status_warn("请先选择单元格".into());
             return;
         };
         self.project.delete_rows(bid, r.r0(), r.r1());
         if let Some(st) = self.sheets.get_mut(&bid) {
             st.range = Some(Range::single(r.c0(), r.r0()));
         }
-        self.status = if r.rows() == 1 {
-            format!("已删除第 {} 行", r.r0() + 1)
-        } else {
-            format!("已删除第 {}–{} 行", r.r0() + 1, r.r1() + 1)
+        {
+            let status_kind = StatusKind::Success;
+            let text: String = if r.rows() == 1 {
+                format!("已删除第 {} 行", r.r0() + 1)
+            } else {
+                format!("已删除第 {}–{} 行", r.r0() + 1, r.r1() + 1)
+            };
+            self.set_status(status_kind, text);
         };
     }
 
@@ -227,7 +238,7 @@ impl SciApp {
         let Some(bid) = self.active_book() else { return };
         let sel = self.picked(bid).0;
         if sel.is_empty() {
-            self.status = "请先单击列标题选中列".into();
+            self.status_warn("请先单击列标题选中列".into());
             return;
         }
         if let Some(b) = self.project.book_mut(bid) {
@@ -242,7 +253,7 @@ impl SciApp {
             Role::Z => "Z",
             Role::Label => "标签",
         };
-        self.status = format!("已将 {} 列设为 {}", sel.join(", "), name);
+        self.status_ok(format!("已将 {} 列设为 {}", sel.join(", "), name));
     }
 
     pub(crate) fn add_column(&mut self) {
@@ -255,7 +266,7 @@ impl SciApp {
                 .map(|i| i + 1)
                 .unwrap_or(b.columns.len());
             let key = b.insert_column(at, Role::Y);
-            self.status = format!("已添加列 {}", key);
+            self.status_ok(format!("已添加列 {}", key));
         }
     }
 
@@ -263,7 +274,7 @@ impl SciApp {
     pub(crate) fn open_column_props(&mut self) {
         let Some(id) = self.active_book() else { return };
         let Some(key) = self.selected_keys(id).into_iter().next() else {
-            self.status = "请先单击列标题选中列".into();
+            self.status_warn("请先单击列标题选中列".into());
             return;
         };
         let Some(col) = self.project.book(id).and_then(|b| b.column(&key)) else {
@@ -286,7 +297,7 @@ impl SciApp {
             self.history_group,
             |project| edit.apply(project.book_mut(book).ok_or("找不到工作簿")?),
             |app, ()| {
-                app.status = format!("已更新列 {} 的属性", edit.key);
+                app.status_ok(format!("已更新列 {} 的属性", edit.key));
             },
         )
     }
@@ -294,9 +305,16 @@ impl SciApp {
     pub(crate) fn set_data_kind(&mut self, kind: scicanvas_core::DataKind) {
         let Some(id) = self.active_book() else { return };
         let keys = self.selected_keys(id);
-        self.status = match self.project.book_mut(id).unwrap().convert_columns(&keys, kind) {
-            Ok(()) => format!("已将 {} 设为{}；原始写法保留", keys.join(", "), kind.label()),
-            Err(error) => error,
+        {
+            let mut status_kind = StatusKind::Success;
+            let text: String = match self.project.book_mut(id).unwrap().convert_columns(&keys, kind) {
+                Ok(()) => format!("已将 {} 设为{}；原始写法保留", keys.join(", "), kind.label()),
+                Err(error) => {
+                    status_kind = StatusKind::Error;
+                    error
+                }
+            };
+            self.set_status(status_kind, text);
         };
     }
 
@@ -304,7 +322,7 @@ impl SciApp {
         let Some(bid) = self.active_book() else { return };
         let sel = self.selected_keys(bid);
         if sel.is_empty() {
-            self.status = "请先单击列标题选中列".into();
+            self.status_warn("请先单击列标题选中列".into());
             return;
         }
         if let Some(b) = self.project.book_mut(bid) {
@@ -314,14 +332,14 @@ impl SciApp {
                 }
             }
         }
-        self.status = format!("已清空 {} 列", sel.join(", "));
+        self.status_ok(format!("已清空 {} 列", sel.join(", ")));
     }
 
     /// 类别顺序对话框：选中的第一列须是分类列。
     pub(crate) fn open_category_order_dialog(&mut self) {
         let Some(bid) = self.active_book() else { return };
         let Some(key) = self.selected_keys(bid).first().cloned() else {
-            self.status = "请先单击分类列的列标题".into();
+            self.status_warn("请先单击分类列的列标题".into());
             return;
         };
         let levels = self
@@ -338,7 +356,7 @@ impl SciApp {
                     error: None,
                 })
             }
-            None => self.status = format!("{key} 列不是分类列，可先“转换为分类列”"),
+            None => self.status_warn(format!("{key} 列不是分类列，可先“转换为分类列”")),
         }
     }
 
@@ -346,7 +364,7 @@ impl SciApp {
         let Some(bid) = self.active_book() else { return };
         let sel = self.selected_keys(bid);
         if sel.is_empty() {
-            self.status = "请先单击列标题选中要移动的列".into();
+            self.status_warn("请先单击列标题选中要移动的列".into());
             return;
         }
         let moved = self.project.book_mut(bid).is_some_and(|b| b.move_columns(&sel, to));
@@ -355,9 +373,9 @@ impl SciApp {
             if let Some(s) = self.sheets.get_mut(&bid) {
                 s.range = None;
             }
-            self.status = format!("已移动 {} 列", sel.join(", "));
+            self.status_ok(format!("已移动 {} 列", sel.join(", ")));
         } else {
-            self.status = "已在边上，无法再移动".into();
+            self.status_warn("已在边上，无法再移动".into());
         }
     }
 
@@ -365,10 +383,10 @@ impl SciApp {
         let Some(bid) = self.active_book() else { return };
         let sel = self.selected_keys(bid);
         if sel.is_empty() {
-            self.status = "请先单击列标题选中要删除的列".into();
+            self.status_warn("请先单击列标题选中要删除的列".into());
             return;
         }
-        self.status = format!("已删除 {} 列", sel.join(", "));
+        self.status_ok(format!("已删除 {} 列", sel.join(", ")));
         self.edit(&format!("删除列 {}", sel.join(", ")), |project| {
             project.delete_columns(bid, &sel);
             Ok(Some(()))
@@ -414,7 +432,7 @@ impl SciApp {
             .map(|c| (c.key.clone(), format!("{}（{}）", c.key, c.display_name())))
             .collect();
         if columns.is_empty() {
-            self.status = "工作表没有列".into();
+            self.status_warn("工作表没有列".into());
             return;
         }
         let first = self.sort_column(bid).unwrap_or(0);
@@ -438,16 +456,16 @@ impl SciApp {
                     .book(bid)
                     .map(|b| b.columns[col].key.clone())
                     .unwrap_or_default();
-                self.status = format!(
+                self.status_ok(format!(
                     "已按 {} 列{}排序来源数据，保留 {} 个随机数列的原顺序",
                     key,
                     if ascending { "升序" } else { "降序" },
                     self.project
                         .book(bid)
                         .map_or(0, |b| b.columns.iter().filter(|c| c.independent_rows).count())
-                );
+                ));
             }
-            Err(e) => self.status = e,
+            Err(e) => self.status_err(e),
         }
     }
 
@@ -455,7 +473,7 @@ impl SciApp {
         let Some((id, keys)) = self.ttest_columns() else { return };
         let Some(book) = self.project.book(id) else { return };
         let Some(target) = keys.first().and_then(|k| book.column(k)) else {
-            self.status = "请先单击列标题选中要设置的列".into();
+            self.status_warn("请先单击列标题选中要设置的列".into());
             return;
         };
         self.dialog = Some(Dialog::SetValues {
@@ -484,10 +502,14 @@ impl SciApp {
             "设置列值",
             |project| project.set_column_formula(id, &target, formula, keep).map(Some),
             |app, n| {
-                app.status = if keep {
-                    format!("已按公式设置列 {target}（{n} 行），数据变化时自动重算")
-                } else {
-                    format!("已按公式设置列 {target}（{n} 行）")
+                {
+                    let status_kind = StatusKind::Success;
+                    let text: String = if keep {
+                        format!("已按公式设置列 {target}（{n} 行），数据变化时自动重算")
+                    } else {
+                        format!("已按公式设置列 {target}（{n} 行）")
+                    };
+                    app.set_status(status_kind, text);
                 };
             },
         );
@@ -495,7 +517,7 @@ impl SciApp {
             true
         } else {
             if let Some(Dialog::SetValues { error, .. }) = &mut self.dialog {
-                *error = Some(self.status.clone());
+                *error = Some(self.status.text.clone());
             }
             false
         }
@@ -505,7 +527,7 @@ impl SciApp {
         let Some((id, keys)) = self.ttest_columns() else { return };
         let Some(book) = self.project.book(id) else { return };
         let Some(target) = keys.first().and_then(|k| book.column(k)) else {
-            self.status = "请先单击列标题选中要填充的列".into();
+            self.status_warn("请先单击列标题选中要填充的列".into());
             return;
         };
         self.dialog = Some(Dialog::Fill {
@@ -536,7 +558,7 @@ impl SciApp {
             "填充数据序列",
             |project| project.fill_sequence(id, &target, kind, rows, seed).map(Some),
             |app, ()| {
-                app.status = format!("已填充列 {target}（{rows} 行）");
+                app.status_ok(format!("已填充列 {target}（{rows} 行）"));
             },
         );
         result
@@ -873,10 +895,10 @@ impl SciApp {
             if let Some(s) = self.sheets.get_mut(&id) {
                 s.range = None;
             }
-            self.status = format!("已选中 {} 列", keys[a..=b].join(", "));
+            self.status_info(format!("已选中 {} 列", keys[a..=b].join(", ")));
         }
         if let Some(s) = status {
-            self.status = s;
+            self.status_info(s);
         }
 
         self.select_sheet_header(id, keys, modifiers, clicked, new_cols);
@@ -914,7 +936,8 @@ impl SciApp {
                 sel.push(key);
             }
             self.active = Some(id);
-            self.status = format!("已选中 {} 列", sel.join(", "));
+            let message = format!("已选中 {} 列", sel.join(", "));
+            self.status_info(message);
             if let Some(s) = self.sheets.get_mut(&id) {
                 s.range = None;
             }
@@ -1081,7 +1104,7 @@ impl SciApp {
             let book = project.book_mut(id).unwrap();
             apply_sheet_events(book, st, g, events).map(|result| Some((result.1, result.2, result.3)))
         };
-        let show = |app: &mut Self, (status, copy, pasted): (Option<String>, Option<String>, bool)| {
+        let show = |app: &mut Self, (status, copy, pasted): (Option<SheetMessage>, Option<String>, bool)| {
             if pasted {
                 if matches!(app.dialog, Some(Dialog::ConvertText { .. })) {
                     app.dialog = None;
@@ -1092,8 +1115,8 @@ impl SciApp {
             if let Some(t) = copy {
                 ctx.copy_text(t);
             }
-            if let Some(s) = status {
-                app.status = s;
+            if let Some((kind, text)) = status {
+                app.set_status(kind, text);
             }
         };
         if writes {
@@ -1104,16 +1127,18 @@ impl SciApp {
     }
 }
 
+type SheetMessage = (StatusKind, String);
+
 fn apply_sheet_events(
     book: &mut scicanvas_core::Book,
     st: &mut SheetState,
     mut g: Range,
     events: Vec<egui::Event>,
-) -> Result<(Range, Option<String>, Option<String>, bool), String> {
+) -> Result<(Range, Option<SheetMessage>, Option<String>, bool), String> {
     use egui::{Event, Key};
     let visible_rows = st.cached_rows();
     let mut pasted = false;
-    let mut status: Option<String> = None;
+    let mut status: Option<SheetMessage> = None;
     let mut start_edit: Option<String> = None;
     let mut copy: Option<String> = None;
     for e in events {
@@ -1155,7 +1180,7 @@ fn apply_sheet_events(
                                     .unwrap_or_else(|| book.nrows().saturating_sub(1)),
                             },
                         };
-                        status = Some(range_status(book, &g));
+                        status = Some((StatusKind::Info, range_status(book, &g)));
                     }
                     Key::F2 => {
                         start_edit = Some(
@@ -1168,7 +1193,7 @@ fn apply_sheet_events(
                     }
                     Key::Delete | Key::Backspace => {
                         let rows = book.clear_visible_range(g.c0(), g.c1(), g.r0(), g.r1());
-                        status = Some(format!("已清除 {} 行 × {} 列", rows, g.cols()));
+                        status = Some((StatusKind::Success, format!("已清除 {} 行 × {} 列", rows, g.cols())));
                     }
                     Key::Escape => g = Range { a: g.a, b: g.a },
                     Key::Home => {
@@ -1220,15 +1245,18 @@ fn apply_sheet_events(
                 };
                 if matches!(e, Event::Cut) {
                     book.clear_visible_range(g.c0(), g.c1(), g.r0(), g.r1());
-                    status = Some(format!("已剪切 {} 行 × {} 列", rows, g.cols()));
+                    status = Some((StatusKind::Success, format!("已剪切 {} 行 × {} 列", rows, g.cols())));
                 } else {
-                    status = Some(format!("已复制 {} 行 × {} 列，可直接粘贴到 Excel", rows, g.cols()));
+                    status = Some((
+                        StatusKind::Success,
+                        format!("已复制 {} 行 × {} 列，可直接粘贴到 Excel", rows, g.cols()),
+                    ));
                 }
             }
             Event::Paste(text) => {
                 let (range, message, changed) = paste_sheet_cells(book, g, &text, visible_rows.as_deref())?;
                 g = range;
-                status = Some(message);
+                status = Some((if changed { StatusKind::Success } else { StatusKind::Warn }, message));
                 if changed {
                     st.edit = None;
                     pasted = true;

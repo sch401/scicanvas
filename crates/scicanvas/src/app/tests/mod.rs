@@ -125,6 +125,14 @@ fn press_dialog_button(app: &mut SciApp, label: &str) {
     let output = harness.frame(app, vec![]);
     if label != "×" {
         harness.click_text(app, &output, label);
+        if app.busy_action.is_some() {
+            harness.frame(app, vec![]);
+            harness.frame(app, vec![]);
+            assert!(
+                app.busy_action.is_none(),
+                "busy action executes after its feedback frame"
+            );
+        }
         return;
     }
     let pos = {

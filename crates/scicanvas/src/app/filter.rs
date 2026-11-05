@@ -69,13 +69,13 @@ impl SciApp {
                 Ok(Some(()))
             },
             |app, ()| {
-                app.status = format!("已更新 {key} 列筛选");
+                app.status_ok(format!("已更新 {key} 列筛选"));
                 app.dialog = None;
             },
         );
         if result.is_none() {
             if let Some(Dialog::Filter(dialog)) = &mut self.dialog {
-                dialog.error = Some(self.status.clone());
+                dialog.error = Some(self.status.text.clone());
             }
         }
     }
@@ -96,10 +96,14 @@ impl SciApp {
                 Ok(Some(()))
             },
             |app, ()| {
-                app.status = if visible_only {
-                    "绘图和分析只使用可见行".into()
-                } else {
-                    "绘图和分析使用全部行".into()
+                {
+                    let status_kind = StatusKind::Success;
+                    let text: String = if visible_only {
+                        "绘图和分析只使用可见行".into()
+                    } else {
+                        "绘图和分析使用全部行".into()
+                    };
+                    app.set_status(status_kind, text);
                 };
             },
         );
