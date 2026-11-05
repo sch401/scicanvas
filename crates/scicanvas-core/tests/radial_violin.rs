@@ -146,3 +146,39 @@ fn b4_statistical_and_radial_scenes_ignore_cartesian_measurement_errors() {
         assert_eq!(before, scene::layout_page(&p.graphs[0], &p, &[]));
     }
 }
+
+#[test]
+fn review_pie_labels_face_outward_on_each_side_and_clear_vertical_edges() {
+    use scicanvas_core::scene::Anchor;
+    for values in [["3", "5"], ["1", "31"], ["1", ""]] {
+        let mut p = project(PlotType::Pie);
+        p.books[0].columns.iter_mut().find(|c| c.key == "B").unwrap().data = values.map(str::to_owned).to_vec().into();
+        let sc = scene::layout_page(&p.graphs[0], &p, &[]);
+        let [l, t, w, h] = sc.plot;
+        let center = [l + w / 2., t + h / 2.];
+        let radius = w.min(h) * 0.4;
+        for item in &sc.items {
+            if let Prim::Text {
+                x,
+                y,
+                text,
+                anchor,
+                size,
+                ..
+            } = &item.prim
+            {
+                if text.ends_with('%') {
+                    let cos = (*x - center[0]) / (radius * 1.12);
+                    if cos.abs() < 0.2 {
+                        assert!(matches!(anchor, Anchor::Middle));
+                        assert!((*y - center[1]).abs() > radius * 1.12 * (1. - cos * cos).sqrt() + size * 0.49);
+                    } else if cos >= 0. {
+                        assert!(matches!(anchor, Anchor::Start));
+                    } else {
+                        assert!(matches!(anchor, Anchor::End));
+                    }
+                }
+            }
+        }
+    }
+}

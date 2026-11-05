@@ -13,11 +13,12 @@ pub(crate) struct GlobalFitEditor {
     pub limits: Vec<ParamLimits>,
     pub constraints: String,
     pub weighted: bool,
+    errors_available: bool,
     names: Vec<String>,
     error: Option<String>,
 }
 impl GlobalFitEditor {
-    pub fn new(source: Source, labels: Vec<String>) -> Self {
+    pub fn new(source: Source, labels: Vec<String>, errors_available: bool) -> Self {
         let mut edit = Self {
             source,
             labels,
@@ -26,6 +27,7 @@ impl GlobalFitEditor {
             limits: Vec::new(),
             constraints: String::new(),
             weighted: false,
+            errors_available,
             names: Vec::new(),
             error: None,
         };
@@ -92,6 +94,9 @@ impl GlobalFitEditor {
                 ui.colored_label(pal.warn,"请把 I 设为独立参数，并逐组固定为该组抑制剂浓度。");
             }
             ui.checkbox(&mut self.weighted,"按各组关联的 Y 误差加权（1/σ²）");
+            if self.weighted && !self.errors_available {
+                self.error = Some("全局拟合中各组需同时提供或同时不提供 Y 误差".into());
+            }
             ui.label("线性约束（展开的参数名可用于等式或不等式）");ui.text_edit_multiline(&mut self.constraints);
             ui.label("初值自动估计，共享参数取各组中位数。结果曲线和 Note 为一次性快照，暂不支持自动重算。最多 60 个展开参数。");
             if let Some(error)=&self.error {ui.colored_label(pal.error,error);}

@@ -48,6 +48,12 @@ def generate_b4(source,doc):
     if kind=="Pie":
         y=columns[layer["y_keys"][0]];y=y[np.isfinite(y)&(y>0)]
         wedges,_=ax.pie(y,startangle=90,counterclock=False)
+        for wedge,value in zip(wedges,y):
+            mid=np.deg2rad((wedge.theta1+wedge.theta2)/2)
+            near=abs(np.cos(mid))<.2
+            ax.annotate(f"{100*value/y.sum():.1f}%",(1.12*np.cos(mid),1.12*np.sin(mid)),
+                        xytext=(0,np.sign(np.sin(mid))*3.5 if near else 0),textcoords="offset points",
+                        ha="center" if near else ("left" if np.cos(mid)>=0 else "right"),va="center",fontsize=7)
         marks={"ends":[float((90-w.theta1)%360) for w in wedges]}
         if marks["ends"]:marks["ends"][-1]=360.
     elif kind=="Violin":
@@ -255,7 +261,10 @@ def generate(source):
                     vv=raw("D" if kind=="BubbleColor" else "C")
                     lo,hi=np.nanmin(vv),np.nanmax(vv)
                     t=(vv-lo)/(hi-lo) if hi>lo else np.full(len(vv),.5)
-                    rgb=palette_values[np.floor(np.clip(t,0,1)*8+.5).astype(int)]
+                    nodes=np.array([[68,1,84],[59,82,139],[33,145,140],[94,201,98],[253,231,37]])
+                    def viridis_rgb(values):
+                        return np.floor(np.column_stack([np.interp(np.clip(values,0,1),np.linspace(0,1,5),nodes[:,c]) for c in range(3)])+.5).astype(int)
+                    rgb=viridis_rgb(t)
                 else:
                     rgb=np.tile(palette_values[0],(len(x),1))
                 size=raw("C") if kind!="ColorScatter" else np.ones(len(x))
@@ -266,12 +275,18 @@ def generate(source):
                 if kind!="ColorScatter":
                     marks["size_ratios"]=(diameter[valid]/diameter[valid].max()).tolist()
                 if kind!="Bubble":
-                    sample=np.linspace(0,1,257)
-                    palette=colors.ListedColormap(palette_values[np.floor(sample*8+.5).astype(int)]/255)
-                    cax=fig.add_axes([(left+width+14*page["w"]/(89*96/25.4))/page["w"],1-(top+height)/page["h"],.04,height/page["h"]])
+                    palette=colors.LinearSegmentedColormap.from_list("five-node-viridis",nodes/255,N=65537)
+                    scale=page["w"]/(89*96/25.4);font=8.5*scale
+                    bar_top=max(top,font*1.2+4*scale);bar_bottom=top+height
+                    bar_width=.04*page["w"];label_width=font*len(f"{hi:g}")*.65
+                    bar_x=min(left+width+14*scale,page["w"]-bar_width-7*scale-label_width)
+                    cax=fig.add_axes([bar_x/page["w"],1-bar_bottom/page["h"],bar_width/page["w"],(bar_bottom-bar_top)/page["h"]])
                     bar=fig.colorbar(matplotlib.cm.ScalarMappable(norm=colors.Normalize(lo,hi),cmap=palette),cax=cax)
+                    bar.solids.set_edgecolor("face")
+                    cax.set_title("D" if kind=="BubbleColor" else "C",loc="left",fontsize=font*72/96,pad=3*scale)
+                    cax.tick_params(labelsize=font*72/96,length=4*scale*72/96,width=.6*scale*72/96)
                     ticks=[float(v) for v in bar.get_ticks() if lo<=v<=hi]
-                    scale_colors=np.floor(palette((np.arange(64)+.5)/64)[:,:3]*255+.5).astype(int).tolist()
+                    scale_colors=viridis_rgb((np.arange(64)+.5)/64).tolist()
                     color_scale=dict(colors=scale_colors,ticks=ticks)
                 continue
             if kind == "ErrorBand":

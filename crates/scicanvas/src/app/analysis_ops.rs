@@ -872,6 +872,14 @@ impl SciApp {
         };
         match self.project.resolve(&source) {
             Ok(resolved) => {
+                let errors_available = resolved.items.iter().all(|item| {
+                    self.project.book(item.book_id).is_some_and(|book| {
+                        book.columns
+                            .iter()
+                            .enumerate()
+                            .any(|(i, c)| c.role == Role::YError && book.error_source(i) == Some(item.y.as_str()))
+                    })
+                });
                 let labels = resolved
                     .items
                     .iter()
@@ -889,7 +897,9 @@ impl SciApp {
                     })
                     .collect();
                 self.dialog = Some(Dialog::GlobalFit(Box::new(dialogs::GlobalFitEditor::new(
-                    source, labels,
+                    source,
+                    labels,
+                    errors_available,
                 ))));
             }
             Err(error) => self.status = error,

@@ -171,13 +171,26 @@ fn draw_pie(slices: &[Slice], rect: [f64; 4], items: &mut Vec<Item>) {
             clip: None,
         });
         let mid = start - angle / 2.;
+        let near_vertical = mid.cos().abs() < 0.2;
+        let anchor = if near_vertical {
+            Anchor::Middle
+        } else if mid.cos() >= 0. {
+            Anchor::Start
+        } else {
+            Anchor::End
+        };
+        let y_offset = if near_vertical {
+            -mid.sin().signum() * TICK_FONT / 2.
+        } else {
+            0.
+        };
         items.push(Item {
             prim: text(
                 center[0] + radius * 1.12 * mid.cos(),
-                center[1] - radius * 1.12 * mid.sin(),
+                center[1] - radius * 1.12 * mid.sin() + y_offset,
                 format!("{:.1}%", 100. * slice.value / total),
                 TICK_FONT,
-                Anchor::Middle,
+                anchor,
             ),
             clip: None,
         });

@@ -2792,3 +2792,47 @@ fn b7_shape_fill_property_checkbox_undo() {
     assert!(app.project.graph(2).unwrap().page.shape(id).unwrap().fill.is_some());
     roundtrip(&mut app, &before);
 }
+
+#[test]
+fn review_global_weight_checkbox_reports_missing_group_errors_immediately() {
+    let mut app = app();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["B".into(), "C".into()]);
+    app.run_command("fit.global");
+    let before = app.project.clone();
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut harness = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1400., 1000.)),
+        |app: &mut SciApp, ctx: &egui::Context| app.dialogs(ctx),
+    )
+    .with_step(0.02);
+    for _ in 0..5 {
+        harness.frame(&mut app, vec![]);
+    }
+    let output = harness.frame(&mut app, vec![]);
+    harness.click_text(&mut app, &output, "按各组关联的 Y 误差加权（1/σ²）");
+    let output = harness.frame(&mut app, vec![]);
+    assert!(crate::test_ui::find_text(&output, "全局拟合中各组需同时提供或同时不提供 Y 误差").is_some());
+    harness.click_text(&mut app, &output, "拟合");
+    assert!(matches!(app.dialog, Some(Dialog::GlobalFit(_))));
+    assert_eq!(app.project, before);
+}
+
+#[test]
+fn review_pie_status_counts_nonfirst_pie_layer() {
+    let mut app = app();
+    let book = app.project.book_mut(1).unwrap();
+    book.columns.iter_mut().find(|c| c.key == "B").unwrap().data =
+        ["1", "-2", "3", "0", ""].map(str::to_owned).to_vec().into();
+    let g = app.project.graph_mut(2).unwrap();
+    let layer = g.first_layer().clone();
+    g.page.add_layer(layer);
+    app.active = Some(2);
+    app.active_layers.insert(2, 1);
+    app.run_command("plot.pie");
+    assert_ne!(app.project.graph(2).unwrap().first_layer().plot_type, PlotType::Pie);
+    assert_eq!(app.project.graph(2).unwrap().page.layers()[1].plot_type, PlotType::Pie);
+    assert!(app.status.contains("跳过 3 行"), "{}", app.status);
+}
