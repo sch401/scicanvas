@@ -3,6 +3,8 @@
 
 use crate::analysis::mat_inv;
 
+mod peak_sum;
+pub use peak_sum::{PeakBaseline, PeakSum};
 mod extended;
 mod global;
 mod guess;
@@ -232,6 +234,7 @@ impl CustomFitFunction {
 pub enum FitFunction {
     Builtin(Model),
     Custom(CustomFitFunction),
+    PeakSum(PeakSum),
     SineDamp {
         origin: f64,
     },
@@ -245,6 +248,7 @@ impl FitFunction {
             Self::Builtin(model) => model.name(),
             Self::SineDamp { .. } => Model::SineDamp.name(),
             Self::Custom(function) => &function.name,
+            Self::PeakSum(function) => &function.name,
             Self::Indexed(function) => function.base.name(),
         }
     }
@@ -254,6 +258,7 @@ impl FitFunction {
             Self::Builtin(model) => model.formula(),
             Self::SineDamp { .. } => Model::SineDamp.formula(),
             Self::Custom(function) => &function.formula,
+            Self::PeakSum(_) => "y = baseline + Σ profile(x; peak parameters)",
             Self::Indexed(function) => function.base.formula(),
         }
     }
@@ -263,6 +268,7 @@ impl FitFunction {
             Self::Builtin(model) => model.params().to_vec(),
             Self::SineDamp { .. } => Model::SineDamp.params().to_vec(),
             Self::Custom(function) => function.parameters.iter().map(String::as_str).collect(),
+            Self::PeakSum(function) => function.params(),
             Self::Indexed(function) => function.names.iter().map(String::as_str).collect(),
         }
     }
@@ -277,6 +283,7 @@ impl FitFunction {
                         * (std::f64::consts::TAU * (x - params[2]) / params[3]).sin()
             }
             Self::Custom(function) => function.eval(x, params),
+            Self::PeakSum(function) => function.eval(x, params),
             Self::Indexed(function) => function.eval(x, params),
         }
     }
@@ -286,6 +293,7 @@ impl FitFunction {
             Self::Builtin(model) => Some(model.guess(xs, ys)),
             Self::SineDamp { .. } => Some(Model::SineDamp.guess(xs, ys)),
             Self::Custom(_) => None,
+            Self::PeakSum(function) => function.guess(xs, ys, 0.05).ok(),
             Self::Indexed(function) => Some(function.initial.clone()),
         }
     }
@@ -1874,6 +1882,9 @@ pub fn fit_function_weighted(
     limits: &[ParamLimits],
     constraints: &[LinearConstraint],
 ) -> Result<NlFit, String> {
+    if let FitFunction::PeakSum(peak) = function {
+        return peak_sum::fit(peak, xs, ys, sigma, initial, limits, constraints);
+    }
     let mut session = FitSession::new(function, xs, ys, sigma, initial, limits, constraints)?;
     session.optimize();
     session.finish()

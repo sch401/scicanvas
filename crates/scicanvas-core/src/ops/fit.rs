@@ -410,6 +410,7 @@ impl Project {
                     output_x: kx.clone(),
                     bands: Vec::new(),
                     residual: None,
+                    components: self.add_peak_components(item, &r, &fit, &fx, &kx)?,
                     weight,
                     input_digest: None,
                     attempted_digest: None,
@@ -576,7 +577,11 @@ impl Project {
         let OpKind::Nonlinear(old) = &op.kind else {
             unreachable!()
         };
-        if recipe.output_x != old.output_x || recipe.bands != old.bands || recipe.residual != old.residual {
+        if recipe.output_x != old.output_x
+            || recipe.bands != old.bands
+            || recipe.residual != old.residual
+            || recipe.components != old.components
+        {
             return Err("拟合输出组已改变，请重新打开设置".into());
         }
         op.kind = OpKind::Nonlinear(Box::new(recipe));

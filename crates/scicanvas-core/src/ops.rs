@@ -14,6 +14,7 @@ mod fft;
 mod fit;
 mod fit_tools;
 mod global_fit;
+mod peak_fit;
 mod recalc;
 mod resolve;
 mod smooth;
@@ -1573,6 +1574,7 @@ mod nonlinear_recalc_tests {
             output_x: "D".into(),
             bands: vec![],
             residual: None,
+            components: Vec::new(),
             weight: FitWeight::None,
             input_digest: None,
             attempted_digest: None,

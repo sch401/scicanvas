@@ -195,6 +195,7 @@ impl SciApp {
             }
             dialogs::Action::OpenCustomNlFit => self.open_custom_nlfit_dialog(),
             dialogs::Action::GlobalFit(edit) => self.run_global_fit(*edit),
+            dialogs::Action::PeakFit(request) => self.run_peak_fit(*request),
             dialogs::Action::CustomFitLibrary(action) => return self.apply_custom_fit_library_action(*action),
             dialogs::Action::CustomNlFit {
                 name,

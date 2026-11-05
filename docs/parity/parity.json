@@ -2641,11 +2641,33 @@
   "feature": "多峰拟合",
   "ref": "Multiple Curves/Multiple Peaks",
   "pri": "P1",
-  "status": "未开始",
-  "how": "",
-  "verify": "与 Origin 比较",
+  "status": "已实现待验收",
+  "how": "分析 → 多峰拟合。Gauss、Lorentz、Voigt、PsdVoigt1，1–10 峰，零/常数/线性基线；自动突出度初值预览、可滚动参数限制和线性约束、误差加权。总曲线与分量共用自动重算及置信带；报告中心、高度、面积、FWHM 及 delta 标准误。",
+  "verify": "三高斯线性基线及双洛伦兹的自动/指定初值与 SciPy 对照；单峰常数基线与普通 Gauss 参数/SE/协方差逐位一致；分量积分、保存重算、输出所有权及真实预览/重新编辑/撤销。",
   "id": "F140",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/peak_sum.rs::a5_single_constant_peak_matches_builtin_bits_after_permutation",
+    "crates/scicanvas-core/tests/peak_sum.rs::a5_components_share_recalculation_ownership_and_save",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::a5_peak_fit_real_preview_fit_report_reedit_and_undo"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/peak_sums.json",
+    "crates/scicanvas-core/tests/peak_sum.rs"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/fitting.md#F140",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "回归与拟合",
@@ -4190,11 +4212,33 @@
   "feature": "多峰拟合（重叠峰分峰）",
   "ref": "Peak Analyzer",
   "pri": "P1",
-  "status": "未开始",
-  "how": "复用拟合引擎",
-  "verify": "与 Origin Peak Analyzer 结果比较",
+  "status": "已实现待验收",
+  "how": "分析 → 多峰拟合。Gauss、Lorentz、Voigt、PsdVoigt1，1–10 峰，零/常数/线性基线；自动突出度初值预览、可滚动参数限制和线性约束、误差加权。总曲线与分量共用自动重算及置信带；报告中心、高度、面积、FWHM 及 delta 标准误。",
+  "verify": "三高斯线性基线及双洛伦兹的自动/指定初值与 SciPy 对照；单峰常数基线与普通 Gauss 参数/SE/协方差逐位一致；分量积分、保存重算、输出所有权及真实预览/重新编辑/撤销。",
   "id": "F220",
-  "milestone": "M2 论文全流程"
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/peak_sum.rs::a5_single_constant_peak_matches_builtin_bits_after_permutation",
+    "crates/scicanvas-core/tests/peak_sum.rs::a5_components_share_recalculation_ownership_and_save",
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::a5_peak_fit_real_preview_fit_report_reedit_and_undo"
+   ],
+   "reference": [
+    "crates/scicanvas-core/tests/reference/peak_sums.json",
+    "crates/scicanvas-core/tests/peak_sum.rs"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/fitting.md#F220",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
  },
  {
   "module": "图像处理",

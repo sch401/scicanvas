@@ -44,7 +44,9 @@ mod modal;
 mod nl_fit;
 mod nl_fit_report;
 mod normalize;
+mod peak_fit;
 mod peaks;
+pub(crate) use peak_fit::{PeakFitEditor, PeakFitRequest};
 mod plot_object;
 mod png;
 mod poly;
@@ -206,6 +208,7 @@ pub enum Dialog {
         weighted: bool,
     },
     GlobalFit(Box<GlobalFitEditor>),
+    PeakFit(Box<PeakFitEditor>),
     CustomNlFit(CustomFitEditor),
     /// 非线性拟合结果。
     NlFitReport(Vec<NlFitReport>),
@@ -353,6 +356,7 @@ pub enum Action {
     NlFit(Model, Vec<scicanvas_core::nlfit::ParamLimits>, String, bool),
     OpenCustomNlFit,
     GlobalFit(Box<GlobalFitEditor>),
+    PeakFit(Box<PeakFitRequest>),
     CustomFitLibrary(Box<CustomFitAction>),
     CustomNlFit {
         name: String,
@@ -402,6 +406,7 @@ impl Dialog {
             Self::Correlations(..) => self.show_correlations(ctx, pal, &mut open, esc),
             Self::NlFit { .. } => self.show_nl_fit(ctx, pal, &mut open, esc),
             Self::GlobalFit(editor) => editor.show(ctx, pal, &mut open),
+            Self::PeakFit(edit) => edit.show(ctx, pal, &mut open),
             Self::CustomNlFit(..) => self.show_custom_nl_fit(ctx, pal, &mut open, esc, project),
             Self::NlFitReport(..) => self.show_nl_fit_report(ctx, pal, &mut open, esc, project),
             Self::FftFilter { .. } => self.show_fft_filter(ctx, pal, &mut open, esc),

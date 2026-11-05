@@ -9,6 +9,7 @@ mod excel_export;
 mod filter;
 mod find_replace;
 mod notes;
+mod peak_fit;
 mod props;
 mod tiff_export;
 mod windows;

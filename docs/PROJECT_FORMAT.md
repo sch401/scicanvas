@@ -1,5 +1,9 @@
 # 项目文件格式
 
+## v35 多峰定义与分量输出
+
+FitMethod 新增 PeakSum { shape, count, baseline }，baseline 为 None/Constant/Linear。参数先按峰写入去掉 y0 的内置形状参数，再追加 y0/B。最多 10 峰，Voigt/PsdVoigt1 加线性基线最多 42 参数，普通模型仍为 12。NonlinearRecipe 新增 components 列键数组，缺省为空且省略，共用总曲线的重算和输出保护。删除一个分量会清除整组分量重算绑定以保留峰索引，剩余列为快照。新文件 v35，读取 v0–v34，SCV 容器版本保持 1。
+
 ## v34 饼图、小提琴与极坐标
 
 追加 Pie、Violin、PolarLine、PolarScatter。Layer 新增 projection，缺省 Cartesian 且省略；Polar { degrees } 保存角度单位。KDE、扇区及投影点均为运行时派生数据。新文件 v34，读取 v0–v33，SCV 容器版本保持 1。

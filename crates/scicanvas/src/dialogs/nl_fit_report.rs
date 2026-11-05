@@ -65,6 +65,10 @@ impl Dialog {
                                 action = Action::EditNlFit(Box::new(r.clone()));
                             }
                             table_grid(ui, ("nlfit-grid", ri), &nlfit_param_rows(f), pal);
+                            let peaks = r.peak_rows();
+                            if !peaks.is_empty() {
+                                table_grid(ui, ("peak-metrics", ri), &peaks, pal);
+                            }
                             ui.add_space(4.0);
                             let stats: Vec<Vec<String>> = [vec!["统计量".to_string(), "值".to_string()]]
                                 .into_iter()
@@ -200,7 +204,15 @@ fn nlfit_markdown(reports: &[NlFitReport]) -> String {
                 report_status(r),
                 warnings,
                 constraints,
-                md_table(&nlfit_param_rows(f)),
+                [
+                    md_table(&nlfit_param_rows(f)),
+                    if r.peak_rows().is_empty() {
+                        String::new()
+                    } else {
+                        md_table(&r.peak_rows())
+                    }
+                ]
+                .join("\n"),
                 md_pairs(["统计量", "值"], &stats)
             )
         })
@@ -219,6 +231,7 @@ fn nlfit_text(reports: &[NlFitReport]) -> String {
         lines.extend(f.warnings.iter().cloned());
         lines.extend(f.constraints.iter().map(|c| format!("约束\t{c}")));
         lines.extend(nlfit_param_rows(f).iter().map(|row| row.join("\t")));
+        lines.extend(r.peak_rows().iter().map(|row| row.join("\t")));
         for (k, v) in nlfit_stats(f) {
             lines.push(format!("{k}\t{v}"));
         }
