@@ -25,6 +25,7 @@ pub(crate) struct Plot {
 /// 图层公共设置与有序曲线对象，不再持有平行映射表。
 #[derive(Clone, Debug, PartialEq)]
 pub struct LayerSpec {
+    pub functions: Vec<super::FunctionCurve>,
     pub book_id: Option<u64>,
     pub x_key: Option<String>,
     pub plot_type: crate::PlotType,
@@ -91,6 +92,14 @@ impl From<PlotSpec> for LayerSpec {
 impl LayerSpec {
     /// 缩放缓存沿用旧 PlotSpec 的判定范围，样式及仅存样式的隐藏项不重置视图。
     pub fn same_mapping(&self, other: &Self) -> bool {
+        if self
+            .functions
+            .iter()
+            .map(|f| (&f.expr, f.points))
+            .ne(other.functions.iter().map(|f| (&f.expr, f.points)))
+        {
+            return false;
+        }
         if (
             self.book_id,
             &self.x_key,
@@ -151,6 +160,7 @@ impl LayerSpec {
             })
             .collect();
         let mut result = Self {
+            functions: Vec::new(),
             book_id: spec.book_id,
             x_key: spec.x_key,
             plot_type: spec.plot_type,
@@ -292,7 +302,9 @@ impl LayerSpec {
     }
     /// 完整替换草稿，保留原本独立于勾选项的样式。
     pub fn replace_draft(&mut self, spec: PlotSpec) {
+        let functions = std::mem::take(&mut self.functions);
         *self = Self::from_draft(spec, self.styles());
+        self.functions = functions;
     }
     pub fn edit_draft<T>(&mut self, edit: impl FnOnce(&mut PlotSpec) -> T) -> T {
         let mut draft = self.draft();
@@ -301,7 +313,9 @@ impl LayerSpec {
         result
     }
     pub fn rebound(&self, book: u64, defaults: Option<&PlotSpec>) -> Self {
-        Self::from_draft(self.draft().rebound(book, defaults), self.styles())
+        let mut result = Self::from_draft(self.draft().rebound(book, defaults), self.styles());
+        result.functions = self.functions.clone();
+        result
     }
     pub fn set_plot_type(&mut self, kind: crate::PlotType) -> Result<(), String> {
         let mut draft = self.draft();
@@ -474,7 +488,22 @@ impl LayerSpec {
 
 impl Layer {
     pub(crate) fn estimated_plot_bytes(&self) -> usize {
-        self.spec.plots.capacity() * std::mem::size_of::<Plot>()
+        let function_bytes = self.functions.capacity() * std::mem::size_of::<super::FunctionCurve>()
+            + self
+                .functions
+                .iter()
+                .map(|f| {
+                    f.expr.capacity()
+                        + f.style.legend_label.capacity()
+                        + [&f.style.color_column, &f.style.size_column, &f.style.symbol_column]
+                            .into_iter()
+                            .flatten()
+                            .map(String::capacity)
+                            .sum::<usize>()
+                })
+                .sum::<usize>();
+        function_bytes
+            + self.spec.plots.capacity() * std::mem::size_of::<Plot>()
             + self
                 .spec
                 .plots
@@ -805,7 +834,7 @@ impl Layer {
             }
         }
     }
-    fn plot_key(&self, source: &DataRef) -> Option<String> {
+    pub(super) fn plot_key(&self, source: &DataRef) -> Option<String> {
         self.spec
             .plots
             .iter()
@@ -965,6 +994,9 @@ impl serde::Serialize for LayerSpec {
                 .collect();
             value["plots"] = serde_json::to_value(plots).map_err(S::Error::custom)?;
         }
+        if !self.functions.is_empty() {
+            value["functions"] = serde_json::to_value(&self.functions).map_err(S::Error::custom)?;
+        }
         value.serialize(serializer)
     }
 }
@@ -973,6 +1005,14 @@ impl<'de> serde::Deserialize<'de> for LayerSpec {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         use serde::de::Error;
         let mut value = serde_json::Value::deserialize(deserializer)?;
+        let functions: Vec<super::FunctionCurve> = value
+            .as_object_mut()
+            .unwrap()
+            .remove("functions")
+            .map(serde_json::from_value)
+            .transpose()
+            .map_err(D::Error::custom)?
+            .unwrap_or_default();
         let plots = value.get("plots").cloned();
         if plots.is_some() {
             // 与旧读取规则一致：plots 是权威数据，忽略同时存在的旧平行字段。
@@ -1031,6 +1071,7 @@ impl<'de> serde::Deserialize<'de> for LayerSpec {
                 });
             }
             result.normalize();
+            result.functions = functions;
             Ok(result)
         } else {
             let styles = value
@@ -1040,7 +1081,9 @@ impl<'de> serde::Deserialize<'de> for LayerSpec {
                 .transpose()
                 .map_err(D::Error::custom)?
                 .unwrap_or_default();
-            Ok(Self::from_draft(draft, styles))
+            let mut result = Self::from_draft(draft, styles);
+            result.functions = functions;
+            Ok(result)
         }
     }
 }

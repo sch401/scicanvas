@@ -8,6 +8,7 @@ mod dialog_actions;
 mod excel_export;
 mod filter;
 mod find_replace;
+mod graphics_tools;
 mod notes;
 mod peak_fit;
 mod props;
@@ -235,6 +236,8 @@ pub struct SciApp {
     pub(crate) sheets: HashMap<u64, SheetState>,
     /// 命令要复制到剪贴板的文字（命令拿不到 egui 上下文，在帧末尾交给 egui）。
     pub(crate) pending_copy: Option<String>,
+    pub(crate) style_clipboard: Option<scicanvas_core::graph_theme::StyleClip>,
+    pub(crate) style_target: Option<(u64, usize, Option<String>)>,
     /// 下一帧要提到最前面的窗口。
     pub(crate) raise: Option<u64>,
     pub(crate) project_path: Option<PathBuf>,
@@ -392,6 +395,8 @@ impl SciApp {
             confirm_delete: None,
             sheets: HashMap::new(),
             pending_copy: None,
+            style_clipboard: None,
+            style_target: None,
             raise: None,
             project_path: None,
             pal,
@@ -1165,11 +1170,21 @@ impl SciApp {
         } else if self.edit_abort.is_some() {
             return None;
         }
+        let first_new_id = self.project.next_id;
         self.edit_depth += 1;
         let outcome = f(self);
         self.edit_depth -= 1;
         let result = match outcome {
             Ok(Some(value)) if self.edit_abort.is_none() => {
+                if outer {
+                    if let Some(theme) = &self.settings.default_graph_theme {
+                        for graph in self.project.graphs.iter_mut().filter(|g| g.id >= first_new_id) {
+                            for layer in graph.page.layers_mut() {
+                                theme.apply(layer);
+                            }
+                        }
+                    }
+                }
                 self.history.changed_if_different(&self.project);
                 Some(show(self, value))
             }

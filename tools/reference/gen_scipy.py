@@ -915,11 +915,18 @@ def peak_sum_cases():
     write("peak_sums",cases)
 
 
+def function_plot_cases():
+    x=np.linspace(-2,2,501)
+    with np.errstate(divide="ignore",invalid="ignore"):
+        cases=[dict(expr=expr,x=x,y=function(x)) for expr,function in [("sin(x)",np.sin),("exp(-x*x)",lambda x:np.exp(-x*x)),("1/x",lambda x:1/x)]]
+    write("function_plots",cases)
+
+
 GENERATORS = [
     integrals, normalization, descriptive, column_math, polynomial, statistical_tests, signal_tests,
     interpolation_cases, derivative_cases, peak_cases, constrained_fit_cases, builtin_fit_cases,
     smoothing_cases, percent_bar_cases, fit_report_cases, formula_cases, weighted_fit_cases, qq_cases, box_cases,
-    histogram_option_cases, normality_ks_ad, ks_2samp, two_way_anova, fit_tools, global_fits, extended_fit_cases, inhibition_fits, kde_cases, peak_sum_cases,
+    histogram_option_cases, normality_ks_ad, ks_2samp, two_way_anova, fit_tools, global_fits, extended_fit_cases, inhibition_fits, kde_cases, peak_sum_cases, function_plot_cases,
 ]
 
 

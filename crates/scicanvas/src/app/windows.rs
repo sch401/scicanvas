@@ -443,6 +443,9 @@ impl SciApp {
         let curve_id = egui::Id::new(("graph-curve-menu", id));
         let object_id = curve_id.with("object");
         if response.secondary_clicked() {
+            self.active = Some(id);
+            self.select_layer(id, hover_layer.unwrap_or(0));
+            self.style_target = Some((id, hover_layer.unwrap_or(0), point.map(|p| p.key.clone())));
             ui.data_mut(|d| d.insert_temp(object_id, object));
             let hit = point.map(|p| (hover_layer.unwrap_or(0), p.key.clone(), p.series.clone()));
             ui.data_mut(|d| d.insert_temp(curve_id, hit));
@@ -456,6 +459,30 @@ impl SciApp {
             .flatten();
         let mut object_action = None;
         response.context_menu(|ui| {
+            if ui.button("复制格式").clicked() {
+                act = Some("graph.style.copy");
+                ui.close_menu();
+            }
+            if ui.button("粘贴格式").clicked() {
+                act = Some("graph.style.paste");
+                ui.close_menu();
+            }
+            if ui.button("保存为主题…").clicked() {
+                act = Some("graph.themes");
+                ui.close_menu();
+            }
+            ui.menu_button("应用主题", |ui| {
+                let themes: Vec<_> = std::iter::once(scicanvas_core::graph_theme::GraphTheme::nature())
+                    .chain(self.project.graph_themes.iter().cloned())
+                    .collect();
+                for theme in themes {
+                    if ui.button(&theme.name).clicked() {
+                        self.apply_graph_theme(theme);
+                        ui.close_menu();
+                    }
+                }
+            });
+            ui.separator();
             if let Some(target) = menu_object {
                 if ui.button("编辑文字/图例…").clicked() {
                     object_action = Some(plot::ObjectAction::Edit(target));

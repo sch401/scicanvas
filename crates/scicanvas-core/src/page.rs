@@ -1,6 +1,8 @@
 //! 页面 → 图层 → 作图描述。图层样式和数据引用均可独立设置。
 pub(crate) mod plots;
 pub use plots::LayerSpec;
+mod functions;
+pub use functions::FunctionCurve;
 
 use crate::Book;
 #[cfg(feature = "serde")]
@@ -214,6 +216,9 @@ impl Page {
             }
         }
         for layer in &self.layers {
+            for function in &layer.functions {
+                function.validate()?;
+            }
             for line in &layer.reference_lines {
                 line.validate()?;
             }
@@ -897,6 +902,7 @@ impl Layer {
             }
         }
         crate::stat::offset(self, &mut prepared);
+        self.append_functions(&mut prepared);
         (xcol, prepared)
     }
 

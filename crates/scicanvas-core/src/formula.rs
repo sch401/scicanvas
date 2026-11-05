@@ -1176,6 +1176,24 @@ fn series(name: &str, values: &[f64], extra: Option<f64>) -> Vec<f64> {
     }
 }
 
+/// Compile a scalar expression with x as its only variable.
+pub fn compile_x(text: &str) -> Result<impl Fn(f64) -> f64, String> {
+    let text = text.trim();
+    let body = if let Some((left, right)) = text.split_once('=') {
+        if !left.trim().eq_ignore_ascii_case("y") {
+            return Err("函数等号左侧应为 y".into());
+        }
+        right.trim()
+    } else {
+        text
+    };
+    let expression = parse_with(body, &FILE_LIMITS)?;
+    if expression.scalar_variables()?.iter().any(|name| name != "x") {
+        return Err("函数图仅支持变量 x".into());
+    }
+    Ok(move |x| expression.eval(0, &|name, _| if name == "x" { x } else { f64::NAN }))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

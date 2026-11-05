@@ -2360,3 +2360,101 @@ fn a5_peak_fit_real_preview_fit_report_reedit_and_undo() {
     };
     assert_eq!(reports[0].curve, keys);
 }
+
+#[test]
+fn b5_function_dialog_validates_creates_edits_and_undoes() {
+    let mut app = app();
+    let before = app.project.clone();
+    app.run_command("plot.function");
+    let Some(Dialog::FunctionPlot(edit)) = &mut app.dialog else {
+        panic!()
+    };
+    edit.expr = "unknown+x".into();
+    press_dialog_button(&mut app, "绘制");
+    assert_eq!(app.project, before);
+    let Some(Dialog::FunctionPlot(edit)) = &mut app.dialog else {
+        panic!()
+    };
+    edit.expr = "sin(x)".into();
+    press_dialog_button(&mut app, "绘制");
+    let id = app.project.graphs.last().unwrap().id;
+    assert_eq!(app.project.books, before.books);
+    assert_eq!(app.project.graph(id).unwrap().first_layer().functions.len(), 1);
+    roundtrip(&mut app, &before);
+    app.edit_function_plot(id, 0, 0);
+    let Some(Dialog::FunctionPlot(edit)) = &mut app.dialog else {
+        panic!()
+    };
+    edit.expr = "exp(-x*x)".into();
+    let before = app.project.clone();
+    press_dialog_button(&mut app, "绘制");
+    assert_eq!(
+        app.project.graph(id).unwrap().first_layer().functions[0].expr,
+        "exp(-x*x)"
+    );
+    roundtrip(&mut app, &before);
+}
+#[test]
+fn b5_style_paste_preserves_target_mapping_and_theme_defaults_are_undoable() {
+    use scicanvas_core::{
+        graph_theme::{GraphTheme, StyleClip},
+        page::CurveStyle,
+    };
+    let mut app = app();
+    app.active = Some(2);
+    app.project.graph_mut(2).unwrap().first_layer_mut().line_width = 3.;
+    app.style_target = Some((2, 0, None));
+    app.run_command("graph.style.copy");
+    let id = app.project.alloc_id();
+    let mut graph = app.project.graph(2).unwrap().clone();
+    graph.id = id;
+    graph.first_layer_mut().line_width = 1.;
+    app.project.graphs.push(graph);
+    app.active = Some(id);
+    app.style_target = Some((id, 0, None));
+    let before = app.project.clone();
+    app.run_command("graph.style.paste");
+    assert_eq!(app.project.graph(id).unwrap().first_layer().line_width, 3.);
+    roundtrip(&mut app, &before);
+    app.active = Some(2);
+    app.style_target = Some((2, 0, Some("B".into())));
+    app.project.graph_mut(2).unwrap().first_layer_mut().set_plot_style(
+        "B",
+        Some(CurveStyle {
+            line_width: Some(4.),
+            color_column: Some("C".into()),
+            legend_label: "source".into(),
+            ..Default::default()
+        }),
+    );
+    app.run_command("graph.style.copy");
+    assert!(
+        matches!(&app.style_clipboard,Some(StyleClip::Curve(style)) if style.color_column.is_none()&&style.legend_label.is_empty())
+    );
+    app.project.graph_mut(id).unwrap().first_layer_mut().set_plot_style(
+        "B",
+        Some(CurveStyle {
+            color_column: Some("C".into()),
+            legend_label: "target".into(),
+            ..Default::default()
+        }),
+    );
+    app.active = Some(id);
+    app.style_target = Some((id, 0, Some("B".into())));
+    let before = app.project.clone();
+    app.run_command("graph.style.paste");
+    let style = app.project.graph(id).unwrap().first_layer().plot_style("B").unwrap();
+    assert_eq!(style.legend_label, "target");
+    assert_eq!(style.color_column.as_deref(), Some("C"));
+    assert_eq!(style.line_width, Some(4.));
+    roundtrip(&mut app, &before);
+    let mut theme = GraphTheme::nature();
+    theme.line_width = 2.5;
+    app.settings.default_graph_theme = Some(theme);
+    app.active = Some(1);
+    app.selection.insert(1, vec!["B".into()]);
+    let before = app.project.clone();
+    app.run_command("plot.line");
+    assert_eq!(app.project.graphs.last().unwrap().first_layer().line_width, 2.5);
+    roundtrip(&mut app, &before);
+}

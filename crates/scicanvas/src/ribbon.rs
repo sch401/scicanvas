@@ -301,6 +301,7 @@ pub static TABS: &[Tab] = &[
                 items: &[
                     Big("graph.props"),
                     Big("layer.contents"),
+                    Smalls(&["graph.themes"]),
                     Smalls(&["layer.add", "layer.remove"]),
                 ],
             },

@@ -36,6 +36,8 @@ mod fit_compare;
 mod fit_report;
 mod frequency;
 mod global_fit;
+mod graphics_tools;
+pub(crate) use graphics_tools::{FunctionPlotEditor, GraphThemeAction, GraphThemeEditor};
 mod ifft;
 mod import_wizard;
 mod interpolate;
@@ -209,6 +211,8 @@ pub enum Dialog {
     },
     GlobalFit(Box<GlobalFitEditor>),
     PeakFit(Box<PeakFitEditor>),
+    FunctionPlot(Box<FunctionPlotEditor>),
+    GraphThemes(Box<GraphThemeEditor>),
     CustomNlFit(CustomFitEditor),
     /// 非线性拟合结果。
     NlFitReport(Vec<NlFitReport>),
@@ -357,6 +361,8 @@ pub enum Action {
     OpenCustomNlFit,
     GlobalFit(Box<GlobalFitEditor>),
     PeakFit(Box<PeakFitRequest>),
+    FunctionPlot(Box<FunctionPlotEditor>),
+    GraphTheme(GraphThemeAction),
     CustomFitLibrary(Box<CustomFitAction>),
     CustomNlFit {
         name: String,
@@ -407,6 +413,8 @@ impl Dialog {
             Self::NlFit { .. } => self.show_nl_fit(ctx, pal, &mut open, esc),
             Self::GlobalFit(editor) => editor.show(ctx, pal, &mut open),
             Self::PeakFit(edit) => edit.show(ctx, pal, &mut open),
+            Self::FunctionPlot(edit) => edit.show(ctx, pal, &mut open),
+            Self::GraphThemes(edit) => edit.show(ctx, pal, &mut open, project),
             Self::CustomNlFit(..) => self.show_custom_nl_fit(ctx, pal, &mut open, esc, project),
             Self::NlFitReport(..) => self.show_nl_fit_report(ctx, pal, &mut open, esc, project),
             Self::FftFilter { .. } => self.show_fft_filter(ctx, pal, &mut open, esc),
