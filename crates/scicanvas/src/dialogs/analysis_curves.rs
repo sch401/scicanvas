@@ -5,14 +5,15 @@ impl Dialog {
         let Self::AnalysisCurves { curves, .. } = self else {
             unreachable!()
         };
-        window(ctx, "分析曲线").open(open).show(ctx, |ui| {
+        window(ctx, "分析曲线").centered().open(open).show(ctx, |ui| {
+            hint(ui, "勾选的曲线参与当前图层的分析。");
             ui.horizontal_wrapped(|ui| {
                 if ui.button("全选").clicked() {
                     for (_, _, checked) in curves.iter_mut() {
                         *checked = true;
                     }
                 }
-                if ui.button("清空").clicked() {
+                if ui.button("全不选").clicked() {
                     for (_, _, checked) in curves.iter_mut() {
                         *checked = false;
                     }
@@ -23,6 +24,7 @@ impl Dialog {
                     ui.checkbox(checked, name.as_str());
                 }
             });
+            live_hint(ui);
         });
         Action::None
     }

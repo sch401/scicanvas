@@ -263,6 +263,27 @@ pub(crate) fn shortcut_bindings(c: &Command) -> Vec<(eframe::egui::Modifiers, ef
 fn presentation(commands: &mut Vec<Command>) {
     commands.retain(|c| !matches!(c.id, "graph.logx" | "graph.logy"));
     for command in commands.iter_mut() {
+        match command.id {
+            "stats.normality" | "stats.dixon" | "stats.grubbs" => command.when = |a| need_cols_n(a, 1, usize::MAX),
+            "stats.ks2" => command.when = |a| need_cols_n(a, 2, 2),
+            "stats.anova" | "stats.correlation" | "fit.mlr" => command.when = |a| need_cols_n(a, 2, usize::MAX),
+            "stats.summary" => command.when = |a| need_cols_n(a, 1, 1),
+            "fit.calibration" => command.when = need_book,
+            _ => {}
+        }
+        if matches!(
+            command.id,
+            "stats.normality"
+                | "stats.dixon"
+                | "stats.grubbs"
+                | "stats.ks2"
+                | "stats.anova"
+                | "stats.correlation"
+                | "fit.mlr"
+        ) {
+            command.label = Box::leak(command.label.trim_end_matches('…').to_string().into_boxed_str());
+        }
+
         command.icon = match command.id {
             "signal.convolve" => "convolve",
             "project.folder.new" => "folder-new",
@@ -342,7 +363,8 @@ fn presentation(commands: &mut Vec<Command>) {
             "graph.legend.auto" => "恢复图例自动位置",
             "graph.text.manage" => "编辑文字标注…",
             "file.recent" => "打开上次的项目",
-            "stats.grubbs" => "Grubbs 异常值检验…",
+            "math.average" => "曲线平均与合并…",
+            "stats.grubbs" => "Grubbs 异常值检验",
             "project.delete" => "删除当前项…",
             _ => command.label,
         };
@@ -381,5 +403,19 @@ fn presentation(commands: &mut Vec<Command>) {
                     .ok_or("没有冻结列")
             };
         }
+    }
+}
+
+fn need_cols_n(app: &SciApp, min: usize, max: usize) -> Result<(), &'static str> {
+    let count = app.statistical_column_count();
+    if count >= min && count <= max {
+        Ok(())
+    } else {
+        Err(match (min, max) {
+            (1, 1) => "请选择恰好 1 列",
+            (2, 2) => "请选择恰好 2 列",
+            (2, _) => "请选择至少 2 列",
+            _ => "请选择至少 1 列",
+        })
     }
 }

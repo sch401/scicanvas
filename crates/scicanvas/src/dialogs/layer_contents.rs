@@ -47,16 +47,17 @@ impl LayerContents {
             .map(|r| {
                 format!(
                     "{} / {}",
-                    project.book(r.book).map_or("已删除的表", |b| b.name.as_str()),
+                    project.book(r.book).map_or("已删除的工作簿", |b| b.name.as_str()),
                     r.col
                 )
             })
             .unwrap_or_else(|| "行号".into())
     }
 
-    pub(super) fn show(&mut self, ctx: &egui::Context, project: &scicanvas_core::Project, pal: &Palette) -> Action {
+    pub(super) fn show(&mut self, ctx: &egui::Context, project: &scicanvas_core::Project, _pal: &Palette) -> Action {
         let mut open = true;
         window(ctx, "图层内容")
+            .centered()
             .open(&mut open)
             .default_width(crate::theme::dialog::SMALL)
             .default_height(660.0)
@@ -69,8 +70,9 @@ impl LayerContents {
                 ui.separator();
                 self.show_available_data(ui, project);
                 self.show_current_curves(ui, project);
+                live_hint(ui);
                 if let Some(error) = &self.error {
-                    ui.colored_label(pal.ink, error);
+                    field_error(ui, error);
                 }
             });
         if open {
@@ -112,13 +114,15 @@ impl LayerContents {
                                 }
                                 if present {
                                     response.on_hover_text("已在当前图层");
+                                } else if col.role == scicanvas_core::Role::X {
+                                    response.on_disabled_hover_text("X 列不能作为曲线添加");
                                 }
                             }
                         });
                 }
             });
         ui.horizontal_wrapped(|ui| {
-            if ui.add_enabled(!self.selected.is_empty(), plain("添加 →")).clicked() {
+            if ui.add_enabled(!self.selected.is_empty(), plain("添加到图层")).clicked() {
                 self.add_selected(project);
             }
         });
@@ -186,7 +190,7 @@ impl LayerContents {
             });
         ui.horizontal_wrapped(|ui| {
             let at = self.active.as_ref().and_then(|key| keys.iter().position(|k| k == key));
-            if ui.add_enabled(at.is_some(), plain("← 移除")).clicked() {
+            if ui.add_enabled(at.is_some(), plain("从图层移除")).clicked() {
                 if let Some(at) = at {
                     if let Some(plot) = plots.iter().find(|plot| plot.key == keys[at]) {
                         self.draft.remove_plot(&plot.mapping.y);

@@ -69,9 +69,9 @@ impl Dialog {
         use scicanvas_core::format::{DateFormat, NumberFormat};
         use scicanvas_core::{DataKind, Role};
         let title = format!("列属性 — {}", edit.key);
-        window(ctx, &title).open(open).show(ctx, |ui| {
+        window(ctx, &title).centered().open(open).show(ctx, |ui| {
             form(ui, "column-props", |ui| {
-                ui.label("短名");
+                ui.label("短名称");
                 ui.label(RichText::new(edit.key.as_str()).strong())
                     .on_hover_text("图形通过短名引用列，创建后不再改变");
                 ui.end_row();
@@ -84,7 +84,7 @@ impl Dialog {
                     ui.add(egui::TextEdit::singleline(field).desired_width(200.0));
                     ui.end_row();
                 }
-                ui.label("列属性");
+                ui.label("列角色");
                 let roles = [
                     (Role::X, "X"),
                     (Role::Y, "Y"),
@@ -121,7 +121,7 @@ impl Dialog {
                     });
                     ui.end_row();
                 }
-                ui.label("显示格式");
+                ui.label("显示格式").on_hover_text("只改变显示，不改变存储的数值。");
                 match edit.kind {
                     DataKind::Num => {
                         ui.horizontal_wrapped(|ui| {
@@ -182,9 +182,9 @@ impl Dialog {
             });
             if let Some(e) = error {
                 ui.add_space(4.0);
-                ui.label(RichText::new(e.as_str()).color(ui.visuals().error_fg_color));
+                field_error(ui, e);
             }
-            hint(ui, "只改变显示，不改变存储的数值。");
+            live_hint(ui);
         });
         Action::None
     }

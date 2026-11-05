@@ -29,9 +29,19 @@ impl Dialog {
                     .small()
                     .color(pal.weak),
             );
-            let (ok, cancel) = buttons(ui, "滤波", Ok(()));
+            let valid: Result<(), String> = if !lo.is_finite() || *lo <= 0. || *lo > *nyquist {
+                Err("截止频率应在 (0, 奈奎斯特] 内".into())
+            } else if band && (!hi.is_finite() || *hi > *nyquist || *lo >= *hi) {
+                Err("下限应小于上限，且上限不超过奈奎斯特频率".into())
+            } else {
+                Ok(())
+            };
+            if let Err(error) = &valid {
+                field_error(ui, error);
+            }
+            let (ok, cancel) = buttons(ui, "滤波", valid);
             if ok {
-                let (a, b) = (lo.min(*hi), lo.max(*hi));
+                let (a, b) = (*lo, *hi);
                 action = Action::FftFilter(match kind {
                     0 => FilterKind::LowPass(*lo),
                     1 => FilterKind::HighPass(*lo),

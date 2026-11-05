@@ -165,38 +165,32 @@ impl PeakFitEditor {
                 if let Some(points) = &self.preview {
                     preview_plot(ui, &self.xs, &self.ys, points);
                 }
-                ui.collapsing("参数限制", |ui| {
+                let limits_panel = ui.collapsing("参数限制", |ui| {
                     egui::ScrollArea::both()
                         .id_salt("peak-parameters")
                         .max_height(144.)
                         .show(ui, |ui| {
-                            egui::Grid::new("peak-limits").show(ui, |ui| {
-                                for label in ["参数", "固定", "下限", "上限"] {
-                                    ui.label(label);
-                                }
-                                ui.end_row();
-                                for (name, limit) in peak.params().iter().zip(&mut self.limits) {
-                                    ui.label(*name);
-                                    for field in [&mut limit.fixed, &mut limit.lower, &mut limit.upper] {
-                                        ui.horizontal(|ui| {
-                                            let mut enabled = field.is_some();
-                                            let mut value = field.unwrap_or(0.);
-                                            ui.checkbox(&mut enabled, "");
-                                            ui.add_enabled(enabled, egui::DragValue::new(&mut value).speed(0.01));
-                                            *field = enabled.then_some(value);
-                                        });
-                                    }
-                                    ui.end_row();
-                                }
-                            });
+                            parameter_table(ui, "peak-limits", &peak.params(), &mut self.limits);
                         });
                 });
+                if limits_panel.header_response.clicked() {
+                    ctx.data_mut(|d| {
+                        d.insert_temp(egui::Id::new(("scicanvas-dialog", "多峰拟合")).with("recenter"), true)
+                    });
+                    ctx.request_repaint();
+                }
                 form(ui, "peak-constraints", |f| {
                     f.row("线性约束", |ui| {
-                        multiline(ui, &mut self.constraints);
+                        multiline(ui, &mut self.constraints).on_hover_text(CONSTRAINT_HINT);
                     });
                 });
-                ui.checkbox(&mut self.weighted, "按 Y 误差加权（1/σ²）");
+                weighted_checkbox(
+                    ui,
+                    &mut self.weighted,
+                    "按 Y 误差加权（1/σ²）",
+                    ctx.data(|d| d.get_temp::<bool>(egui::Id::new("analysis-errors-available")))
+                        .unwrap_or(false),
+                );
                 if let Some(error) = &self.error {
                     field_error(ui, error);
                 }

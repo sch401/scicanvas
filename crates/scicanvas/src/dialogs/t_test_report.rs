@@ -6,7 +6,7 @@ impl Dialog {
             unreachable!()
         };
         let mut action = Action::None;
-        window(ctx, "t 检验结果").open(open).show(ctx, |ui| {
+        window(ctx, "t 检验结果").centered().open(open).show(ctx, |ui| {
             let rows = ttest_rows(result, names);
             form(ui, "ttest-report", |ui| {
                 for (k, v) in &rows {
@@ -31,24 +31,15 @@ impl Dialog {
             ui.add_space(10.0);
             ui.separator();
             ui.add_space(4.0);
-            ui.horizontal_wrapped(|ui| {
-                center_buttons(ui, 3);
-                if ui
-                    .add(plain("复制结果"))
-                    .on_hover_text("复制为制表符分隔的文本，可粘贴到 Excel")
-                    .clicked()
-                {
-                    let text: Vec<String> = rows.iter().map(|(k, v)| format!("{k}\t{v}")).collect();
-                    ui.ctx().copy_text(text.join("\n"));
-                }
-                if ui.add(plain("保存为 Note")).clicked() {
-                    let text = format!("## t 检验\n\n{}", md_pairs(["项目", "值"], &rows));
-                    action = Action::SaveNote("t 检验结果".into(), text);
-                }
-                if ui.add(primary(ui, "关闭")).clicked() {
-                    action = Action::Close;
-                }
-            });
+            let table: Vec<_> = rows.iter().map(|(a, b)| vec![a.clone(), b.clone()]).collect();
+            let text = table.iter().map(|r| r.join("\t")).collect::<Vec<_>>().join("\n");
+            action = result_actions(
+                ui,
+                "t 检验结果",
+                &table,
+                format!("## t 检验\n\n{}", md_pairs(["项目", "值"], &rows)),
+                text,
+            );
         });
         action
     }

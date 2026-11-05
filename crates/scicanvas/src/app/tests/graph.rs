@@ -283,7 +283,7 @@ fn layer_contents_real_controls_apply_live_and_header_close_keeps_changes() {
     harness.frame(&mut app, vec![]);
     harness.frame(&mut app, vec![]);
     let output = harness.frame(&mut app, vec![]);
-    for label in ["添加 →", "← 移除", "上移", "下移", "按名称排序"] {
+    for label in ["添加到图层", "从图层移除", "上移", "下移", "按名称排序"] {
         let pos = positions(&output, label)[0];
         let rect = output
             .shapes
@@ -298,7 +298,7 @@ fn layer_contents_real_controls_apply_live_and_header_close_keeps_changes() {
     }
     harness.click(&mut app, *positions(&output, "B (Y)").last().expect("source column"));
     let output = harness.frame(&mut app, vec![]);
-    harness.click(&mut app, positions(&output, "添加 →")[0]);
+    harness.click(&mut app, positions(&output, "添加到图层")[0]);
     let key = scicanvas_core::plotspec::foreign_key(b, "B");
     assert_ne!(app.project, before, "controls update the project immediately");
     assert!(app.preview_graph(gid).unwrap().page.layers()[1]
@@ -356,7 +356,7 @@ fn layer_contents_real_controls_apply_live_and_header_close_keeps_changes() {
     app.run_command("layer.contents");
     harness.frame(&mut app, vec![]);
     let output = harness.frame(&mut app, vec![]);
-    harness.click(&mut app, positions(&output, "← 移除")[0]);
+    harness.click(&mut app, positions(&output, "从图层移除")[0]);
     assert_ne!(app.project, committed);
     assert_eq!(
         app.preview_graph(gid).unwrap().as_ref(),
@@ -864,7 +864,7 @@ fn area_opacity_slider_is_an_undoable_property_edit() {
         .shapes
         .iter()
         .find_map(|s| match &s.shape {
-            egui::Shape::Text(t) if t.galley.job.text == "面积填充" => Some(t.pos.y + t.galley.size().y / 2.0),
+            egui::Shape::Text(t) if t.galley.job.text == "填充透明度" => Some(t.pos.y + t.galley.size().y / 2.0),
             _ => None,
         })
         .unwrap();
@@ -1286,7 +1286,19 @@ fn curve_point_style_properties_map_columns_and_undo_the_changes() {
         .unwrap();
     harness.click(&mut app, none + egui::vec2(5.0, 5.0));
     let popup = harness.frame(&mut app, vec![]);
-    harness.click_text(&mut app, &popup, "电压 B");
+    let at = popup
+        .shapes
+        .iter()
+        .filter_map(|shape| match &shape.shape {
+            egui::Shape::Text(text) if text.galley.job.text == "电压 B" => {
+                Some((shape.clip_rect.area(), text.pos + egui::vec2(5., 5.)))
+            }
+            _ => None,
+        })
+        .min_by(|a, b| a.0.total_cmp(&b.0))
+        .unwrap()
+        .1;
+    harness.click(&mut app, at);
     assert_eq!(
         app.project
             .graph(2)
@@ -1309,7 +1321,19 @@ fn curve_point_style_properties_map_columns_and_undo_the_changes() {
         .unwrap();
     harness.click(&mut app, none + egui::vec2(5.0, 5.0));
     let popup = harness.frame(&mut app, vec![]);
-    harness.click_text(&mut app, &popup, "电压 B");
+    let at = popup
+        .shapes
+        .iter()
+        .filter_map(|shape| match &shape.shape {
+            egui::Shape::Text(text) if text.galley.job.text == "电压 B" => {
+                Some((shape.clip_rect.area(), text.pos + egui::vec2(5., 5.)))
+            }
+            _ => None,
+        })
+        .min_by(|a, b| a.0.total_cmp(&b.0))
+        .unwrap()
+        .1;
+    harness.click(&mut app, at);
     assert_eq!(
         app.project
             .graph(2)

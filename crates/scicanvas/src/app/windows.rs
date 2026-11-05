@@ -568,10 +568,11 @@ impl SciApp {
         response.context_menu(|ui| {
             if let Some(target) = menu_object {
                 if ui
-                    .button(if matches!(target, plot::ObjectTarget::Shape(_)) {
-                        "编辑图形…"
-                    } else {
-                        "编辑文字/图例…"
+                    .button(match target {
+                        plot::ObjectTarget::Text(_) => "编辑文字…",
+                        plot::ObjectTarget::Legend(_) => "编辑图例…",
+                        plot::ObjectTarget::ColorScale(_) => "编辑色阶条…",
+                        plot::ObjectTarget::Shape(_) => "编辑绘图对象…",
                     })
                     .clicked()
                 {
@@ -583,7 +584,7 @@ impl SciApp {
                     ui.close_menu();
                 }
                 if let plot::ObjectTarget::Legend(index) = target {
-                    if ui.button("恢复图例自动位置").clicked() {
+                    if ui.button("恢复自动位置").clicked() {
                         object_action = Some(plot::ObjectAction::AutoLegend(index));
                         ui.close_menu();
                     }
@@ -732,6 +733,18 @@ impl SciApp {
             self.object_editor = None;
             return;
         }
+        let mut names = HashMap::new();
+        for (index, layer) in before.page.layers().iter().enumerate() {
+            for key in layer.plot_keys(true) {
+                let name = layer.curve_label(
+                    layer.book_id.and_then(|id| self.project.book(id)),
+                    &|id| self.project.book(id),
+                    &key,
+                );
+                names.insert((index, key), name);
+            }
+        }
+        ctx.data_mut(|d| d.insert_temp(egui::Id::new("object-curve-names"), names));
         let (open, action) = edit.show(
             ctx,
             self.project.graph_mut(edit.graph).unwrap(),

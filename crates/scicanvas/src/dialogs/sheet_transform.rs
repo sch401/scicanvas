@@ -31,10 +31,19 @@ impl SheetTransform {
             TransformKind::Split => "拆分列",
             TransformKind::Reduce => "数据精简",
         };
-        window(ctx, title).open(open).show(ctx, |ui| {
+        window(ctx, title).centered().open(open).show(ctx, |ui| {
             match self.kind {
                 TransformKind::Stack => {
                     ui.label("选择要堆叠的列：");
+                    ui.horizontal(|ui| {
+                        for (label, on) in [("全选", true), ("全不选", false)] {
+                            if ui.button(label).clicked() {
+                                for c in &mut self.columns {
+                                    c.2 = on;
+                                }
+                            }
+                        }
+                    });
                     egui::ScrollArea::vertical().max_height(240.0).show(ui, |ui| {
                         for (_, name, selected) in &mut self.columns {
                             ui.checkbox(selected, name.as_str());
@@ -55,7 +64,20 @@ impl SheetTransform {
                     ui.radio_value(&mut self.average, true, "取平均值（忽略缺失和非有限数值）");
                 }
             }
-            let (ok, cancel) = buttons(ui, "确定", Ok(()));
+            let valid: Result<(), String> = match self.kind {
+                TransformKind::Stack if !self.columns.iter().any(|c| c.2) => Err("请选择至少一列".into()),
+                TransformKind::Split if self.value == self.category => Err("值列和分类列应不同".into()),
+                _ => Ok(()),
+            };
+            if let Err(error) = &valid {
+                field_error(ui, error);
+            }
+            let verb = match self.kind {
+                TransformKind::Stack => "堆叠",
+                TransformKind::Split => "拆分",
+                TransformKind::Reduce => "精简",
+            };
+            let (ok, cancel) = buttons(ui, verb, valid);
             if ok {
                 let selection = match self.kind {
                     TransformKind::Stack => {

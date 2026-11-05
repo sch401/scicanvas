@@ -40,7 +40,6 @@ pub(crate) enum ActionKind {
 
 #[derive(Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Keys {
-    None,
     Modal,
 }
 
@@ -319,3 +318,87 @@ pub(crate) fn multiline_editor(ui: &mut egui::Ui, editor: egui::TextEdit<'_>) ->
     mark_multiline(&response);
     response
 }
+
+pub(crate) fn odd_window(ui: &mut egui::Ui, value: &mut usize) -> egui::Response {
+    let response = ui.add(egui::DragValue::new(value).range(3..=101).speed(2.));
+    if response.changed() && (*value).is_multiple_of(2) {
+        *value = (*value + 1).min(101);
+        hint(ui, "窗口点数已调整为奇数。");
+    }
+    response
+}
+pub(crate) fn live_hint(ui: &mut egui::Ui) {
+    hint(ui, "修改即时生效，可撤销（Ctrl+Z）");
+}
+
+pub(crate) fn numeric_step(value: f64) -> f64 {
+    if value.is_finite() && value != 0. {
+        10_f64.powf(value.abs().log10().floor()) / 100.
+    } else {
+        0.01
+    }
+}
+pub(crate) fn parameter_table(
+    ui: &mut egui::Ui,
+    id: &str,
+    names: &[&str],
+    limits: &mut [scicanvas_core::nlfit::ParamLimits],
+) {
+    egui::Grid::new(id).striped(true).num_columns(4).show(ui, |ui| {
+        for label in ["参数", "固定", "下限", "上限"] {
+            ui.label(label);
+        }
+        ui.end_row();
+        for (name, limit) in names.iter().zip(limits) {
+            ui.label(*name);
+            for (column, field) in [&mut limit.fixed, &mut limit.lower, &mut limit.upper]
+                .into_iter()
+                .enumerate()
+            {
+                ui.horizontal(|ui| {
+                    let key = ui.id().with((id, name, column));
+                    let mut value = field.unwrap_or_else(|| ui.data(|d| d.get_temp::<f64>(key)).unwrap_or(0.));
+                    let mut on = field.is_some();
+                    let response = ui.checkbox(&mut on, "");
+                    #[cfg(test)]
+                    ui.ctx().data_mut(|d| {
+                        d.insert_temp(egui::Id::new(("parameter-toggle", id, *name, column)), response.rect)
+                    });
+                    let _ = response;
+                    let step = numeric_step(value);
+                    ui.add_enabled(
+                        on,
+                        egui::DragValue::new(&mut value)
+                            .speed(step)
+                            .custom_formatter(|value, _| {
+                                if value != 0. && (value.abs() < 0.001 || value.abs() >= 1e6) {
+                                    format!("{value:.3e}")
+                                } else {
+                                    scicanvas_core::fmt_num(value)
+                                }
+                            }),
+                    );
+                    ui.data_mut(|d| d.insert_temp(key, value));
+                    *field = on.then_some(value);
+                });
+            }
+            ui.end_row();
+        }
+    });
+}
+pub(crate) fn weighted_checkbox(ui: &mut egui::Ui, weighted: &mut bool, label: &str, available: bool) {
+    if !available {
+        *weighted = false;
+    }
+    let response = ui.add_enabled(available, egui::Checkbox::new(weighted, label));
+    #[cfg(test)]
+    ui.ctx().data_mut(|d| {
+        d.insert_temp(
+            egui::Id::new(("weighted-control", label)),
+            (response.rect, response.enabled()),
+        )
+    });
+    response.on_disabled_hover_text("数据未关联 Y 误差列");
+}
+
+pub(crate) const CONSTRAINT_HINT: &str = "每行一条，如 a >= 0 或 a + b = 1";

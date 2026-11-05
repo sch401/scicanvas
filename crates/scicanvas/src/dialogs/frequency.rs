@@ -14,6 +14,7 @@ impl Dialog {
         };
         let mut action = Action::None;
         window(ctx, "频数统计").centered().open(open).show(ctx, |ui| {
+            data_hint(ui);
             form(ui, "freq-grid", |ui| {
                 ui.label("区间数");
                 ui.horizontal_wrapped(|ui| {

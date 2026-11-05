@@ -13,7 +13,7 @@ fn fit_reports_add_confidence_and_prediction_bands_in_one_step() {
         }
         let before = app.project.clone();
         let columns = app.project.book(1).unwrap().columns.len();
-        press_dialog_button(&mut app, "置信/预测带");
+        press_dialog_button(&mut app, "置信/预测带（95%）");
         let book = app.project.book(1).unwrap();
         assert_eq!(book.columns.len(), columns + 4, "{}", app.status);
         let names: Vec<&str> = book.columns[columns..].iter().map(|c| c.long_name.as_str()).collect();
@@ -552,9 +552,9 @@ fn regression_uses_the_last_picked_column_as_y() {
     );
     match (&app.dialog, want) {
         (Some(Dialog::Table { rows, note, .. }), Ok(r)) => {
-            assert_eq!(rows.len(), 4);
-            assert_eq!(rows[2][0], book.column("A").unwrap().display_name());
-            assert_eq!(rows[1][1], fmt_num(round_sig(r.coef[0], 8)));
+            assert_eq!(rows.len(), 5);
+            assert_eq!(rows[3][0], book.column("A").unwrap().display_name());
+            assert_eq!(rows[2][1], fmt_num(round_sig(r.coef[0], 8)));
             assert!(note.contains(book.column("B").unwrap().display_name()));
         }
         (d, w) => panic!("unexpected {:?} / {:?}", d.is_some(), w),
@@ -612,12 +612,14 @@ fn normality_three_tests_and_grubbs_report_picked_columns() {
 }
 
 #[test]
-fn calibrate_needs_three_columns_in_click_order() {
+fn calibrate_prefills_available_columns_and_allows_missing_choices() {
     let mut app = app();
     app.active = Some(1);
     app.selection.insert(1, vec!["A".into(), "B".into()]);
     app.calibrate();
-    assert!(app.status.contains("三列"));
+    assert!(
+        matches!(&app.dialog,Some(Dialog::Calibration{keys,..}) if keys==&["A".to_string(),"B".to_string(),String::new()])
+    );
     let cols = app.project.book(1).unwrap().columns.len();
     app.selection.insert(1, vec!["A".into(), "B".into(), "C".into()]);
     app.calibrate();
@@ -935,7 +937,9 @@ fn report_band_failure_rolls_back_earlier_results_and_preserves_redo() {
             harness.frame(&mut app, vec![]);
         }
         let output = harness.frame(&mut app, vec![]);
-        let at = crate::test_ui::text_rect(&output, "置信/预测带").unwrap().center();
+        let at = crate::test_ui::text_rect(&output, "置信/预测带（95%）")
+            .unwrap()
+            .center();
         harness.click(&mut app, at);
         assert_eq!(app.project, before);
         assert_eq!(app.active, active);
@@ -1336,7 +1340,7 @@ fn rational_models_run_from_dialog_save_reopen_and_undo() {
         roundtrip(&mut app, &before);
         let before_bands = app.project.clone();
         app.dialog = Some(Dialog::NlFitReport(reports));
-        press_dialog_button(&mut app, "置信/预测带");
+        press_dialog_button(&mut app, "置信/预测带（95%）");
         let book = app.project.book(1).unwrap();
         let fit_curve = book.columns[book.columns.len() - 5].values();
         for column in &book.columns[book.columns.len() - 4..] {
@@ -1860,13 +1864,19 @@ fn custom_fit_parameter_controls_scroll_into_view_in_a_normal_workspace() {
         let label = format!("b{count}");
         for _ in 0..40 {
             if let Some(last) = visible(&out, &label) {
-                let upper_visible = out.shapes.iter().any(|shape| match &shape.shape {
-                    egui::Shape::Text(text) if text.galley.job.text == "上限" => {
-                        let rect = text.galley.rect.translate(text.pos.to_vec2());
-                        rect.top() > last.bottom() && shape.clip_rect.contains_rect(rect)
-                    }
-                    _ => false,
-                });
+                let upper_visible = ui
+                    .ctx
+                    .data(|d| {
+                        d.get_temp::<egui::Rect>(egui::Id::new((
+                            "parameter-toggle",
+                            "custom-limits",
+                            label.as_str(),
+                            2_usize,
+                        )))
+                    })
+                    .is_some_and(|r| {
+                        r.center().y >= last.top() && out.shapes.iter().any(|s| s.clip_rect.contains_rect(r))
+                    });
                 if upper_visible && visible(&out, "拟合").is_some() {
                     break;
                 }
@@ -1888,22 +1898,21 @@ fn custom_fit_parameter_controls_scroll_into_view_in_a_normal_workspace() {
                 out = ui.frame(&mut app, vec![]);
             }
         }
-        let last = visible(&out, &label).unwrap_or_else(|| {
+        let _last = visible(&out, &label).unwrap_or_else(|| {
             panic!("{width}x{height}: {label} must be fully inside the clip and screen after scrolling")
         });
         assert!(visible(&out, "拟合").is_some());
-        let upper = out
-            .shapes
-            .iter()
-            .filter_map(|shape| match &shape.shape {
-                egui::Shape::Text(text) if text.galley.job.text == "上限" => {
-                    let rect = text.galley.rect.translate(text.pos.to_vec2());
-                    (rect.top() > last.bottom() && shape.clip_rect.contains_rect(rect)).then_some(rect)
-                }
-                _ => None,
+        let upper = ui
+            .ctx
+            .data(|d| {
+                d.get_temp::<egui::Rect>(egui::Id::new((
+                    "parameter-toggle",
+                    "custom-limits",
+                    label.as_str(),
+                    2_usize,
+                )))
             })
-            .next_back()
-            .expect("last parameter upper-limit control is visible");
+            .expect("last parameter upper-limit checkbox");
         ui.click(&mut app, upper.center());
         assert!(matches!(&app.dialog,Some(Dialog::CustomNlFit(editor)) if editor.limits[count-1].upper==Some(0.0)));
         let rect = ui.ctx.memory(|m| m.area_rect(id)).unwrap();
@@ -2836,7 +2845,7 @@ fn review_global_weight_checkbox_reports_missing_group_errors_immediately() {
     let ctx = egui::Context::default();
     crate::fonts::setup(&ctx);
     let mut harness = crate::test_ui::Harness::new(
-        ctx,
+        ctx.clone(),
         Some(egui::vec2(1400., 1000.)),
         |app: &mut SciApp, ctx: &egui::Context| app.dialogs(ctx),
     )
@@ -2846,10 +2855,14 @@ fn review_global_weight_checkbox_reports_missing_group_errors_immediately() {
     }
     let output = harness.frame(&mut app, vec![]);
     harness.click_text(&mut app, &output, "按各组关联的 Y 误差加权（1/σ²）");
-    let output = harness.frame(&mut app, vec![]);
-    assert!(crate::test_ui::find_text(&output, "全局拟合中各组需同时提供或同时不提供 Y 误差").is_some());
-    harness.click_text(&mut app, &output, "拟合");
-    assert!(matches!(app.dialog, Some(Dialog::GlobalFit(_))));
+    harness.frame(&mut app, vec![]);
+    let response = ctx
+        .data(|d| {
+            d.get_temp::<(egui::Rect, bool)>(egui::Id::new(("weighted-control", "按各组关联的 Y 误差加权（1/σ²）")))
+        })
+        .unwrap();
+    assert!(!response.1);
+    assert!(matches!(&app.dialog,Some(Dialog::GlobalFit(edit)) if !edit.weighted));
     assert_eq!(app.project, before);
 }
 
@@ -3363,4 +3376,149 @@ fn u6_insertion_and_menu_states_follow_current_selection() {
     assert!((commands::find("sheet.unfreeze").unwrap().when)(&app).is_err());
     app.active = Some(2);
     assert!((commands::find("graph.style.paste").unwrap().when)(&app).is_err());
+}
+
+#[test]
+fn h1_nonmodal_parameters_leave_sheet_navigation_edit_copy_and_delete_working() {
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut app = app();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["C".into()]);
+    app.run_command("fit.poly");
+    let mut h = crate::test_ui::Harness::new(
+        ctx.clone(),
+        Some(egui::vec2(1280., 820.)),
+        |a: &mut SciApp, c: &egui::Context| a.ui_frame(c),
+    );
+    for _ in 0..6 {
+        h.frame(&mut app, vec![]);
+    }
+    let cell = ctx
+        .read_response(egui::Id::new(("cell", 1_u64, 0_usize, 0_usize)))
+        .unwrap()
+        .rect
+        .center();
+    h.click(&mut app, cell);
+    h.key(egui::Key::ArrowDown, |c| app.ui_frame(c));
+    assert_eq!(app.sheets[&1].range.unwrap().a.r, 1);
+    h.frame(&mut app, vec![egui::Event::Text("123".into())]);
+    assert!(app.sheets[&1].edit.is_some());
+    h.frame(&mut app, vec![]);
+    h.key(egui::Key::Enter, |c| app.ui_frame(c));
+    let out = h.frame(&mut app, vec![egui::Event::Copy]);
+    assert!(!out.platform_output.copied_text.is_empty());
+    h.key(egui::Key::Delete, |c| app.ui_frame(c));
+    assert!(matches!(app.dialog, Some(Dialog::Poly { .. })));
+    assert_eq!(app.project.book(1).unwrap().columns.len(), 3);
+    assert_eq!(app.project.graphs.len(), 1);
+}
+
+#[test]
+fn h3_statistical_buttons_count_columns_and_graph_curves() {
+    let mut app = app();
+    app.active = Some(1);
+    app.selection.insert(1, vec![]);
+    for id in [
+        "stats.normality",
+        "stats.dixon",
+        "stats.grubbs",
+        "stats.ks2",
+        "stats.anova",
+        "stats.correlation",
+        "fit.mlr",
+        "stats.summary",
+    ] {
+        let err = (commands::find(id).unwrap().when)(&app).unwrap_err();
+        assert!(err.contains("列"), "{id}: {err}");
+    }
+    app.selection.insert(1, vec!["B".into(), "C".into()]);
+    for id in ["stats.ks2", "stats.anova", "stats.correlation", "fit.mlr"] {
+        assert!((commands::find(id).unwrap().when)(&app).is_ok(), "{id}");
+    }
+    app.active = Some(2);
+    assert_eq!(app.statistical_column_count(), app.statistical_columns().unwrap().len());
+    assert!((commands::find("stats.ks2").unwrap().when)(&app).is_ok());
+}
+
+#[test]
+fn h4_reports_copy_with_feedback_and_write_one_undoable_workbook() {
+    let mut app = app();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["B".into(), "C".into()]);
+    app.anova();
+    press_dialog_button(&mut app, "复制结果");
+    assert!(app.status.contains("已复制") && app.status.contains("Excel"));
+    let before = app.project.clone();
+    press_dialog_button(&mut app, "写入新表");
+    assert_eq!(app.project.books.len(), before.books.len() + 1);
+    roundtrip(&mut app, &before);
+}
+
+#[test]
+fn h6_new_custom_fit_keeps_limits_and_linked_error_weighting() {
+    use scicanvas_core::nlfit::{CustomFitDefinition, FitFunction, ParamLimits};
+    use scicanvas_core::ops::FitWeight;
+    let mut app = app();
+    app.active = Some(1);
+    app.selection.insert(1, vec!["B".into()]);
+    let n = app.project.book(1).unwrap().nrows();
+    {
+        let error = &mut app.project.book_mut(1).unwrap().columns[2];
+        error.role = Role::YError;
+        error.error_for = Some("B".into());
+        error.data = vec!["0.2".into(); n].into();
+    }
+    let definition = CustomFitDefinition::from_text("linear", "a*x+b", "a,b", "1,0", "").unwrap();
+    let mut edit = dialogs::CustomFitEditor::from_definition(&definition);
+    let limits = vec![
+        ParamLimits {
+            lower: Some(0.),
+            ..Default::default()
+        },
+        ParamLimits::default(),
+    ];
+    edit.limits = limits.clone();
+    edit.weighted = true;
+    let mut expected = app.project.clone();
+    let (function, constraints) = definition.resolve().unwrap();
+    expected
+        .nlfit_weighted(
+            &Source::Book {
+                id: 1,
+                selected: vec!["B".into()],
+                rows: None,
+            },
+            FitFunction::Custom(function),
+            Some(&definition.initial),
+            &limits,
+            &constraints,
+            FitWeight::YError,
+        )
+        .unwrap();
+    app.dialog = Some(Dialog::CustomNlFit(edit));
+    let before = app.project.clone();
+    press_dialog_button(&mut app, "拟合");
+    assert_eq!(app.project, expected);
+    roundtrip(&mut app, &before);
+}
+
+#[test]
+fn h10_find_opens_with_a_selected_keyboard_focus() {
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut app = app();
+    app.active = Some(1);
+    app.run_command("edit.find");
+    let mut h = crate::test_ui::Harness::new(
+        ctx.clone(),
+        Some(egui::vec2(1280., 820.)),
+        |a: &mut SciApp, c: &egui::Context| a.ui_frame(c),
+    );
+    for _ in 0..5 {
+        h.frame(&mut app, vec![]);
+    }
+    assert!(ctx.memory(|m| m.focused()).is_some());
+    h.frame(&mut app, vec![egui::Event::Text("needle".into())]);
+    assert!(matches!(&app.dialog,Some(Dialog::FindReplace(edit)) if edit.needle=="needle"));
 }

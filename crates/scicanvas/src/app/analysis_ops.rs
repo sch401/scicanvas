@@ -213,12 +213,23 @@ impl SciApp {
         );
     }
 
+    #[cfg(test)]
     pub(super) fn custom_nlfit(
         &mut self,
         function: scicanvas_core::nlfit::CustomFitFunction,
         initial: Vec<f64>,
         limits: Vec<scicanvas_core::nlfit::ParamLimits>,
         constraints: Vec<scicanvas_core::nlfit::LinearConstraint>,
+    ) -> bool {
+        self.custom_nlfit_weighted(function, initial, limits, constraints, false)
+    }
+    pub(super) fn custom_nlfit_weighted(
+        &mut self,
+        function: scicanvas_core::nlfit::CustomFitFunction,
+        initial: Vec<f64>,
+        limits: Vec<scicanvas_core::nlfit::ParamLimits>,
+        constraints: Vec<scicanvas_core::nlfit::LinearConstraint>,
+        weighted: bool,
     ) -> bool {
         let Some(src) = self.analysis_source() else {
             self.status_warn("请选择要拟合的数据曲线".into());
@@ -229,7 +240,14 @@ impl SciApp {
             "自定义非线性拟合",
             |project| {
                 project
-                    .nlfit_custom(&src, function, &initial, &limits, &constraints)
+                    .nlfit_weighted(
+                        &src,
+                        scicanvas_core::nlfit::FitFunction::Custom(function),
+                        Some(&initial),
+                        &limits,
+                        &constraints,
+                        scicanvas_core::ops::FitWeight::from_y_error(weighted),
+                    )
                     .map(Some)
             },
             move |app, (gid, reports)| {
@@ -545,7 +563,17 @@ impl SciApp {
         }
     }
 
-    pub(super) fn statistical_columns(&self) -> Option<Vec<scicanvas_core::ops::AnalysisColumn>> {
+    pub(crate) fn statistical_column_count(&self) -> usize {
+        if let Some(id) = self.active_book_id() {
+            return self.project.book(id).map_or(0, |book| {
+                self.picked(id).0.iter().filter(|k| book.column(k).is_some()).count()
+            });
+        }
+        self.analysis_source()
+            .and_then(|source| self.project.resolve(&source).ok())
+            .map_or(0, |resolved| resolved.items.len())
+    }
+    pub(crate) fn statistical_columns(&self) -> Option<Vec<scicanvas_core::ops::AnalysisColumn>> {
         if self.active_book_id().is_some_and(|id| self.picked(id).0.is_empty()) {
             return Some(Vec::new());
         }
@@ -642,28 +670,21 @@ impl SciApp {
 
     /// 多元线性回归：最后点选的列为因变量，其余为自变量。
     pub(crate) fn regression(&mut self) {
-        let Some((id, keys)) = self.ttest_columns() else { return };
-        if keys.len() < 2 {
-            self.status_warn("请先点选自变量列，最后点选因变量（Y）列".into());
+        let Some(columns) = self.statistical_columns() else {
+            return;
+        };
+        let Some((y, xs)) = columns.split_last() else {
+            return;
+        };
+        if xs.is_empty() {
+            self.status_warn("请选择至少 2 列".into());
             return;
         }
-        let book = self.project.book(id).unwrap();
-        let (ykey, xkeys) = keys.split_last().unwrap();
-        let visible_only = book.uses_visible_rows();
-        let values = |column: &scicanvas_core::Column| {
-            if visible_only {
-                book.visible_values(column)
-            } else {
-                column.values()
-            }
-        };
-        let xs: Vec<Vec<f64>> = xkeys.iter().map(|k| values(book.column(k).unwrap())).collect();
-        let y = book.column(ykey).unwrap();
-        match scicanvas_core::stats::multiple_regression(&xs, &values(y)) {
+        let xvalues: Vec<_> = xs.iter().map(|c| c.values.clone()).collect();
+        match scicanvas_core::stats::multiple_regression(&xvalues, &y.values) {
             Ok(r) => {
                 let mut rows = vec![["参数", "值", "标准误", "t", "p"].map(String::from).to_vec()];
-                let names = std::iter::once("截距".to_owned())
-                    .chain(xkeys.iter().map(|k| book.column(k).unwrap().display_name().to_owned()));
+                let names = std::iter::once("截距".to_owned()).chain(xs.iter().map(|c| c.name.clone()));
                 for (i, name) in names.enumerate() {
                     rows.push(vec![
                         name,
@@ -675,13 +696,23 @@ impl SciApp {
                 }
                 let note = format!(
                     "因变量 {}，N = {}。R² = {}，调整 R² = {}，残差标准差 = {}；\nF = {}，p = {}（检验所有斜率是否同时为 0）。参数的 p 为双侧 t 检验；任一变量缺失的行已跳过。",
-                    y.display_name(),
+                    y.name,
                     r.n,
                     fmt_num(round_sig(r.r2, 6)),
                     fmt_num(round_sig(r.adj_r2, 6)),
                     fmt_num(round_sig(r.s, 6)),
                     fmt_num(round_sig(r.f, 6)),
                     fmt_num(round_sig(r.f_p, 6))
+                );
+                rows.insert(
+                    0,
+                    vec![
+                        format!("因变量：{}", y.name),
+                        String::new(),
+                        String::new(),
+                        String::new(),
+                        String::new(),
+                    ],
                 );
                 self.status_ok(format!("多元线性回归：R² = {}", fmt_num(round_sig(r.r2, 6))));
                 self.dialog = Some(Dialog::Table {
@@ -835,7 +866,7 @@ impl SciApp {
         self.dialog = Some(Dialog::TwoWayAnova {
             book: book.id,
             columns,
-            keys: keys.try_into().unwrap(),
+            keys: std::array::from_fn(|i| keys.get(i).cloned().unwrap_or_default()),
         });
     }
 
@@ -1067,10 +1098,6 @@ impl SciApp {
         let Some((id, keys)) = self.ttest_columns() else {
             return;
         };
-        if keys.len() != 3 {
-            self.status_warn("请按顺序 Ctrl+单击选中三列：标准 X、标准 Y、样品".into());
-            return;
-        }
         let columns = self
             .project
             .book(id)
@@ -1083,7 +1110,7 @@ impl SciApp {
         self.dialog = Some(Dialog::Calibration {
             book: id,
             columns,
-            keys: keys.try_into().unwrap(),
+            keys: std::array::from_fn(|i| keys.get(i).cloned().unwrap_or_default()),
             reports,
             model: None,
             forward: false,
@@ -1167,6 +1194,7 @@ impl SciApp {
         let count = columns.len();
         let columns = columns.iter().take(2).map(|c| c.name.clone()).collect();
         self.dialog = Some(Dialog::TTest {
+            swapped: false,
             columns,
             kind: if count >= 2 { 1 } else { 0 },
             mu: 0.0,
@@ -1176,9 +1204,15 @@ impl SciApp {
     }
 
     pub(super) fn run_ttest(&mut self, kind: scicanvas_core::stats::TTestKind, level: f64) {
-        let Some(columns) = self.statistical_columns() else {
+        self.run_ttest_ordered(kind, level, false)
+    }
+    pub(super) fn run_ttest_ordered(&mut self, kind: scicanvas_core::stats::TTestKind, level: f64, swapped: bool) {
+        let Some(mut columns) = self.statistical_columns() else {
             return;
         };
+        if swapped && columns.len() >= 2 {
+            columns.swap(0, 1);
+        }
         let names = columns.iter().take(2).map(|c| c.name.clone()).collect();
         let empty = Vec::new();
         let a = columns.first().map(|c| &c.values).unwrap_or(&empty);
@@ -1406,6 +1440,7 @@ impl SciApp {
                 let mut edit = dialogs::CustomFitEditor::from_definition(&definition);
                 edit.target = target;
                 edit.limits = recipe.limits.clone();
+                edit.weighted = recipe.weight == scicanvas_core::ops::FitWeight::YError;
                 self.dialog = Some(Dialog::CustomNlFit(edit));
             }
         }

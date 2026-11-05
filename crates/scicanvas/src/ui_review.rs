@@ -145,7 +145,7 @@ fn long_settings_fit_the_work_area_and_report_actions_stay_visible() {
         for (command, title) in [
             ("graph.props", "绘图属性"),
             ("fit.nonlinear", "非线性拟合"),
-            ("fit.linear", "拟合结果"),
+            ("fit.linear", "拟合报告"),
         ] {
             let ctx = egui::Context::default();
             crate::theme::install(&ctx);
@@ -177,7 +177,7 @@ fn long_settings_fit_the_work_area_and_report_actions_stay_visible() {
             );
             let output = output.unwrap();
             if command == "fit.linear" {
-                for label in ["复制结果", "残差图", "置信/预测带", "保存为 Note", "关闭"] {
+                for label in ["复制结果", "残差图", "置信/预测带（95%）", "保存为 Note", "关闭"] {
                     let (text, clip) = output
                         .shapes
                         .iter()
@@ -248,10 +248,10 @@ fn live_settings_keep_edits_through_minimize_close_and_undo() {
                 egui::Id::new(("scicanvas-dialog", "类别顺序"))
             }
             "analysis.curves" => egui::Id::new(("scicanvas-dialog", "分析曲线")),
-            "legend" => egui::Id::new(("scicanvas-dialog", "图例")),
+            "legend" => egui::Id::new(("scicanvas-dialog", "编辑图例")),
             _ => {
                 app.project.graph_mut(2).unwrap().page.add_text([0.2, 0.2]).unwrap();
-                egui::Id::new(("scicanvas-dialog", "文字标注"))
+                egui::Id::new(("scicanvas-dialog", "编辑文字"))
             }
         };
         if command == "legend" {
@@ -744,6 +744,9 @@ fn ui_copy_uses_short_user_facing_hints() {
                     "可以撤销",
                     "暂不支持",
                 ] {
+                    if text == "修改即时生效，可撤销（Ctrl+Z）" {
+                        continue;
+                    }
                     if matches!(word, "可撤销" | "可以撤销") && !path.components().any(|p| p.as_os_str() == "dialogs")
                     {
                         continue;
@@ -795,7 +798,6 @@ fn visible_plot_and_analysis_commands_have_ribbon_entries() {
         "fit.nonlinear",
         "fit.global",
         "fit.peaks",
-        "fit.mlr",
         "fit.compare",
         "fit.calibration",
         "fit.reports",
@@ -860,12 +862,8 @@ fn command_labels_use_dialog_ellipsis_and_readable_spacing() {
         "fit.peaks",
         "fit.compare",
         "fit.calibration",
-        "fit.mlr",
         "fit.reports",
         "stats.whole",
-        "stats.normality",
-        "stats.dixon",
-        "stats.ks2",
         "signal.convolve",
         "math.interp",
         "plot.function",

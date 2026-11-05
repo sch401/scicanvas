@@ -7,6 +7,7 @@ impl Dialog {
         };
         let mut action = Action::None;
         window(ctx, "平滑").centered().open(open).show(ctx, |ui| {
+            data_hint(ui);
             form(ui, "smooth-grid", |ui| {
                 ui.label("方法");
                 egui::ComboBox::from_id_salt("smooth-method")
@@ -18,7 +19,7 @@ impl Dialog {
                     });
                 ui.end_row();
                 ui.label("窗口点数");
-                ui.add(egui::DragValue::new(w).range(3..=101).speed(1.0));
+                odd_window(ui, w);
                 ui.end_row();
             });
             ui.label(
@@ -30,9 +31,17 @@ impl Dialog {
                 .small()
                 .color(pal.weak),
             );
-            let (ok, cancel) = buttons(ui, "平滑", Ok(()));
+            let (ok, cancel) = buttons(
+                ui,
+                "平滑",
+                if *w % 2 == 1 {
+                    Ok(())
+                } else {
+                    Err("窗口点数应为奇数".into())
+                },
+            );
             if ok {
-                action = Action::Smooth(*method, (*w).max(3) | 1);
+                action = Action::Smooth(*method, *w);
             } else if cancel {
                 action = Action::Close;
             }

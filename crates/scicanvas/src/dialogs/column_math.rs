@@ -14,6 +14,7 @@ impl Dialog {
         };
         let mut action = Action::None;
         window(ctx, "列运算").centered().open(open).show(ctx, |ui| {
+            data_hint(ui);
             if b.is_none() {
                 *use_constant = true;
             }

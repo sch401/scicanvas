@@ -9,6 +9,7 @@ impl Dialog {
         };
         let mut action = Action::None;
         window(ctx, if is_tiff { "导出 TIFF" } else { "导出 PNG" })
+            .centered()
             .open(open)
             .show(ctx, |ui| {
                 ui.horizontal_wrapped(|ui| {

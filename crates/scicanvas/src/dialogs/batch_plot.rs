@@ -27,6 +27,15 @@ impl BatchPlot {
                     "此图形引用了其他工作簿的列，这些列同样会在所选工作簿中按列名匹配，不会保留原工作簿。",
                 );
             }
+            ui.horizontal(|ui| {
+                for (label, on) in [("全选", true), ("全不选", false)] {
+                    if ui.button(label).clicked() {
+                        for item in &mut self.books {
+                            item.2 = on;
+                        }
+                    }
+                }
+            });
             egui::ScrollArea::vertical().max_height(220.0).show(ui, |ui| {
                 for (_, name, selected) in &mut self.books {
                     ui.checkbox(selected, name.as_str());

@@ -48,6 +48,39 @@ impl SciApp {
             self.dialog_error_for = None;
         }
         ctx.data_mut(|data| data.insert_temp(egui::Id::new("dialog-execution-error"), self.dialog_error.clone()));
+        let error_source = match &self.dialog {
+            Some(Dialog::NlFit {
+                target: Some(target), ..
+            }) => Some(Source::Book {
+                id: target.report.book_id,
+                selected: vec![target.before.y.clone()],
+                rows: target.before.rows,
+            }),
+            Some(Dialog::CustomNlFit(edit)) if edit.target.is_some() => {
+                let target = edit.target.as_ref().unwrap();
+                Some(Source::Book {
+                    id: target.report.book_id,
+                    selected: vec![target.before.y.clone()],
+                    rows: target.before.rows,
+                })
+            }
+            Some(Dialog::PeakFit(edit)) => Some(edit.source.clone()),
+            Some(Dialog::GlobalFit(edit)) => Some(edit.source.clone()),
+            _ => self.analysis_source(),
+        };
+        let errors_available = error_source
+            .and_then(|source| self.project.resolve(&source).ok())
+            .is_some_and(|resolved| {
+                !resolved.items.is_empty()
+                    && resolved.items.iter().all(|item| {
+                        self.project.book(item.book_id).is_some_and(|book| {
+                            book.columns.iter().any(|column| {
+                                column.role == Role::YError && column.error_for.as_deref() == Some(&item.y)
+                            })
+                        })
+                    })
+            });
+        ctx.data_mut(|d| d.insert_temp(egui::Id::new("analysis-errors-available"), errors_available));
         let caption = self
             .analysis_source()
             .and_then(|source| self.project.resolve(&source).ok())
@@ -129,6 +162,8 @@ impl SciApp {
     /// false 表示输入校验提前返回，保留原对话框并跳过本帧收尾。
     pub(super) fn apply_dialog_action(&mut self, ctx: &egui::Context, action: dialogs::Action) -> bool {
         match action {
+            dialogs::Action::ImportTemplate(save) => self.import_template_file(save),
+            dialogs::Action::CopyResult(text, rows) => self.copy_report_result(ctx, text, rows),
             dialogs::Action::FindNext => self.find_next(),
             dialogs::Action::SetFilter(book, key, rule, visible_only) => {
                 self.apply_filter(book, key, rule, visible_only)
@@ -220,6 +255,7 @@ impl SciApp {
                 self.finish_analysis_input(|app| app.interpolate(method, points, range));
             }
             dialogs::Action::TTest(kind, level) => self.run_ttest(kind, level),
+            dialogs::Action::TTestSwapped(kind, level) => self.run_ttest_ordered(kind, level, true),
             dialogs::Action::NlFit(model, limits, text, weighted) => {
                 return self.apply_nlfit_action(model, limits, text, weighted);
             }
@@ -306,6 +342,10 @@ impl SciApp {
         }
     }
 
+    fn copy_report_result(&mut self, ctx: &egui::Context, text: String, rows: usize) {
+        ctx.copy_text(text);
+        self.status_ok(format!("已复制 {rows} 行，可粘贴到 Excel"));
+    }
     pub(super) fn record_dialog_error(&mut self, error: String) {
         self.dialog_error_for = self.dialog.as_ref().map(std::mem::discriminant);
         self.dialog_error = Some(error);
@@ -629,14 +669,69 @@ impl SciApp {
                 return false;
             }
         };
-        let limits = vec![scicanvas_core::nlfit::ParamLimits::default(); function.parameters().len()];
-        self.custom_nlfit(function, values, limits, constraints)
+        let (limits, weighted) = match &self.dialog {
+            Some(Dialog::CustomNlFit(edit)) => (edit.limits.clone(), edit.weighted),
+            _ => (
+                vec![scicanvas_core::nlfit::ParamLimits::default(); function.parameters().len()],
+                false,
+            ),
+        };
+        self.custom_nlfit_weighted(function, values, limits, constraints, weighted)
     }
 
     fn apply_set_values_action(&mut self, formula: String, keep: bool) {
         self.finish_edit();
         if self.set_column_values(&formula, keep) {
             self.dialog = None;
+        }
+    }
+}
+
+impl SciApp {
+    fn import_template_file(&mut self, save: bool) {
+        let Some(Dialog::ImportWizard(wizard)) = &self.dialog else {
+            return;
+        };
+        let options = wizard.options.clone();
+        let dialog = self.file_dialog().add_filter("导入模板", &["scit"]);
+        let path = if save { dialog.save_file() } else { dialog.pick_file() };
+        let Some(path) = path else {
+            return;
+        };
+        self.settings.last_dir = path.parent().map(std::path::Path::to_path_buf);
+        let result = if save {
+            scicanvas_core::csv::import_template_json(&options)
+                .and_then(|s| std::fs::write(path, s).map_err(|e| e.to_string()))
+                .map(|_| None)
+        } else {
+            std::fs::read_to_string(path)
+                .map_err(|e| e.to_string())
+                .and_then(|s| scicanvas_core::csv::import_template_from_json(&s))
+                .map(Some)
+        };
+        match result {
+            Ok(options) => {
+                if let Some(Dialog::ImportWizard(wizard)) = &mut self.dialog {
+                    if let Some(options) = options {
+                        wizard.options = options;
+                    }
+                    wizard.error = None;
+                }
+                self.status_ok(
+                    if save {
+                        "已保存导入模板"
+                    } else {
+                        "已加载导入模板"
+                    }
+                    .into(),
+                );
+            }
+            Err(error) => {
+                if let Some(Dialog::ImportWizard(wizard)) = &mut self.dialog {
+                    wizard.error = Some(error.clone());
+                }
+                self.status_err(error);
+            }
         }
     }
 }

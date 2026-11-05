@@ -13,7 +13,7 @@ impl Dialog {
             unreachable!()
         };
         let mut action = Action::None;
-        window(ctx, "标准曲线正反查")
+        window(ctx, "标准曲线反查")
             .centered()
             .default_width(crate::theme::dialog::MEDIUM)
             .open(open)

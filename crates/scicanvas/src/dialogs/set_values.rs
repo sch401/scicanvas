@@ -31,7 +31,7 @@ impl Dialog {
                 }
             });
             if let Some(e) = error {
-                ui.label(RichText::new(e.as_str()).color(ui.visuals().error_fg_color));
+                field_error(ui, e);
             }
             ui.add_space(4.0);
             ui.horizontal_wrapped(|ui| {

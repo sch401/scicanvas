@@ -41,7 +41,10 @@ impl<'open> SettingsWindow<'open> {
         ctx: &egui::Context,
         contents: impl FnOnce(&mut egui::Ui) -> R,
     ) -> Option<egui::InnerResponse<Option<R>>> {
-        let first_open = self.centered && ctx.memory(|memory| memory.area_rect(self.id).is_none());
+        let recenter = ctx
+            .data_mut(|d| d.remove_temp::<bool>(self.id.with("recenter")))
+            .unwrap_or(false);
+        let first_open = self.centered && (recenter || ctx.memory(|memory| memory.area_rect(self.id).is_none()));
         let mut state = docks(ctx);
         if !state.panels.iter().any(|p| p.id == self.id) {
             state.panels.push(DockPanel {
@@ -269,6 +272,7 @@ pub(crate) fn window<'open>(ctx: &egui::Context, title: &str) -> SettingsWindow<
         id,
         centered: false,
         window: egui::Window::new(RichText::new(title).strong())
+            .order(egui::Order::Foreground)
             .id(id)
             .constrain_to(floating_bounds(ctx))
             .collapsible(true)

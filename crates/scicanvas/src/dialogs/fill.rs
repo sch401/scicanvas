@@ -14,7 +14,7 @@ impl Dialog {
             unreachable!()
         };
         let mut action = Action::None;
-        window(ctx, "填充数据序列").centered().open(open).show(ctx, |ui| {
+        window(ctx, "填充序列").centered().open(open).show(ctx, |ui| {
             ui.label(RichText::new(format!("目标列：{target}")).strong());
             if *filtered {
                 ui.colored_label(pal.warn, "工作表已筛选：填充会从第 1 行开始写入，包括隐藏行。");
