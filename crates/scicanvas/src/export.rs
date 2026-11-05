@@ -166,6 +166,44 @@ pub fn copy_to_clipboard(pixmap: &Pixmap) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn b7_shapes_hatches_export_as_vectors_and_rasterize() {
+        use scicanvas_core::{
+            page::{CurveStyle, FillPattern, PatternKind, ShapeKind},
+            PlotType, Project,
+        };
+        let mut p = Project::sample();
+        let layer = p.graphs[0].first_layer_mut();
+        layer.set_plot_type(PlotType::Area).unwrap();
+        layer.set_plot_style(
+            "B",
+            Some(CurveStyle {
+                pattern: Some(FillPattern {
+                    kind: PatternKind::Cross,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+        );
+        for (kind, a, b) in [
+            (ShapeKind::Line, [0.1, 0.1], [0.3, 0.1]),
+            (ShapeKind::Arrow, [0.1, 0.2], [0.3, 0.3]),
+            (ShapeKind::Rect, [0.6, 0.1], [0.8, 0.3]),
+            (ShapeKind::Ellipse, [0.6, 0.5], [0.8, 0.7]),
+        ] {
+            p.graphs[0].page.add_shape(kind, a, b).unwrap();
+        }
+        let page = scicanvas_core::svg::render_page(&p.graphs[0], &p);
+        assert!(!page.contains("<pattern"));
+        let image = super::rasterize(&page, 150).unwrap();
+        assert!(image.width() > 100 && image.height() > 100);
+        let png = super::png_bytes(&image, 150).unwrap();
+        assert!(png.starts_with(&[137, 80, 78, 71]));
+        let pdf = super::pdf_bytes(&page).unwrap();
+        assert!(pdf.starts_with(b"%PDF-1."));
+        assert!(!String::from_utf8_lossy(&pdf).contains("/Subtype /Image"));
+    }
+
     use super::*;
     use scicanvas_core::{svg, Project};
 

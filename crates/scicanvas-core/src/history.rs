@@ -246,6 +246,7 @@ fn estimated_bytes(p: &Project) -> usize {
     }
     for g in &p.graphs {
         bytes += g.name.capacity() + std::mem::size_of_val(g.page.layers());
+        bytes += g.page.shapes.capacity() * size_of::<crate::page::ShapeObject>();
         for layer in g.page.layers() {
             bytes += layer.estimated_plot_bytes();
             bytes += [&layer.title, &layer.x_title, &layer.y_title]
@@ -453,6 +454,7 @@ mod tests {
         }
         for g in &p.graphs {
             bytes += g.name.capacity() + std::mem::size_of_val(g.page.layers());
+            bytes += g.page.shapes.capacity() * size_of::<crate::page::ShapeObject>();
             for layer in g.page.layers() {
                 bytes += layer.functions.capacity() * size_of::<crate::page::FunctionCurve>();
                 for function in &layer.functions {

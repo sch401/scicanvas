@@ -34,7 +34,9 @@ impl PlotObjectEditor {
     ) -> (bool, Option<crate::plot::ObjectAction>) {
         use crate::plot::{self, ObjectTarget as T};
         let edit = self;
-        let title = if matches!(edit.target, T::Text(_)) {
+        let title = if matches!(edit.target, T::Shape(_)) {
+            "绘图对象"
+        } else if matches!(edit.target, T::Text(_)) {
             "文字标注"
         } else if matches!(edit.target, T::ColorScale(_)) {
             "色阶条"
@@ -47,6 +49,7 @@ impl PlotObjectEditor {
             ui.push_id((edit.graph, edit.target), |ui| {
                 ui.label(&g.name);
                 match edit.target {
+                    T::Shape(id) => shape_properties(ui, g.page.shape_mut(id).unwrap(), history_group),
                     T::Text(id) => {
                         egui::ComboBox::from_id_salt("text-object")
                             .selected_text(format!("文字 {id}"))
@@ -147,5 +150,82 @@ impl PlotObjectEditor {
             });
         });
         (open, action)
+    }
+}
+
+fn shape_properties(ui: &mut egui::Ui, shape: &mut scicanvas_core::page::ShapeObject, group: &mut Option<egui::Id>) {
+    use scicanvas_core::page::ShapeKind;
+    let mut candidate = *shape;
+    egui::Grid::new("shape-properties").num_columns(2).show(ui, |ui| {
+        ui.label("类型");
+        egui::ComboBox::from_id_salt("shape-kind")
+            .selected_text(candidate.kind.label())
+            .show_ui(ui, |ui| {
+                for kind in ShapeKind::ALL {
+                    ui.selectable_value(&mut candidate.kind, kind, kind.label());
+                }
+            });
+        ui.end_row();
+        ui.label("端点/角点 A");
+        page_position_editor(ui, &mut candidate.a, group);
+        ui.end_row();
+        ui.label("端点/角点 B");
+        page_position_editor(ui, &mut candidate.b, group);
+        ui.end_row();
+        ui.label("线条颜色");
+        edit_group(&ui.color_edit_button_srgb(&mut candidate.stroke), group);
+        ui.end_row();
+        ui.label("线宽");
+        edit_group(
+            &ui.add(
+                egui::DragValue::new(&mut candidate.width_pt)
+                    .range(0.0..=32.)
+                    .speed(0.1)
+                    .suffix(" pt"),
+            ),
+            group,
+        );
+        ui.end_row();
+        ui.label("线型");
+        ui.checkbox(&mut candidate.dashed, "虚线");
+        ui.end_row();
+        if candidate.kind == ShapeKind::Arrow {
+            ui.label("箭头大小");
+            edit_group(
+                &ui.add(
+                    egui::DragValue::new(&mut candidate.head_pt)
+                        .range(0.0..=64.)
+                        .speed(0.5)
+                        .suffix(" pt"),
+                ),
+                group,
+            );
+            ui.end_row();
+        }
+        if matches!(candidate.kind, ShapeKind::Rect | ShapeKind::Ellipse) {
+            let mut enabled = candidate.fill.is_some();
+            let (mut color, mut alpha) = candidate.fill.unwrap_or((candidate.stroke, 0.25));
+            ui.label("填充");
+            ui.checkbox(&mut enabled, "启用");
+            ui.end_row();
+            if enabled {
+                ui.label("填充颜色");
+                edit_group(&ui.color_edit_button_srgb(&mut color), group);
+                ui.end_row();
+                ui.label("不透明度");
+                edit_group(
+                    &ui.add(egui::DragValue::new(&mut alpha).range(0.0..=1.).speed(0.01)),
+                    group,
+                );
+                ui.end_row();
+            }
+            candidate.fill = enabled.then_some((color, alpha));
+        }
+    });
+    match candidate.validate() {
+        Ok(()) => *shape = candidate,
+        Err(error) => {
+            ui.colored_label(ui.visuals().error_fg_color, error);
+        }
     }
 }

@@ -680,6 +680,7 @@ fn radial_plots(commands: &mut Vec<Command>) {
 }
 
 fn graphics_tools(commands: &mut Vec<Command>) {
+    shape_tools(commands);
     commands.extend([
         c(
             "plot.function",
@@ -723,4 +724,47 @@ fn graphics_tools(commands: &mut Vec<Command>) {
         )
         .modifies(),
     ]);
+}
+
+fn shape_tools(commands: &mut Vec<Command>) {
+    commands.push(c(
+        "graph.shape.line",
+        "绘制直线",
+        "area",
+        "",
+        "图形",
+        "draw shape line",
+        need_graph,
+        |a| a.start_shape_tool(scicanvas_core::page::ShapeKind::Line),
+    ));
+    commands.push(c(
+        "graph.shape.arrow",
+        "绘制箭头",
+        "area",
+        "",
+        "图形",
+        "draw shape arrow",
+        need_graph,
+        |a| a.start_shape_tool(scicanvas_core::page::ShapeKind::Arrow),
+    ));
+    commands.push(c(
+        "graph.shape.rect",
+        "绘制矩形",
+        "area",
+        "",
+        "图形",
+        "draw shape rect",
+        need_graph,
+        |a| a.start_shape_tool(scicanvas_core::page::ShapeKind::Rect),
+    ));
+    commands.push(c(
+        "graph.shape.ellipse",
+        "绘制椭圆",
+        "area",
+        "",
+        "图形",
+        "draw shape ellipse",
+        need_graph,
+        |a| a.start_shape_tool(scicanvas_core::page::ShapeKind::Ellipse),
+    ));
 }

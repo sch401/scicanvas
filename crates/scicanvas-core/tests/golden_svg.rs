@@ -66,6 +66,7 @@ fn cases() -> Vec<(String, String)> {
     let id = graph.page.add_text([0.15, 0.06]).unwrap();
     graph.page.text_mut(id).unwrap().text = "Note_{1} α\n\\b{Result} R^{2}".into();
     cases.push(("annotation-legend".into(), svg::render_page(&graph, &project)));
+    cases.extend(drawing_cases());
     cases
 }
 
@@ -104,4 +105,87 @@ fn update_svg_baselines() {
     for (name, rendered) in cases() {
         fs::write(directory().join(format!("{name}.svg")), rendered).unwrap();
     }
+}
+
+fn drawing_project(kind: PlotType, keys: &[&str]) -> Project {
+    let mut p = Project::default();
+    let id = p.alloc_id();
+    let mut book = presets::example();
+    book.id = id;
+    p.books.push(book);
+    let keys: Vec<_> = keys.iter().map(|s| (*s).to_owned()).collect();
+    let spec = PlotSpec::from_selection(&p.books[0], &keys, kind).unwrap();
+    p.plot_spec(spec).unwrap();
+    let layer = p.graphs[0].first_layer_mut();
+    layer.title = "Patterns".into();
+    layer.x_title = "X".into();
+    layer.y_title = "Y".into();
+    p
+}
+fn drawing_cases() -> Vec<(String, String)> {
+    use scicanvas_core::page::{FillPattern, PatternKind, ShapeKind};
+    let mut result = Vec::new();
+    let mut p = drawing_project(PlotType::LineSymbol, &["B"]);
+    let g = &mut p.graphs[0];
+    g.first_layer_mut().legend = false;
+    g.first_layer_mut().title = "Page shapes".into();
+    for (kind, a, b) in [
+        (ShapeKind::Line, [0.1, 0.12], [0.4, 0.12]),
+        (ShapeKind::Arrow, [0.1, 0.3], [0.4, 0.45]),
+        (ShapeKind::Rect, [0.5, 0.1], [0.82, 0.35]),
+        (ShapeKind::Ellipse, [0.5, 0.55], [0.85, 0.82]),
+    ] {
+        let id = g.page.add_shape(kind, a, b).unwrap();
+        let shape = g.page.shape_mut(id).unwrap();
+        shape.stroke = [140, 30, 60];
+        if matches!(kind, ShapeKind::Rect | ShapeKind::Ellipse) {
+            shape.fill = Some(([30, 150, 180], 0.25));
+        }
+        shape.dashed = kind == ShapeKind::Ellipse;
+    }
+    result.push(("shape-objects".into(), svg::render_page(&p.graphs[0], &p)));
+    let mut p = drawing_project(PlotType::Bar, &["B"]);
+    let base = p.graphs[0].first_layer().clone();
+    for _ in 1..6 {
+        p.graphs[0].page.add_layer(base.clone());
+    }
+    p.graphs[0].page.columns = 3;
+    p.graphs[0].page.height_mm = 140.;
+    for (layer, kind) in p.graphs[0].page.layers_mut().iter_mut().zip(PatternKind::ALL) {
+        layer.legend = false;
+        layer.title = format!("{kind:?}");
+        layer.set_plot_style(
+            "B",
+            Some(scicanvas_core::page::CurveStyle {
+                pattern: Some(FillPattern {
+                    kind,
+                    spacing_pt: 4.,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+        );
+    }
+    result.push(("hatch-bars".into(), svg::render_page(&p.graphs[0], &p)));
+    let mut p = drawing_project(PlotType::Area, &["B", "C"]);
+    for (key, values) in [("B", vec![2., 3., 2., 4., 3.]), ("C", vec![-1., -2., -1., -3., -2.])] {
+        p.books[0].columns.iter_mut().find(|c| c.key == key).unwrap().data =
+            values.iter().map(ToString::to_string).collect();
+    }
+    for (key, kind) in [("B", PatternKind::Cross), ("C", PatternKind::Dots)] {
+        p.graphs[0].first_layer_mut().set_plot_style(
+            key,
+            Some(scicanvas_core::page::CurveStyle {
+                pattern: Some(FillPattern {
+                    kind,
+                    spacing_pt: 4.,
+                    width_pt: 0.75,
+                    ..Default::default()
+                }),
+                ..Default::default()
+            }),
+        );
+    }
+    result.push(("hatch-area".into(), svg::render_page(&p.graphs[0], &p)));
+    result
 }

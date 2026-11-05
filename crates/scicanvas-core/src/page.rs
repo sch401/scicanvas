@@ -1,6 +1,9 @@
 //! 页面 → 图层 → 作图描述。图层样式和数据引用均可独立设置。
 pub(crate) mod plots;
 pub use plots::LayerSpec;
+mod shapes;
+pub use crate::scene::hatch::{FillPattern, PatternKind};
+pub use shapes::{ShapeKind, ShapeObject};
 mod functions;
 pub use functions::FunctionCurve;
 
@@ -26,6 +29,10 @@ pub struct Page {
     pub gap_mm: [f64; 2],
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Vec::is_empty"))]
     pub annotations: Vec<TextAnnotation>,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "Vec::is_empty"))]
+    pub shapes: Vec<ShapeObject>,
+    #[cfg_attr(feature = "serde", serde(skip_serializing_if = "first_shape_id"))]
+    next_shape_id: u64,
     /// Page-local stable IDs are never reused after deletion.
     next_text_id: u64,
 }
@@ -40,6 +47,11 @@ pub struct TextAnnotation {
     pub size_pt: f64,
     pub color: [u8; 3],
     pub rich: bool,
+}
+
+#[cfg(feature = "serde")]
+fn first_shape_id(id: &u64) -> bool {
+    *id == 1
 }
 
 fn valid_position(position: [f64; 2]) -> bool {
@@ -76,6 +88,8 @@ impl Default for Page {
             margin_mm: [0.0; 4],
             gap_mm: [0.0; 2],
             annotations: Vec::new(),
+            shapes: Vec::new(),
+            next_shape_id: 1,
             next_text_id: 1,
         }
     }
@@ -159,6 +173,7 @@ impl Page {
         Ok(layer)
     }
     pub fn validate(&self) -> Result<(), String> {
+        self.validate_shapes()?;
         let mut ids = std::collections::BTreeSet::new();
         for text in &self.annotations {
             if text.id == 0 || text.id >= self.next_text_id || !ids.insert(text.id) {
@@ -229,7 +244,15 @@ impl Page {
             }) {
                 return Err("右 Y 非线性手动范围无效".into());
             }
+            for style in layer.styles().values() {
+                if let Some(pattern) = &style.pattern {
+                    pattern.validate()?;
+                }
+            }
             for function in &layer.functions {
+                if let Some(pattern) = &function.style.pattern {
+                    pattern.validate()?;
+                }
                 function.validate()?;
             }
             for line in &layer.reference_lines {
@@ -474,6 +497,8 @@ impl Default for ColorScale {
 #[derive(Clone, Debug, Default, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize), serde(default))]
 pub struct CurveStyle {
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Option::is_none"))]
+    pub pattern: Option<FillPattern>,
     #[cfg_attr(feature = "serde", serde(skip_serializing_if = "String::is_empty"))]
     pub legend_label: String,
     pub kind: Option<crate::PlotType>,

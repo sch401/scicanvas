@@ -1,5 +1,9 @@
 # 项目文件格式
 
+## v39 绘图对象和填充图案
+
+Page 新增 shapes 数组和 next_shape_id，空数组与默认计数省略。ShapeObject 保存稳定 id、kind、页面比例端点 a/b、描边、宽度、虚线、填充透明度和箭头大小，F494 数据坐标锚定另行实现。CurveStyle 新增可选 pattern，缺省 None 且省略；FillPattern 保存 kind、spacing_pt、width_pt 和可选颜色，颜色缺省时自动使用与底色对比的黑色或白色。线段、箭头、椭圆和填充图案共用几何原语，SVG 不使用 pattern 元素。新文件 v39，读取 v0–v38，SCV 容器版本保持 1。
+
 ## v38 坐标轴类型
 
 Layer 新增可选 x_scale/y_scale，缺省 None 且省略，沿用 x_log/y_log 回退为 Linear/Log10。运行时 Axis 只保存 AxisScale，正逆映射共用 forward/inverse。设置和保存 Log10 继续写旧 log 标志；其余类型使用显式枚举。Probability 为 0–100 百分数，Logit 为 0–1。倒数范围需同号，自动按首个有效点取侧，左右 Y 独立。新文件 v38，读取 v0–v37，SCV 容器版本保持 1。

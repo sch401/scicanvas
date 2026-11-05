@@ -87,7 +87,9 @@ pub(crate) fn draw(ctx: &Context<'_, '_, '_, '_>, plots: &[crate::page::Prepared
         row_lines::draw(ctx, plots, items);
     }
     for plot in plots {
+        let start = items.len();
         if box_plot::draw(ctx, plot, items) {
+            apply_pattern(plot, items, start);
             continue;
         }
         let (series, style, paths) = (&plot.series, &plot.style, &plot.paths);
@@ -116,11 +118,13 @@ pub(crate) fn draw(ctx: &Context<'_, '_, '_, '_>, plots: &[crate::page::Prepared
             }
         }
         if bars::draw(ctx, series, style, paths, items) {
+            apply_pattern(plot, items, start);
             continue;
         }
         if let Some(symbol) = path::draw(ctx, series, style, plot.plot.style.as_ref(), paths, items) {
             symbols.push(symbol);
         }
+        apply_pattern(plot, items, start);
     }
     if ctx.layer.error_bars.visible && ctx.layer.plot_type != PlotType::ErrorBand {
         annotations::errors(ctx, plots, items);
@@ -130,6 +134,12 @@ pub(crate) fn draw(ctx: &Context<'_, '_, '_, '_>, plots: &[crate::page::Prepared
     }
     if ctx.layer.labels.visible {
         annotations::labels(ctx, plots, items);
+    }
+}
+
+fn apply_pattern(plot: &crate::page::PreparedPlot, items: &mut Vec<Item>, start: usize) {
+    if let Some(pattern) = plot.plot.style.as_ref().and_then(|s| s.pattern.as_ref()) {
+        crate::scene::hatch::overlay(items, start, pattern);
     }
 }
 

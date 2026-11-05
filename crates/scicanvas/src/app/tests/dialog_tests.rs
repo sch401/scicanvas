@@ -2670,3 +2670,125 @@ fn a7_reports_real_write_compare_and_summary_undo() {
     assert_eq!(app.project.graphs.last().unwrap().page.layers().len(), 3);
     roundtrip(&mut app, &before);
 }
+
+#[test]
+fn b7_actual_shape_create_move_resize_delete_undo() {
+    use scicanvas_core::page::ShapeKind;
+    for (kind, command) in [
+        (ShapeKind::Line, "graph.shape.line"),
+        (ShapeKind::Arrow, "graph.shape.arrow"),
+        (ShapeKind::Rect, "graph.shape.rect"),
+        (ShapeKind::Ellipse, "graph.shape.ellipse"),
+    ] {
+        let mut app = app();
+        app.active = Some(2);
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        let before = app.project.clone();
+        app.run_command(command);
+        let page = object_frame(&mut app, &ctx, vec![], false);
+        let at = |p: [f64; 2]| {
+            egui::pos2(
+                page.left() + page.width() * p[0] as f32,
+                page.top() + page.height() * p[1] as f32,
+            )
+        };
+        let a = at([0.15, 0.15]);
+        let b = at([0.65, 0.45]);
+        object_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(a)], false);
+        object_frame(&mut app, &ctx, vec![object_button(a, true)], false);
+        object_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(b)], false);
+        object_frame(&mut app, &ctx, vec![object_button(b, false)], false);
+        assert_eq!(
+            app.project.graph(2).unwrap().page.shapes.len(),
+            1,
+            "{kind:?}: {}",
+            app.status
+        );
+        assert_eq!(app.project.graph(2).unwrap().page.shapes[0].kind, kind);
+        roundtrip(&mut app, &before);
+        let shape = app.project.graph(2).unwrap().page.shapes[0];
+        let center = at([(shape.a[0] + shape.b[0]) / 2., (shape.a[1] + shape.b[1]) / 2.]);
+        let before = app.project.clone();
+        let end = center + egui::vec2(page.width() * 0.04, page.height() * 0.03);
+        object_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(center)], false);
+        object_frame(&mut app, &ctx, vec![object_button(center, true)], false);
+        object_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)], false);
+        object_frame(&mut app, &ctx, vec![object_button(end, false)], false);
+        let moved = app.project.graph(2).unwrap().page.shapes[0];
+        assert!((moved.origin()[0] - shape.origin()[0] - 0.04).abs() < 1e-5, "{kind:?}");
+        assert!((moved.origin()[1] - shape.origin()[1] - 0.03).abs() < 1e-5);
+        roundtrip(&mut app, &before);
+        let shape = app.project.graph(2).unwrap().page.shapes[0];
+        let center = at([(shape.a[0] + shape.b[0]) / 2., (shape.a[1] + shape.b[1]) / 2.]);
+        object_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(center)], false);
+        object_frame(&mut app, &ctx, vec![object_button(center, true)], false);
+        object_frame(&mut app, &ctx, vec![object_button(center, false)], false);
+        let before = app.project.clone();
+        let handle = at(shape.a);
+        let end = handle + egui::vec2(-page.width() * 0.02, page.height() * 0.01);
+        object_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(handle)], false);
+        object_frame(&mut app, &ctx, vec![object_button(handle, true)], false);
+        object_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(end)], false);
+        object_frame(&mut app, &ctx, vec![object_button(end, false)], false);
+        let resized = app.project.graph(2).unwrap().page.shapes[0];
+        assert!((resized.a[0] - shape.a[0] + 0.02).abs() < 1e-5, "{kind:?}");
+        assert!((resized.a[1] - shape.a[1] - 0.01).abs() < 1e-5);
+        for i in 0..2 {
+            assert!((resized.b[i] - shape.b[i]).abs() < 1e-12);
+        }
+        roundtrip(&mut app, &before);
+        let shape = app.project.graph(2).unwrap().page.shapes[0];
+        let center = at([(shape.a[0] + shape.b[0]) / 2., (shape.a[1] + shape.b[1]) / 2.]);
+        object_frame(&mut app, &ctx, vec![egui::Event::PointerMoved(center)], false);
+        object_frame(&mut app, &ctx, vec![object_button(center, true)], false);
+        object_frame(&mut app, &ctx, vec![object_button(center, false)], false);
+        let before = app.project.clone();
+        object_frame(
+            &mut app,
+            &ctx,
+            vec![egui::Event::Key {
+                key: egui::Key::Delete,
+                physical_key: None,
+                pressed: true,
+                repeat: false,
+                modifiers: egui::Modifiers::NONE,
+            }],
+            false,
+        );
+        assert!(app.project.graph(2).unwrap().page.shapes.is_empty());
+        roundtrip(&mut app, &before);
+    }
+}
+
+#[test]
+fn b7_shape_fill_property_checkbox_undo() {
+    use scicanvas_core::page::ShapeKind;
+    let mut app = app();
+    app.active = Some(2);
+    let id = app
+        .project
+        .graph_mut(2)
+        .unwrap()
+        .page
+        .add_shape(ShapeKind::Rect, [0.2, 0.2], [0.6, 0.6])
+        .unwrap();
+    app.apply_object_action(2, crate::plot::ObjectAction::Edit(crate::plot::ObjectTarget::Shape(id)));
+    let before = app.project.clone();
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    ctx.style_mut(|s| s.animation_time = 0.);
+    let mut ui = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1200., 900.)),
+        |app: &mut SciApp, ctx: &egui::Context| app.object_window(ctx),
+    );
+    for _ in 0..4 {
+        ui.frame(&mut app, vec![]);
+    }
+    let out = ui.frame(&mut app, vec![]);
+    ui.click_text(&mut app, &out, "启用");
+    app.finish_edit();
+    assert!(app.project.graph(2).unwrap().page.shape(id).unwrap().fill.is_some());
+    roundtrip(&mut app, &before);
+}

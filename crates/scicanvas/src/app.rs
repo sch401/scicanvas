@@ -224,6 +224,7 @@ pub struct SciApp {
     /// 正在编辑属性的图形。
     pub(crate) props_for: Option<u64>,
     adding_text: Option<u64>,
+    shape_tool: Option<(u64, scicanvas_core::page::ShapeKind)>,
     object_editor: Option<ObjectEditor>,
     plot_epoch: u64,
     active_layers: HashMap<u64, usize>,
@@ -370,6 +371,7 @@ impl SciApp {
             edit_depth: 0,
             edit_abort: None,
             adding_text: None,
+            shape_tool: None,
             object_editor: None,
             plot_epoch: 0,
             open: HashMap::new(),
@@ -424,6 +426,7 @@ impl SciApp {
         self.analysis_curves.clear();
         self.active_layers.clear();
         self.adding_text = None;
+        self.shape_tool = None;
         self.object_editor = None;
         self.plot_epoch = self.plot_epoch.wrapping_add(1);
         self.plot_draft = None;
@@ -1336,9 +1339,11 @@ impl SciApp {
 
     fn restore_history(&mut self, project: Project) {
         self.adding_text = None;
+        self.shape_tool = None;
         self.plot_epoch = self.plot_epoch.wrapping_add(1);
         self.object_editor = self.object_editor.filter(|edit| match edit.target {
             plot::ObjectTarget::Text(id) => project.graph(edit.graph).is_some_and(|g| g.page.text(id).is_some()),
+            plot::ObjectTarget::Shape(id) => project.graph(edit.graph).is_some_and(|g| g.page.shape(id).is_some()),
             plot::ObjectTarget::ColorScale(index) => project.graph(edit.graph).is_some_and(|g| {
                 g.page
                     .layers()
@@ -1647,9 +1652,9 @@ impl SciApp {
     pub(crate) fn add_layer(&mut self) {
         let Some(id) = self.active_graph_id() else { return };
         self.plot_epoch = self.plot_epoch.wrapping_add(1);
-        self.object_editor = self
-            .object_editor
-            .filter(|e| e.graph != id || matches!(e.target, plot::ObjectTarget::Text(_)));
+        self.object_editor = self.object_editor.filter(|e| {
+            e.graph != id || matches!(e.target, plot::ObjectTarget::Text(_) | plot::ObjectTarget::Shape(_))
+        });
         let index = self.layer_index(id);
         let graph = self.project.graph_mut(id).unwrap();
         let mut layer = graph.page.layers()[index].clone();
@@ -1702,9 +1707,9 @@ impl SciApp {
         match graph.page.remove_layer(index) {
             Ok(_) => {
                 self.plot_epoch = self.plot_epoch.wrapping_add(1);
-                self.object_editor = self
-                    .object_editor
-                    .filter(|e| e.graph != id || matches!(e.target, plot::ObjectTarget::Text(_)));
+                self.object_editor = self.object_editor.filter(|e| {
+                    e.graph != id || matches!(e.target, plot::ObjectTarget::Text(_) | plot::ObjectTarget::Shape(_))
+                });
                 self.analysis_curves.retain(|(graph_id, _), _| *graph_id != id);
                 self.active_layers.insert(id, index.min(graph.page.layers().len() - 1));
                 self.status = "已删除图层".into();
