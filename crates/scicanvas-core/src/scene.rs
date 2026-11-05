@@ -8,7 +8,7 @@ use crate::coord::{Cartesian, Coord};
 use crate::model::{Book, Graph, PlotType, Symbol};
 use crate::page::Layer;
 use crate::plotspec::BookLookup;
-use crate::ticks::{axis, Axis, TickLabel};
+use crate::ticks::{axis, axis_scaled, Axis, AxisScale, TickLabel};
 mod color_scale;
 mod layout;
 mod legend;
@@ -413,7 +413,7 @@ pub fn layout_page(g: &Graph, project: &crate::Project, views: &[Option<View>]) 
 /// 端点上有数据点时把线性轴的这一端外扩 4%（刻度不变）。
 fn pad_ends(a: &mut Axis, vals: impl Iterator<Item = f64>) {
     let span = a.hi - a.lo;
-    if a.log || !span.is_finite() || span <= 0.0 {
+    if a.scale != AxisScale::Linear || !span.is_finite() || span <= 0.0 {
         return;
     }
     let (mut lo, mut hi) = (false, false);
@@ -733,7 +733,9 @@ fn prepare_layer_data(ctx: &LayerContext<'_, '_, '_>) -> LayerData {
                 | PlotType::LineSeries
         )
     });
-    let x_date = !horizontal && !g.x_log && x_col.is_some_and(|c| c.data.kind() == crate::DataKind::DateTime);
+    let x_date = !horizontal
+        && g.effective_x_scale() == AxisScale::Linear
+        && x_col.is_some_and(|c| c.data.kind() == crate::DataKind::DateTime);
     let date_offset = x_col.map_or(0.0, |c| f64::from(c.format.utc_offset) * 60_000.0);
     let categories = if matches!(
         g.plot_type,
@@ -778,7 +780,13 @@ fn prepare_layer_data(ctx: &LayerContext<'_, '_, '_>) -> LayerData {
         } else {
             &mut all_y
         };
-        target.extend(paths.iter().flatten().map(|p| p[1]).filter(|v| !g.y_log || *v > 0.0));
+        target.extend(
+            paths
+                .iter()
+                .flatten()
+                .map(|p| p[1])
+                .filter(|v| g.effective_y_scale().domain_ok(*v)),
+        );
     }
     if (g.plot_type.is_bar() && recipe.position != crate::position::Position::Dodge)
         || matches!(g.plot_type, PlotType::StackedArea | PlotType::FillBetween)
@@ -787,14 +795,14 @@ fn prepare_layer_data(ctx: &LayerContext<'_, '_, '_>) -> LayerData {
             .iter()
             .filter(|p| !p.series.line_only && (g.plot_type != PlotType::FillBetween || p.plot.mapping.base.is_some()))
         {
-            let (target, log) = if horizontal {
-                (&mut all_x, g.x_log)
+            let (target, scale) = if horizontal {
+                (&mut all_x, g.effective_x_scale())
             } else if p.style.y_axis == crate::coord::YAxis::Right {
-                (&mut all_y2, g.y_log)
+                (&mut all_y2, g.effective_y_scale())
             } else {
-                (&mut all_y, g.y_log)
+                (&mut all_y, g.effective_y_scale())
             };
-            target.extend(p.series.bases.iter().copied().filter(|v| !log || *v > 0.0));
+            target.extend(p.series.bases.iter().copied().filter(|v| scale.domain_ok(*v)));
         }
     }
     if g.error_bars.visible {
@@ -805,12 +813,12 @@ fn prepare_layer_data(ctx: &LayerContext<'_, '_, '_>) -> LayerData {
                 } else {
                     &mut all_y
                 };
-                for (dim, values, log) in [(0, &mut all_x, g.x_log), (1, ys, g.y_log)] {
+                for (dim, values, scale) in [(0, &mut all_x, g.effective_x_scale()), (1, ys, g.effective_y_scale())] {
                     if let Some(error) = errors[dim] {
                         values.extend(
                             [point[dim] - error, point[dim] + error]
                                 .into_iter()
-                                .filter(|v| v.is_finite() && (!log || *v > 0.0)),
+                                .filter(|v| scale.domain_ok(*v)),
                         );
                     }
                 }
@@ -855,13 +863,37 @@ struct AxisRanges {
     y2_label: TickLabel,
     ylab2_w: f64,
 }
+fn right_y_axis(g: &Layer, data: &LayerData) -> Option<Axis> {
+    let all_y2 = &data.all_y2;
+    let plots = &data.plots;
+    (!all_y2.is_empty()).then(|| {
+        let mut a = axis_scaled(all_y2, g.y2_auto, g.y2_min, g.y2_max, g.effective_y_scale(), false);
+        if g.y2_auto {
+            let marks: Vec<f64> = plots
+                .iter()
+                .map(|p| (&p.series, &p.style))
+                .filter(|(s, st)| {
+                    !s.line_only
+                        && (st.kind.has_symbol()
+                            || matches!(
+                                st.kind,
+                                PlotType::Box | PlotType::Violin | PlotType::ColumnScatter | PlotType::LineSeries
+                            ))
+                        && st.y_axis == crate::coord::YAxis::Right
+                })
+                .flat_map(|(s, _)| s.points.iter().map(|p| p[1]))
+                .collect();
+            pad_ends(&mut a, marks.into_iter());
+        }
+        a
+    })
+}
 fn axis_ranges(ctx: &LayerContext<'_, '_, '_>, data: &LayerData) -> AxisRanges {
     let g = ctx.layer;
     let view = ctx.view;
     let plots = &data.plots;
     let all_x = &data.all_x;
     let all_y = &data.all_y;
-    let all_y2 = &data.all_y2;
     let horizontal = data.horizontal;
     let is_bar = data.is_bar;
     let dx = data.dx;
@@ -869,28 +901,30 @@ fn axis_ranges(ctx: &LayerContext<'_, '_, '_>, data: &LayerData) -> AxisRanges {
     let categories = &data.categories;
     let (xa, ya): (Axis, Axis) = match view {
         Some(v) => (
-            axis(&[], false, v.x.0, v.x.1, g.x_log, false),
-            axis(&[], false, v.y.0, v.y.1, g.y_log, false),
+            axis_scaled(&[], false, v.x.0, v.x.1, g.effective_x_scale(), false),
+            axis_scaled(&[], false, v.y.0, v.y.1, g.effective_y_scale(), false),
         ),
         None => {
-            let xa = if is_bar && !horizontal && g.x_auto && !g.x_log && !all_x.is_empty() {
-                let lo = all_x.iter().copied().fold(f64::INFINITY, f64::min);
-                let hi = all_x.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-                axis(&[lo - dx * 0.6, hi + dx * 0.6], true, 0.0, 0.0, false, false)
-            } else {
-                axis(all_x, g.x_auto, g.x_min, g.x_max, g.x_log, horizontal)
-            };
-            let ya = if horizontal && g.y_auto && !g.y_log && !all_y.is_empty() {
+            let xa =
+                if is_bar && !horizontal && g.x_auto && g.effective_x_scale() == AxisScale::Linear && !all_x.is_empty()
+                {
+                    let lo = all_x.iter().copied().fold(f64::INFINITY, f64::min);
+                    let hi = all_x.iter().copied().fold(f64::NEG_INFINITY, f64::max);
+                    axis(&[lo - dx * 0.6, hi + dx * 0.6], true, 0.0, 0.0, false, false)
+                } else {
+                    axis_scaled(all_x, g.x_auto, g.x_min, g.x_max, g.effective_x_scale(), horizontal)
+                };
+            let ya = if horizontal && g.y_auto && g.effective_y_scale() == AxisScale::Linear && !all_y.is_empty() {
                 let lo = all_y.iter().copied().fold(f64::INFINITY, f64::min);
                 let hi = all_y.iter().copied().fold(f64::NEG_INFINITY, f64::max);
                 axis(&[lo - dx * 0.6, hi + dx * 0.6], true, 0.0, 0.0, false, false)
             } else {
-                axis(
+                axis_scaled(
                     all_y,
                     g.y_auto,
                     g.y_min,
                     g.y_max,
-                    g.y_log,
+                    g.effective_y_scale(),
                     (is_bar && !horizontal && g.plot_type != PlotType::FloatingBar)
                         || matches!(g.plot_type, PlotType::Area | PlotType::VerticalDrop),
                 )
@@ -966,35 +1000,32 @@ fn axis_ranges(ctx: &LayerContext<'_, '_, '_>, data: &LayerData) -> AxisRanges {
             .for_each(|t| *t -= off);
         (axis, TickLabel::Date(unit, off))
     } else {
-        (xa, TickLabel::Number(g.x_format))
+        {
+            let label = if xa.scale == AxisScale::Ln {
+                TickLabel::NaturalLog
+            } else {
+                TickLabel::Number(g.x_format)
+            };
+            (xa, label)
+        }
     };
     let y_label = match y_cat {
         Some(names) => TickLabel::Category(names),
-        None => TickLabel::Number(g.y_format),
+        None => {
+            if ya.scale == AxisScale::Ln {
+                TickLabel::NaturalLog
+            } else {
+                TickLabel::Number(g.y_format)
+            }
+        }
     };
     // 右侧 Y 轴独立控制范围；自动范围时，符号落在端点会留 4%
-    let ya2 = (!all_y2.is_empty()).then(|| {
-        let mut a = axis(all_y2, g.y2_auto, g.y2_min, g.y2_max, g.y_log, false);
-        if g.y2_auto {
-            let marks: Vec<f64> = plots
-                .iter()
-                .map(|p| (&p.series, &p.style))
-                .filter(|(s, st)| {
-                    !s.line_only
-                        && (st.kind.has_symbol()
-                            || matches!(
-                                st.kind,
-                                PlotType::Box | PlotType::Violin | PlotType::ColumnScatter | PlotType::LineSeries
-                            ))
-                        && st.y_axis == crate::coord::YAxis::Right
-                })
-                .flat_map(|(s, _)| s.points.iter().map(|p| p[1]))
-                .collect();
-            pad_ends(&mut a, marks.into_iter());
-        }
-        a
-    });
-    let y2_label = TickLabel::Number(g.y2_format.unwrap_or(g.y_format));
+    let ya2 = right_y_axis(g, data);
+    let y2_label = if g.effective_y_scale() == AxisScale::Ln {
+        TickLabel::NaturalLog
+    } else {
+        TickLabel::Number(g.y2_format.unwrap_or(g.y_format))
+    };
     let ylab2_w = ya2.as_ref().map_or(0.0, |a| {
         a.ticks
             .iter()
@@ -1208,14 +1239,14 @@ fn draw_layer_data(
         for line in &g.reference_lines {
             let seg = match line.axis {
                 crate::page::ReferenceAxis::X => {
-                    if axes.x.log && line.value <= 0.0 {
+                    if !axes.x.scale.domain_ok(line.value) {
                         continue;
                     }
                     let x = coord.project([line.value, ya.lo])[0];
                     [x, top, x, top + ph]
                 }
                 crate::page::ReferenceAxis::YLeft => {
-                    if ya.log && line.value <= 0.0 {
+                    if !ya.scale.domain_ok(line.value) {
                         continue;
                     }
                     let y = coord.project([xa.lo, line.value])[1];
@@ -1223,7 +1254,7 @@ fn draw_layer_data(
                 }
                 crate::page::ReferenceAxis::YRight => {
                     let Some(right) = axes.right_y.as_ref() else { continue };
-                    if right.log && line.value <= 0.0 {
+                    if !right.scale.domain_ok(line.value) {
                         continue;
                     }
                     let y = axes

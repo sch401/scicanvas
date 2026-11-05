@@ -247,6 +247,8 @@ fn project_value(project: &Project) -> Result<Value, String> {
             .iter()
             .zip(wire["page"]["layers"].as_array_mut().unwrap())
         {
+            wire["x_log"] = (layer.effective_x_scale() == crate::ticks::AxisScale::Log10).into();
+            wire["y_log"] = (layer.effective_y_scale() == crate::ticks::AxisScale::Log10).into();
             // 保留失去主工作簿的旧空图编辑设置；其余图层用明确的曲线对象写盘。
             if layer.book_id.is_none() {
                 continue;

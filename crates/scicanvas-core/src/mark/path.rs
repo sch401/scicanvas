@@ -17,7 +17,7 @@ pub(super) fn draw(
     if recipe.marks.contains(&Kind::Drop) {
         let axis = ctx.y_axis(style.y_axis);
         let base = ctx.py(
-            if axis.log {
+            if axis.scale != crate::ticks::AxisScale::Linear {
                 axis.lo
             } else {
                 0.0f64.clamp(axis.lo, axis.hi)
@@ -142,7 +142,8 @@ pub(super) fn draw_paths(
     items: &mut Vec<crate::scene::Item>,
 ) {
     for path in paths {
-        for run in path.split(|p| (ctx.layer.x_log && p[0] <= 0.0) || (ctx.layer.y_log && p[1] <= 0.0)) {
+        for run in path.split(|p| !ctx.axes.x.scale.domain_ok(p[0]) || !ctx.y_axis(style.y_axis).scale.domain_ok(p[1]))
+        {
             if run.len() > 1 {
                 ctx.push(
                     items,
@@ -358,7 +359,9 @@ fn colored_spline_segments(
     source.sort_by(|a, b| series.points[*a][0].total_cmp(&series.points[*b][0]));
     let mut segments = Vec::new();
     for path in splines {
-        for run in path.split(|point| (ctx.layer.x_log && point[0] <= 0.0) || (ctx.layer.y_log && point[1] <= 0.0)) {
+        for run in path
+            .split(|point| !ctx.axes.x.scale.domain_ok(point[0]) || !ctx.y_axis(style.y_axis).scale.domain_ok(point[1]))
+        {
             let pixels: Vec<_> = run
                 .iter()
                 .map(|point| [ctx.px(point[0]), ctx.py(point[1], style.y_axis)])

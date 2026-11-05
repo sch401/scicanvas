@@ -290,7 +290,36 @@ pub(crate) fn spline_paths(s: &crate::Series) -> Vec<Vec<[f64; 2]>> {
 }
 
 pub(crate) fn prepare(g: &crate::page::Layer, series: &mut [Series]) {
+    let scales = [g.effective_x_scale(), g.effective_y_scale()];
+    let sides = std::array::from_fn::<_, 3, _>(|axis| {
+        let (dim, auto, min) = match axis {
+            0 => (0, g.x_auto, g.x_min),
+            1 => (1, g.y_auto, g.y_min),
+            _ => (1, g.y2_auto, g.y2_min),
+        };
+        if auto {
+            series
+                .iter()
+                .filter(|s| axis == 0 || g.plot_style(&s.key).is_some_and(|s| s.right_axis) == (axis == 2))
+                .flat_map(|s| s.points.iter().map(|p| p[dim]))
+                .find(|v| scales[dim].domain_ok(*v))
+                .map_or(1., f64::signum)
+        } else {
+            min.signum()
+        }
+    });
+    let horizontal = crate::presets::recipe(g.plot_type).orientation == crate::coord::Orientation::Horizontal;
     for s in series {
+        let y_side = if g.plot_style(&s.key).is_some_and(|s| s.right_axis) {
+            sides[2]
+        } else {
+            sides[1]
+        };
+        let domain = |dim: usize, v: f64| {
+            scales[dim].domain_ok(v)
+                && (scales[dim] != crate::ticks::AxisScale::Reciprocal
+                    || v.signum() == if dim == 0 { sides[0] } else { y_side })
+        };
         // 均值变换后的点没有原始行，按顺序编号，连线不在组之间断开
         if (g.plot_type == PlotType::Area || g.plot_type.is_spline() || g.plot_type.has_line())
             && g.plot_type != PlotType::LineSeries
@@ -306,8 +335,8 @@ pub(crate) fn prepare(g: &crate::page::Layer, series: &mut [Series]) {
             .map(|(p, base)| {
                 p[1].is_finite()
                     && base.is_finite()
-                    && (!g.x_log || p[0] > 0.0)
-                    && (!g.y_log || p[1] > 0.0 || (g.plot_type.is_bar() && !s.line_only && *base > 0.0))
+                    && (domain(0, p[0]) || (horizontal && g.plot_type.is_bar() && !s.line_only && domain(0, *base)))
+                    && (domain(1, p[1]) || (!horizontal && g.plot_type.is_bar() && !s.line_only && domain(1, *base)))
             })
             .collect();
         let mut flags = keep.iter();

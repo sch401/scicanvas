@@ -2604,3 +2604,33 @@ fn a6_anchor_signal_and_merge_real_dialogs_are_single_undo_steps() {
         roundtrip(&mut app, &before);
     }
 }
+
+#[test]
+fn b6_axis_scale_combo_real_window_undo() {
+    use scicanvas_core::ticks::AxisScale;
+    let mut app = app();
+    app.active = Some(2);
+    app.props_for = Some(2);
+    let before = app.project.clone();
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    ctx.style_mut(|style| style.animation_time = 0.);
+    let mut ui = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1600., 1400.)),
+        |app: &mut SciApp, ctx: &egui::Context| app.props_window(ctx),
+    );
+    for _ in 0..5 {
+        ui.frame(&mut app, vec![]);
+    }
+    let out = ui.frame(&mut app, vec![]);
+    ui.click_text(&mut app, &out, "线性");
+    let out = ui.frame(&mut app, vec![]);
+    ui.click_text(&mut app, &out, "Log2");
+    app.finish_edit();
+    assert_eq!(
+        app.project.graph(2).unwrap().first_layer().effective_x_scale(),
+        AxisScale::Log2
+    );
+    roundtrip(&mut app, &before);
+}

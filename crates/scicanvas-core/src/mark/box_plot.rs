@@ -23,7 +23,7 @@ pub(super) fn draw(ctx: &Context<'_, '_, '_, '_>, plot: &PreparedPlot, items: &m
     let (left, right) = (ctx.px(x - half), ctx.px(x + half));
     let py = |v: f64| {
         let axis = ctx.y_axis(style.y_axis);
-        ctx.py(if axis.log { v.max(axis.lo) } else { v }, style.y_axis)
+        ctx.py(axis.clip_domain(v), style.y_axis)
     };
     let color = style.color.rgb();
     let width = f64::from(style.line_width);

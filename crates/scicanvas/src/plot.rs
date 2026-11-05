@@ -198,11 +198,11 @@ fn axis_key(g: &Layer) -> [f64; 8] {
         b(g.x_auto),
         g.x_min,
         g.x_max,
-        b(g.x_log),
+        g.effective_x_scale() as u8 as f64,
         b(g.y_auto),
         g.y_min,
         g.y_max,
-        b(g.y_log),
+        g.effective_y_scale() as u8 as f64,
     ]
 }
 
@@ -422,32 +422,16 @@ fn page_transform(rect: Rect, size: [f64; 2]) -> egui::emath::TSTransform {
     egui::emath::TSTransform::new(rect.min.to_vec2() + (rect.size() - logical * scale) * 0.5, scale)
 }
 
-fn tf(v: f64, log: bool) -> f64 {
-    if log {
-        v.log10()
-    } else {
-        v
-    }
-}
-
-fn itf(v: f64, log: bool) -> f64 {
-    if log {
-        10f64.powf(v)
-    } else {
-        v
-    }
-}
-
 /// 在变换后的空间里（对数轴取 lg）平移 / 缩放一个范围。
 /// shift 是按范围宽度计的平移比例，zoom 是缩放倍数，center 是缩放中心在范围里的位置（0..1）。
-fn adjust(r: (f64, f64), log: bool, shift: f64, zoom: f64, center: f64) -> (f64, f64) {
-    let (a, b) = (tf(r.0, log), tf(r.1, log));
+fn adjust(r: (f64, f64), scale: scicanvas_core::ticks::AxisScale, shift: f64, zoom: f64, center: f64) -> (f64, f64) {
+    let (a, b) = (scale.forward(r.0), scale.forward(r.1));
     let span = b - a;
     let (a, b) = (a + shift * span, b + shift * span);
     let c = a + center * (b - a);
     let (a, b) = (c - (c - a) * zoom, c + (b - c) * zoom);
-    let (a, b) = (itf(a, log), itf(b, log));
-    if a.is_finite() && b.is_finite() && b > a && (b - a) > 1e-12 * a.abs().max(b.abs()).max(1e-300) {
+    let (a, b) = (scale.inverse(a), scale.inverse(b));
+    if scale.range_ok(a, b) && (b - a) > 1e-12 * a.abs().max(b.abs()).max(1e-300) {
         (a, b)
     } else {
         r
@@ -519,14 +503,14 @@ fn update_saved_view(
                 if d != egui::Vec2::ZERO {
                     view.x = adjust(
                         view.x,
-                        layer.x_log,
+                        layer.effective_x_scale(),
                         -d.x as f64 / f64::from(input.transform.scaling) / layout.plot[2],
                         1.0,
                         0.5,
                     );
                     view.y = adjust(
                         view.y,
-                        layer.y_log,
+                        layer.effective_y_scale(),
                         d.y as f64 / f64::from(input.transform.scaling) / layout.plot[3],
                         1.0,
                         0.5,
@@ -556,8 +540,8 @@ fn update_saved_view(
                     };
                     let fx = ((x - layout.plot[0]) / layout.plot[2]).clamp(0.0, 1.0);
                     let fy = ((layout.plot[1] + layout.plot[3] - y) / layout.plot[3]).clamp(0.0, 1.0);
-                    view.x = adjust(view.x, layer.x_log, 0.0, zx, fx);
-                    view.y = adjust(view.y, layer.y_log, 0.0, zy, fy);
+                    view.x = adjust(view.x, layer.effective_x_scale(), 0.0, zx, fx);
+                    view.y = adjust(view.y, layer.effective_y_scale(), 0.0, zy, fy);
                     changed = true;
                 }
             }
@@ -910,6 +894,32 @@ fn paint_with_painter(free: egui::Painter, rect: Rect, sc: &Scene) {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn b6_view_changes_use_each_transform_space() {
+        use scicanvas_core::ticks::AxisScale as S;
+        for (scale, range) in [
+            (S::Linear, (1., 10.)),
+            (S::Log10, (1., 100.)),
+            (S::Log2, (1., 16.)),
+            (S::Ln, (1., 4f64.exp())),
+            (S::Reciprocal, (1., 10.)),
+            (S::Reciprocal, (-10., -1.)),
+            (S::Probability, (1., 99.)),
+            (S::Logit, (0.01, 0.99)),
+        ] {
+            let center = scale.inverse((scale.forward(range.0) + scale.forward(range.1)) / 2.);
+            let zoom = super::adjust(range, scale, 0., 0.8, 0.5);
+            assert!(scale.range_ok(zoom.0, zoom.1));
+            let fraction =
+                (scale.forward(center) - scale.forward(zoom.0)) / (scale.forward(zoom.1) - scale.forward(zoom.0));
+            assert!((fraction - 0.5).abs() < 1e-10);
+            let pan = super::adjust(range, scale, 0.1, 1., 0.5);
+            let shift =
+                (scale.forward(pan.0) - scale.forward(range.0)) / (scale.forward(range.1) - scale.forward(range.0));
+            assert!((shift - 0.1).abs() < 1e-10);
+        }
+    }
+
     use super::*;
 
     fn project() -> Project {

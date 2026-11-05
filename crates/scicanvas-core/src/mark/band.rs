@@ -55,10 +55,10 @@ pub(super) fn draw(
             .map(|&i| {
                 [
                     series.points[i][0],
-                    if axis.log {
-                        series.bases[i].max(axis.lo)
+                    if axis.scale != crate::ticks::AxisScale::Linear && !axis.scale.domain_ok(series.bases[i]) {
+                        axis.lo
                     } else {
-                        series.bases[i]
+                        axis.clip_domain(series.bases[i])
                     },
                 ]
             })

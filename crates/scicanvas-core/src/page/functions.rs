@@ -32,7 +32,7 @@ impl Layer {
             .iter()
             .filter(|p| !p.series.line_only)
             .flat_map(|p| p.series.points.iter().map(|p| p[0]))
-            .filter(|v| v.is_finite() && (!self.x_log || *v > 0.))
+            .filter(|v| self.effective_x_scale().domain_ok(*v))
             .collect();
         let (lo, hi) = if self.x_auto && !xs.is_empty() {
             (
@@ -42,6 +42,23 @@ impl Layer {
         } else {
             (self.x_min, self.x_max)
         };
+        let mut y_sides = std::array::from_fn::<_, 2, _>(|right| {
+            let (auto, min) = if right == 0 {
+                (self.y_auto, self.y_min)
+            } else {
+                (self.y2_auto, self.y2_min)
+            };
+            if auto {
+                plots
+                    .iter()
+                    .filter(|p| (p.style.y_axis == crate::coord::YAxis::Right) == (right == 1))
+                    .flat_map(|p| p.series.points.iter().map(|p| p[1]))
+                    .find(|v| self.effective_y_scale().domain_ok(*v))
+                    .map(f64::signum)
+            } else {
+                Some(min.signum())
+            }
+        });
         for (i, function) in self.functions.iter().enumerate() {
             let Ok(eval) = crate::formula::compile_x(&function.expr) else {
                 continue;
@@ -51,13 +68,19 @@ impl Layer {
             let mut rows = Vec::new();
             for row in 0..n {
                 let f = row as f64 / (n - 1) as f64;
-                let x = if self.x_log {
+                let scale = self.effective_x_scale();
+                let x = if scale == crate::ticks::AxisScale::Log10 {
                     (lo.ln() + (hi.ln() - lo.ln()) * f).exp()
                 } else {
-                    lo + (hi - lo) * f
+                    scale.inverse(scale.forward(lo) + (scale.forward(hi) - scale.forward(lo)) * f)
                 };
                 let y = eval(x);
-                if x.is_finite() && y.is_finite() && (!self.y_log || y > 0.) {
+                if scale.domain_ok(x) && self.effective_y_scale().domain_ok(y) {
+                    if self.effective_y_scale() == crate::ticks::AxisScale::Reciprocal
+                        && *y_sides[usize::from(function.style.right_axis)].get_or_insert(y.signum()) != y.signum()
+                    {
+                        continue;
+                    }
                     points.push([x, y]);
                     rows.push(row);
                 }

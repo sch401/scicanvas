@@ -597,36 +597,8 @@ fn axes(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_group: &
         ui.end_row();
     }
 
-    ui.label("X 范围");
-    ui.horizontal_wrapped(|ui| {
-        ui.checkbox(&mut g.x_auto, "自动");
-        edit_group(
-            &ui.add_enabled(!g.x_auto, egui::DragValue::new(&mut g.x_min).speed(0.1)),
-            history_group,
-        );
-        ui.label("到");
-        edit_group(
-            &ui.add_enabled(!g.x_auto, egui::DragValue::new(&mut g.x_max).speed(0.1)),
-            history_group,
-        );
-        ui.checkbox(&mut g.x_log, "对数");
-    });
-    ui.end_row();
-    ui.label("左 Y 范围");
-    ui.horizontal_wrapped(|ui| {
-        ui.checkbox(&mut g.y_auto, "自动");
-        edit_group(
-            &ui.add_enabled(!g.y_auto, egui::DragValue::new(&mut g.y_min).speed(0.1)),
-            history_group,
-        );
-        ui.label("到");
-        edit_group(
-            &ui.add_enabled(!g.y_auto, egui::DragValue::new(&mut g.y_max).speed(0.1)),
-            history_group,
-        );
-        ui.checkbox(&mut g.y_log, "对数（左右共用）");
-    });
-    ui.end_row();
+    axis_controls(ui, g, true, history_group);
+    axis_controls(ui, g, false, history_group);
     if g.has_right_axis_style() {
         ui.label("右 Y 范围");
         ui.horizontal_wrapped(|ui| {
@@ -643,6 +615,39 @@ fn axes(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_group: &
         });
         ui.end_row();
     }
+}
+
+fn axis_controls(
+    ui: &mut egui::Ui,
+    g: &mut scicanvas_core::page::Layer,
+    x: bool,
+    history_group: &mut Option<egui::Id>,
+) {
+    ui.label(if x { "X 类型" } else { "Y 类型" });
+    ui.vertical(|ui| {
+        ui.set_max_width(160.);
+        scale_selector(ui, g, x, history_group);
+    });
+    ui.end_row();
+    ui.label(if x { "X 范围" } else { "左 Y 范围" });
+    let (auto, min, max) = if x {
+        (&mut g.x_auto, &mut g.x_min, &mut g.x_max)
+    } else {
+        (&mut g.y_auto, &mut g.y_min, &mut g.y_max)
+    };
+    ui.horizontal_wrapped(|ui| {
+        ui.checkbox(auto, "自动");
+        edit_group(
+            &ui.add_enabled(!*auto, egui::DragValue::new(min).speed(0.1)),
+            history_group,
+        );
+        ui.label("到");
+        edit_group(
+            &ui.add_enabled(!*auto, egui::DragValue::new(max).speed(0.1)),
+            history_group,
+        );
+    });
+    ui.end_row();
 }
 
 fn curve_offset_options(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_group: &mut Option<egui::Id>) {
@@ -887,7 +892,7 @@ fn reference_lines(
             if vertical.clicked() {
                 g.reference_lines.push(ReferenceLine {
                     axis: ReferenceAxis::X,
-                    value: if g.x_log { 1.0 } else { 0.0 },
+                    value: g.effective_x_scale().default_value(),
                     ..Default::default()
                 });
             }
@@ -896,7 +901,7 @@ fn reference_lines(
             if horizontal.clicked() {
                 g.reference_lines.push(ReferenceLine {
                     axis: ReferenceAxis::YLeft,
-                    value: if g.y_log { 1.0 } else { 0.0 },
+                    value: g.effective_y_scale().default_value(),
                     ..Default::default()
                 });
             }
@@ -1268,6 +1273,50 @@ fn function_properties(
         g.functions.remove(index);
     }
     edit
+}
+
+fn scale_selector(
+    ui: &mut egui::Ui,
+    g: &mut scicanvas_core::page::Layer,
+    x: bool,
+    history_group: &mut Option<egui::Id>,
+) {
+    use scicanvas_core::ticks::AxisScale;
+    let before = if x {
+        g.effective_x_scale()
+    } else {
+        g.effective_y_scale()
+    };
+    let mut scale = before;
+    let id = ui.id().with(("axis-scale", x));
+    if x && !g.projection.is_cartesian() {
+        ui.label("角度轴");
+        return;
+    }
+    let response = egui::ComboBox::from_id_salt(id)
+        .width(90.0)
+        .selected_text(scale.label())
+        .show_ui(ui, |ui| {
+            for kind in AxisScale::ALL {
+                ui.selectable_value(&mut scale, kind, kind.label());
+            }
+        })
+        .response;
+    edit_group(&response, history_group);
+    if scale != before {
+        match g.set_axis_scale(x, scale) {
+            Ok(()) => ui.data_mut(|d| {
+                d.remove::<String>(id);
+            }),
+            Err(error) => ui.data_mut(|d| d.insert_temp(id, error)),
+        }
+    }
+    if let Some(error) = ui.data(|d| d.get_temp::<String>(id)) {
+        ui.colored_label(ui.visuals().error_fg_color, error);
+    }
+    if scale == AxisScale::Reciprocal {
+        ui.label("倒数范围不跨零：自动取首个有效点所在侧，手动用同号上下限指定。");
+    }
 }
 
 #[cfg(test)]

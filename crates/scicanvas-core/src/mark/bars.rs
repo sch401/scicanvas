@@ -26,19 +26,13 @@ pub(super) fn draw(
                 (point[0], point[1], &ctx.axes.x, ctx.y_axis(style.y_axis))
             };
             let (start, end) = position.span(category, ctx.dx, style.bar_index, style.bar_count);
-            let category = |value: f64| {
-                if category_axis.log {
-                    value.max(category_axis.lo)
-                } else {
-                    value
-                }
-            };
-            let base = base.clamp(value_axis.lo, value_axis.hi);
-            let value = if value_axis.log {
-                value.max(value_axis.lo)
+            let category = |value: f64| category_axis.clip_domain(value);
+            let base = if value_axis.scale != crate::ticks::AxisScale::Linear && !value_axis.scale.domain_ok(*base) {
+                value_axis.lo
             } else {
-                value
+                base.clamp(value_axis.lo, value_axis.hi)
             };
+            let value = value_axis.clip_domain(value);
             let (a, b) = if ctx.horizontal {
                 (
                     [ctx.px(base), ctx.py(category(start), style.y_axis)],
@@ -73,7 +67,7 @@ pub(super) fn draw(
     if super::contains(style.kind, Kind::Area) {
         let axis = ctx.y_axis(style.y_axis);
         let base = ctx.py(
-            if axis.log {
+            if axis.scale != crate::ticks::AxisScale::Linear {
                 axis.lo
             } else {
                 0.0f64.clamp(axis.lo, axis.hi)
