@@ -304,3 +304,32 @@ fn b7_default_pattern_ink_contrasts_with_solid_bar_fill() {
         .iter()
         .any(|i| matches!(&i.prim, Prim::Segments { color: (255, 255, 255), segs, .. } if !segs.is_empty())));
 }
+
+#[test]
+fn arrow_shaft_stops_inside_head_for_thin_and_thick_lines() {
+    use scicanvas_core::page::{ShapeKind, ShapeObject};
+    for width in [1., 8., 20.] {
+        for (a, b) in [
+            ([0.1, 0.5], [0.8, 0.5]),
+            ([0.8, 0.5], [0.1, 0.5]),
+            ([0.1, 0.2], [0.8, 0.8]),
+        ] {
+            let mut shape = ShapeObject::new(ShapeKind::Arrow, a, b);
+            shape.width_pt = width;
+            let prims = scene::shape_primitives(&shape, 800., 600.);
+            let Prim::Polyline { pts: shaft, .. } = &prims[0] else {
+                panic!("shaft")
+            };
+            let Prim::Triangles { pts: head, .. } = &prims[1] else {
+                panic!("head")
+            };
+            let center = [
+                (head[0][0] + head[1][0] + head[2][0]) / 3.,
+                (head[0][1] + head[1][1] + head[2][1]) / 3.,
+            ];
+            assert!((shaft[1][0] - center[0]).abs() < 1e-9 && (shaft[1][1] - center[1]).abs() < 1e-9);
+            let distance = (head[0][0] - center[0]).hypot(head[0][1] - center[1]);
+            assert!(distance > width * 96. / 72. / 2.);
+        }
+    }
+}

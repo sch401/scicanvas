@@ -87,7 +87,7 @@ class ParityTests(unittest.TestCase):
     def test_manual_p0_coverage_pending_needs_and_accepted_evidence(self):
         rows = json.loads((Path(__file__).parent / "parity.json").read_text(encoding="utf-8"))
         build_parity.validate(rows)
-        self.assertEqual(sum(r["status"] == "已完成" for r in rows), 82)
+        self.assertEqual(sum(r["status"] == "已完成" for r in rows), 81)
         self.assertEqual(sum(r["status"] == "已实现待验收" for r in rows), 100)
         self.assertEqual(sum(r["status"] == "部分实现" for r in rows), 8)
         self.assertEqual(sum(r["status"] == "未开始" for r in rows), 312)

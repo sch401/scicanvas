@@ -39,6 +39,18 @@ pub(super) fn store_docks(ctx: &egui::Context, state: Docks) {
 }
 
 pub(crate) fn reset_docks(ctx: &egui::Context) {
+    if !ctx.embed_viewports() {
+        let position = ctx
+            .input(|input| input.viewport().inner_rect.map(|r| r.min))
+            .unwrap_or_default()
+            + egui::vec2(80., 80.);
+        for panel in docks(ctx).panels.iter().filter(|p| p.visible && p.side.is_none()) {
+            ctx.send_viewport_cmd_to(
+                egui::ViewportId(panel.id),
+                egui::ViewportCommand::OuterPosition(position),
+            );
+        }
+    }
     ctx.data_mut(|d| d.remove::<Docks>(egui::Id::new("settings-docks")));
 }
 

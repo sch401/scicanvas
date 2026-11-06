@@ -200,7 +200,13 @@ impl SheetFrame {
                         .is_some_and(|op| op.mode != scicanvas_core::ops::RecalcMode::None);
                 let mark = if computed { " ƒ" } else { "" };
                 let text = RichText::new(format!("{}({}){mark}", col.key, col.role.label())).strong();
-                let resp = ui
+                let title_rect = egui::Rect::from_min_max(rect.min, egui::pos2(rect.right() - 24.0, rect.bottom()));
+                let mut title_ui = ui.new_child(
+                    egui::UiBuilder::new()
+                        .id_salt(("column-title", ci))
+                        .max_rect(title_rect),
+                );
+                let resp = title_ui
                     .centered_and_justified(|ui| ui.add(egui::SelectableLabel::new(self.sel_flags[ci], text)))
                     .inner
                     .on_hover_text("单击选中列，Ctrl / Shift 多选，拖动选多列，右键更多操作");
@@ -213,7 +219,7 @@ impl SheetFrame {
                         self.sel_stroke,
                     );
                 }
-                if self.pressed && ui.rect_contains_pointer(rect) {
+                if self.pressed && ui.rect_contains_pointer(title_rect) {
                     self.press = Some(Target::Col(ci));
                 }
                 if matches!(self.drag, Some(Drag::Cols(_))) && self.down && ui.rect_contains_pointer(rect) {
@@ -234,25 +240,39 @@ impl SheetFrame {
                     .filter
                     .as_ref()
                     .is_some_and(|filter| filter.rules.contains_key(&col.key));
-                let button_rect = egui::Rect::from_min_max(egui::pos2(rect.right() - 20.0, rect.top()), rect.max);
+                let button_rect = egui::Rect::from_min_max(egui::pos2(rect.right() - 24.0, rect.top()), rect.max);
                 let mut button_ui = ui.new_child(
                     egui::UiBuilder::new()
                         .id_salt(("filter-menu", ci))
                         .max_rect(button_rect),
                 );
-                button_ui.menu_button(
-                    RichText::new("▾").color(if active { self.pal.accent } else { self.pal.weak }),
-                    |ui| {
-                        if ui.button("筛选…").clicked() {
-                            self.action = Some((ci, ColAction::Filter));
-                            ui.close_menu();
-                        }
-                        if active && ui.button("清除筛选").clicked() {
-                            self.action = Some((ci, ColAction::ClearFilter));
-                            ui.close_menu();
-                        }
-                    },
-                );
+                button_ui.spacing_mut().button_padding = egui::vec2(3.0, 3.0);
+                button_ui.spacing_mut().interact_size = egui::vec2(20.0, 20.0);
+                let filter_button = button_ui
+                    .menu_image_button(
+                        crate::icons::icon("chevrondown", self.pal.dark)
+                            .fit_to_exact_size(egui::vec2(12.0, 12.0))
+                            .tint(if active { self.pal.accent } else { self.pal.ink }),
+                        |ui| {
+                            if ui.button("筛选…").clicked() {
+                                self.action = Some((ci, ColAction::Filter));
+                                ui.close_menu();
+                            }
+                            if active && ui.button("清除筛选").clicked() {
+                                self.action = Some((ci, ColAction::ClearFilter));
+                                ui.close_menu();
+                            }
+                        },
+                    )
+                    .response;
+                #[cfg(test)]
+                ui.data_mut(|data| {
+                    data.insert_temp(
+                        egui::Id::new(("sheet-filter-button", self.id, ci)),
+                        (filter_button.rect, rect),
+                    )
+                });
+                filter_button.on_hover_text("筛选此列");
             });
         }
     }

@@ -1022,7 +1022,9 @@ def drawing_geometry_cases():
         else:
             case["points"]=np.stack([aa,bb])
             if kind=="Arrow":
-                u=(bb-aa)/np.linalg.norm(bb-aa);normal=np.array([-u[1],u[0]]);head=6*96/72;base=bb-head*u;case["head"]=np.stack([bb,base+.45*head*normal,base-.45*head*normal])
+                u=(bb-aa)/np.linalg.norm(bb-aa);normal=np.array([-u[1],u[0]]);head=6*96/72;base=bb-head*u
+                case["points"]=np.stack([aa,bb-2*head*u/3])
+                case["head"]=np.stack([bb,base+.45*head*normal,base-.45*head*normal])
         cases.append(case)
     poly=np.array([[0.,0.],[40.,0.],[40.,24.],[24.,24.],[24.,8.],[16.,8.],[16.,24.],[0.,24.]])
     grid=np.array([[x,y] for y in np.arange(4.,24.,8.) for x in np.arange(4.,40.,8.)]);dots=grid[PlotPath(poly).contains_points(grid)]

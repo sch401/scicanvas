@@ -171,39 +171,110 @@ pub(crate) fn axis_scale_options(ui: &mut egui::Ui, scale: &mut scicanvas_core::
 
 pub(crate) struct Form<'a> {
     ui: &'a mut egui::Ui,
+    value: Option<egui::Ui>,
     column: usize,
+    row: usize,
+    left: f32,
+    width: f32,
+    top: f32,
+    label_bottom: f32,
+    background: Option<egui::layers::ShapeIdx>,
 }
 impl std::ops::Deref for Form<'_> {
     type Target = egui::Ui;
     fn deref(&self) -> &egui::Ui {
-        self.ui
+        self.value.as_ref().unwrap_or(self.ui)
     }
 }
 impl std::ops::DerefMut for Form<'_> {
     fn deref_mut(&mut self) -> &mut egui::Ui {
-        self.ui
+        if self.column == 0 {
+            self.ui
+        } else {
+            self.value_ui()
+        }
     }
 }
 impl Form<'_> {
-    pub(crate) fn label(&mut self, text: impl Into<egui::WidgetText>) -> egui::Response {
-        let first = self.column == 0;
-        self.column += 1;
-        if first {
-            self.ui.add_sized(
-                egui::vec2(crate::theme::dialog::LABEL_WIDTH, self.ui.spacing().interact_size.y),
-                egui::Label::new(text).halign(egui::Align::RIGHT),
-            )
-        } else {
-            self.ui.label(text)
+    fn value_ui(&mut self) -> &mut egui::Ui {
+        if self.value.is_none() {
+            let x = self.left + crate::theme::dialog::LABEL_WIDTH + crate::theme::space::M;
+            let width = (self.left + self.width - x).max(1.0);
+            let mut value = self.ui.new_child(
+                egui::UiBuilder::new()
+                    .id_salt(("form-value", self.row))
+                    .max_rect(egui::Rect::from_min_size(
+                        egui::pos2(x, self.top),
+                        egui::vec2(width, f32::INFINITY),
+                    ))
+                    .layout(egui::Layout::top_down(egui::Align::Min)),
+            );
+            value.set_min_width(width);
+            value.spacing_mut().item_spacing.y = crate::theme::space::XS;
+            self.value = Some(value);
         }
+        self.value.as_mut().unwrap()
+    }
+    pub(crate) fn label(&mut self, text: impl Into<egui::WidgetText>) -> egui::Response {
+        if self.column != 0 {
+            return self.value_ui().label(text);
+        }
+        self.column = 1;
+        self.top = self.ui.cursor().top();
+        self.background = Some(self.ui.painter().add(egui::Shape::Noop));
+        let mut label = self.ui.new_child(
+            egui::UiBuilder::new()
+                .id_salt(("form-label", self.row))
+                .max_rect(egui::Rect::from_min_size(
+                    egui::pos2(self.left, self.top),
+                    egui::vec2(crate::theme::dialog::LABEL_WIDTH, self.ui.spacing().interact_size.y),
+                ))
+                .layout(egui::Layout::top_down(egui::Align::RIGHT)),
+        );
+        let response = label.add_sized(
+            egui::vec2(crate::theme::dialog::LABEL_WIDTH, self.ui.spacing().interact_size.y),
+            egui::Label::new(text).wrap().halign(egui::Align::RIGHT),
+        );
+        self.label_bottom = label.min_rect().bottom();
+        response
     }
     pub(crate) fn end_row(&mut self) {
+        if self.column == 0 {
+            return;
+        }
+        let bottom = self
+            .value
+            .take()
+            .map_or(self.label_bottom, |value| value.min_rect().bottom())
+            .max(self.label_bottom)
+            .max(self.top + self.ui.spacing().interact_size.y);
+        let rect = egui::Rect::from_min_max(
+            egui::pos2(self.left, self.top),
+            egui::pos2(self.left + self.width, bottom),
+        );
+        if self.row % 2 == 1 && self.ui.visuals().striped {
+            if let Some(background) = self.background.take() {
+                self.ui.painter().set(
+                    background,
+                    egui::Shape::rect_filled(
+                        rect.expand2(egui::vec2(0., crate::theme::space::S / 2.)),
+                        2.,
+                        self.ui.visuals().faint_bg_color,
+                    ),
+                );
+            }
+        }
+        #[cfg(test)]
+        self.ui
+            .data_mut(|data| data.insert_temp(egui::Id::new(("responsive-form-row", self.ui.id(), self.row)), rect));
+        self.ui.advance_cursor_after_rect(rect);
+        self.ui.add_space(crate::theme::space::S);
         self.column = 0;
-        self.ui.end_row();
+        self.row += 1;
     }
     pub(crate) fn row<R>(&mut self, label: &str, contents: impl FnOnce(&mut egui::Ui) -> R) -> R {
         self.label(label);
-        let result = contents(self.ui);
+        let result = contents(self.value_ui());
         self.end_row();
         result
     }
@@ -213,10 +284,30 @@ pub(crate) fn form<R>(
     id: impl std::hash::Hash,
     contents: impl FnOnce(&mut Form<'_>) -> R,
 ) -> egui::InnerResponse<R> {
-    egui::Grid::new(id)
-        .num_columns(2)
-        .spacing([crate::theme::space::M, crate::theme::space::S])
-        .show(ui, |ui| contents(&mut Form { ui, column: 0 }))
+    ui.scope_builder(
+        egui::UiBuilder::new()
+            .id_salt(id)
+            .layout(egui::Layout::top_down(egui::Align::Min)),
+        |ui| {
+            let left = ui.cursor().left();
+            let width = ui.available_width();
+            ui.spacing_mut().item_spacing.y = 0.;
+            let mut form = Form {
+                ui,
+                value: None,
+                column: 0,
+                row: 0,
+                left,
+                width,
+                top: 0.,
+                label_bottom: 0.,
+                background: None,
+            };
+            let result = contents(&mut form);
+            form.end_row();
+            result
+        },
+    )
 }
 pub(crate) fn hint(ui: &mut egui::Ui, text: &str) {
     let pal = crate::theme::palette_for(ui.ctx());
@@ -433,6 +524,52 @@ pub(crate) const CONSTRAINT_HINT: &str = "每行一条，如 a >= 0 或 a + b = 
 mod review_tests {
     use super::*;
     use scicanvas_core::nlfit::ParamLimits;
+
+    #[test]
+    fn form_rows_fill_width_and_grow_when_controls_wrap() {
+        let ctx = egui::Context::default();
+        crate::theme::install(&ctx);
+        crate::fonts::setup(&ctx);
+        let mut heights = Vec::new();
+        for width in [330., 680., 330.] {
+            let mut rows = Vec::new();
+            let _ = ctx.run(
+                egui::RawInput {
+                    screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(width, 500.))),
+                    ..Default::default()
+                },
+                |ctx| {
+                    egui::CentralPanel::default().show(ctx, |ui| {
+                        form(ui, "responsive-test", |f| {
+                            let id = f.ui.id();
+                            let expected = f.width;
+                            f.row("Margins", |ui| {
+                                ui.horizontal_wrapped(|ui| {
+                                    for name in ["Left", "Top", "Right", "Bottom"] {
+                                        ui.add_sized([90., 28.], egui::Button::new(name));
+                                    }
+                                });
+                            });
+                            f.row("Background", |ui| {
+                                let _ = ui.button("Color");
+                            });
+                            for row in 0_usize..2 {
+                                let rect = ctx
+                                    .data(|d| d.get_temp::<egui::Rect>(egui::Id::new(("responsive-form-row", id, row))))
+                                    .unwrap();
+                                assert!((rect.width() - expected).abs() < 0.1);
+                                rows.push(rect);
+                            }
+                        });
+                    });
+                },
+            );
+            assert!(rows[1].top() > rows[0].bottom());
+            heights.push(rows[0].height());
+        }
+        assert!(heights[0] > heights[1]);
+        assert_eq!(heights[0], heights[2]);
+    }
 
     #[test]
     fn p11_fixed_parameters_disable_and_ignore_bounds() {

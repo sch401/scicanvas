@@ -5,7 +5,7 @@
   "ref": "",
   "pri": "P0",
   "status": "已完成",
-  "how": "自绘 MDI；拖动/缩放、最小化换行、最大化/还原与统一窗口命令；自由拖出工作区，浮动窗口可越过可见区域边缘，支持重置位置；标题栏上边界限制在工作区/功能区下方，左、右、下仍自由移动",
+  "how": "自绘 MDI；拖动/缩放、最小化换行、最大化/还原与统一窗口命令；自由拖出工作区，浮动窗口可越过可见区域边缘，支持重置位置；文档子窗口标题栏保持在工作区下方；弹出面板使用独立桌面窗口，可自由拖到主窗口外及其他显示器，保留停靠、缩放和关闭",
   "verify": "真实 egui 拖动、缩放、窗口按钮与几何恢复回归；真实向上拖动松开、旧越界位置恢复、非零顶部及另外三边越界回归",
   "id": "F001",
   "milestone": "M1 日常够用",
@@ -69,7 +69,7 @@
   "ref": "",
   "pri": "P1",
   "status": "已实现待验收",
-  "how": "层叠/平铺、边缘及四角吸附、顶部吸附布局与 Snap Assist 候选补位已接入；越界自由移动，贴靠只在实际边缘附近触发；视图菜单或 Ctrl+Shift+R 可重置全部窗口位置；设置面板可左右侧栏吸附、上下堆叠/换序、折叠、调整高度和拖回浮动，左侧与项目管理器共用侧栏，会话内记住布局；标题栏上边界限制在工作区/功能区下方，左、右、下仍自由移动",
+  "how": "层叠/平铺、边缘及四角吸附、顶部吸附布局与 Snap Assist 候选补位已接入；越界自由移动，贴靠只在实际边缘附近触发；视图菜单或 Ctrl+Shift+R 可重置全部窗口位置；设置面板可左右侧栏吸附、上下堆叠/换序、折叠、调整高度和拖回浮动，左侧与项目管理器共用侧栏，会话内记住布局；文档子窗口标题栏保持在工作区下方；弹出面板使用独立桌面窗口，可自由拖到主窗口外及其他显示器，保留停靠、缩放和关闭",
   "verify": "窗口几何、吸附和候选补位回归通过；Windows 不同缩放、窄窗口手工验收待做；真实鼠标左右吸附/换序/分隔条/折叠/拖出/菜单浮动/窄屏/关闭清理及工作区避让回归；真实向上拖动松开、旧越界位置恢复、非零顶部及另外三边越界回归",
   "id": "F004",
   "milestone": "M2 论文全流程",
@@ -1564,18 +1564,18 @@
   "module": "绘图基础",
   "feature": "图形缩放、平移",
   "ref": "",
-  "pri": "P0",
-  "status": "已完成",
-  "how": "自绘 plot.rs/coord.rs：图层独立缩放、平移和视图复位；固定页面画布整体缩放",
-  "verify": "手动操作",
+  "pri": "不做",
+  "status": "不做",
+  "how": "按用户要求不提供画布拖动平移、滚轮或触控缩放；坐标范围通过坐标轴属性设置，页面仍按窗口尺寸等比例显示。",
+  "verify": "画布拖动、滚轮和触控输入均不改变范围；标注、图例和形状仍可拖动。",
   "id": "F087",
-  "milestone": "M1 日常够用",
+  "milestone": "—",
   "needs": [
    "auto"
   ],
   "evidence": {
    "auto": [
-    "crates/scicanvas/src/plot.rs::pan_stays_on_press_layer_when_pointer_crosses_into_next_panel"
+    "crates/scicanvas/src/plot.rs::canvas_gestures_keep_axis_ranges_fixed"
    ]
   }
  },
@@ -1732,8 +1732,8 @@
   "ref": "",
   "pri": "P1",
   "status": "已实现待验收",
-  "how": "属性轴类型下拉：Linear、Log10、Log2、Ln、Reciprocal、Probability、Logit。统一正逆变换、定义域、取样、刻度、拾取和缩放；Ln 标签 e^k。概率为百分数，Logit 按方法卡为 0–1。倒数自动取首个有效点所在同号分支，手动范围需同号，左右 Y 分支独立。",
-  "verify": "NumPy/SciPy 七种变换与刻度位置 1e-12；往返、原值拾取、定义域及保存回归；真实下拉及撤销、各类型缩放平移；新增五个 matplotlib 位置对照 1e-6。现有 SVG 和视觉基线保持。",
+  "how": "属性轴类型下拉：Linear、Log10、Log2、Ln、Reciprocal、Probability、Logit。统一正逆变换、定义域、取样、刻度和拾取；Ln 标签 e^k。概率为百分数，Logit 按方法卡为 0–1。倒数自动取首个有效点所在同号分支，手动范围需同号，左右 Y 分支独立。",
+  "verify": "NumPy/SciPy 七种变换与刻度位置 1e-12；往返、原值拾取、定义域及保存回归；真实下拉及撤销、画布手势不改变坐标范围；新增五个 matplotlib 位置对照 1e-6。现有 SVG 和视觉基线保持。",
   "id": "F094",
   "milestone": "M2 论文全流程",
   "needs": [
@@ -1747,7 +1747,7 @@
     "crates/scicanvas-core/tests/axis_scales.rs::b6_all_transforms_inverse_ticks_and_numpy_positions",
     "crates/scicanvas-core/tests/axis_scales.rs::b6_probability_domains_reciprocal_branches_and_right_axis_pick",
     "crates/scicanvas/src/app/tests/dialog_tests.rs::b6_axis_scale_combo_real_window_undo",
-    "crates/scicanvas/src/plot.rs::b6_view_changes_use_each_transform_space"
+    "crates/scicanvas/src/plot.rs::canvas_gestures_keep_axis_ranges_fixed"
    ],
    "reference": [
     "crates/scicanvas-core/tests/reference/axis_scales.json",

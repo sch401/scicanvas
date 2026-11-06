@@ -7,6 +7,8 @@ pub(crate) struct SettingsWindow<'open> {
     window: egui::Window<'open>,
     id: egui::Id,
     centered: bool,
+    native: egui::ViewportBuilder,
+    open: Option<&'open mut bool>,
 }
 
 impl<'open> SettingsWindow<'open> {
@@ -21,25 +23,28 @@ impl<'open> SettingsWindow<'open> {
         self
     }
     pub(crate) fn open(mut self, open: &'open mut bool) -> Self {
-        self.window = self.window.open(open);
+        self.open = Some(open);
         self
     }
     pub(crate) fn resizable(mut self, value: bool) -> Self {
         self.window = self.window.resizable(value);
+        self.native = self.native.with_resizable(value);
         self
     }
     pub(crate) fn default_width(mut self, width: f32) -> Self {
         self.window = self.window.default_width(width);
+        self.native.inner_size.as_mut().unwrap().x = width;
         self
     }
     pub(crate) fn default_height(mut self, height: f32) -> Self {
         self.window = self.window.default_height(height);
+        self.native.inner_size.as_mut().unwrap().y = height;
         self
     }
     pub(crate) fn show<R>(
         mut self,
         ctx: &egui::Context,
-        contents: impl FnOnce(&mut egui::Ui) -> R,
+        mut contents: impl FnMut(&mut egui::Ui) -> R,
     ) -> Option<egui::InnerResponse<Option<R>>> {
         let recenter = ctx
             .data_mut(|d| d.remove_temp::<bool>(self.id.with("recenter")))
@@ -81,7 +86,9 @@ impl<'open> SettingsWindow<'open> {
         }
         store_docks(ctx, state);
         let id = self.id;
-        let out = self.window.show(ctx, |ui| {
+        let parent_frame = ctx.cumulative_pass_nr();
+        let content = |ui: &mut egui::Ui| {
+            let ctx = ui.ctx().clone();
             ui.spacing_mut().item_spacing = egui::vec2(crate::theme::space::CONTROL_GAP, crate::theme::space::XS);
             ui.spacing_mut().slider_width = 100.0;
             ui.spacing_mut().text_edit_width = 200.0;
@@ -90,17 +97,23 @@ impl<'open> SettingsWindow<'open> {
             }
             let result = egui::ScrollArea::vertical()
                 .auto_shrink([false, dock_size.is_none()])
-                .show(ui, contents)
+                .show(ui, &mut contents)
                 .inner;
             if ctx.data(|d| d.get_temp::<bool>(egui::Id::new("rendering-dialog-window"))) == Some(true)
                 && super::widgets::owns_keyboard(ui)
                 && ctx.input_mut(|i| i.consume_key(egui::Modifiers::NONE, egui::Key::Escape))
             {
-                let frame = ctx.cumulative_pass_nr();
-                ctx.data_mut(|d| d.insert_temp(egui::Id::new("dialog-window-escape"), frame));
+                ctx.data_mut(|d| d.insert_temp(egui::Id::new("dialog-window-escape"), parent_frame));
             }
             result
-        });
+        };
+        if docked.is_none() && !ctx.embed_viewports() {
+            return self.show_native(ctx, content);
+        }
+        if let Some(open) = self.open {
+            self.window = self.window.open(open);
+        }
+        let out = self.window.show(ctx, content);
         if let Some(out) = &out {
             ctx.data_mut(|d| {
                 let layers = d.get_temp_mut_or_default::<Vec<egui::LayerId>>(egui::Id::new("settings-layers"));
@@ -118,6 +131,52 @@ impl<'open> SettingsWindow<'open> {
         }
         out
     }
+    fn show_native<R>(
+        mut self,
+        ctx: &egui::Context,
+        mut contents: impl FnMut(&mut egui::Ui) -> R,
+    ) -> Option<egui::InnerResponse<Option<R>>> {
+        if self.open.as_deref() == Some(&false) {
+            return None;
+        }
+        let id = self.id;
+        let mut embedded = Some(self.window);
+        ctx.show_viewport_immediate(egui::ViewportId(id), self.native, |child, class| {
+            if class == egui::ViewportClass::Embedded {
+                let mut window = embedded.take().unwrap();
+                if let Some(open) = self.open.as_deref_mut() {
+                    window = window.open(open);
+                }
+                return window.show(child, &mut contents);
+            }
+            if child.input(|input| input.viewport().close_requested()) {
+                if let Some(open) = self.open.as_deref_mut() {
+                    *open = false;
+                }
+                ctx.request_repaint();
+                return None;
+            }
+            super::widgets::begin_keyboard_frame(child);
+            super::widgets::prepare_submission(child);
+            egui::TopBottomPanel::top(id.with("native-menu")).show(child, |ui| {
+                ui.menu_button("面板", |ui| {
+                    for (label, side) in [("停靠到左侧", DockSide::Left), ("停靠到右侧", DockSide::Right)] {
+                        if ui.button(label).clicked() {
+                            dock_panel(ctx, id, Some(side), None);
+                            ctx.request_repaint();
+                            ui.close_menu();
+                        }
+                    }
+                });
+            });
+            let out = egui::CentralPanel::default().show(child, &mut contents);
+            Some(egui::InnerResponse {
+                inner: Some(out.inner),
+                response: out.response,
+            })
+        })
+    }
+
     fn window_header<R>(
         ctx: &egui::Context,
         id: egui::Id,
@@ -262,28 +321,33 @@ impl<'open> SettingsWindow<'open> {
     }
 }
 
-/// 浮动标题栏限制在功能区下方，另外三边可自由越界。
-pub(crate) fn floating_bounds(ctx: &egui::Context) -> egui::Rect {
-    let mut bounds = egui::Rect::EVERYTHING;
-    bounds.min.y = ctx.available_rect().top();
-    bounds
-}
-
 /// 紧凑的单列设置面板；拖动标题栏即可吸附到侧栏，也可使用面板菜单。
 pub(crate) fn window<'open>(ctx: &egui::Context, title: &str) -> SettingsWindow<'open> {
     let id = egui::Id::new(("scicanvas-dialog", title));
     SettingsWindow {
         id,
         centered: false,
+        open: None,
+        native: egui::ViewportBuilder::default()
+            .with_title(title)
+            .with_icon(crate::window_icon())
+            .with_inner_size([
+                crate::theme::dialog::SMALL,
+                (ctx.screen_rect().height() * 0.75).max(240.),
+            ])
+            .with_min_inner_size([280., 120.])
+            .with_resizable(true)
+            .with_decorations(true)
+            .with_taskbar(true),
         window: egui::Window::new(RichText::new(title).strong())
             .id(id)
-            .constrain_to(floating_bounds(ctx))
+            .constrain(false)
             .collapsible(true)
             .resizable(true)
             .pivot(Align2::LEFT_TOP)
             .default_pos(egui::pos2(
                 ctx.screen_rect().center().x - 190.0,
-                ctx.screen_rect().top() + 60.0,
+                ctx.available_rect().top().max(ctx.screen_rect().top() + 60.0),
             ))
             .default_width(crate::theme::dialog::SMALL)
             .min_width(280.0)

@@ -407,6 +407,16 @@ pub(super) fn graph(commands: &mut Vec<Command>) {
     axis_scale_commands(commands);
     commands.extend([
         c(
+            "graph.reference.manage",
+            "管理参考线…",
+            "annotation-edit",
+            "",
+            "图形",
+            "reference manage edit delete 参考线 管理 编辑 删除",
+            need_graph,
+            |app| app.manage_reference_lines(),
+        ),
+        c(
             "graph.reference.vertical",
             "添加垂直参考线",
             "refline-v",

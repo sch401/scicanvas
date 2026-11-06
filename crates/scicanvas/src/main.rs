@@ -24,11 +24,23 @@ mod theme;
 
 use eframe::egui;
 
+fn window_icon() -> std::sync::Arc<egui::IconData> {
+    static ICON: std::sync::OnceLock<std::sync::Arc<egui::IconData>> = std::sync::OnceLock::new();
+    ICON.get_or_init(|| {
+        std::sync::Arc::new(
+            eframe::icon_data::from_png_bytes(include_bytes!("../../../installer/assets/product.png"))
+                .expect("application icon"),
+        )
+    })
+    .clone()
+}
+
 fn main() {
     scicanvas_core::project_file::session::install_panic_log();
     let settings = scicanvas_core::project_file::session::load_settings();
     let mut viewport = egui::ViewportBuilder::default()
         .with_title("SciCanvas")
+        .with_icon(window_icon())
         .with_inner_size([1280.0, 820.0])
         .with_min_inner_size([800.0, 500.0])
         .with_decorations(false);

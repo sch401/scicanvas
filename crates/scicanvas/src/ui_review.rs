@@ -638,23 +638,8 @@ fn narrow_ribbon_exposes_overflow_without_horizontal_scrolling() {
 }
 
 #[test]
-fn chart_previews_show_only_common_types_and_resize_consistently() {
-    let ids = [
-        "plot.line",
-        "plot.scatter",
-        "plot.linesym",
-        "plot.bar",
-        "plot.stacked_bar",
-        "plot.percent_stacked_bar",
-        "plot.floating_bar",
-        "plot.horizontal_bar",
-        "plot.area",
-        "plot.spline",
-        "plot.spline_symbol",
-        "plot.vertical_drop",
-        "plot.step_horizontal",
-        "plot.step_vertical",
-    ];
+fn chart_previews_expand_with_window_width_and_resize_consistently() {
+    let ids = crate::ribbon::PLOT_TYPES;
     for (tab, active) in [("plot", 1), ("graph", 2)] {
         let ctx = egui::Context::default();
         crate::theme::install(&ctx);
@@ -695,8 +680,8 @@ fn chart_previews_show_only_common_types_and_resize_consistently() {
         } else {
             assert!(counts[0] >= 1 && counts[1] >= 3, "{tab}: {counts:?}");
         }
-        assert!(counts.iter().all(|count| *count <= 4), "{tab}: {counts:?}");
-        assert_eq!(counts[2], 4, "{tab}: {counts:?}");
+        assert!(counts[2] > 4 && counts[2] > counts[1], "{tab}: {counts:?}");
+        assert!(counts.iter().all(|count| *count <= ids.len()));
         assert_eq!(counts[3], counts[0], "{tab}: {counts:?}");
     }
 }
