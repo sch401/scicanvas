@@ -11,6 +11,7 @@ pub(super) fn draw_layer_legend(
     data_end: usize,
 ) -> Option<Scene> {
     let g = ctx.layer;
+    let style = ctx.style;
     let book = ctx.book;
     let others = ctx.others;
     let w = ctx.w;
@@ -44,14 +45,14 @@ pub(super) fn draw_layer_legend(
             let entries: Vec<_> = rows.into_values().collect();
             let width = entries
                 .iter()
-                .map(|(name, _)| text_width(name, LEGEND_FONT))
+                .map(|(name, _)| text_width(name, style.legend_font))
                 .fold(0., f64::max)
                 + 24.;
             let at = g
                 .legend_position
                 .map(|p| [p[0] * w, p[1] * h])
                 .unwrap_or([left + pw - width - 8., top + 12.]);
-            draw_row_legend(&entries, at, items, objects);
+            draw_row_legend(&entries, at, items, objects, &style);
         }
         return None;
     }
@@ -72,18 +73,24 @@ pub(super) fn draw_layer_legend(
                     || p.series.name.clone(),
                     |column| format!("{} · {}", p.series.name, column),
                 );
-                crate::text::fonts().wrap_formatted(&name, LEGEND_FONT, false, (pw - sw - 16.0).max(20.0), g.rich_text)
+                crate::text::fonts().wrap_formatted(
+                    &name,
+                    style.legend_font,
+                    false,
+                    (pw - sw - 16.0).max(20.0),
+                    g.rich_text,
+                )
             })
             .collect();
         let layouts: Vec<_> = names
             .iter()
-            .map(|name| crate::text::layout_formatted(name, LEGEND_FONT, false, g.rich_text))
+            .map(|name| crate::text::layout_formatted(name, style.legend_font, false, g.rich_text))
             .collect();
         let lw = layouts.iter().map(|l| l.width).fold(0.0, f64::max) + sw + 16.0;
         let lhh = layouts.iter().map(|l| l.height + 4.0).sum::<f64>() + 4.0;
         // 自动放在四个角里数据最少的一个，尽量不遮挡曲线
-        let pad_x = MAJOR_TICK + 6.0;
-        let pad_y = MAJOR_TICK + 4.0;
+        let pad_x = style.major_len + 6.0;
+        let pad_y = style.major_len + 4.0;
         let corners = [
             (left + pad_x, top + pad_y),
             (left + pw - pad_x - lw, top + pad_y),
@@ -103,6 +110,9 @@ pub(super) fn draw_layer_legend(
             wider[2] = wider[2].max(lw + gap + 14.0);
             return Some(build_layer_full(LayerContext {
                 layer: g,
+                style: ctx.style,
+                linked_x: ctx.linked_x,
+                linked_y: ctx.linked_y,
                 book,
                 others,
                 w,
@@ -136,7 +146,7 @@ pub(super) fn draw_layer_legend(
                 x0 + sw + 4.0,
                 cy,
                 names[i].clone(),
-                LEGEND_FONT,
+                style.legend_font,
                 Anchor::Start,
                 g.rich_text,
             ));
@@ -332,15 +342,17 @@ pub(super) fn draw_row_legend(
     at: [f64; 2],
     items: &mut Vec<Item>,
     objects: &mut Vec<ObjectLayout>,
+    style: &ResolvedAxisStyle,
 ) {
     let start = items.len();
     let width = entries
         .iter()
-        .map(|(s, _)| text_width(s, LEGEND_FONT))
+        .map(|(s, _)| text_width(s, style.legend_font))
         .fold(0., f64::max)
         + 24.;
+    let row_height = 16. + (style.legend_font - LEGEND_FONT).max(0.);
     for (i, (name, color)) in entries.iter().enumerate() {
-        let y = at[1] + i as f64 * 16.;
+        let y = at[1] + i as f64 * row_height;
         items.push(Item {
             prim: Prim::Rect {
                 x: at[0],
@@ -353,13 +365,13 @@ pub(super) fn draw_row_legend(
             clip: None,
         });
         items.push(Item {
-            prim: text(at[0] + 18., y, name.clone(), LEGEND_FONT, Anchor::Start),
+            prim: text(at[0] + 18., y, name.clone(), style.legend_font, Anchor::Start),
             clip: None,
         });
     }
     objects.push(ObjectLayout {
         target: ObjectTarget::Legend(0),
-        bounds: [at[0], at[1] - 8., width, entries.len() as f64 * 16.],
+        bounds: [at[0], at[1] - 8., width, entries.len() as f64 * row_height],
         items: start..items.len(),
         overlay: false,
         hit_segment: None,

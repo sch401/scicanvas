@@ -231,6 +231,21 @@ impl Page {
             }
         }
         for layer in &self.layers {
+            layer.axis_style.validate()?;
+            for (spacing, scale) in [
+                (&layer.x_ticks, layer.effective_x_scale()),
+                (&layer.y_ticks, layer.effective_y_scale()),
+                (&layer.y2_ticks, layer.effective_y_scale()),
+            ] {
+                spacing.validate()?;
+                if scale.is_log()
+                    && (spacing.major_step.is_some_and(|v| v.fract() != 0.)
+                        || spacing.minor_count.is_some_and(|n| n != 0))
+                {
+                    return Err("对数轴主刻度间隔应为整数，次刻度仅支持自动或无".into());
+                }
+            }
+
             for (scale, auto, lo, hi) in [
                 (layer.x_scale, layer.x_auto, layer.x_min, layer.x_max),
                 (layer.y_scale, layer.y_auto, layer.y_min, layer.y_max),
@@ -305,9 +320,76 @@ impl HistogramOptions {
     }
 }
 
+/// 图层坐标轴外观；未设置时沿用页面比例对应的默认值。
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize), serde(default))]
+pub struct AxisStyle {
+    pub axis_width_pt: Option<f32>,
+    pub tick_width_pt: Option<f32>,
+    pub major_len_pt: Option<f32>,
+    pub minor_len_pt: Option<f32>,
+    pub tick_font_pt: Option<f32>,
+    pub label_font_pt: Option<f32>,
+    pub title_font_pt: Option<f32>,
+    pub legend_font_pt: Option<f32>,
+}
+impl AxisStyle {
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+    pub fn validate(&self) -> Result<(), String> {
+        for (value, min, max, label) in [
+            (self.axis_width_pt, 0.1, 8., "轴线粗细"),
+            (self.tick_width_pt, 0.1, 8., "刻度线粗细"),
+            (self.major_len_pt, 0., 20., "主刻度长度"),
+            (self.minor_len_pt, 0., 20., "次刻度长度"),
+            (self.tick_font_pt, 1., 72., "刻度标签字号"),
+            (self.label_font_pt, 1., 72., "轴标题字号"),
+            (self.title_font_pt, 1., 72., "图标题字号"),
+            (self.legend_font_pt, 1., 72., "图例字号"),
+        ] {
+            if value.is_some_and(|v| !v.is_finite() || !(min..=max).contains(&v)) {
+                return Err(format!("{label}应在 {min}–{max} pt 之间"));
+            }
+        }
+        Ok(())
+    }
+}
+
+/// 单根轴的主刻度间隔与每段次刻度根数。
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+#[cfg_attr(feature = "serde", derive(Serialize, Deserialize), serde(default))]
+pub struct TickSpacing {
+    pub major_step: Option<f64>,
+    pub minor_count: Option<u8>,
+}
+impl TickSpacing {
+    pub fn is_default(&self) -> bool {
+        *self == Self::default()
+    }
+    pub fn validate(&self) -> Result<(), String> {
+        if self.major_step.is_some_and(|v| !v.is_finite() || v <= 0.) {
+            return Err("主刻度间隔必须是有限正数".into());
+        }
+        if self.minor_count.is_some_and(|n| n > 9) {
+            return Err("次刻度根数应在 0–9 之间".into());
+        }
+        Ok(())
+    }
+}
+
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Layer {
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "AxisStyle::is_default"))]
+    pub axis_style: AxisStyle,
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "TickSpacing::is_default"))]
+    pub x_ticks: TickSpacing,
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "TickSpacing::is_default"))]
+    pub y_ticks: TickSpacing,
+    #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "TickSpacing::is_default"))]
+    pub y2_ticks: TickSpacing,
+
     #[cfg_attr(feature = "serde", serde(default, skip_serializing_if = "Projection::is_cartesian"))]
     pub projection: Projection,
     /// None 使用网格排版；自定义矩形按页面比例定位，可与其他图层重叠。
@@ -635,6 +717,11 @@ impl Projection {
 impl Default for Layer {
     fn default() -> Self {
         Self {
+            axis_style: AxisStyle::default(),
+            x_ticks: TickSpacing::default(),
+            y_ticks: TickSpacing::default(),
+            y2_ticks: TickSpacing::default(),
+
             projection: Projection::Cartesian,
             placement: None,
             transparent: false,
@@ -1199,6 +1286,21 @@ impl Layer {
 }
 
 impl Layer {
+    /// 日期、分类和逐列统计图的 X 轴使用固定刻度。
+    pub fn x_uses_fixed_ticks<'a>(&self, books: crate::plotspec::BookLookup<'a, '_>) -> bool {
+        matches!(
+            self.plot_type,
+            crate::PlotType::Box
+                | crate::PlotType::Violin
+                | crate::PlotType::ColumnScatter
+                | crate::PlotType::LineSeries
+        ) || self
+            .book_id
+            .and_then(books)
+            .and_then(|book| self.x_key.as_ref().and_then(|key| self.spec.resolve(book, books, key)))
+            .is_some_and(|(_, column)| column.data.kind() != crate::DataKind::Num)
+    }
+
     pub fn effective_x_scale(&self) -> crate::ticks::AxisScale {
         self.x_scale.unwrap_or(if self.x_log {
             crate::ticks::AxisScale::Log10
@@ -1236,6 +1338,22 @@ impl Layer {
         } else {
             self.y_log = scale == crate::ticks::AxisScale::Log10;
             self.y_scale = explicit;
+        }
+        if scale.is_log() {
+            let reset = |ticks: &mut TickSpacing| {
+                if ticks.major_step.is_some_and(|v| v.fract() != 0.) {
+                    ticks.major_step = None;
+                }
+                if ticks.minor_count.is_some_and(|n| n != 0) {
+                    ticks.minor_count = None;
+                }
+            };
+            if x {
+                reset(&mut self.x_ticks);
+            } else {
+                reset(&mut self.y_ticks);
+                reset(&mut self.y2_ticks);
+            }
         }
         Ok(())
     }

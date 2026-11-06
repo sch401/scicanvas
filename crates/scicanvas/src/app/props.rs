@@ -42,6 +42,7 @@ impl SciApp {
                     props_layer = page_layout(ui, graph, props_layer, history_group);
                     layer(ui, graph, gid, props_layer, history_group);
                 });
+                let page_scale = graph.page.scale();
                 let g = &mut graph.page.layers_mut()[props_layer];
                 let cols = g
                     .book_id
@@ -72,7 +73,9 @@ impl SciApp {
                 });
                 props_section(ui, "axes", "坐标轴", true, |ui| {
                     titles(ui, g, history_group);
-                    axes(ui, g, history_group, &actual.layers[props_layer].axes);
+                    let fixed_x = g.x_uses_fixed_ticks(&lookup);
+                    axes(ui, g, history_group, &actual.layers[props_layer].axes, fixed_x);
+                    axis_style_controls(ui, &mut g.axis_style, page_scale, history_group);
                     ui.label("网格与边框");
                     ui.horizontal_wrapped(|ui| {
                         ui.checkbox(&mut g.grid, "网格线");
@@ -129,6 +132,9 @@ impl SciApp {
                     });
                 }
             });
+        if let Some(message) = ctx.data_mut(|d| d.remove_temp::<String>(egui::Id::new("axis-spacing-notice"))) {
+            self.set_status(StatusKind::Warn, message);
+        }
         if self.project.graph(gid).unwrap() != &graph_before {
             ctx.request_repaint();
             let after = std::mem::replace(self.project.graph_mut(gid).unwrap(), graph_before);
@@ -678,11 +684,12 @@ fn axes(
     g: &mut scicanvas_core::page::Layer,
     group: &mut Option<egui::Id>,
     actual: &scicanvas_core::coord::AxisSet,
+    fixed_x: bool,
 ) {
     use scicanvas_core::format::NumberFormat;
     let history_group = &mut *group;
     for x in [true, false] {
-        axis_controls(ui, g, x, history_group, actual);
+        axis_controls(ui, g, x, history_group, actual, fixed_x);
         if x {
             number_format(ui, "X 刻度格式", "props-x-format", &mut g.x_format, history_group);
         } else {
@@ -691,6 +698,10 @@ fn axes(
     }
     if g.has_right_axis_style() {
         let axis = actual.right_y.as_ref().unwrap_or(&actual.left_y);
+        let reason = (!g.effective_y_scale().is_log()
+            && g.effective_y_scale() != scicanvas_core::ticks::AxisScale::Linear)
+            .then_some("该刻度类型使用固定刻度");
+        spacing_controls(ui, "右 Y", &mut g.y2_ticks, axis, reason, history_group);
         ui.label("右 Y 范围");
         range_controls(
             ui,
@@ -747,10 +758,36 @@ fn axis_controls(
     x: bool,
     group: &mut Option<egui::Id>,
     actual: &scicanvas_core::coord::AxisSet,
+    fixed_x: bool,
 ) {
     ui.label(if x { "X 刻度类型" } else { "Y 刻度类型" });
     scale_selector(ui, g, x, group);
     ui.end_row();
+    let scale = if x {
+        g.effective_x_scale()
+    } else {
+        g.effective_y_scale()
+    };
+    let reason = if !g.projection.is_cartesian()
+        || g.plot_type == PlotType::Pie
+        || (x && fixed_x)
+        || (!scale.is_log() && scale != scicanvas_core::ticks::AxisScale::Linear)
+    {
+        Some("该刻度类型使用固定刻度")
+    } else if (x && g.link_x.is_some()) || (!x && g.link_y.is_some()) {
+        Some("刻度跟随联动的目标图层")
+    } else {
+        None
+    };
+    let spacing = if x { &mut g.x_ticks } else { &mut g.y_ticks };
+    spacing_controls(
+        ui,
+        if x { "X" } else { "左 Y" },
+        spacing,
+        if x { &actual.x } else { &actual.left_y },
+        reason,
+        group,
+    );
     ui.label(if x { "X 范围" } else { "左 Y 范围" });
     if x {
         range_controls(
@@ -770,6 +807,228 @@ fn axis_controls(
             [actual.left_y.lo, actual.left_y.hi],
             group,
         );
+    }
+}
+
+fn axis_style_controls(
+    ui: &mut egui::Ui,
+    style: &mut scicanvas_core::page::AxisStyle,
+    scale: f64,
+    group: &mut Option<egui::Id>,
+) {
+    use scicanvas_core::scene::{pt_to_units, ResolvedAxisStyle};
+    let defaults = ResolvedAxisStyle::new(&Default::default(), scale);
+    let actual = ResolvedAxisStyle::new(style, scale);
+    let pt = |v: f64| (v * scale / pt_to_units(1.)) as f32;
+    ui.strong("线条与刻度");
+    ui.end_row();
+    for (key, label, value, automatic, min, max) in [
+        (
+            "axis-width",
+            "轴线粗细",
+            &mut style.axis_width_pt,
+            pt(defaults.axis_width),
+            0.1,
+            8.,
+        ),
+        (
+            "tick-width",
+            "刻度线粗细",
+            &mut style.tick_width_pt,
+            pt(actual.axis_width),
+            0.1,
+            8.,
+        ),
+        (
+            "major-length",
+            "主刻度长度",
+            &mut style.major_len_pt,
+            pt(defaults.major_len),
+            0.,
+            20.,
+        ),
+        (
+            "minor-length",
+            "次刻度长度",
+            &mut style.minor_len_pt,
+            pt(defaults.minor_len),
+            0.,
+            20.,
+        ),
+    ] {
+        auto_pt(ui, (key, label), value, automatic, min..=max, group);
+    }
+    ui.strong("文字大小");
+    ui.end_row();
+    for (key, label, value, automatic) in [
+        (
+            "tick-font",
+            "刻度标签字号",
+            &mut style.tick_font_pt,
+            pt(defaults.tick_font),
+        ),
+        (
+            "label-font",
+            "轴标题字号",
+            &mut style.label_font_pt,
+            pt(defaults.label_font),
+        ),
+        (
+            "title-font",
+            "图标题字号",
+            &mut style.title_font_pt,
+            pt(defaults.title_font),
+        ),
+        (
+            "legend-font",
+            "图例字号",
+            &mut style.legend_font_pt,
+            pt(defaults.legend_font),
+        ),
+    ] {
+        auto_pt(ui, (key, label), value, automatic, 1. ..=72., group);
+    }
+}
+
+fn auto_pt(
+    ui: &mut egui::Ui,
+    (key, label): (&str, &str),
+    value: &mut Option<f32>,
+    automatic: f32,
+    range: std::ops::RangeInclusive<f32>,
+    group: &mut Option<egui::Id>,
+) {
+    ui.label(label);
+    ui.push_id(key, |ui| {
+        ui.horizontal_wrapped(|ui| {
+            let mut auto = value.is_none();
+            let response = ui.checkbox(&mut auto, "自动");
+            edit_group(&response, group);
+            #[cfg(test)]
+            ui.data_mut(|d| d.insert_temp(egui::Id::new(("axis-style-auto", key)), response.rect));
+            if response.changed() {
+                *value = (!auto).then_some(automatic);
+            }
+            let mut shown = value.unwrap_or(automatic);
+            let response = ui.add_enabled(
+                !auto,
+                egui::DragValue::new(&mut shown)
+                    .range(range)
+                    .speed(0.1)
+                    .max_decimals(3)
+                    .suffix(" pt"),
+            );
+            edit_group(&response, group);
+            #[cfg(test)]
+            ui.data_mut(|d| {
+                d.insert_temp(
+                    egui::Id::new(("axis-style-value", key)),
+                    (response.rect, response.enabled(), shown),
+                )
+            });
+            if response.changed() && !auto {
+                *value = Some(shown);
+            }
+        });
+    });
+    ui.end_row();
+}
+
+fn spacing_controls(
+    ui: &mut egui::Ui,
+    label: &str,
+    spacing: &mut scicanvas_core::page::TickSpacing,
+    axis: &scicanvas_core::ticks::Axis,
+    reason: Option<&str>,
+    group: &mut Option<egui::Id>,
+) {
+    let enabled = reason.is_none();
+    let before = *spacing;
+    ui.label(format!("{label} 主刻度间隔"));
+    ui.push_id(("tick-spacing", label), |ui| {
+        let response = ui.add_enabled_ui(enabled, |ui| {
+            ui.horizontal_wrapped(|ui| {
+                let mut auto = spacing.major_step.is_none();
+                let toggle = ui.checkbox(&mut auto, "自动");
+                edit_group(&toggle, group);
+                let default = axis.ticks.windows(2).next().map_or(1., |p| {
+                    if axis.scale.is_log() {
+                        (axis.scale.forward(p[1]) - axis.scale.forward(p[0])).round().max(1.)
+                    } else {
+                        p[1] - p[0]
+                    }
+                });
+                if toggle.changed() {
+                    spacing.major_step = (!auto).then_some(default);
+                }
+                let mut value = spacing.major_step.unwrap_or(default);
+                let input = ui.add_enabled(
+                    !auto,
+                    egui::DragValue::new(&mut value)
+                        .speed(if axis.scale.is_log() { 1. } else { default / 20. })
+                        .range(f64::MIN_POSITIVE..=f64::MAX),
+                );
+                edit_group(&input, group);
+                #[cfg(test)]
+                ui.data_mut(|d| {
+                    d.insert_temp(
+                        egui::Id::new(("axis-spacing-value", label)),
+                        (input.rect, input.enabled()),
+                    )
+                });
+                if input.changed() && !auto {
+                    if axis.scale.is_log() && value.fract() != 0. {
+                        ui.data_mut(|d| {
+                            d.insert_temp(
+                                egui::Id::new("axis-spacing-notice"),
+                                "对数轴主刻度间隔应为整数".to_owned(),
+                            )
+                        });
+                    } else {
+                        spacing.major_step = Some(value);
+                    }
+                }
+            });
+        });
+        if let Some(reason) = reason {
+            response.response.on_disabled_hover_text(reason);
+        }
+    });
+    ui.end_row();
+    ui.label(format!("{label} 次刻度"));
+    ui.add_enabled_ui(enabled, |ui| {
+        egui::ComboBox::from_id_salt(("axis-minor-count", label))
+            .selected_text(spacing.minor_count.map_or("自动".into(), |n| {
+                if n == 0 {
+                    "无".into()
+                } else {
+                    n.to_string()
+                }
+            }))
+            .show_ui(ui, |ui| {
+                let response = ui.selectable_value(&mut spacing.minor_count, None, "自动");
+                edit_group(&response, group);
+                for count in 0..=if axis.scale.is_log() { 0 } else { 9 } {
+                    let response = ui.selectable_value(
+                        &mut spacing.minor_count,
+                        Some(count),
+                        if count == 0 { "无".into() } else { count.to_string() },
+                    );
+                    edit_group(&response, group);
+                }
+            });
+    })
+    .response
+    .on_disabled_hover_text(reason.unwrap_or_default());
+    ui.end_row();
+    if *spacing != before && scicanvas_core::ticks::spacing_too_dense(axis.lo, axis.hi, axis.scale, spacing) {
+        spacing.major_step = None;
+        ui.data_mut(|d| {
+            d.insert_temp(
+                egui::Id::new("axis-spacing-notice"),
+                "刻度间隔过小，已改用自动间隔".to_owned(),
+            )
+        });
     }
 }
 

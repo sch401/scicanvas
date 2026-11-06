@@ -1826,3 +1826,66 @@ fn u3_color_mapping_controls_are_saved_and_undoable() {
     harness.click_text(&mut app, &out, "显示色阶条");
     assert!(has_scale(&app));
 }
+
+#[test]
+fn axis_style_auto_initial_value_drag_history_and_fixed_spacing_controls() {
+    let mut app = app();
+    app.props_for = Some(2);
+    let ctx = egui::Context::default();
+    crate::theme::install(&ctx);
+    crate::fonts::setup(&ctx);
+    ctx.style_mut(|s| s.animation_time = 0.);
+    let mut h = crate::test_ui::Harness::new(
+        ctx.clone(),
+        Some(egui::vec2(1800., 2600.)),
+        |a: &mut SciApp, c: &egui::Context| {
+            a.history_group = None;
+            a.props_window(c);
+            a.finish_frame_edit(a.history_group);
+        },
+    )
+    .with_step(0.02);
+    for _ in 0..5 {
+        h.frame(&mut app, vec![]);
+    }
+    let value = ctx
+        .data(|d| d.get_temp::<(egui::Rect, bool, f32)>(egui::Id::new(("axis-style-value", "tick-font"))))
+        .unwrap();
+    let automatic = (scicanvas_core::scene::TICK_FONT * app.project.graph(2).unwrap().page.scale()
+        / scicanvas_core::scene::pt_to_units(1.)) as f32;
+    assert!(!value.1);
+    assert_eq!(value.2, automatic);
+    let toggle = ctx
+        .data(|d| d.get_temp::<egui::Rect>(egui::Id::new(("axis-style-auto", "tick-font"))))
+        .unwrap();
+    h.click(&mut app, toggle.center());
+    assert_eq!(
+        app.project.graph(2).unwrap().first_layer().axis_style.tick_font_pt,
+        Some(automatic)
+    );
+    let before = app.project.clone();
+    let value = ctx
+        .data(|d| d.get_temp::<(egui::Rect, bool, f32)>(egui::Id::new(("axis-style-value", "tick-font"))))
+        .unwrap();
+    assert!(value.1);
+    let start = value.0.center();
+    h.frame(&mut app, vec![egui::Event::PointerMoved(start)]);
+    h.frame(&mut app, vec![crate::test_ui::button(start, true)]);
+    for delta in [12., 24., 36.] {
+        h.frame(&mut app, vec![egui::Event::PointerMoved(start + egui::vec2(delta, 0.))]);
+    }
+    h.frame(
+        &mut app,
+        vec![crate::test_ui::button(start + egui::vec2(36., 0.), false)],
+    );
+    assert_ne!(app.project, before);
+    roundtrip(&mut app, &before);
+    let g = app.project.graph_mut(2).unwrap().first_layer_mut();
+    g.x_scale = Some(scicanvas_core::ticks::AxisScale::Logit);
+    g.x_ticks.major_step = Some(0.1);
+    h.frame(&mut app, vec![]);
+    let (_, enabled) = ctx
+        .data(|d| d.get_temp::<(egui::Rect, bool)>(egui::Id::new(("axis-spacing-value", "X"))))
+        .unwrap();
+    assert!(!enabled);
+}

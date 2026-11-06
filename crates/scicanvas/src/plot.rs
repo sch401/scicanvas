@@ -611,6 +611,35 @@ fn update_saved_view(
     sc
 }
 
+fn warn_dense_ticks(ui: &egui::Ui, id: egui::Id, g: &Graph, project: &Project, sc: &Scene) {
+    let dense_ticks = g.page.layers().iter().zip(&sc.layers).any(|(layer, view)| {
+        if !layer.projection.is_cartesian() || layer.plot_type == scicanvas_core::PlotType::Pie {
+            return false;
+        }
+        let fixed_x = layer.x_uses_fixed_ticks(&|id| project.book(id));
+        let dense = |axis: &scicanvas_core::ticks::Axis, spacing: &scicanvas_core::page::TickSpacing| {
+            scicanvas_core::ticks::spacing_too_dense(axis.lo, axis.hi, axis.scale, spacing)
+        };
+        (!fixed_x && layer.link_x.is_none() && dense(&view.axes.x, &layer.x_ticks))
+            || (layer.link_y.is_none() && dense(&view.axes.left_y, &layer.y_ticks))
+            || view
+                .axes
+                .right_y
+                .as_ref()
+                .is_some_and(|axis| dense(axis, &layer.y2_ticks))
+    });
+    let was_dense = ui.data(|d| d.get_temp::<bool>(id.with("dense-ticks"))).unwrap_or(false);
+    ui.data_mut(|d| {
+        d.insert_temp(id.with("dense-ticks"), dense_ticks);
+        if dense_ticks && !was_dense {
+            d.insert_temp(
+                egui::Id::new("axis-spacing-notice"),
+                "刻度间隔过小，已改用自动间隔".to_owned(),
+            );
+        }
+    });
+}
+
 pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize, objects: ObjectUi) -> PlotOutput {
     let adding = objects.adding || objects.adding_shape.is_some();
     let id = view_id(g.id);
@@ -639,6 +668,7 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize, ob
     }
     let views = |saved: &[Option<Saved>]| saved.iter().map(|s| s.as_ref().map(|s| s.view)).collect::<Vec<_>>();
     let sc = cached_layout(ui, id, g, project, views(&saved));
+    warn_dense_ticks(ui, id, g, project, &sc);
     let object = interact_objects(ui, &response, g, &sc, transform, objects);
     let hovered = response.hover_pos().and_then(|p| {
         let (x, y) = local(p);

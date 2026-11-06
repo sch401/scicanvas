@@ -1,7 +1,7 @@
 //! 图形版面：把一张图排成像素坐标下的图元列表。
 //!
 //! 界面上的绘制和 SVG 导出都从这里取图元，所以屏幕上看到的和导出的论文插图完全一致。
-//! 默认是 Nature 图稿风格：白底、只保留左轴和下轴、刻度朝外、不画网格、
+//! 默认是 期刊图稿风格：白底、只保留左轴和下轴、刻度朝外、不画网格、
 //! 无边框图例自动避开数据；按 96 单位 = 1 英寸，常用页宽 89 mm 时文字为 6–7 pt。
 
 use crate::coord::{Cartesian, Coord};
@@ -45,11 +45,50 @@ pub const MAJOR_TICK: f64 = 4.0;
 pub const MINOR_TICK: f64 = 2.3;
 /// 刻度标签与轴标题的间距。
 const TICK_GAP: f64 = 3.0;
-/// 刻度标签、轴标题、图例、图标题的字号：约 6.4 pt 与 7 pt，落在 Nature 要求的 5–7 pt 内。
+/// 刻度标签、轴标题、图例、图标题的字号：约 6.4 pt 与 7 pt，作为默认期刊字号。
 pub const TICK_FONT: f64 = 8.5;
 pub const LABEL_FONT: f64 = 9.33;
 pub const LEGEND_FONT: f64 = 8.5;
 pub const TITLE_FONT: f64 = 9.33;
+
+/// 导出页面上的 pt 转为 96 dpi 逻辑单位。
+pub fn pt_to_units(pt: f64) -> f64 {
+    pt * 4.0 / 3.0
+}
+
+/// 图层局部坐标中的尺寸；页面合成时统一乘以 scale。
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct ResolvedAxisStyle {
+    pub axis_width: f64,
+    pub tick_width: f64,
+    pub tick_gap: f64,
+    pub major_len: f64,
+    pub minor_len: f64,
+    pub tick_font: f64,
+    pub label_font: f64,
+    pub title_font: f64,
+    pub legend_font: f64,
+}
+impl ResolvedAxisStyle {
+    pub fn new(style: &crate::page::AxisStyle, scale: f64) -> Self {
+        let resolve = |value: Option<f32>, default: f64| value.map_or(default, |pt| pt_to_units(f64::from(pt)) / scale);
+        let axis_width = resolve(style.axis_width_pt, AXIS_WIDTH);
+        let tick_width = style
+            .tick_width_pt
+            .map_or(axis_width, |pt| pt_to_units(f64::from(pt)) / scale);
+        Self {
+            axis_width,
+            tick_width,
+            tick_gap: TICK_GAP.max(axis_width.max(tick_width) / 2. + 1.),
+            major_len: resolve(style.major_len_pt, MAJOR_TICK),
+            minor_len: resolve(style.minor_len_pt, MINOR_TICK),
+            tick_font: resolve(style.tick_font_pt, TICK_FONT),
+            label_font: resolve(style.label_font_pt, LABEL_FONT),
+            title_font: resolve(style.title_font_pt, TITLE_FONT),
+            legend_font: resolve(style.legend_font_pt, LEGEND_FONT),
+        }
+    }
+}
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Anchor {
@@ -678,19 +717,6 @@ fn build_layer<'a>(
     h: f64,
     view: Option<View>,
 ) -> Scene {
-    build_layer_min(g, book, others, w, h, view, [0.0; 4])
-}
-
-/// `min` 为绘图区四周的最小边距 [左, 上, 右, 下]，用于多面板对齐。
-fn build_layer_min<'a>(
-    g: &Layer,
-    book: Option<&'a Book>,
-    others: BookLookup<'a, '_>,
-    w: f64,
-    h: f64,
-    view: Option<View>,
-    min: [f64; 4],
-) -> Scene {
     build_layer_full(LayerContext {
         layer: g,
         book,
@@ -698,8 +724,11 @@ fn build_layer_min<'a>(
         w,
         h,
         view,
-        min,
+        min: [0.; 4],
         legend_outside: false,
+        style: ResolvedAxisStyle::new(&g.axis_style, 1.),
+        linked_x: None,
+        linked_y: None,
     })
 }
 
@@ -707,6 +736,9 @@ fn build_layer_min<'a>(
 #[derive(Clone, Copy)]
 struct LayerContext<'g, 'a, 'b> {
     layer: &'g Layer,
+    style: ResolvedAxisStyle,
+    linked_x: Option<&'g Axis>,
+    linked_y: Option<&'g Axis>,
     book: Option<&'a Book>,
     others: BookLookup<'a, 'b>,
     w: f64,
@@ -887,8 +919,16 @@ fn right_y_axis(g: &Layer, data: &LayerData) -> Option<Axis> {
     let all_y2 = &data.all_y2;
     let plots = &data.plots;
     (!all_y2.is_empty()).then(|| {
-        let mut a = axis_scaled(all_y2, g.y2_auto, g.y2_min, g.y2_max, g.effective_y_scale(), false);
-        if g.y2_auto {
+        let mut a = axis_scaled(
+            all_y2,
+            g.y2_auto,
+            g.y2_min,
+            g.y2_max,
+            g.effective_y_scale(),
+            false,
+            &g.y2_ticks,
+        );
+        if g.y2_auto && g.y2_ticks.major_step.is_none() {
             let marks: Vec<f64> = plots
                 .iter()
                 .map(|p| (&p.series, &p.style))
@@ -908,7 +948,7 @@ fn right_y_axis(g: &Layer, data: &LayerData) -> Option<Axis> {
         a
     })
 }
-fn axis_ranges(ctx: &LayerContext<'_, '_, '_>, data: &LayerData) -> AxisRanges {
+fn numeric_axes(ctx: &LayerContext<'_, '_, '_>, data: &LayerData) -> (Axis, Axis) {
     let g = ctx.layer;
     let view = ctx.view;
     let plots = &data.plots;
@@ -917,12 +957,10 @@ fn axis_ranges(ctx: &LayerContext<'_, '_, '_>, data: &LayerData) -> AxisRanges {
     let horizontal = data.horizontal;
     let is_bar = data.is_bar;
     let dx = data.dx;
-    let x_date = data.x_date;
-    let categories = &data.categories;
-    let (xa, ya): (Axis, Axis) = match view {
+    match view {
         Some(v) => (
-            axis_scaled(&[], false, v.x.0, v.x.1, g.effective_x_scale(), false),
-            axis_scaled(&[], false, v.y.0, v.y.1, g.effective_y_scale(), false),
+            axis_scaled(&[], false, v.x.0, v.x.1, g.effective_x_scale(), false, &g.x_ticks),
+            axis_scaled(&[], false, v.y.0, v.y.1, g.effective_y_scale(), false, &g.y_ticks),
         ),
         None => {
             let xa =
@@ -930,14 +968,38 @@ fn axis_ranges(ctx: &LayerContext<'_, '_, '_>, data: &LayerData) -> AxisRanges {
                 {
                     let lo = all_x.iter().copied().fold(f64::INFINITY, f64::min);
                     let hi = all_x.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-                    axis(&[lo - dx * 0.6, hi + dx * 0.6], true, 0.0, 0.0, false, false)
+                    axis(
+                        &[lo - dx * 0.6, hi + dx * 0.6],
+                        true,
+                        0.0,
+                        0.0,
+                        false,
+                        false,
+                        &g.x_ticks,
+                    )
                 } else {
-                    axis_scaled(all_x, g.x_auto, g.x_min, g.x_max, g.effective_x_scale(), horizontal)
+                    axis_scaled(
+                        all_x,
+                        g.x_auto,
+                        g.x_min,
+                        g.x_max,
+                        g.effective_x_scale(),
+                        horizontal,
+                        &g.x_ticks,
+                    )
                 };
             let ya = if horizontal && g.y_auto && g.effective_y_scale() == AxisScale::Linear && !all_y.is_empty() {
                 let lo = all_y.iter().copied().fold(f64::INFINITY, f64::min);
                 let hi = all_y.iter().copied().fold(f64::NEG_INFINITY, f64::max);
-                axis(&[lo - dx * 0.6, hi + dx * 0.6], true, 0.0, 0.0, false, false)
+                axis(
+                    &[lo - dx * 0.6, hi + dx * 0.6],
+                    true,
+                    0.0,
+                    0.0,
+                    false,
+                    false,
+                    &g.y_ticks,
+                )
             } else {
                 axis_scaled(
                     all_y,
@@ -947,6 +1009,7 @@ fn axis_ranges(ctx: &LayerContext<'_, '_, '_>, data: &LayerData) -> AxisRanges {
                     g.effective_y_scale(),
                     (is_bar && !horizontal && g.plot_type != PlotType::FloatingBar)
                         || matches!(g.plot_type, PlotType::Area | PlotType::VerticalDrop),
+                    &g.y_ticks,
                 )
             };
             let (mut xa, mut ya) = (xa, ya);
@@ -967,16 +1030,27 @@ fn axis_ranges(ctx: &LayerContext<'_, '_, '_>, data: &LayerData) -> AxisRanges {
                 .flat_map(|(s, _)| s.points.iter().copied())
                 .collect();
             if !marks.is_empty() {
-                if g.x_auto {
+                if g.x_auto && g.x_ticks.major_step.is_none() {
                     pad_ends(&mut xa, marks.iter().map(|p| p[0]));
                 }
-                if g.y_auto {
+                if g.y_auto && g.y_ticks.major_step.is_none() {
                     pad_ends(&mut ya, marks.iter().map(|p| p[1]));
                 }
             }
             (xa, ya)
         }
-    };
+    }
+}
+
+fn axis_ranges(ctx: &LayerContext<'_, '_, '_>, data: &LayerData) -> AxisRanges {
+    let g = ctx.layer;
+    let style = ctx.style;
+    let view = ctx.view;
+    let all_x = &data.all_x;
+    let horizontal = data.horizontal;
+    let x_date = data.x_date;
+    let categories = &data.categories;
+    let (xa, ya) = numeric_axes(ctx, data);
     let zoomed = view.is_some();
     let (xa, ya, x_cat, y_cat) = match &categories {
         // 缩放后保留视图范围，刻度仍在各类别上
@@ -1049,10 +1123,12 @@ fn axis_ranges(ctx: &LayerContext<'_, '_, '_>, data: &LayerData) -> AxisRanges {
     let ylab2_w = ya2.as_ref().map_or(0.0, |a| {
         a.ticks
             .iter()
-            .map(|t| text_width(&y2_label.text(*t), TICK_FONT))
+            .map(|t| text_width(&y2_label.text(*t), style.tick_font))
             .fold(8.0, f64::max)
     });
 
+    let xa = ctx.linked_x.cloned().unwrap_or(xa);
+    let ya = ctx.linked_y.cloned().unwrap_or(ya);
     AxisRanges {
         xa,
         ya,
@@ -1082,9 +1158,11 @@ struct AxisLayout {
     ylab2_w: f64,
     tick_height: f64,
     axis_height: f64,
+    label_heights: [f64; 3],
 }
 fn axis_layout(ctx: &LayerContext<'_, '_, '_>, ranges: AxisRanges) -> AxisLayout {
     let g = ctx.layer;
+    let style = ctx.style;
     let book = ctx.book;
     let others = ctx.others;
     let w = ctx.w;
@@ -1103,43 +1181,47 @@ fn axis_layout(ctx: &LayerContext<'_, '_, '_>, ranges: AxisRanges) -> AxisLayout
     let ylab_w = ya
         .ticks
         .iter()
-        .map(|t| text_width(&y_label.text(*t), TICK_FONT))
+        .map(|t| text_width(&y_label.text(*t), style.tick_font))
         .fold(8.0, f64::max);
-    let tick_height = crate::text::layout("0", TICK_FONT, false).height;
-    let axis_height = crate::text::layout("Ag", LABEL_FONT, false).height;
+    let tick_height = crate::text::layout("0", style.tick_font, false).height;
+    let axis_height = crate::text::layout("Ag", style.label_font, false).height;
     let tick_half_width = xa
         .ticks
         .iter()
-        .map(|t| text_width(&x_label.text(*t), TICK_FONT) / 2.0)
+        .map(|t| text_width(&x_label.text(*t), style.tick_font) / 2.0)
         .fold(0.0, f64::max);
     let x_title = g.x_axis_title_in(book, others);
     let y_title = g.y_axis_title_in(book, others);
     let y2_title = g.y2_axis_title_in(book, others);
     // 刻度在框外的长度：朝内时刻度标签直接贴近坐标轴
     let (fout, fin) = g.tick_dir.factors();
-    let out = MAJOR_TICK * fout;
-    let left = (out + TICK_GAP + ylab_w + 5.0 + axis_height + 4.0)
+    let out = style.major_len.max(style.minor_len) * fout;
+    let left = (out + style.tick_gap + ylab_w + 5.0 + axis_height + 4.0)
         .round()
         .max(min[0])
         .max(tick_half_width + 4.0);
     let right = if ya2.is_some() {
-        (out + TICK_GAP + ylab2_w + 5.0 + axis_height + 4.0).round()
+        (out + style.tick_gap + ylab2_w + 5.0 + axis_height + 4.0).round()
     } else {
         14.0
     }
     .max(min[2])
-    .max(tick_half_width + 4.0);
+    .max(tick_half_width + 4.0)
+    .max(if g.frame { out + style.tick_gap + 1. } else { 0. });
     let title = crate::text::fonts().wrap_formatted(
         &g.title,
-        TITLE_FONT,
+        style.title_font,
         true,
         (w - (left - right).abs() - 12.0).max(20.0),
         g.rich_text,
     );
-    let title_height = crate::text::layout_formatted(&title, TITLE_FONT, true, g.rich_text).height;
+    let title_height = crate::text::layout_formatted(&title, style.title_font, true, g.rich_text).height;
     let has_title = !title.trim().is_empty();
     let top = (if has_title { 6.0 + title_height + 8.0 } else { 10.0f64 }).max(min[1]);
-    let bottom = (out + TICK_GAP + tick_height + 5.0 + axis_height + 5.0)
+    let top = top
+        .max(tick_height / 2. + 2.)
+        .max(if g.frame { out + style.tick_gap + 1. } else { 0. });
+    let bottom = (out + style.tick_gap + tick_height + 5.0 + axis_height + 5.0)
         .round()
         .max(min[3]);
     let color_width = crate::plotspec::color_scale_data(g, &|id| {
@@ -1153,13 +1235,13 @@ fn axis_layout(ctx: &LayerContext<'_, '_, '_>, ranges: AxisRanges) -> AxisLayout
         0.04 * w
             + range
                 .iter()
-                .map(|v| text_width(&crate::fmt_num(*v), TICK_FONT))
+                .map(|v| text_width(&crate::fmt_num(*v), style.tick_font))
                 .fold(0.0, f64::max)
             + 22.0
     });
     let pw = (w - left - right - color_width).max(20.0);
     let ph = (h - top - bottom).max(20.0);
-    AxisLayout {
+    let mut layout = AxisLayout {
         axes: crate::coord::AxisSet {
             x: xa,
             left_y: ya,
@@ -1181,7 +1263,50 @@ fn axis_layout(ctx: &LayerContext<'_, '_, '_>, ranges: AxisRanges) -> AxisLayout
         ylab2_w,
         tick_height,
         axis_height,
+        label_heights: [axis_height; 3],
+    };
+    if g.axis_style.label_font_pt.is_some() {
+        wrap_axis_titles(&mut layout, ctx);
     }
+    layout
+}
+
+fn wrap_axis_titles(layout: &mut AxisLayout, ctx: &LayerContext<'_, '_, '_>) {
+    let raw = [layout.x_title.clone(), layout.y_title.clone(), layout.y2_title.clone()];
+    let [left, top, pw, ph] = layout.rect;
+    let right = ctx.w - left - pw;
+    let bottom = ctx.h - top - ph;
+    let mut wrapped = raw.clone();
+    loop {
+        let previous = layout.rect;
+        let sizes = [layout.rect[2], layout.rect[3], layout.rect[3]];
+        for i in 0..3 {
+            wrapped[i] = crate::text::fonts().wrap_formatted(
+                &raw[i],
+                ctx.style.label_font,
+                false,
+                sizes[i],
+                ctx.layer.rich_text,
+            );
+            layout.label_heights[i] =
+                crate::text::layout_formatted(&wrapped[i], ctx.style.label_font, false, ctx.layer.rich_text)
+                    .height
+                    .max(layout.axis_height);
+        }
+        let l = left + (layout.label_heights[1] - layout.axis_height);
+        let r = right
+            + if layout.axes.right_y.is_some() {
+                layout.label_heights[2] - layout.axis_height
+            } else {
+                0.
+            };
+        let b = bottom + (layout.label_heights[0] - layout.axis_height);
+        layout.rect = [l, top, (ctx.w - l - r).max(20.), (ctx.h - top - b).max(20.)];
+        if layout.rect == previous {
+            break;
+        }
+    }
+    [layout.x_title, layout.y_title, layout.y2_title] = wrapped;
 }
 
 fn draw_layer_data(
@@ -1334,6 +1459,7 @@ fn draw_layer_data(
 
 fn draw_axis_ticks(ctx: &LayerContext<'_, '_, '_>, layout: &AxisLayout, items: &mut Vec<Item>) -> usize {
     let g = ctx.layer;
+    let style = ctx.style;
     let [left, top, pw, ph] = layout.rect;
     let axes = &layout.axes;
     let xa = &axes.x;
@@ -1342,7 +1468,7 @@ fn draw_axis_ticks(ctx: &LayerContext<'_, '_, '_>, layout: &AxisLayout, items: &
     let x_label = &layout.x_label;
     let y_label = &layout.y_label;
     let (fin, fout) = (layout.tick_in, layout.tick_out);
-    let out = MAJOR_TICK * fout;
+    let out = style.major_len.max(style.minor_len) * fout;
     let tick_height = layout.tick_height;
     let coord = axes.cartesian([left, top, pw, ph], crate::coord::YAxis::Left);
     let px = |v: f64| coord.project([v, ya.lo])[0];
@@ -1356,7 +1482,7 @@ fn draw_axis_ticks(ctx: &LayerContext<'_, '_, '_>, layout: &AxisLayout, items: &
         });
         items.len()
     };
-    // 坐标轴：默认只画左轴和下轴（Nature 风格，不闭合）；四边框时闭合
+    // 坐标轴：默认只画左轴和下轴（默认不闭合）；四边框时闭合
     let mut axis_pts = vec![[left, top], [left, top + ph], [left + pw, top + ph]];
     if g.frame {
         axis_pts.extend([[left + pw, top], [left, top]]);
@@ -1365,7 +1491,7 @@ fn draw_axis_ticks(ctx: &LayerContext<'_, '_, '_>, layout: &AxisLayout, items: &
         Prim::Polyline {
             pts: axis_pts,
             color: INK,
-            width: AXIS_WIDTH,
+            width: style.axis_width,
         },
         false,
     ) - 1;
@@ -1373,6 +1499,9 @@ fn draw_axis_ticks(ctx: &LayerContext<'_, '_, '_>, layout: &AxisLayout, items: &
     // 刻度：左轴和下轴带标签，方向按 tick_dir；四边框时顶边和右边画镜像刻度（无标签）
     let mut ticks = Vec::new();
     let x_tick = |ticks: &mut Vec<[f64; 4]>, x: f64, len: f64| {
+        if len == 0. {
+            return;
+        }
         ticks.push([x, top + ph - len * fin, x, top + ph + len * fout]);
         if g.frame {
             ticks.push([x, top + len * fin, x, top - len * fout]);
@@ -1384,8 +1513,8 @@ fn draw_axis_ticks(ctx: &LayerContext<'_, '_, '_>, layout: &AxisLayout, items: &
         if !inside_x(x) {
             continue;
         }
-        x_tick(&mut ticks, x, MAJOR_TICK);
-        let half = text_width(&x_label.text(*t), TICK_FONT) / 2.0;
+        x_tick(&mut ticks, x, style.major_len);
+        let half = text_width(&x_label.text(*t), style.tick_font) / 2.0;
         if x - half < previous_right + 4.0 {
             continue;
         }
@@ -1393,9 +1522,9 @@ fn draw_axis_ticks(ctx: &LayerContext<'_, '_, '_>, layout: &AxisLayout, items: &
         push(
             text(
                 x,
-                top + ph + out + TICK_GAP + tick_height / 2.0,
+                top + ph + out + style.tick_gap + tick_height / 2.0,
                 x_label.text(*t),
-                TICK_FONT,
+                style.tick_font,
                 Anchor::Middle,
             ),
             false,
@@ -1404,10 +1533,13 @@ fn draw_axis_ticks(ctx: &LayerContext<'_, '_, '_>, layout: &AxisLayout, items: &
     for t in &xa.minor {
         let x = px(*t);
         if x > left && x < left + pw {
-            x_tick(&mut ticks, x, MINOR_TICK);
+            x_tick(&mut ticks, x, style.minor_len);
         }
     }
     let y_tick = |ticks: &mut Vec<[f64; 4]>, y: f64, len: f64| {
+        if len == 0. {
+            return;
+        }
         ticks.push([left + len * fin, y, left - len * fout, y]);
         if g.frame && ya2.is_none() {
             ticks.push([left + pw - len * fin, y, left + pw + len * fout, y]);
@@ -1418,23 +1550,29 @@ fn draw_axis_ticks(ctx: &LayerContext<'_, '_, '_>, layout: &AxisLayout, items: &
         if !inside_y(y) {
             continue;
         }
-        y_tick(&mut ticks, y, MAJOR_TICK);
+        y_tick(&mut ticks, y, style.major_len);
         push(
-            text(left - out - TICK_GAP, y, y_label.text(*t), TICK_FONT, Anchor::End),
+            text(
+                left - out - style.tick_gap,
+                y,
+                y_label.text(*t),
+                style.tick_font,
+                Anchor::End,
+            ),
             false,
         );
     }
     for t in &ya.minor {
         let y = py(*t);
         if y > top && y < top + ph {
-            y_tick(&mut ticks, y, MINOR_TICK);
+            y_tick(&mut ticks, y, style.minor_len);
         }
     }
     push(
         Prim::Segments {
             segs: ticks,
             color: INK,
-            width: AXIS_WIDTH,
+            width: style.tick_width,
             dashed: false,
         },
         false,
@@ -1445,20 +1583,13 @@ fn draw_axis_ticks(ctx: &LayerContext<'_, '_, '_>, layout: &AxisLayout, items: &
 
 fn draw_axis_titles(ctx: &LayerContext<'_, '_, '_>, layout: &AxisLayout, items: &mut Vec<Item>) {
     let g = ctx.layer;
+    let style = ctx.style;
     let [left, top, pw, ph] = layout.rect;
-    let out = MAJOR_TICK * layout.tick_out;
+    let out = style.major_len.max(style.minor_len) * layout.tick_out;
     let tick_height = layout.tick_height;
-    let axis_height = layout.axis_height;
+    let axis_height = layout.label_heights[0];
     let ylab_w = layout.ylab_w;
-    let ylab2_w = layout.ylab2_w;
-    let (x_title, y_title, y2_title) = (&layout.x_title, &layout.y_title, &layout.y2_title);
-    let axes = &layout.axes;
-    let ya2 = &axes.right_y;
-    let y2_label = &layout.y2_label;
-    let (fin, fout) = (layout.tick_in, layout.tick_out);
-    let coord2 = axes.cartesian([left, top, pw, ph], crate::coord::YAxis::Right);
-    let py2 = |v: f64| coord2.project([axes.x.lo, v])[1];
-    let inside_y = |y: f64| y >= top - 0.5 && y <= top + ph + 0.5;
+    let (x_title, y_title) = (&layout.x_title, &layout.y_title);
     let has_title = layout.has_title;
     let title_height = layout.title_height;
     let title = layout.title.clone();
@@ -1472,73 +1603,41 @@ fn draw_axis_titles(ctx: &LayerContext<'_, '_, '_>, layout: &AxisLayout, items: 
     push(
         formatted_text(
             left + pw / 2.0,
-            top + ph + out + TICK_GAP + tick_height + 5.0 + axis_height / 2.0,
+            top + ph + out + style.tick_gap + tick_height + 5.0 + axis_height / 2.0,
             x_title.clone(),
-            crate::text::fit_size_formatted(x_title, LABEL_FONT, false, pw, g.rich_text),
+            if g.axis_style.label_font_pt.is_some() {
+                style.label_font
+            } else {
+                crate::text::fit_size_formatted(x_title, style.label_font, false, pw, g.rich_text)
+            },
             Anchor::Middle,
             g.rich_text,
         ),
         false,
     );
-    // 右侧 Y 轴：轴线、刻度、标签与标题
-    if let Some(a2) = &ya2 {
-        let mut ticks2 = Vec::new();
-        for t in &a2.ticks {
-            let y = py2(*t);
-            if !inside_y(y) {
-                continue;
-            }
-            ticks2.push([left + pw - MAJOR_TICK * fin, y, left + pw + MAJOR_TICK * fout, y]);
-            push(
-                text(
-                    left + pw + out + TICK_GAP,
-                    y,
-                    y2_label.text(*t),
-                    TICK_FONT,
-                    Anchor::Start,
-                ),
-                false,
-            );
-        }
-        for t in &a2.minor {
-            let y = py2(*t);
-            if y > top && y < top + ph {
-                ticks2.push([left + pw - MINOR_TICK * fin, y, left + pw + MINOR_TICK * fout, y]);
-            }
-        }
-        if !g.frame {
-            ticks2.push([left + pw, top, left + pw, top + ph]);
-        }
-        push(
-            Prim::Segments {
-                segs: ticks2,
-                color: INK,
-                width: AXIS_WIDTH,
-                dashed: false,
-            },
-            false,
-        );
-        push(
-            Prim::Text {
-                x: left + pw + out + TICK_GAP + ylab2_w + 5.0 + LABEL_FONT / 2.0,
-                y: top + ph / 2.0,
-                text: y2_title.clone(),
-                size: crate::text::fit_size_formatted(y2_title, LABEL_FONT, false, ph, g.rich_text),
-                anchor: Anchor::Middle,
-                vertical: true,
-                bold: false,
-                rich: g.rich_text,
-                color: INK,
-            },
-            false,
-        );
+    for prim in right_axis_primitives(ctx, layout) {
+        push(prim, false);
     }
+
     push(
         Prim::Text {
-            x: left - out - TICK_GAP - ylab_w - 5.0 - LABEL_FONT / 2.0,
+            x: left
+                - out
+                - style.tick_gap
+                - ylab_w
+                - 5.0
+                - if g.axis_style.label_font_pt.is_some() {
+                    layout.label_heights[1] / 2.
+                } else {
+                    style.label_font / 2.
+                },
             y: top + ph / 2.0,
             text: y_title.clone(),
-            size: crate::text::fit_size_formatted(y_title, LABEL_FONT, false, ph, g.rich_text),
+            size: if g.axis_style.label_font_pt.is_some() {
+                style.label_font
+            } else {
+                crate::text::fit_size_formatted(y_title, style.label_font, false, ph, g.rich_text)
+            },
             anchor: Anchor::Middle,
             vertical: true,
             bold: false,
@@ -1553,7 +1652,7 @@ fn draw_axis_titles(ctx: &LayerContext<'_, '_, '_>, layout: &AxisLayout, items: 
                 x: left + pw / 2.0,
                 y: 6.0 + title_height / 2.0,
                 text: title,
-                size: TITLE_FONT,
+                size: style.title_font,
                 anchor: Anchor::Middle,
                 vertical: false,
                 bold: true,
@@ -1563,6 +1662,115 @@ fn draw_axis_titles(ctx: &LayerContext<'_, '_, '_>, layout: &AxisLayout, items: 
             false,
         );
     }
+}
+
+fn right_axis_primitives(ctx: &LayerContext<'_, '_, '_>, layout: &AxisLayout) -> Vec<Prim> {
+    let g = ctx.layer;
+    let style = ctx.style;
+    let [left, top, pw, ph] = layout.rect;
+    let axes = &layout.axes;
+    let ya2 = &axes.right_y;
+    let y2_label = &layout.y2_label;
+    let y2_title = &layout.y2_title;
+    let ylab2_w = layout.ylab2_w;
+    let out = style.major_len.max(style.minor_len) * layout.tick_out;
+    let (fin, fout) = (layout.tick_in, layout.tick_out);
+    let coord2 = axes.cartesian(layout.rect, crate::coord::YAxis::Right);
+    let py2 = |v: f64| coord2.project([axes.x.lo, v])[1];
+    let inside_y = |y: f64| y >= top - 0.5 && y <= top + ph + 0.5;
+    let mut items = Vec::new();
+    let mut push = |prim: Prim, _clip: bool| items.push(prim);
+    if let Some(a2) = &ya2 {
+        let mut ticks2 = Vec::new();
+        for t in &a2.ticks {
+            let y = py2(*t);
+            if !inside_y(y) {
+                continue;
+            }
+            if style.major_len > 0. {
+                ticks2.push([
+                    left + pw - style.major_len * fin,
+                    y,
+                    left + pw + style.major_len * fout,
+                    y,
+                ]);
+            }
+            push(
+                text(
+                    left + pw + out + style.tick_gap,
+                    y,
+                    y2_label.text(*t),
+                    style.tick_font,
+                    Anchor::Start,
+                ),
+                false,
+            );
+        }
+        for t in &a2.minor {
+            let y = py2(*t);
+            if y > top && y < top + ph && style.minor_len > 0. {
+                ticks2.push([
+                    left + pw - style.minor_len * fin,
+                    y,
+                    left + pw + style.minor_len * fout,
+                    y,
+                ]);
+            }
+        }
+        if !g.frame {
+            if style.axis_width == style.tick_width {
+                ticks2.push([left + pw, top, left + pw, top + ph]);
+            } else {
+                push(
+                    Prim::Segments {
+                        segs: vec![[left + pw, top, left + pw, top + ph]],
+                        color: INK,
+                        width: style.axis_width,
+                        dashed: false,
+                    },
+                    false,
+                );
+            }
+        }
+        push(
+            Prim::Segments {
+                segs: ticks2,
+                color: INK,
+                width: style.tick_width,
+                dashed: false,
+            },
+            false,
+        );
+        push(
+            Prim::Text {
+                x: left
+                    + pw
+                    + out
+                    + style.tick_gap
+                    + ylab2_w
+                    + 5.0
+                    + if g.axis_style.label_font_pt.is_some() {
+                        layout.label_heights[2] / 2.
+                    } else {
+                        style.label_font / 2.
+                    },
+                y: top + ph / 2.0,
+                text: y2_title.clone(),
+                size: if g.axis_style.label_font_pt.is_some() {
+                    style.label_font
+                } else {
+                    crate::text::fit_size_formatted(y2_title, style.label_font, false, ph, g.rich_text)
+                },
+                anchor: Anchor::Middle,
+                vertical: true,
+                bold: false,
+                rich: g.rich_text,
+                color: INK,
+            },
+            false,
+        );
+    }
+    items
 }
 
 fn build_layer_full(ctx: LayerContext<'_, '_, '_>) -> Scene {

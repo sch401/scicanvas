@@ -39,6 +39,7 @@ fn b6_all_transforms_inverse_ticks_and_numpy_positions() {
             case["hi"].as_f64().unwrap(),
             scale,
             false,
+            &Default::default(),
         );
         for (v, f) in data.iter().zip(values(case, "fractions")) {
             assert!((axis.frac(*v) - f).abs() < 1e-12);

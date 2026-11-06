@@ -87,9 +87,17 @@ impl AxisScale {
         }
     }
 }
-pub fn axis_scaled(values: &[f64], auto: bool, min: f64, max: f64, scale: AxisScale, force_zero: bool) -> Axis {
+pub fn axis_scaled(
+    values: &[f64],
+    auto: bool,
+    min: f64,
+    max: f64,
+    scale: AxisScale,
+    force_zero: bool,
+    spacing: &crate::page::TickSpacing,
+) -> Axis {
     if matches!(scale, AxisScale::Linear | AxisScale::Log10) {
-        return axis(values, auto, min, max, scale == AxisScale::Log10, force_zero);
+        return axis(values, auto, min, max, scale == AxisScale::Log10, force_zero, spacing);
     }
     let side = values
         .iter()
@@ -164,11 +172,17 @@ pub fn axis_scaled(values: &[f64], auto: bool, min: f64, max: f64, scale: AxisSc
         }
         _ => unreachable!(),
     };
-    Axis {
-        lo,
-        hi,
-        ticks,
-        minor: Vec::new(),
-        scale,
-    }
+    super::with_spacing(
+        Axis {
+            lo,
+            hi,
+            ticks,
+            minor: Vec::new(),
+            scale,
+        },
+        &values,
+        auto,
+        force_zero,
+        spacing,
+    )
 }
