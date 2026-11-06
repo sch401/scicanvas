@@ -1301,6 +1301,18 @@ impl Layer {
             .is_some_and(|(_, column)| column.data.kind() != crate::DataKind::Num)
     }
 
+    /// 联动的轴沿用目标图层刻度：目标有效，且两者有效刻度类型相同。
+    pub fn inherits_linked_ticks(&self, page: &Page, x: bool) -> bool {
+        let link = if x { self.link_x } else { self.link_y };
+        link.and_then(|index| page.layers().get(index)).is_some_and(|target| {
+            if x {
+                self.effective_x_scale() == target.effective_x_scale()
+            } else {
+                self.effective_y_scale() == target.effective_y_scale()
+            }
+        })
+    }
+
     pub fn effective_x_scale(&self) -> crate::ticks::AxisScale {
         self.x_scale.unwrap_or(if self.x_log {
             crate::ticks::AxisScale::Log10

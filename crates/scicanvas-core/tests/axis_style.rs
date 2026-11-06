@@ -360,3 +360,26 @@ fn linked_axes_with_different_scales_keep_their_own_tick_type() {
         assert_eq!(axis.ticks, [1., 10., 100.]);
     }
 }
+
+#[test]
+fn linked_tick_capability_requires_a_valid_same_scale_target() {
+    let page = scicanvas_core::page::Page::default();
+    for x in [true, false] {
+        let mut layer = page.layers()[0].clone();
+        assert!(!layer.inherits_linked_ticks(&page, x));
+        if x {
+            layer.link_x = Some(0);
+        } else {
+            layer.link_y = Some(0);
+        }
+        assert!(layer.inherits_linked_ticks(&page, x));
+        layer.set_axis_scale(x, AxisScale::Log10).unwrap();
+        assert!(!layer.inherits_linked_ticks(&page, x));
+        if x {
+            layer.link_x = Some(99);
+        } else {
+            layer.link_y = Some(99);
+        }
+        assert!(!layer.inherits_linked_ticks(&page, x));
+    }
+}

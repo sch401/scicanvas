@@ -620,8 +620,8 @@ fn warn_dense_ticks(ui: &egui::Ui, id: egui::Id, g: &Graph, project: &Project, s
         let dense = |axis: &scicanvas_core::ticks::Axis, spacing: &scicanvas_core::page::TickSpacing| {
             scicanvas_core::ticks::spacing_too_dense(axis.lo, axis.hi, axis.scale, spacing)
         };
-        (!fixed_x && layer.link_x.is_none() && dense(&view.axes.x, &layer.x_ticks))
-            || (layer.link_y.is_none() && dense(&view.axes.left_y, &layer.y_ticks))
+        (!fixed_x && !layer.inherits_linked_ticks(&g.page, true) && dense(&view.axes.x, &layer.x_ticks))
+            || (!layer.inherits_linked_ticks(&g.page, false) && dense(&view.axes.left_y, &layer.y_ticks))
             || view
                 .axes
                 .right_y

@@ -43,6 +43,8 @@ impl SciApp {
                     layer(ui, graph, gid, props_layer, history_group);
                 });
                 let page_scale = graph.page.scale();
+                let inherit =
+                    [true, false].map(|x| graph.page.layers()[props_layer].inherits_linked_ticks(&graph.page, x));
                 let g = &mut graph.page.layers_mut()[props_layer];
                 let cols = g
                     .book_id
@@ -74,7 +76,7 @@ impl SciApp {
                 props_section(ui, "axes", "坐标轴", true, |ui| {
                     titles(ui, g, history_group);
                     let fixed_x = g.x_uses_fixed_ticks(&lookup);
-                    axes(ui, g, history_group, &actual.layers[props_layer].axes, fixed_x);
+                    axes(ui, g, history_group, &actual.layers[props_layer].axes, fixed_x, inherit);
                     axis_style_controls(ui, &mut g.axis_style, page_scale, history_group);
                     ui.label("网格与边框");
                     ui.horizontal_wrapped(|ui| {
@@ -685,11 +687,12 @@ fn axes(
     group: &mut Option<egui::Id>,
     actual: &scicanvas_core::coord::AxisSet,
     fixed_x: bool,
+    inherit: [bool; 2],
 ) {
     use scicanvas_core::format::NumberFormat;
     let history_group = &mut *group;
     for x in [true, false] {
-        axis_controls(ui, g, x, history_group, actual, fixed_x);
+        axis_controls(ui, g, x, history_group, actual, fixed_x, inherit[usize::from(!x)]);
         if x {
             number_format(ui, "X 刻度格式", "props-x-format", &mut g.x_format, history_group);
         } else {
@@ -701,7 +704,7 @@ fn axes(
         let reason = (!g.effective_y_scale().is_log()
             && g.effective_y_scale() != scicanvas_core::ticks::AxisScale::Linear)
             .then_some("该刻度类型使用固定刻度");
-        spacing_controls(ui, "右 Y", &mut g.y2_ticks, axis, reason, history_group);
+        spacing_controls(ui, "右 Y", &mut g.y2_ticks, axis, reason, None, history_group);
         ui.label("右 Y 范围");
         range_controls(
             ui,
@@ -759,6 +762,7 @@ fn axis_controls(
     group: &mut Option<egui::Id>,
     actual: &scicanvas_core::coord::AxisSet,
     fixed_x: bool,
+    inherit: bool,
 ) {
     ui.label(if x { "X 刻度类型" } else { "Y 刻度类型" });
     scale_selector(ui, g, x, group);
@@ -774,11 +778,13 @@ fn axis_controls(
         || (!scale.is_log() && scale != scicanvas_core::ticks::AxisScale::Linear)
     {
         Some("该刻度类型使用固定刻度")
-    } else if (x && g.link_x.is_some()) || (!x && g.link_y.is_some()) {
+    } else if inherit {
         Some("刻度跟随联动的目标图层")
     } else {
         None
     };
+    let linked = if x { g.link_x.is_some() } else { g.link_y.is_some() };
+    let hint = (linked && !inherit && reason.is_none()).then_some("刻度类型与联动目标不同，只同步范围");
     let spacing = if x { &mut g.x_ticks } else { &mut g.y_ticks };
     spacing_controls(
         ui,
@@ -786,6 +792,7 @@ fn axis_controls(
         spacing,
         if x { &actual.x } else { &actual.left_y },
         reason,
+        hint,
         group,
     );
     ui.label(if x { "X 范围" } else { "左 Y 范围" });
@@ -940,6 +947,7 @@ fn spacing_controls(
     spacing: &mut scicanvas_core::page::TickSpacing,
     axis: &scicanvas_core::ticks::Axis,
     reason: Option<&str>,
+    hint: Option<&str>,
     group: &mut Option<egui::Id>,
 ) {
     let enabled = reason.is_none();
@@ -990,6 +998,9 @@ fn spacing_controls(
                 }
             });
         });
+        if let Some(hint) = hint {
+            response.response.clone().on_hover_text(hint);
+        }
         if let Some(reason) = reason {
             response.response.on_disabled_hover_text(reason);
         }
@@ -1019,7 +1030,8 @@ fn spacing_controls(
             });
     })
     .response
-    .on_disabled_hover_text(reason.unwrap_or_default());
+    .on_disabled_hover_text(reason.unwrap_or_default())
+    .on_hover_text(hint.unwrap_or_default());
     ui.end_row();
     if *spacing != before && scicanvas_core::ticks::spacing_too_dense(axis.lo, axis.hi, axis.scale, spacing) {
         spacing.major_step = None;

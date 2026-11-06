@@ -1127,6 +1127,7 @@ fn axis_ranges(ctx: &LayerContext<'_, '_, '_>, data: &LayerData) -> AxisRanges {
             .fold(8.0, f64::max)
     });
 
+    // 与 Layer::inherits_linked_ticks 保持一致：仅同类型轴继承刻度，异类型只同步范围。
     let xa = ctx
         .linked_x
         .filter(|target| target.scale == xa.scale)
