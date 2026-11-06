@@ -99,5 +99,23 @@ class ParityTests(unittest.TestCase):
             self.assertEqual(row["ref"], "")
 
 
+    def test_document_wording_has_no_damaged_replacements(self):
+        import re
+
+        docs = Path(__file__).resolve().parent.parent
+        paths = [docs / "parity/parity.json"] + sorted(
+            path for path in docs.rglob("*")
+            if path.suffix in (".md", ".html") and "_gpt_session" not in path.parts
+        )
+        damaged = re.compile(r"[ ]科研绘图[ ]|/科[研]绘图|scientific[ ]plotting|来源[：]；|^。", re.MULTILINE)
+        for path in paths:
+            with self.subTest(path=str(path.relative_to(docs))):
+                text = path.read_text(encoding="utf-8")
+                match = damaged.search(text)
+                if match:
+                    line = text.count("\n", 0, match.start()) + 1
+                    self.fail(f"Damaged wording: {path.relative_to(docs)}:{line}: {match.group()}")
+
+
 if __name__ == "__main__":
     unittest.main()

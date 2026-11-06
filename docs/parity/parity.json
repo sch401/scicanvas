@@ -771,7 +771,7 @@
   "pri": "P1",
   "status": "已实现待验收",
   "how": "选择多列堆叠生成值列与分类来源列，或按分类列拆分值列；保持同类型、缺失值和原列，每次操作可撤销。",
-  "verify": "数据类型、缺失值和撤销测试；按人工清单按已知结果比较。",
+  "verify": "数据类型、缺失值和撤销测试；按人工清单核对已知结果。",
   "id": "F042",
   "milestone": "M2 论文全流程",
   "needs": [
@@ -809,7 +809,7 @@
   "pri": "P1",
   "status": "已实现待验收",
   "how": "按指定 N 行取第一行，或对每组有限数值求平均，生成独立新列；每次操作可撤销。",
-  "verify": "缺失值、部分分组、非法间隔和撤销测试；按人工清单按已知结果比较。",
+  "verify": "缺失值、部分分组、非法间隔和撤销测试；按人工清单核对已知结果。",
   "id": "F044",
   "milestone": "M2 论文全流程",
   "needs": [
@@ -1049,7 +1049,7 @@
   "pri": "P1",
   "status": "未开始",
   "how": "spade（Delaunay）+ 自写克里金",
-  "verify": "与 科研绘图 网格结果比较",
+  "verify": "与 SciPy griddata 结果比较",
   "id": "F060",
   "milestone": "M2 论文全流程"
  },
@@ -1326,7 +1326,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "逐个格式实现",
-  "verify": "与 科研绘图 导入结果比较",
+  "verify": "与公开格式说明及示例文件的内容比较",
   "id": "F075",
   "milestone": "M3 高级功能"
  },
@@ -1365,7 +1365,7 @@
  },
  {
   "module": "导入导出",
-  "feature": "导入 科研绘图 工程中的工作表",
+  "feature": "导入第三方专有工程中的工作表",
   "ref": "",
   "pri": "不做",
   "status": "不做",
@@ -1695,7 +1695,7 @@
   "pri": "P0",
   "status": "已完成",
   "how": "ticks.rs（1/2/5 步长）；左 Y 和右 Y 分别支持自动或手动设定范围",
-  "verify": "自动/手动范围和独立左右 Y 范围场景回归；科研绘图 刻度与范围对照",
+  "verify": "自动/手动范围和独立左右 Y 范围场景回归",
   "id": "F092",
   "milestone": "M1 日常够用",
   "needs": [
@@ -2036,7 +2036,7 @@
     "total": 4,
     "done": 0,
     "review": 4,
-    "note": "数值、X/Y、行号、指定列；自动化回归已通过，科研绘图 对照待验收"
+    "note": "数值、X/Y、行号、指定列；自动化回归已通过，Windows 人工验收待做"
    }
   },
   "needs": [
@@ -2159,7 +2159,7 @@
   "ref": "",
   "pri": "P1",
   "status": "部分实现",
-  "how": "曲线属性支持颜色、大小和符号列映射，数值列连续归一化，分类列参与映射，可配置符号大小范围；颜色预设默认 Viridis，色阶条可定位和隐藏。对照同数据参考结果 的数据集颜色控制，尚缺直接 RGB/HTML 颜色列、可编辑颜色列表及色阶分箱；大小公式和按坐标轴单位设置也待后续。",
+  "how": "曲线属性支持颜色、大小和符号列映射，数值列连续归一化，分类列参与映射，可配置符号大小范围；颜色预设默认 Viridis，色阶条可定位和隐藏。尚缺直接 RGB/HTML 颜色列、可编辑颜色列表及色阶分箱；大小公式和按坐标轴单位设置也待后续。",
   "verify": "scatter_variants 覆盖逐点颜色/大小、气泡面积比例、色阶条、新图默认值与手动设置/保存往返；人工验收按 F112 小节。",
   "id": "F112",
   "milestone": "M2 论文全流程",
@@ -2303,7 +2303,7 @@
   "pri": "P1",
   "status": "未开始",
   "how": "掩码位图",
-  "verify": "屏蔽后拟合结果按已知结果比较",
+  "verify": "屏蔽后的拟合结果与 SciPy 参考值比较",
   "id": "F118",
   "milestone": "M2 论文全流程"
  },
@@ -2597,7 +2597,7 @@
     "total": 28,
     "done": 0,
     "review": 28,
-    "note": "28 为当前 Model::ALL 数量，含四种有理模型。完整函数库见 F514；自定义函数由用户输入初值，复杂数据与 科研绘图 实例待验收。"
+    "note": "28 为当前 Model::ALL 数量，含四种有理模型。完整函数库见 F514；自定义函数由用户输入初值，复杂数据实例待验收。"
    }
   },
   "needs": [
@@ -3042,7 +3042,7 @@
   "ref": "",
   "pri": "P0",
   "status": "已完成",
-  "how": "峰函数：Gauss、Lorentz、Voigt（Gauss wG 与 Lorentz wL 卷积，面积 A；Faddeeva 函数用 Weideman N=64 有理展开）、PsdVoigt1、LogNormal，公式与参数名同 科研绘图，均有数据驱动初值",
+  "how": "峰函数：Gauss、Lorentz、Voigt（Gauss wG 与 Lorentz wL 卷积，面积 A；Faddeeva 函数用 Weideman N=64 有理展开）、PsdVoigt1、LogNormal。公式与参数名采用常用写法，见 nlfit/model.rs 的公式说明。各函数均有数据驱动初值",
   "verify": "从自动初值收敛到 SciPy 1.17.1 curve_fit（p0 取真值）的参数（1e-5）、标准误（1e-3）与 RSS；Voigt 线形与 scipy.special.voigt_profile 一致（< 1e-12）；2026-11：生成并通过 SciPy 参数、标准误和残差参考对照。",
   "id": "F148",
   "milestone": "M1 日常够用",
@@ -3067,7 +3067,7 @@
   "ref": "",
   "pri": "P0",
   "status": "已完成",
-  "how": "指数类：ExpDec1/2/3、ExpGro1、ExpAssoc，公式与参数名同 科研绘图，均有数据驱动初值（多指数由单指数估计拆分）",
+  "how": "指数类：ExpDec1/2/3、ExpGro1、ExpAssoc。公式与参数名采用常用写法，见 nlfit/model.rs 的公式说明。各函数均有数据驱动初值（多指数由单指数估计拆分）",
   "verify": "从自动初值收敛到 SciPy 1.17.1 curve_fit 的参数（1e-5）、标准误（1e-3）与 RSS；2026-11：生成并通过 SciPy 参数、标准误和残差参考对照。",
   "id": "F149",
   "milestone": "M1 日常够用",
@@ -3091,7 +3091,7 @@
   "ref": "",
   "pri": "P0",
   "status": "已完成",
-  "how": "S 形与生长：Boltzmann、Logistic、DoseResp、Hill、Gompertz，公式与参数名同 科研绘图，均有数据驱动初值",
+  "how": "S 形与生长：Boltzmann、Logistic、DoseResp、Hill、Gompertz。公式与参数名采用常用写法，见 nlfit/model.rs 的公式说明。各函数均有数据驱动初值",
   "verify": "从自动初值收敛到 SciPy 1.17.1 curve_fit 的参数（1e-5）、标准误（1e-3）与 RSS；2026-11：生成并通过 SciPy 参数、标准误和残差参考对照。",
   "id": "F150",
   "milestone": "M1 日常够用",
@@ -3115,7 +3115,7 @@
   "ref": "",
   "pri": "P0",
   "status": "已完成",
-  "how": "幂函数与对数：Allometric1、Allometric2、Power1、Log3P1，公式与参数名同 科研绘图，均有数据驱动初值",
+  "how": "幂函数与对数：Allometric1、Allometric2、Power1、Log3P1。公式与参数名采用常用写法，见 nlfit/model.rs 的公式说明。各函数均有数据驱动初值",
   "verify": "从自动初值收敛到 SciPy 1.17.1 curve_fit 的参数（1e-5）、标准误（1e-3）与 RSS；2026-11：生成并通过 SciPy 参数、标准误和残差参考对照。",
   "id": "F151",
   "milestone": "M1 日常够用",
@@ -3139,7 +3139,7 @@
   "ref": "",
   "pri": "P0",
   "status": "已实现待验收",
-  "how": "线性入口提供一阶，多项式入口提供 2–6 阶；有理函数提供 Rational1（一阶/一阶）、Rational12（一阶/二阶）、Rational22（二阶/二阶）、Rational33（三阶/三阶），新增名按阶数定义，不作 科研绘图 别名。复用自动初值、解析导数、固定/上下界/线性约束、报告和结果曲线；分母极点处断线，项目保存和撤销重做沿用现有流程。更多参数化、多项式变体和数据驱动目录不在本条范围，移至 S2-5 拟合补强，由 F514 目录总览跟踪",
+  "how": "线性入口提供一阶，多项式入口提供 2–6 阶；有理函数提供 Rational1（一阶/一阶）、Rational12（一阶/二阶）、Rational22（二阶/二阶）、Rational33（三阶/三阶），新增名按阶数定义。复用自动初值、解析导数、固定/上下界/线性约束、报告和结果曲线；分母极点处断线，项目保存和撤销重做沿用现有流程。更多参数化、多项式变体和数据驱动目录不在本条范围，移至 S2-5 拟合补强，由 F514 目录总览跟踪",
   "verify": "四个有理模型与 SciPy 1.17.1 参数/标准误/RSS 对照；Rational33 的 NIST Thurber 37 点、自动初值与两组官方起点对照；完整 NIST 参考值对照待做",
   "id": "F152",
   "milestone": "M1 日常够用",
@@ -3154,7 +3154,7 @@
     "total": 4,
     "done": 0,
     "review": 4,
-    "note": "Rational1/12/22/33 四个模型已接入，数字描述阶数，独立数值回归通过，人工操作按已知结果核对待验收；不折算为 239 项目录已完成数。"
+    "note": "Rational1/12/22/33 四个模型已接入，数字描述阶数，独立数值回归通过，Windows 人工操作验收待做；不折算为 239 项目录已完成数。"
    }
   },
   "needs": [
@@ -3288,7 +3288,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "函数表达式 + 初值估计，数据驱动注册",
-  "verify": "每个函数用 科研绘图 拟合结果做回归测试",
+  "verify": "每个函数用 SciPy curve_fit 参考结果做回归测试",
   "id": "F156",
   "milestone": "M3 高级功能"
  },
@@ -3383,7 +3383,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "自写，数值算法参照 Numerical Recipes / SciPy",
-  "verify": "与 科研绘图 及 SciPy 结果比较",
+  "verify": "与 SciPy 结果比较",
   "id": "F160",
   "milestone": "M3 高级功能"
  },
@@ -3394,7 +3394,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "自写，数值算法参照 Numerical Recipes / SciPy",
-  "verify": "与 科研绘图 及 SciPy 结果比较",
+  "verify": "与 SciPy 结果比较",
   "id": "F161",
   "milestone": "M3 高级功能"
  },
@@ -3405,7 +3405,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "自写，数值算法参照 Numerical Recipes / SciPy",
-  "verify": "与 科研绘图 及 SciPy 结果比较",
+  "verify": "与 SciPy 结果比较",
   "id": "F162",
   "milestone": "M3 高级功能"
  },
@@ -3416,7 +3416,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "自写，数值算法参照 Numerical Recipes / SciPy",
-  "verify": "与 科研绘图 及 SciPy 结果比较",
+  "verify": "与 SciPy 结果比较",
   "id": "F163",
   "milestone": "M3 高级功能"
  },
@@ -3450,7 +3450,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "自写，数值算法参照 Numerical Recipes / SciPy",
-  "verify": "与 科研绘图 及 SciPy 结果比较",
+  "verify": "与 SciPy 结果比较",
   "id": "F165",
   "milestone": "M3 高级功能"
  },
@@ -3563,7 +3563,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "自写，数值算法参照 Numerical Recipes / SciPy",
-  "verify": "与 科研绘图 及 SciPy 结果比较",
+  "verify": "与 SciPy 结果比较",
   "id": "F170",
   "milestone": "M3 高级功能"
  },
@@ -3574,7 +3574,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "自写，数值算法参照 Numerical Recipes / SciPy",
-  "verify": "与 科研绘图 及 SciPy 结果比较",
+  "verify": "与 SciPy 结果比较",
   "id": "F171",
   "milestone": "M3 高级功能"
  },
@@ -3585,7 +3585,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "自写，数值算法参照 Numerical Recipes / SciPy",
-  "verify": "与 科研绘图 及 SciPy 结果比较",
+  "verify": "与 SciPy 结果比较",
   "id": "F172",
   "milestone": "M3 高级功能"
  },
@@ -3714,7 +3714,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "statrs / linfa",
-  "verify": "与 科研绘图 及 SciPy / R 结果比较（统计量、p 值）",
+  "verify": "与 SciPy / R 结果比较（统计量、p 值）",
   "id": "F178",
   "milestone": "M3 高级功能"
  },
@@ -3789,7 +3789,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "statrs / linfa",
-  "verify": "与 科研绘图 及 SciPy / R 结果比较（统计量、p 值）",
+  "verify": "与 SciPy / R 结果比较（统计量、p 值）",
   "id": "F181",
   "milestone": "M3 高级功能"
  },
@@ -3800,7 +3800,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "statrs / linfa",
-  "verify": "与 科研绘图 及 SciPy / R 结果比较（统计量、p 值）",
+  "verify": "与 SciPy / R 结果比较（统计量、p 值）",
   "id": "F182",
   "milestone": "M3 高级功能"
  },
@@ -3811,7 +3811,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "statrs / linfa",
-  "verify": "与 科研绘图 及 SciPy / R 结果比较（统计量、p 值）",
+  "verify": "与 SciPy / R 结果比较（统计量、p 值）",
   "id": "F183",
   "milestone": "M3 高级功能"
  },
@@ -3934,7 +3934,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "statrs / linfa",
-  "verify": "与 科研绘图 及 SciPy / R 结果比较（统计量、p 值）",
+  "verify": "与 SciPy / R 结果比较（统计量、p 值）",
   "id": "F188",
   "milestone": "M3 高级功能"
  },
@@ -3945,7 +3945,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "statrs / linfa",
-  "verify": "与 科研绘图 及 SciPy / R 结果比较（统计量、p 值）",
+  "verify": "与 SciPy / R 结果比较（统计量、p 值）",
   "id": "F189",
   "milestone": "M3 高级功能"
  },
@@ -3996,7 +3996,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "statrs / linfa",
-  "verify": "与 科研绘图 及 SciPy / R 结果比较（统计量、p 值）",
+  "verify": "与 SciPy / R 结果比较（统计量、p 值）",
   "id": "F191",
   "milestone": "M3 高级功能"
  },
@@ -4007,7 +4007,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "statrs / linfa",
-  "verify": "与 科研绘图 及 SciPy / R 结果比较（统计量、p 值）",
+  "verify": "与 SciPy / R 结果比较（统计量、p 值）",
   "id": "F192",
   "milestone": "M3 高级功能"
  },
@@ -4018,7 +4018,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "statrs / linfa",
-  "verify": "与 科研绘图 及 SciPy / R 结果比较（统计量、p 值）",
+  "verify": "与 SciPy / R 结果比较（统计量、p 值）",
   "id": "F193",
   "milestone": "M3 高级功能"
  },
@@ -4029,7 +4029,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "statrs / linfa",
-  "verify": "与 科研绘图 及 SciPy / R 结果比较（统计量、p 值）",
+  "verify": "与 SciPy / R 结果比较（统计量、p 值）",
   "id": "F194",
   "milestone": "M3 高级功能"
  },
@@ -4040,7 +4040,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "statrs / linfa",
-  "verify": "与 科研绘图 及 SciPy / R 结果比较（统计量、p 值）",
+  "verify": "与 SciPy / R 结果比较（统计量、p 值）",
   "id": "F195",
   "milestone": "M3 高级功能"
  },
@@ -4051,7 +4051,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "statrs / linfa",
-  "verify": "与 科研绘图 及 SciPy / R 结果比较（统计量、p 值）",
+  "verify": "与 SciPy / R 结果比较（统计量、p 值）",
   "id": "F196",
   "milestone": "M3 高级功能"
  },
@@ -4062,7 +4062,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "statrs / linfa",
-  "verify": "与 科研绘图 及 SciPy / R 结果比较（统计量、p 值）",
+  "verify": "与 SciPy / R 结果比较（统计量、p 值）",
   "id": "F197",
   "milestone": "M3 高级功能"
  },
@@ -4073,7 +4073,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "statrs / linfa",
-  "verify": "与 科研绘图 及 SciPy / R 结果比较（统计量、p 值）",
+  "verify": "与 SciPy / R 结果比较（统计量、p 值）",
   "id": "F198",
   "milestone": "M3 高级功能"
  },
@@ -4084,7 +4084,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "statrs / linfa",
-  "verify": "与 科研绘图 及 SciPy / R 结果比较（统计量、p 值）",
+  "verify": "与 SciPy / R 结果比较（统计量、p 值）",
   "id": "F199",
   "milestone": "M3 高级功能"
  },
@@ -4095,7 +4095,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "statrs / linfa",
-  "verify": "与 科研绘图 及 SciPy / R 结果比较（统计量、p 值）",
+  "verify": "与 SciPy / R 结果比较（统计量、p 值）",
   "id": "F200",
   "milestone": "M3 高级功能"
  },
@@ -4173,7 +4173,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "自写或 biquad",
-  "verify": "与 科研绘图 及 SciPy.signal 结果比较",
+  "verify": "与 SciPy.signal 结果比较",
   "id": "F203",
   "milestone": "M3 高级功能"
  },
@@ -4211,7 +4211,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "rustfft",
-  "verify": "与 科研绘图 及 SciPy.signal 结果比较",
+  "verify": "与 SciPy.signal 结果比较",
   "id": "F205",
   "milestone": "M3 高级功能"
  },
@@ -4279,7 +4279,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "rustfft",
-  "verify": "与 科研绘图 及 SciPy.signal 结果比较",
+  "verify": "与 SciPy.signal 结果比较",
   "id": "F208",
   "milestone": "M3 高级功能"
  },
@@ -4290,7 +4290,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "rustfft",
-  "verify": "与 科研绘图 及 SciPy.signal 结果比较",
+  "verify": "与 SciPy.signal 结果比较",
   "id": "F209",
   "milestone": "M3 高级功能"
  },
@@ -4301,7 +4301,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "rustfft",
-  "verify": "与 科研绘图 及 SciPy.signal 结果比较",
+  "verify": "与 SciPy.signal 结果比较",
   "id": "F210",
   "milestone": "M3 高级功能"
  },
@@ -4312,7 +4312,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "自写",
-  "verify": "与 科研绘图 及 SciPy.signal 结果比较",
+  "verify": "与 SciPy.signal 结果比较",
   "id": "F211",
   "milestone": "M3 高级功能"
  },
@@ -4323,7 +4323,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "自写",
-  "verify": "与 科研绘图 及 SciPy.signal 结果比较",
+  "verify": "与 SciPy.signal 结果比较",
   "id": "F212",
   "milestone": "M3 高级功能"
  },
@@ -4334,7 +4334,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "自写",
-  "verify": "与 科研绘图 及 SciPy.signal 结果比较",
+  "verify": "与 SciPy.signal 结果比较",
   "id": "F213",
   "milestone": "M3 高级功能"
  },
@@ -4345,7 +4345,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "自写",
-  "verify": "与 科研绘图 及 SciPy.signal 结果比较",
+  "verify": "与 SciPy.signal 结果比较",
   "id": "F214",
   "milestone": "M3 高级功能"
  },
@@ -4356,7 +4356,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "自写",
-  "verify": "与 科研绘图 及 SciPy.signal 结果比较",
+  "verify": "与 SciPy.signal 结果比较",
   "id": "F215",
   "milestone": "M3 高级功能"
  },
@@ -4564,7 +4564,7 @@
   "pri": "P0",
   "status": "已完成",
   "how": "svg.rs",
-  "verify": "目视比较 科研绘图 导出图",
+  "verify": "示例图 SVG 导出回归（svg.rs::renders_sample）",
   "id": "F226",
   "milestone": "M1 日常够用",
   "needs": [
@@ -4905,7 +4905,7 @@
  },
  {
   "module": "自动化与编程",
-  "feature": "C 扩展接口 兼容",
+  "feature": "第三方 C 语言脚本接口兼容",
   "ref": "",
   "pri": "不做",
   "status": "不做",
@@ -4976,7 +4976,7 @@
   "pri": "P0",
   "status": "已完成",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
+  "verify": "matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F254",
   "milestone": "M1 日常够用",
   "needs": [
@@ -5084,7 +5084,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F258",
   "milestone": "M3 高级功能"
  },
@@ -5095,7 +5095,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F259",
   "milestone": "M3 高级功能"
  },
@@ -5137,7 +5137,7 @@
   "pri": "P0",
   "status": "已完成",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
+  "verify": "matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F261",
   "milestone": "M1 日常够用",
   "needs": [
@@ -5162,7 +5162,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F262",
   "milestone": "M3 高级功能"
  },
@@ -5256,7 +5256,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F266",
   "milestone": "M3 高级功能"
  },
@@ -5431,7 +5431,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F272",
   "milestone": "M3 高级功能"
  },
@@ -5442,7 +5442,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F273",
   "milestone": "M3 高级功能"
  },
@@ -5453,7 +5453,7 @@
   "pri": "P0",
   "status": "已完成",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
+  "verify": "matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F274",
   "milestone": "M1 日常够用",
   "needs": [
@@ -5477,7 +5477,7 @@
   "ref": "",
   "pri": "P1",
   "status": "已实现待验收",
-  "how": "绘图 → 线系列图。按 科研绘图 官方定义，每个原始行跨所选 Y 列连接为一条点线，X 为列位置和列名；至少两列，无隐藏工作表，保留原始行/列及实时源数据连接，缺失列处断开。",
+  "how": "绘图 → 线系列图。每个原始行跨所选 Y 列连接为一条点线，X 为列位置和列名；至少两列，无隐藏工作表，保留原始行/列及实时源数据连接，缺失列处断开。",
   "verify": "核心偏移、派生路径、原值拾取、源行连接与 v32 保存兼容；真实命令一步撤销；新增 NumPy/matplotlib 位置对照。",
   "id": "F275",
   "milestone": "M2 论文全流程",
@@ -5513,7 +5513,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F276",
   "milestone": "M3 高级功能"
  },
@@ -5524,7 +5524,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F277",
   "milestone": "M3 高级功能"
  },
@@ -5566,7 +5566,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F279",
   "milestone": "M3 高级功能"
  },
@@ -5577,7 +5577,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F280",
   "milestone": "M3 高级功能"
  },
@@ -5588,7 +5588,7 @@
   "pri": "P0",
   "status": "已完成",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
+  "verify": "matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）",
   "id": "F281",
   "milestone": "M1 日常够用",
   "needs": [
@@ -5681,7 +5681,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F285",
   "milestone": "M3 高级功能"
  },
@@ -5809,7 +5809,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F290",
   "milestone": "M3 高级功能"
  },
@@ -5820,7 +5820,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F291",
   "milestone": "M3 高级功能"
  },
@@ -5831,7 +5831,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F292",
   "milestone": "M3 高级功能"
  },
@@ -5842,7 +5842,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F293",
   "milestone": "M3 高级功能"
  },
@@ -5853,7 +5853,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F294",
   "milestone": "M3 高级功能"
  },
@@ -5899,7 +5899,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F296",
   "milestone": "M3 高级功能"
  },
@@ -5910,7 +5910,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F297",
   "milestone": "M3 高级功能"
  },
@@ -5921,7 +5921,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F298",
   "milestone": "M3 高级功能"
  },
@@ -5932,7 +5932,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F299",
   "milestone": "M3 高级功能"
  },
@@ -5943,7 +5943,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F300",
   "milestone": "M3 高级功能"
  },
@@ -5954,7 +5954,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F301",
   "milestone": "M3 高级功能"
  },
@@ -5965,7 +5965,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F302",
   "milestone": "M3 高级功能"
  },
@@ -5976,7 +5976,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F303",
   "milestone": "M3 高级功能"
  },
@@ -5987,7 +5987,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F304",
   "milestone": "M3 高级功能"
  },
@@ -6022,7 +6022,7 @@
   "pri": "P1",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F306",
   "milestone": "M2 论文全流程"
  },
@@ -6033,7 +6033,7 @@
   "pri": "P1",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F307",
   "milestone": "M2 论文全流程"
  },
@@ -6044,7 +6044,7 @@
   "pri": "P1",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F308",
   "milestone": "M2 论文全流程"
  },
@@ -6055,7 +6055,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F309",
   "milestone": "M3 高级功能"
  },
@@ -6066,7 +6066,7 @@
   "pri": "P1",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F310",
   "milestone": "M2 论文全流程"
  },
@@ -6077,7 +6077,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F311",
   "milestone": "M3 高级功能"
  },
@@ -6088,7 +6088,7 @@
   "pri": "P1",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F312",
   "milestone": "M2 论文全流程"
  },
@@ -6099,7 +6099,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F313",
   "milestone": "M3 高级功能"
  },
@@ -6110,7 +6110,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F314",
   "milestone": "M3 高级功能"
  },
@@ -6121,7 +6121,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F315",
   "milestone": "M3 高级功能"
  },
@@ -6132,7 +6132,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F316",
   "milestone": "M3 高级功能"
  },
@@ -6143,7 +6143,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F317",
   "milestone": "M3 高级功能"
  },
@@ -6154,7 +6154,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F318",
   "milestone": "M3 高级功能"
  },
@@ -6165,7 +6165,7 @@
   "pri": "P1",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F319",
   "milestone": "M2 论文全流程"
  },
@@ -6176,7 +6176,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F320",
   "milestone": "M3 高级功能"
  },
@@ -6262,7 +6262,7 @@
   "pri": "P1",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F324",
   "milestone": "M2 论文全流程"
  },
@@ -6273,7 +6273,7 @@
   "pri": "P1",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F325",
   "milestone": "M2 论文全流程"
  },
@@ -6284,7 +6284,7 @@
   "pri": "P1",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F326",
   "milestone": "M2 论文全流程"
  },
@@ -6295,7 +6295,7 @@
   "pri": "P1",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F327",
   "milestone": "M2 论文全流程"
  },
@@ -6306,7 +6306,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F328",
   "milestone": "M3 高级功能"
  },
@@ -6317,7 +6317,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F329",
   "milestone": "M3 高级功能"
  },
@@ -6328,7 +6328,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F330",
   "milestone": "M3 高级功能"
  },
@@ -6374,7 +6374,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F332",
   "milestone": "M3 高级功能"
  },
@@ -6385,7 +6385,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F333",
   "milestone": "M3 高级功能"
  },
@@ -6396,7 +6396,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F334",
   "milestone": "M3 高级功能"
  },
@@ -6407,7 +6407,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F335",
   "milestone": "M3 高级功能"
  },
@@ -6418,7 +6418,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F336",
   "milestone": "M3 高级功能"
  },
@@ -6429,7 +6429,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F337",
   "milestone": "M3 高级功能"
  },
@@ -6440,7 +6440,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F338",
   "milestone": "M3 高级功能"
  },
@@ -6451,7 +6451,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F339",
   "milestone": "M3 高级功能"
  },
@@ -6462,7 +6462,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F340",
   "milestone": "M3 高级功能"
  },
@@ -6514,7 +6514,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F342",
   "milestone": "M3 高级功能"
  },
@@ -6575,7 +6575,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F344",
   "milestone": "M3 高级功能"
  },
@@ -6586,7 +6586,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F345",
   "milestone": "M3 高级功能"
  },
@@ -6597,7 +6597,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F346",
   "milestone": "M3 高级功能"
  },
@@ -6608,7 +6608,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F347",
   "milestone": "M3 高级功能"
  },
@@ -6619,7 +6619,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F348",
   "milestone": "M3 高级功能"
  },
@@ -6630,7 +6630,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F349",
   "milestone": "M3 高级功能"
  },
@@ -6641,7 +6641,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F350",
   "milestone": "M3 高级功能"
  },
@@ -6652,7 +6652,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F351",
   "milestone": "M3 高级功能"
  },
@@ -6663,7 +6663,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F352",
   "milestone": "M3 高级功能"
  },
@@ -6674,7 +6674,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F353",
   "milestone": "M3 高级功能"
  },
@@ -6685,7 +6685,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F354",
   "milestone": "M3 高级功能"
  },
@@ -6738,7 +6738,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F356",
   "milestone": "M3 高级功能"
  },
@@ -6749,7 +6749,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F357",
   "milestone": "M3 高级功能"
  },
@@ -6760,7 +6760,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F358",
   "milestone": "M3 高级功能"
  },
@@ -6771,7 +6771,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F359",
   "milestone": "M3 高级功能"
  },
@@ -6782,7 +6782,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F360",
   "milestone": "M3 高级功能"
  },
@@ -6793,7 +6793,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F361",
   "milestone": "M3 高级功能"
  },
@@ -6804,7 +6804,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F362",
   "milestone": "M3 高级功能"
  },
@@ -6850,7 +6850,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F364",
   "milestone": "M3 高级功能"
  },
@@ -6861,7 +6861,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F365",
   "milestone": "M3 高级功能"
  },
@@ -6872,7 +6872,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F366",
   "milestone": "M3 高级功能"
  },
@@ -6883,7 +6883,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F367",
   "milestone": "M3 高级功能"
  },
@@ -6894,7 +6894,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F368",
   "milestone": "M3 高级功能"
  },
@@ -6905,7 +6905,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F369",
   "milestone": "M3 高级功能"
  },
@@ -6916,7 +6916,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F370",
   "milestone": "M3 高级功能"
  },
@@ -6927,7 +6927,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F371",
   "milestone": "M3 高级功能"
  },
@@ -6938,7 +6938,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F372",
   "milestone": "M3 高级功能"
  },
@@ -6949,7 +6949,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F373",
   "milestone": "M3 高级功能"
  },
@@ -6960,7 +6960,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F374",
   "milestone": "M3 高级功能"
  },
@@ -6971,7 +6971,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F375",
   "milestone": "M3 高级功能"
  },
@@ -6982,7 +6982,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F376",
   "milestone": "M3 高级功能"
  },
@@ -6993,7 +6993,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F377",
   "milestone": "M3 高级功能"
  },
@@ -7004,7 +7004,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F378",
   "milestone": "M3 高级功能"
  },
@@ -7015,7 +7015,7 @@
   "pri": "P1",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F379",
   "milestone": "M2 论文全流程"
  },
@@ -7026,7 +7026,7 @@
   "pri": "P1",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F380",
   "milestone": "M2 论文全流程"
  },
@@ -7037,7 +7037,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F381",
   "milestone": "M3 高级功能"
  },
@@ -7048,7 +7048,7 @@
   "pri": "P1",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F382",
   "milestone": "M2 论文全流程"
  },
@@ -7059,7 +7059,7 @@
   "pri": "P1",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F383",
   "milestone": "M2 论文全流程"
  },
@@ -7070,7 +7070,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F384",
   "milestone": "M3 高级功能"
  },
@@ -7081,7 +7081,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F385",
   "milestone": "M3 高级功能"
  },
@@ -7092,7 +7092,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F386",
   "milestone": "M3 高级功能"
  },
@@ -7103,7 +7103,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F387",
   "milestone": "M3 高级功能"
  },
@@ -7114,7 +7114,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F388",
   "milestone": "M3 高级功能"
  },
@@ -7125,7 +7125,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F389",
   "milestone": "M3 高级功能"
  },
@@ -7136,7 +7136,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F390",
   "milestone": "M3 高级功能"
  },
@@ -7147,7 +7147,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F391",
   "milestone": "M3 高级功能"
  },
@@ -7158,7 +7158,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F392",
   "milestone": "M3 高级功能"
  },
@@ -7169,7 +7169,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "geojson / shapefile",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F393",
   "milestone": "M3 高级功能"
  },
@@ -7180,7 +7180,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "geojson / shapefile",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F394",
   "milestone": "M3 高级功能"
  },
@@ -7191,7 +7191,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "geojson / shapefile",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F395",
   "milestone": "M3 高级功能"
  },
@@ -7202,7 +7202,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "geojson / shapefile",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F396",
   "milestone": "M3 高级功能"
  },
@@ -7213,7 +7213,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "geojson / shapefile",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F397",
   "milestone": "M3 高级功能"
  },
@@ -7224,7 +7224,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "geojson / shapefile",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F398",
   "milestone": "M3 高级功能"
  },
@@ -7290,7 +7290,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F401",
   "milestone": "M3 高级功能"
  },
@@ -7333,7 +7333,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F403",
   "milestone": "M3 高级功能"
  },
@@ -7344,7 +7344,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F404",
   "milestone": "M3 高级功能"
  },
@@ -7355,7 +7355,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F405",
   "milestone": "M3 高级功能"
  },
@@ -7366,7 +7366,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F406",
   "milestone": "M3 高级功能"
  },
@@ -7377,7 +7377,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F407",
   "milestone": "M3 高级功能"
  },
@@ -7388,7 +7388,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F408",
   "milestone": "M3 高级功能"
  },
@@ -7399,7 +7399,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F409",
   "milestone": "M3 高级功能"
  },
@@ -7410,7 +7410,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F410",
   "milestone": "M3 高级功能"
  },
@@ -7421,7 +7421,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F411",
   "milestone": "M3 高级功能"
  },
@@ -7432,7 +7432,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F412",
   "milestone": "M3 高级功能"
  },
@@ -7478,7 +7478,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F414",
   "milestone": "M3 高级功能"
  },
@@ -7489,7 +7489,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F415",
   "milestone": "M3 高级功能"
  },
@@ -7500,7 +7500,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F416",
   "milestone": "M3 高级功能"
  },
@@ -7511,7 +7511,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F417",
   "milestone": "M3 高级功能"
  },
@@ -7522,7 +7522,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F418",
   "milestone": "M3 高级功能"
  },
@@ -7533,7 +7533,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F419",
   "milestone": "M3 高级功能"
  },
@@ -7544,7 +7544,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F420",
   "milestone": "M3 高级功能"
  },
@@ -7555,7 +7555,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F421",
   "milestone": "M3 高级功能"
  },
@@ -7566,7 +7566,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F422",
   "milestone": "M3 高级功能"
  },
@@ -7577,7 +7577,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F423",
   "milestone": "M3 高级功能"
  },
@@ -7588,7 +7588,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F424",
   "milestone": "M3 高级功能"
  },
@@ -7599,7 +7599,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F425",
   "milestone": "M3 高级功能"
  },
@@ -7610,7 +7610,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F426",
   "milestone": "M3 高级功能"
  },
@@ -7621,7 +7621,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F427",
   "milestone": "M3 高级功能"
  },
@@ -7632,7 +7632,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F428",
   "milestone": "M3 高级功能"
  },
@@ -7643,7 +7643,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F429",
   "milestone": "M3 高级功能"
  },
@@ -7654,7 +7654,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F430",
   "milestone": "M3 高级功能"
  },
@@ -7665,7 +7665,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F431",
   "milestone": "M3 高级功能"
  },
@@ -7676,7 +7676,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F432",
   "milestone": "M3 高级功能"
  },
@@ -7687,7 +7687,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F433",
   "milestone": "M3 高级功能"
  },
@@ -7698,7 +7698,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "2D 渲染器 + SVG 导出",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F434",
   "milestone": "M3 高级功能"
  },
@@ -7709,7 +7709,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F435",
   "milestone": "M3 高级功能"
  },
@@ -7720,7 +7720,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F436",
   "milestone": "M3 高级功能"
  },
@@ -7731,7 +7731,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F437",
   "milestone": "M3 高级功能"
  },
@@ -7742,7 +7742,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F438",
   "milestone": "M3 高级功能"
  },
@@ -7753,7 +7753,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F439",
   "milestone": "M3 高级功能"
  },
@@ -7764,7 +7764,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F440",
   "milestone": "M3 高级功能"
  },
@@ -7775,7 +7775,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F441",
   "milestone": "M3 高级功能"
  },
@@ -7786,7 +7786,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F442",
   "milestone": "M3 高级功能"
  },
@@ -7797,7 +7797,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F443",
   "milestone": "M3 高级功能"
  },
@@ -7808,7 +7808,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F444",
   "milestone": "M3 高级功能"
  },
@@ -7819,7 +7819,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F445",
   "milestone": "M3 高级功能"
  },
@@ -7830,7 +7830,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F446",
   "milestone": "M3 高级功能"
  },
@@ -7841,7 +7841,7 @@
   "pri": "P1",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F447",
   "milestone": "M2 论文全流程"
  },
@@ -7852,7 +7852,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F448",
   "milestone": "M3 高级功能"
  },
@@ -7863,7 +7863,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F449",
   "milestone": "M3 高级功能"
  },
@@ -7874,7 +7874,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F450",
   "milestone": "M3 高级功能"
  },
@@ -7885,7 +7885,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F451",
   "milestone": "M3 高级功能"
  },
@@ -7896,7 +7896,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F452",
   "milestone": "M3 高级功能"
  },
@@ -7907,7 +7907,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F453",
   "milestone": "M3 高级功能"
  },
@@ -7918,7 +7918,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F454",
   "milestone": "M3 高级功能"
  },
@@ -7929,7 +7929,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F455",
   "milestone": "M3 高级功能"
  },
@@ -7940,7 +7940,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F456",
   "milestone": "M3 高级功能"
  },
@@ -7951,7 +7951,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F457",
   "milestone": "M3 高级功能"
  },
@@ -7962,7 +7962,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F458",
   "milestone": "M3 高级功能"
  },
@@ -7973,7 +7973,7 @@
   "pri": "P1",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F459",
   "milestone": "M2 论文全流程"
  },
@@ -7984,7 +7984,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F460",
   "milestone": "M3 高级功能"
  },
@@ -7995,7 +7995,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F461",
   "milestone": "M3 高级功能"
  },
@@ -8006,7 +8006,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F462",
   "milestone": "M3 高级功能"
  },
@@ -8017,7 +8017,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F463",
   "milestone": "M3 高级功能"
  },
@@ -8028,7 +8028,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F464",
   "milestone": "M3 高级功能"
  },
@@ -8039,7 +8039,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F465",
   "milestone": "M3 高级功能"
  },
@@ -8050,7 +8050,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F466",
   "milestone": "M3 高级功能"
  },
@@ -8061,7 +8061,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F467",
   "milestone": "M3 高级功能"
  },
@@ -8072,7 +8072,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F468",
   "milestone": "M3 高级功能"
  },
@@ -8083,7 +8083,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F469",
   "milestone": "M3 高级功能"
  },
@@ -8094,7 +8094,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F470",
   "milestone": "M3 高级功能"
  },
@@ -8105,7 +8105,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "wgpu 3D 渲染（three-d 或自写）",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F471",
   "milestone": "M3 高级功能"
  },
@@ -8116,7 +8116,7 @@
   "pri": "P1",
   "status": "未开始",
   "how": "contour crate（marching squares）+ 色阶",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F472",
   "milestone": "M2 论文全流程"
  },
@@ -8127,7 +8127,7 @@
   "pri": "P1",
   "status": "未开始",
   "how": "contour crate（marching squares）+ 色阶",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F473",
   "milestone": "M2 论文全流程"
  },
@@ -8138,7 +8138,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "contour crate（marching squares）+ 色阶",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F474",
   "milestone": "M3 高级功能"
  },
@@ -8149,7 +8149,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "contour crate（marching squares）+ 色阶",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F475",
   "milestone": "M3 高级功能"
  },
@@ -8160,7 +8160,7 @@
   "pri": "P1",
   "status": "未开始",
   "how": "contour crate（marching squares）+ 色阶",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F476",
   "milestone": "M2 论文全流程"
  },
@@ -8171,7 +8171,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "contour crate（marching squares）+ 色阶",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F477",
   "milestone": "M3 高级功能"
  },
@@ -8182,7 +8182,7 @@
   "pri": "P1",
   "status": "未开始",
   "how": "contour crate（marching squares）+ 色阶",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F478",
   "milestone": "M2 论文全流程"
  },
@@ -8193,7 +8193,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "contour crate（marching squares）+ 色阶",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F479",
   "milestone": "M3 高级功能"
  },
@@ -8204,7 +8204,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "contour crate（marching squares）+ 色阶",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F480",
   "milestone": "M3 高级功能"
  },
@@ -8215,7 +8215,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "contour crate（marching squares）+ 色阶",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F481",
   "milestone": "M3 高级功能"
  },
@@ -8226,7 +8226,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "contour crate（marching squares）+ 色阶",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F482",
   "milestone": "M3 高级功能"
  },
@@ -8237,7 +8237,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "contour crate（marching squares）+ 色阶",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F483",
   "milestone": "M3 高级功能"
  },
@@ -8248,7 +8248,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "contour crate（marching squares）+ 色阶",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F484",
   "milestone": "M3 高级功能"
  },
@@ -8259,7 +8259,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "contour crate（marching squares）+ 色阶",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F485",
   "milestone": "M3 高级功能"
  },
@@ -8270,7 +8270,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "contour crate（marching squares）+ 色阶",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F486",
   "milestone": "M3 高级功能"
  },
@@ -8281,7 +8281,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "contour crate（marching squares）+ 色阶",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F487",
   "milestone": "M3 高级功能"
  },
@@ -8292,7 +8292,7 @@
   "pri": "P2",
   "status": "未开始",
   "how": "contour crate（marching squares）+ 色阶",
-  "verify": "与 科研绘图 同数据出图目视比较",
+  "verify": "与 matplotlib 同数据出图，比较数据位置与刻度",
   "id": "F488",
   "milestone": "M3 高级功能"
  },
@@ -8797,7 +8797,7 @@
   "ref": "",
   "pri": "P1",
   "status": "未开始",
-  "how": "按方法卡暂缓，需用户确认具体检验统计量、分组及窗口规则。清单 ref 为 Running Nonparametric Tests；科研绘图 官方 Randomness Tests App 提供序列随机性的 Runs Test，Moving Average 帮助提供移动窗口统计。来源：；",
+  "how": "按方法卡暂缓，需用户确认具体检验统计量、分组及窗口规则。目前没有可以对齐的标准定义；需要时可用移动窗口加现有检验组合实现。",
   "verify": "需要用户确认定义后，补窗口边界、缺失值及所选检验的独立参考；状态保持未开始。",
   "milestone": "M2 论文全流程"
  },
