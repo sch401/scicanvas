@@ -1127,8 +1127,16 @@ fn axis_ranges(ctx: &LayerContext<'_, '_, '_>, data: &LayerData) -> AxisRanges {
             .fold(8.0, f64::max)
     });
 
-    let xa = ctx.linked_x.cloned().unwrap_or(xa);
-    let ya = ctx.linked_y.cloned().unwrap_or(ya);
+    let xa = ctx
+        .linked_x
+        .filter(|target| target.scale == xa.scale)
+        .cloned()
+        .unwrap_or(xa);
+    let ya = ctx
+        .linked_y
+        .filter(|target| target.scale == ya.scale)
+        .cloned()
+        .unwrap_or(ya);
     AxisRanges {
         xa,
         ya,

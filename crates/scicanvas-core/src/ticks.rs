@@ -244,7 +244,10 @@ fn with_spacing(
                 .ceil()
                 .max(1.)
         } else {
-            nice(axis.lo, axis.hi, 5).2
+            axis.ticks
+                .windows(2)
+                .next()
+                .map_or_else(|| nice(axis.lo, axis.hi, 5).2, |pair| pair[1] - pair[0])
         }
     });
     if requested.is_some() && !too_dense || axis.ticks.len() > 200 {

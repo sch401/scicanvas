@@ -300,3 +300,63 @@ fn frame_and_right_axis_share_tick_geometry_and_independent_stroke_widths() {
         }
     }
 }
+
+#[test]
+fn automatic_major_spacing_subdivides_the_actual_intervals() {
+    for hi in [7.2, 17.4, 3.6, 0.74, 72.] {
+        for count in [1_u8, 4] {
+            for major_step in [None, Some(1e-9)] {
+                let spacing = TickSpacing {
+                    major_step,
+                    minor_count: Some(count),
+                };
+                let axis = ticks::axis(&[0., hi], true, 0., hi, false, false, &spacing);
+                assert_eq!(
+                    axis.minor.len(),
+                    (axis.ticks.len() - 1) * usize::from(count),
+                    "{hi}, {count}, {major_step:?}"
+                );
+                for (pair, minors) in axis.ticks.windows(2).zip(axis.minor.chunks(usize::from(count))) {
+                    for (i, &tick) in minors.iter().enumerate() {
+                        assert!(tick > pair[0] && tick < pair[1], "{hi}: {tick} outside {pair:?}");
+                        let expected = pair[0] + (pair[1] - pair[0]) * (i + 1) as f64 / f64::from(count + 1);
+                        assert!(
+                            (tick - expected).abs() < 1e-11 * hi.max(1.),
+                            "{hi}: {tick} != {expected}"
+                        );
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn linked_axes_with_different_scales_keep_their_own_tick_type() {
+    let mut p = Project::sample();
+    let g = p.graph_mut(2).unwrap();
+    let target = g.first_layer_mut();
+    target.x_auto = false;
+    target.y_auto = false;
+    target.x_min = 1.;
+    target.x_max = 100.;
+    target.y_min = 1.;
+    target.y_max = 100.;
+    let mut linked = target.clone();
+    linked.set_axis_scale(true, AxisScale::Log10).unwrap();
+    linked.set_axis_scale(false, AxisScale::Log10).unwrap();
+    linked.link_x = Some(0);
+    linked.link_y = Some(0);
+    g.page.add_layer(linked);
+    g.page.columns = 2;
+    let s = scene::layout_page(p.graph(2).unwrap(), &p, &[]);
+    let a = &s.layers[0].axes;
+    let b = &s.layers[1].axes;
+    assert_eq!(a.x.scale, AxisScale::Linear);
+    assert_eq!(a.left_y.scale, AxisScale::Linear);
+    for axis in [&b.x, &b.left_y] {
+        assert_eq!(axis.scale, AxisScale::Log10);
+        assert_eq!((axis.lo, axis.hi), (1., 100.));
+        assert_eq!(axis.ticks, [1., 10., 100.]);
+    }
+}
