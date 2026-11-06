@@ -20,6 +20,41 @@ pub(super) fn draw_layer_legend(
     let legend_outside = ctx.legend_outside;
     let plots = &data.plots;
     let [left, top, pw, ph] = layout.rect;
+    if g.plot_type == PlotType::LineSeries {
+        if g.legend {
+            let label = book
+                .and_then(|b| g.x_key.as_ref().and_then(|key| b.column(key)))
+                .filter(|c| matches!(c.data.kind(), crate::DataKind::Text | crate::DataKind::Category));
+            let mut rows = std::collections::BTreeMap::new();
+            for plot in plots.iter().filter(|p| !p.series.line_only) {
+                for (i, &row) in plot.series.rows.iter().enumerate() {
+                    let name = label
+                        .map(|c| c.display_at(row).into_owned())
+                        .filter(|s| !s.trim().is_empty())
+                        .unwrap_or_else(|| format!("行 {}", row + 1));
+                    let color = plot
+                        .series
+                        .point_styles
+                        .get(i)
+                        .and_then(|s| s.color)
+                        .map_or(plot.style.color.rgb(), |[r, g, b]| (r, g, b));
+                    rows.entry(row).or_insert((name, color));
+                }
+            }
+            let entries: Vec<_> = rows.into_values().collect();
+            let width = entries
+                .iter()
+                .map(|(name, _)| text_width(name, LEGEND_FONT))
+                .fold(0., f64::max)
+                + 24.;
+            let at = g
+                .legend_position
+                .map(|p| [p[0] * w, p[1] * h])
+                .unwrap_or([left + pw - width - 8., top + 12.]);
+            draw_row_legend(&entries, at, items, objects);
+        }
+        return None;
+    }
     // 图例：坐标框内，白底无边框
     if g.legend && !plots.is_empty() {
         let sw = 18.0;

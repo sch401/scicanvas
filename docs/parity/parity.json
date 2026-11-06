@@ -1732,7 +1732,7 @@
   "ref": "",
   "pri": "P1",
   "status": "已实现待验收",
-  "how": "属性轴类型下拉：Linear、Log10、Log2、Ln、Reciprocal、Probability、Logit。统一正逆变换、定义域、取样、刻度、拾取和缩放；Ln 标签 e^k。概率为百分数，Logit 按方法卡为 0–1。倒数自动取首个有效点所在同号分支，手动范围需同号，左右 Y 分支独立。",
+  "how": "属性轴类型下拉：Linear、Log10、Log2、Ln、Reciprocal、Probability、Logit。统一正逆变换、定义域、取样、刻度、拾取和缩放；Ln 标签 e^k。概率为百分数，Logit 保持 0–1，兼容已交付安装包及其项目；百分数单位调整暂缓，另行设计文件迁移。倒数自动取首个有效点所在同号分支，手动范围需同号，左右 Y 分支独立。",
   "verify": "NumPy/SciPy 七种变换与刻度位置 1e-12；往返、原值拾取、定义域及保存回归；真实下拉及撤销、各类型缩放平移；新增五个 matplotlib 位置对照 1e-6。现有 SVG 和视觉基线保持。",
   "id": "F094",
   "milestone": "M2 论文全流程",
@@ -3179,9 +3179,9 @@
   "feature": "内置拟合函数：波形（Sine、SineDamp、Pulse、SquareWave 等）",
   "ref": "",
   "pri": "P1",
-  "status": "部分实现",
-  "how": "新增 Sine、SineDamp、Pulse，自动周期初值使用插值 FFT，含噪声参考；SineDamp 固定首批有效数据最小 X 为时间原点并保存。方波按卡片暂缓，等待平滑近似方案。",
-  "verify": "SciPy 参数参考覆盖自动初值和真值 ×1.1 初值，相对误差 1e-6；抑制模型三浓度全局拟合；BET 定义域及阻尼时间原点保存、重算、重新编辑回归。",
+  "status": "已实现待验收",
+  "how": "内置 Sine、SineDamp、Pulse、SquareWave；方波固定 k = 10，使用 y0 + A·tanh(10·sin(2π(x−xc)/T))/tanh(10) 的可导平滑近似，边沿附近与理想方波略有差别；参数和自动初值复用正弦模型。SineDamp 固定拟合有效数据最小 X 为时间原点并保存。",
+  "verify": "SciPy 参数参考覆盖自动初值和真值 ×1.1 初值，相对误差 1e-6；抑制模型三浓度全局拟合；BET 定义域及阻尼时间原点保存、重算、重新编辑回归。 方波自动初值和真值 ×1.1 初值按 SciPy curve_fit 对照，相对误差 1e-6；带噪声数据确认主周期。",
   "id": "F153",
   "milestone": "M2 论文全流程",
   "needs": [
@@ -3192,12 +3192,14 @@
   "evidence": {
    "auto": [
     "crates/scicanvas-core/tests/extended_models.rs::a4_bet_domain_and_damped_origin_save_recalculate_and_reedit",
-    "crates/scicanvas/src/app/tests/dialog_tests.rs::a4_damped_model_real_report_reedit_preserves_fixed_origin"
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::a4_damped_model_real_report_reedit_preserves_fixed_origin",
+    "crates/scicanvas-core/tests/reference_scipy.rs::square_wave_matches_scipy_with_automatic_and_manual_initials"
    ],
    "reference": [
     "crates/scicanvas-core/tests/reference/builtin_fits.json",
     "crates/scicanvas-core/tests/reference/inhibition_fits.json",
-    "crates/scicanvas-core/tests/reference_scipy.rs"
+    "crates/scicanvas-core/tests/reference_scipy.rs",
+    "crates/scicanvas-core/tests/reference/square_wave.json"
    ],
    "manual": {
     "checklist": "docs/acceptance/fitting.md#F153",
@@ -3210,8 +3212,8 @@
    "波形模型": {
     "total": 4,
     "done": 0,
-    "review": 3,
-    "note": "Sine、SineDamp、Pulse 待验收；方波暂缓。"
+    "review": 4,
+    "note": "Sine、SineDamp、Pulse、SquareWave 待验收；方波为固定陡度平滑近似"
    }
   }
  },
@@ -5477,7 +5479,7 @@
   "ref": "",
   "pri": "P1",
   "status": "已实现待验收",
-  "how": "绘图 → 线系列图。每个原始行跨所选 Y 列连接为一条点线，X 为列位置和列名；至少两列，无隐藏工作表，保留原始行/列及实时源数据连接，缺失列处断开。",
+  "how": "绘图 → 线系列图。每个原始行跨所选 Y 列连接为一条点线，X 为列位置和列名；至少两列，无隐藏工作表，保留原始行/列及实时源数据连接，缺失列处断开。 每行按经典分类色循环或连续色表归一取色，符号统一；手动列颜色保留。图例按原始行显示，优先使用选中范围内的文本/分类列，缺省为“行 n”；不新增持久字段。",
   "verify": "核心偏移、派生路径、原值拾取、源行连接与 v32 保存兼容；真实命令一步撤销；新增 NumPy/matplotlib 位置对照。",
   "id": "F275",
   "milestone": "M2 论文全流程",
@@ -5490,7 +5492,8 @@
   "evidence": {
    "auto": [
     "crates/scicanvas-core/tests/offset_lines.rs::b3_line_series_links_original_rows_without_hidden_book",
-    "crates/scicanvas/src/app/tests/dialog_tests.rs::b3_new_commands_create_offset_or_row_series_and_undo"
+    "crates/scicanvas/src/app/tests/dialog_tests.rs::b3_new_commands_create_offset_or_row_series_and_undo",
+    "crates/scicanvas-core/tests/offset_lines.rs::line_series_colors_and_legend_follow_rows_and_keep_manual_column_color"
    ],
    "reference": [
     "docs/parity/visual/line-series/matplotlib.json"
@@ -8795,11 +8798,11 @@
   "module": "统计",
   "feature": "滑动窗口非参数检验",
   "ref": "",
-  "pri": "P1",
-  "status": "未开始",
-  "how": "按方法卡暂缓，需用户确认具体检验统计量、分组及窗口规则。目前没有可以对齐的标准定义；需要时可用移动窗口加现有检验组合实现。",
-  "verify": "需要用户确认定义后，补窗口边界、缺失值及所选检验的独立参考；状态保持未开始。",
-  "milestone": "M2 论文全流程"
+  "pri": "不做",
+  "status": "不做",
+  "how": "未找到定义明确的同名内置功能，检验统计量、分组和窗口规则尚无具体需求；需要时可用移动窗口加现有检验组合实现，有具体需求后重新立项。",
+  "verify": "按功能定义未对齐的规则列为不做，不登记实现或验收通过。",
+  "milestone": "—"
  },
  {
   "id": "F509",
@@ -8921,7 +8924,7 @@
   "ref": "",
   "pri": "P1",
   "status": "部分实现",
-  "how": "当前内置 38 个模型、10 类，新增波形和结合分类；显函数参考目录仍为 239 项，目录逐项映射另行推进。",
+  "how": "当前内置 39 个模型、10 类，新增波形和结合分类；显函数参考目录仍为 239 项，目录逐项映射另行推进。",
   "verify": "SciPy 参数参考覆盖自动初值和真值 ×1.1 初值，相对误差 1e-6；抑制模型三浓度全局拟合；BET 定义域及阻尼时间原点保存、重算、重新编辑回归。",
   "milestone": "M2 论文全流程",
   "sub_items": {
@@ -8929,13 +8932,13 @@
     "total": 239,
     "done": 0,
     "review": 0,
-    "note": "当前 38 个内置模型，239 项目录映射待做。"
+    "note": "当前 39 个内置模型，239 项目录映射待做。"
    },
    "当前内置模型": {
-    "total": 38,
+    "total": 39,
     "done": 0,
-    "review": 38,
-    "note": "当前 Model::ALL 的 28 个模型已有各自回归，均待完整参考/人工验收；不含线性与多项式阶数，也不含用户自定义表达式。"
+    "review": 39,
+    "note": "当前 Model::ALL 的 39 个模型已有各自回归，均待完整参考/人工验收；不含线性与多项式阶数，也不含用户自定义表达式。"
    }
   },
   "needs": [
@@ -8951,7 +8954,8 @@
    "reference": [
     "crates/scicanvas-core/tests/reference/builtin_fits.json",
     "crates/scicanvas-core/tests/reference/inhibition_fits.json",
-    "crates/scicanvas-core/tests/reference_scipy.rs"
+    "crates/scicanvas-core/tests/reference_scipy.rs",
+    "crates/scicanvas-core/tests/reference/square_wave.json"
    ],
    "manual": {
     "checklist": "docs/acceptance/fitting.md#F514",

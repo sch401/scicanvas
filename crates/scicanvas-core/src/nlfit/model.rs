@@ -35,6 +35,7 @@ pub enum Model {
     Rational22,
     Rational33,
     Sine,
+    SquareWave,
     SineDamp,
     Pulse,
     SubstrateInhibition,
@@ -50,7 +51,7 @@ pub enum Model {
 pub const MAX_PARAMS: usize = 12;
 
 impl Model {
-    pub const ALL: [Model; 38] = [
+    pub const ALL: [Model; 39] = [
         Model::Gauss,
         Model::Lorentz,
         Model::Voigt,
@@ -80,6 +81,7 @@ impl Model {
         Model::Rational22,
         Model::Rational33,
         Model::Sine,
+        Model::SquareWave,
         Model::SineDamp,
         Model::Pulse,
         Model::SubstrateInhibition,
@@ -136,6 +138,7 @@ impl Model {
             Model::Rational22 => "Rational22",
             Model::Rational33 => "Rational33",
             Model::Sine => "Sine",
+            Model::SquareWave => "SquareWave",
             Model::SineDamp => "SineDamp",
             Model::Pulse => "Pulse",
             Model::SubstrateInhibition => "SubstrateInhibition",
@@ -159,6 +162,7 @@ impl Model {
             Model::MichaelisMenten => "酶动力学",
             Model::Rational1 | Model::Rational12 | Model::Rational22 | Model::Rational33 => "有理函数",
             Model::Sine => "波形",
+            Model::SquareWave => "波形",
             Model::SineDamp => "波形",
             Model::Pulse => "波形",
             Model::SubstrateInhibition => "酶动力学",
@@ -202,6 +206,7 @@ impl Model {
             Model::Rational22 => "y = (a0 + a1·x + a2·x²)/(1 + b1·x + b2·x²)",
             Model::Rational33 => "y = (a0 + a1·x + a2·x² + a3·x³)/(1 + b1·x + b2·x² + b3·x³)",
             Model::Sine => "y = y0 + A·sin(2π(x − xc)/T)",
+            Model::SquareWave => "y = y0 + A·tanh(10·sin(2π(x − xc)/T))/tanh(10)；方波按 k = 10 的 tanh 平滑近似，边沿附近与理想方波略有差别",
             Model::SineDamp => "y = y0 + A·exp(−(x − x₀)/t0)·sin(2π(x − xc)/T)，x₀ 为固定数据起点",
             Model::Pulse => "x ≥ x0: y = y0 + A·(1 − exp(−(x − x0)/t1))^p·exp(−(x − x0)/t2)，其余 y0",
             Model::SubstrateInhibition => "y = Vmax·x / (Km + x·(1 + x/Ki))",
@@ -243,7 +248,7 @@ impl Model {
             Model::Rational12 => &["a0", "a1", "b1", "b2"],
             Model::Rational22 => &["a0", "a1", "a2", "b1", "b2"],
             Model::Rational33 => &["a0", "a1", "a2", "a3", "b1", "b2", "b3"],
-            Model::Sine => &["y0", "A", "xc", "T"],
+            Model::Sine | Model::SquareWave => &["y0", "A", "xc", "T"],
             Model::SineDamp => &["y0", "A", "xc", "T", "t0"],
             Model::Pulse => &["y0", "A", "x0", "t1", "t2", "p"],
             Model::SubstrateInhibition => &["Vmax", "Km", "Ki"],
@@ -369,6 +374,7 @@ impl Model {
                 }
             }
             Model::Sine => p[0] + p[1] * (2.0 * PI * (x - p[2]) / p[3]).sin(),
+            Model::SquareWave => p[0] + p[1] * (10.0 * (2.0 * PI * (x - p[2]) / p[3]).sin()).tanh() / 10.0_f64.tanh(),
             Model::SineDamp => p[0] + p[1] * (-x / p[4]).exp() * (2.0 * PI * (x - p[2]) / p[3]).sin(),
             Model::Pulse => {
                 if x < p[2] {

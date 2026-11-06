@@ -221,13 +221,14 @@ def generate(source):
             ax.set_xticks(np.arange(1, len(keys) + 1), keys)
         if kind=="LineSeries":
             ax.set_xticks(np.arange(1,len(keys)+1),keys)
+            row_palette = np.array([(15,77,146),(182,67,66),(66,148,158),(154,77,142),(118,118,118),(46,158,68),(39,39,39),(55,117,186),(233,166,161)]) / 255
             for row in range(max(len(y) for y in arrays)):
                 yy=np.array([y[row] if row<len(y) else np.nan for y in arrays])
                 points=np.column_stack([np.arange(1,len(keys)+1),yy])
                 points[~np.isfinite(yy)]=np.nan
                 for run in runs(points):
                     if len(run)>1:
-                        line,=ax.plot(run[:,0],run[:,1],color="#0F4D92")
+                        line,=ax.plot(run[:,0],run[:,1],color=row_palette[row % len(row_palette)])
                         marks["polylines"].append(artist_points(line,ax).tolist())
         offset=layer.get("offset",{})
         if kind in ("OffsetLine","Waterfall"):
@@ -250,8 +251,9 @@ def generate(source):
                 lo, hi = layer["rows"]
                 valid &= (np.arange(len(x)) >= lo) & (np.arange(len(x)) <= hi)
             if kind=="LineSeries":
-                dots=target.scatter(np.full(np.count_nonzero(valid),si+1),y[valid],s=10,color="#0F4D92")
+                dots=target.scatter(np.full(np.count_nonzero(valid),si+1),y[valid],s=10,c=row_palette[np.flatnonzero(valid)%len(row_palette)])
                 marks["symbols"].extend(target.transAxes.inverted().transform(dots.get_offset_transform().transform(dots.get_offsets())).tolist())
+                marks["colors"].extend((row_palette[np.flatnonzero(valid)%len(row_palette)]*255).round().astype(int).tolist())
                 continue
             if kind == "ColumnScatter":
                 center=si+1

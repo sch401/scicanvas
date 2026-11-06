@@ -127,3 +127,75 @@ fn b3_offset_roundtrips_and_old_project_has_no_offset() {
         .offset
         .is_none());
 }
+
+#[test]
+fn line_series_colors_and_legend_follow_rows_and_keep_manual_column_color() {
+    use scicanvas_core::{colormap::ColorMap, ColumnData};
+    let mut p = project(PlotType::LineSeries);
+    p.books[0].columns[0].data =
+        ColumnData::Text(["alpha", "beta", "gamma", "delta"].map(String::from).to_vec()).into();
+    p.graphs[0].first_layer_mut().legend = true;
+    let layer = p.graphs[0].first_layer();
+    let (_, plots) = layer.prepared_plots_in(&p.books[0], &|_| None);
+    let colors: std::collections::BTreeSet<_> = plots[0].series.point_styles.iter().map(|s| s.color.unwrap()).collect();
+    assert_eq!(colors.len(), 4);
+    assert!(plots.iter().all(|p| p.style.symbol == plots[0].style.symbol));
+    let sc = scene::layout_page(&p.graphs[0], &p, &[]);
+    let line_colors: std::collections::BTreeSet<_> = sc
+        .items
+        .iter()
+        .filter_map(|item| {
+            if item.clip != Some(sc.plot) {
+                return None;
+            }
+            match &item.prim {
+                Prim::Polyline { pts, color, .. } if pts.len() == 2 => Some(*color),
+                _ => None,
+            }
+        })
+        .collect();
+    assert_eq!(line_colors.len(), 4);
+    for label in ["alpha", "beta", "gamma", "delta"] {
+        assert!(sc
+            .items
+            .iter()
+            .any(|i| matches!(&i.prim, Prim::Text{text,..} if text == label)));
+    }
+    p.graphs[0].first_layer_mut().color_map = ColorMap::Viridis;
+    let (_, plots) = p.graphs[0].first_layer().prepared_plots_in(&p.books[0], &|_| None);
+    let to_array = |(r, g, b)| [r, g, b];
+    assert_eq!(
+        plots[0].series.point_styles[0].color,
+        Some(to_array(ColorMap::Viridis.sample(0.)))
+    );
+    assert_eq!(
+        plots[0].series.point_styles[3].color,
+        Some(to_array(ColorMap::Viridis.sample(1.)))
+    );
+    p.graphs[0]
+        .first_layer_mut()
+        .edit_styles(|s| s.entry("C".into()).or_default().color = Some([10, 20, 30]));
+    let (_, plots) = p.graphs[0].first_layer().prepared_plots_in(&p.books[0], &|_| None);
+    assert!(plots[1]
+        .series
+        .point_styles
+        .iter()
+        .all(|s| s.color == Some([10, 20, 30])));
+}
+
+#[test]
+fn line_series_row_labels_use_the_first_selected_text_column() {
+    use scicanvas_core::{plotspec::PlotSpec, ColumnData};
+    let mut p = project(PlotType::LineSeries);
+    p.books[0].columns[0].data = ColumnData::Text(vec!["outside".into(); 4]).into();
+    let selected = vec!["B".into(), "C".into()];
+    let spec = PlotSpec::from_selection(&p.books[0], &selected, PlotType::LineSeries).unwrap();
+    assert_eq!(spec.x_key, None);
+    let mut label = Column::new("D", Role::Y);
+    label.data = ColumnData::Text(vec!["selected".into(); 4]).into();
+    p.books[0].columns.push(label);
+    let selected = vec!["B".into(), "C".into(), "D".into()];
+    let spec = PlotSpec::from_selection(&p.books[0], &selected, PlotType::LineSeries).unwrap();
+    assert_eq!(spec.x_key.as_deref(), Some("D"));
+    assert_eq!(spec.y_keys, ["B", "C"]);
+}

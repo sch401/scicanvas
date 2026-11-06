@@ -46,7 +46,7 @@ impl FitFunction {
 impl Model {
     pub(super) fn guess_extended(self, xs: &[f64], ys: &[f64]) -> Vec<f64> {
         match self {
-            Self::Sine | Self::SineDamp => wave_guess(self, xs, ys),
+            Self::Sine | Self::SquareWave | Self::SineDamp => wave_guess(self, xs, ys),
             Self::Pulse => pulse_guess(xs, ys),
             Self::SubstrateInhibition => {
                 let peak = (0..ys.len()).max_by(|a, b| ys[*a].total_cmp(&ys[*b])).unwrap();
@@ -123,7 +123,7 @@ fn wave_guess(model: Model, xs: &[f64], ys: &[f64]) -> Vec<f64> {
     };
     let phase = crossings.first().copied().unwrap_or(xs[0]);
     let amplitude = (hi - lo) / 2.0;
-    if model == Model::Sine {
+    if matches!(model, Model::Sine | Model::SquareWave) {
         return vec![mean, amplitude, phase, period];
     }
     let peaks: Vec<_> = (1..n - 1)
