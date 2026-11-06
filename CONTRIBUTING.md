@@ -4,7 +4,7 @@
 
 ## 准备环境
 
-- Git，具备本私密仓库的读取权限。
+- Git，用于克隆仓库与提交改动。
 - Visual Studio Build Tools，安装“使用 C++ 的桌面开发”和 Windows SDK，供 MSVC 编译、链接使用。
 - Rust stable，包含 rustfmt、Clippy 和 rust-docs。工作区声明的最低 Rust 版本为 1.88；发布脚本需要 rust-docs 中的标准库版权材料。
 - Python 3.11 或更新版本，维护脚本使用标准库 `tomllib`，无需 pip 安装。
