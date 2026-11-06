@@ -23,7 +23,7 @@ pub enum Item {
     Smalls(&'static [&'static str]),
     /// 展开的图类型画廊（带缩略图）。
     Gallery(&'static [&'static str]),
-    Scale(bool),
+    Scales,
 }
 
 pub struct Group {
@@ -336,39 +336,34 @@ pub static TABS: &[Tab] = &[
             Group {
                 label: "坐标轴",
                 items: &[
-                    Scale(true),
-                    Scale(false),
-                    Smalls(&["graph.grid"]),
-                    Smalls(&["graph.reference.vertical", "graph.reference.horizontal"]),
+                    Scales,
+                    Smalls(&["graph.grid", "graph.reference.vertical", "graph.reference.horizontal"]),
                 ],
             },
             Group {
                 label: "图例与标签",
-                items: &[Big("graph.legend"), Big("graph.labels"), Smalls(&["graph.legend.auto"])],
+                items: &[Smalls(&["graph.legend", "graph.labels", "graph.legend.auto"])],
             },
             Group {
                 label: "标注",
                 items: &[
-                    Smalls(&["graph.text.add", "graph.text.manage"]),
-                    Smalls(&["graph.shape.line", "graph.shape.arrow"]),
-                    Smalls(&["graph.shape.rect", "graph.shape.ellipse"]),
+                    Smalls(&["graph.text.add", "graph.text.manage", "graph.shape.line"]),
+                    Smalls(&["graph.shape.rect", "graph.shape.ellipse", "graph.shape.arrow"]),
                 ],
             },
             Group {
                 label: "设置",
                 items: &[
-                    Big("graph.props"),
-                    Big("layer.contents"),
-                    Smalls(&["graph.themes", "graph.style.copy", "graph.style.paste"]),
+                    Smalls(&["graph.props", "layer.contents", "graph.themes"]),
                     Smalls(&["layer.add", "layer.remove"]),
+                    Smalls(&["graph.style.copy", "graph.style.paste"]),
                 ],
             },
             Group {
                 label: "导出",
                 items: &[
-                    Big("graph.export"),
-                    Smalls(&["graph.export_pdf", "graph.export_png", "graph.export_tiff"]),
-                    Smalls(&["graph.export_batch", "graph.copy"]),
+                    Smalls(&["graph.export", "graph.export_pdf", "graph.export_png"]),
+                    Smalls(&["graph.export_tiff", "graph.export_batch", "graph.copy"]),
                 ],
             },
         ],
@@ -698,7 +693,12 @@ fn group(
                         });
                     }
                     Gallery(ids) => plot_gallery(ui, ids, preview_count, app, pal, clicked),
-                    Scale(x) => scale_menu(ui, *x, app, clicked),
+                    Scales => {
+                        ui.vertical(|ui| {
+                            scale_menu(ui, true, app, clicked);
+                            scale_menu(ui, false, app, clicked);
+                        });
+                    }
                 }
             }
         });
@@ -736,7 +736,7 @@ fn group_width(ui: &egui::Ui, group: &Group, preview_count: usize) -> f32 {
             .filter_map(|id| commands::find(id))
             .map(|c| text_width(ui, c.label, font.clone()) + 34.0)
             .fold(0.0, f32::max),
-        Scale(x) => menu_width(ui, if *x { "X 刻度类型" } else { "Y 刻度类型" }),
+        Scales => menu_width(ui, "X 刻度类型"),
         Gallery(ids) => {
             let tiles = ids
                 .iter()
@@ -773,8 +773,8 @@ fn gallery_preview_count(ui: &egui::Ui, tab: &Tab, available: f32) -> usize {
         cumulative.push(cumulative.last().copied().unwrap_or_default() + width);
     }
     let preferred = ids.len().min(4);
-    let budget = if total + cumulative[preferred] <= available {
-        available - total
+    let budget = if tab.id == "graph" || total + cumulative[preferred] <= available {
+        (available - total).max(0.0)
     } else {
         (available - prefix - 117.0).max(0.0)
     };
@@ -802,7 +802,7 @@ fn plot_gallery(
             ui.horizontal(|ui| {
                 for id in ids.iter().take(preview_count) {
                     if let Some(command) = commands::find(id) {
-                        if gallery_tile(ui, app, command, pal, clicked).clicked() {
+                        if gallery_tile(ui, app, command, pal, clicked, None).clicked() {
                             *clicked = Some(command.id);
                         }
                     }
@@ -823,17 +823,29 @@ fn thumbnail_grid(
     clicked: &mut Option<&'static str>,
 ) {
     let _ = ids;
+    let tile_width = PLOT_CATEGORIES
+        .iter()
+        .flat_map(|(_, ids)| *ids)
+        .filter_map(|id| commands::find(id))
+        .map(|command| gallery_tile_width(ui, command))
+        .fold(72.0_f32, f32::max);
     let height = (ui.ctx().screen_rect().height() - 150.0).clamp(120.0, 540.0);
     egui::ScrollArea::vertical().max_height(height).show(ui, |ui| {
         for (category, ids) in PLOT_CATEGORIES {
             ui.label(egui::RichText::new(*category).strong());
             egui::Grid::new(("plot-menu-grid", category))
                 .num_columns(3)
+                .min_col_width(tile_width)
                 .spacing(vec2(crate::theme::space::XS, crate::theme::space::XS))
                 .show(ui, |ui| {
                     for (index, id) in ids.iter().enumerate() {
                         if let Some(command) = commands::find(id) {
-                            if gallery_tile(ui, app, command, pal, clicked).clicked() {
+                            let response = gallery_tile(ui, app, command, pal, clicked, Some(tile_width));
+                            #[cfg(test)]
+                            ui.data_mut(|data| {
+                                data.insert_temp(egui::Id::new(("gallery-grid-tile", command.id)), response.rect)
+                            });
+                            if response.clicked() {
                                 *clicked = Some(command.id);
                             }
                             if clicked.is_some() {
@@ -905,7 +917,10 @@ fn overflow_group(
                                         }
                                     }
                                     Gallery(ids) => thumbnail_grid(ui, ids, app, pal, clicked),
-                                    Scale(x) => scale_menu(ui, *x, app, clicked),
+                                    Scales => {
+                                        scale_menu(ui, true, app, clicked);
+                                        scale_menu(ui, false, app, clicked);
+                                    }
                                 }
                                 if clicked.is_some() {
                                     ui.close_menu();
@@ -1036,6 +1051,7 @@ fn gallery_tile(
     c: &Command,
     pal: &Palette,
     clicked: &mut Option<&'static str>,
+    width: Option<f32>,
 ) -> egui::Response {
     let enabled = (c.when)(app).is_ok();
     let label = ui.painter().layout_no_wrap(
@@ -1043,7 +1059,7 @@ fn gallery_tile(
         FontId::proportional(crate::theme::size::LABEL),
         text_color(enabled, pal),
     );
-    let width = (label.size().x + 12.0).max(72.0);
+    let width = width.unwrap_or_else(|| (label.size().x + 12.0).max(72.0));
     let (rect, resp) = ui.allocate_exact_size(vec2(width, 62.0), if enabled { Sense::click() } else { Sense::hover() });
     let checked = app.active_layer().is_some_and(|layer| {
         crate::examples::ALL

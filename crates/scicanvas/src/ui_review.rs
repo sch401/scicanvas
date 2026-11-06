@@ -49,7 +49,7 @@ fn short_settings_fit_their_content_and_keep_footer_controls_visible() {
 #[test]
 fn every_tab_keeps_three_rows_and_aligned_group_captions() {
     for theme in [egui::Theme::Light, egui::Theme::Dark] {
-        for width in [800.0, 1440.0] {
+        for width in [800.0, 1280.0, 1440.0] {
             let ctx = egui::Context::default();
             crate::theme::install(&ctx);
             crate::fonts::setup(&ctx);
@@ -79,6 +79,15 @@ fn every_tab_keeps_three_rows_and_aligned_group_captions() {
                         height = ctx.available_rect().top();
                     },
                 );
+                if tab.id == "graph" && width >= 1280.0 {
+                    for label in ["坐标轴", "图例与标签", "标注", "设置", "导出"] {
+                        assert!(
+                            crate::test_ui::find_text(&output, label).is_some(),
+                            "{width} / {theme:?} / {label}"
+                        );
+                    }
+                    assert!(crate::test_ui::find_text(&output, "更多功能").is_none());
+                }
                 let captions: Vec<_> = output
                     .shapes
                     .iter()
@@ -460,18 +469,24 @@ fn title_buttons_share_native_geometry_at_each_dpi() {
 
 #[test]
 fn chart_type_menus_open_and_dispatch_in_both_tabs() {
-    for (tab, active) in [("plot", 1), ("graph", 2)] {
+    for (tab, active, theme) in [
+        ("plot", 1, egui::Theme::Light),
+        ("graph", 2, egui::Theme::Light),
+        ("plot", 1, egui::Theme::Dark),
+        ("graph", 2, egui::Theme::Dark),
+    ] {
         let ctx = egui::Context::default();
         crate::theme::install(&ctx);
         crate::fonts::setup(&ctx);
-        let pal = theme::palette(egui::Theme::Light);
+        ctx.set_theme(theme);
+        let pal = theme::palette(theme);
         let mut app = SciApp::initial(pal);
         app.active = Some(active);
         let mut state = UiState::default();
         state.tab = tab;
         let mut harness = crate::test_ui::Harness::new(
             ctx,
-            Some(vec2(800.0, 820.0)),
+            Some(vec2(if tab == "graph" { 1800.0 } else { 800.0 }, 820.0)),
             |state: &mut UiState, ctx: &egui::Context| {
                 let mut clicked = None;
                 show(ctx, &app, state, &pal, &mut clicked);
@@ -501,6 +516,31 @@ fn chart_type_menus_open_and_dispatch_in_both_tabs() {
             .center();
         harness.click(&mut state, menu);
         output = harness.frame(&mut state, vec![]);
+        for _ in 0..3 {
+            output = harness.frame(&mut state, vec![]);
+        }
+        let rect = |id: &str| {
+            harness
+                .ctx
+                .data(|data| data.get_temp::<Rect>(egui::Id::new(("gallery-grid-tile", id))))
+                .unwrap()
+        };
+        let first = rect("plot.line");
+        let columns = [
+            rect("plot.line").center().x,
+            rect("plot.linesym").center().x,
+            rect("plot.spline").center().x,
+        ];
+        for (_, ids) in crate::ribbon::PLOT_CATEGORIES {
+            for (index, id) in ids.iter().enumerate() {
+                let tile = rect(id);
+                assert!((tile.width() - first.width()).abs() < 0.1, "{tab} / {theme:?} / {id}");
+                assert!(
+                    (tile.center().x - columns[index % 3]).abs() < 0.1,
+                    "{tab} / {theme:?} / {id}: {tile:?}"
+                );
+            }
+        }
         let scroll = crate::test_ui::find_text(&output, "线").expect("gallery category") + vec2(80., 80.);
         let mut position = None;
         for _ in 0..12 {
@@ -646,7 +686,15 @@ fn chart_previews_show_only_common_types_and_resize_consistently() {
                 .count();
             counts.push(count);
         }
-        assert!(counts[0] >= 1 && counts[1] >= 3, "{tab}: {counts:?}");
+        if tab == "graph" {
+            assert_eq!(&counts[..2], &[0, 0], "compact graph keeps commands ahead of previews");
+            assert!(harness
+                .ctx
+                .data(|data| data.get_temp::<Rect>(egui::Id::new("ribbon-gallery-menu-rect")))
+                .is_some());
+        } else {
+            assert!(counts[0] >= 1 && counts[1] >= 3, "{tab}: {counts:?}");
+        }
         assert!(counts.iter().all(|count| *count <= 4), "{tab}: {counts:?}");
         assert_eq!(counts[2], 4, "{tab}: {counts:?}");
         assert_eq!(counts[3], counts[0], "{tab}: {counts:?}");
@@ -783,9 +831,11 @@ fn visible_plot_and_analysis_commands_have_ribbon_entries() {
                         visible.insert(*id);
                     }
                     Item::Smalls(ids) | Item::Gallery(ids) => visible.extend(ids.iter().copied()),
-                    Item::Scale(x) => {
-                        for kind in scicanvas_core::ticks::AxisScale::ALL {
-                            visible.insert(crate::commands::axis_scale_command(*x, kind));
+                    Item::Scales => {
+                        for x in [true, false] {
+                            for kind in scicanvas_core::ticks::AxisScale::ALL {
+                                visible.insert(crate::commands::axis_scale_command(x, kind));
+                            }
                         }
                     }
                 }

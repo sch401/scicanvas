@@ -526,3 +526,55 @@ fn capture_u7_details() {
         }
     }
 }
+
+#[test]
+#[ignore = "Explicit gallery alignment screenshots"]
+fn capture_gallery_alignment() {
+    let directory = std::path::PathBuf::from(std::env::var("SCICANVAS_UI_CAPTURE_DIR").unwrap());
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut capture = Capture::new();
+    for theme in [egui::Theme::Light, egui::Theme::Dark] {
+        let ctx = egui::Context::default();
+        crate::theme::install(&ctx);
+        crate::fonts::setup(&ctx);
+        crate::icons::install_loaders(&ctx);
+        ctx.set_theme(theme);
+        let mut app = SciApp::initial(crate::theme::palette(theme));
+        app.active = Some(1);
+        app.ui.tab = "plot";
+        for _ in 0..8 {
+            capture.app_frame(&ctx, &mut app, vec![]);
+        }
+        let at = ctx
+            .data(|data| data.get_temp::<egui::Rect>(egui::Id::new("ribbon-gallery-menu-rect")))
+            .unwrap()
+            .center();
+        capture.app_frame(
+            &ctx,
+            &mut app,
+            vec![egui::Event::PointerMoved(at), crate::test_ui::button(at, true)],
+        );
+        capture.app_frame(&ctx, &mut app, vec![crate::test_ui::button(at, false)]);
+        for (section, delta) in [("top", 0.), ("middle", -380.), ("bottom", -800.)] {
+            if delta != 0. {
+                capture.app_frame(
+                    &ctx,
+                    &mut app,
+                    vec![
+                        egui::Event::PointerMoved(at + egui::vec2(80., 160.)),
+                        egui::Event::MouseWheel {
+                            unit: egui::MouseWheelUnit::Point,
+                            delta: egui::vec2(0., delta),
+                            modifiers: egui::Modifiers::NONE,
+                        },
+                    ],
+                );
+            }
+            capture.app_capture(
+                &ctx,
+                &mut app,
+                &directory.join(format!("gallery-{section}-{theme:?}.png")),
+            );
+        }
+    }
+}
