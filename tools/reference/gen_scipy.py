@@ -1032,8 +1032,24 @@ def drawing_geometry_cases():
     write("drawing_geometry",cases,{"matplotlib":matplotlib.__version__})
 
 
+def square_wave_cases():
+    def square(x, y0, amplitude, phase, period):
+        return y0 + amplitude * np.tanh(10 * np.sin(2 * np.pi * (x-phase)/period)) / np.tanh(10)
+    cases = []
+    truth = np.array([1.2, 2.0, .3, 2.5])
+    for name, noise in [("square", .005), ("square-noisy", .15)]:
+        x = np.linspace(0, 10, 401)
+        i = np.arange(len(x))
+        y = square(x, *truth) + noise * (.6*np.sin(1.7*i) + .4*np.cos(.37*i*i))
+        initial = truth * 1.1
+        p, cov = optimize.curve_fit(square, x, y, p0=initial, maxfev=100000, ftol=1e-13, xtol=1e-13, gtol=1e-13)
+        cases.append(dict(name=name, model="SquareWave", x=x, y=y, truth=truth, extra_initial=initial,
+                          params=p, se=np.sqrt(np.diag(cov)), rss=np.sum((y-square(x,*p))**2)))
+    write("square_wave", cases)
+
+
 GENERATORS = [
-    integrals, normalization, descriptive, column_math, polynomial, statistical_tests, signal_tests,
+    square_wave_cases, integrals, normalization, descriptive, column_math, polynomial, statistical_tests, signal_tests,
     interpolation_cases, derivative_cases, peak_cases, constrained_fit_cases, builtin_fit_cases,
     smoothing_cases, percent_bar_cases, fit_report_cases, formula_cases, weighted_fit_cases, qq_cases, box_cases,
     histogram_option_cases, normality_ks_ad, ks_2samp, two_way_anova, fit_tools, global_fits, extended_fit_cases, inhibition_fits, kde_cases, peak_sum_cases, function_plot_cases, baseline_extension_cases, derivative_peak_cases, signal_extension_cases, curve_tool_cases, axis_scale_cases, statistical_report_cases, drawing_geometry_cases,

@@ -2452,7 +2452,7 @@ mod tests {
             }
             close(f.rss, rss, 1e-8);
         }
-        assert_eq!(Model::ALL.len(), 38);
+        assert_eq!(Model::ALL.len(), 39);
         assert!(
             Model::ALL.iter().all(|m| m.params().len() <= MAX_PARAMS),
             "the dialog holds up to MAX_PARAMS parameters"

@@ -421,19 +421,40 @@ pub(crate) fn offset(layer: &crate::page::Layer, plots: &mut [crate::page::Prepa
 
 pub(crate) fn columns(layer: &crate::page::Layer, prepared: &mut [crate::page::PreparedPlot]) {
     if layer.plot_type == crate::PlotType::LineSeries {
+        let rows: std::collections::BTreeSet<_> = prepared
+            .iter()
+            .filter(|p| !p.series.line_only)
+            .flat_map(|p| p.series.rows.iter().copied())
+            .collect();
+        let colors: std::collections::BTreeMap<_, _> = rows
+            .iter()
+            .enumerate()
+            .map(|(i, &row)| {
+                let color = if layer.color_map == crate::colormap::ColorMap::Classic {
+                    crate::PALETTE[row % crate::PALETTE.len()]
+                } else {
+                    layer
+                        .color_map
+                        .sample(i as f64 / rows.len().saturating_sub(1).max(1) as f64)
+                };
+                (row, color)
+            })
+            .collect();
+        let symbol = prepared.iter().find(|p| !p.series.line_only).map(|p| p.style.symbol);
         for (i, p) in prepared.iter_mut().filter(|p| !p.series.line_only).enumerate() {
-            for point in &mut p.series.points {
+            p.style.symbol = symbol.unwrap();
+            p.series
+                .point_styles
+                .resize(p.series.points.len(), crate::PointStyle::default());
+            let manual_color = p.plot.style.as_ref().and_then(|s| s.color).map(|[r, g, b]| (r, g, b));
+            for (j, point) in p.series.points.iter_mut().enumerate() {
                 point[0] = (i + 1) as f64;
+                let (r, g, b) = manual_color.unwrap_or(colors[&p.series.rows[j]]);
+                p.series.point_styles[j].color = Some([r, g, b]);
+                p.series.point_styles[j].symbol = symbol;
             }
             for e in &mut p.series.errors {
                 e[0] = None;
-            }
-            if p.plot.style.as_ref().is_none_or(|s| s.color.is_none()) {
-                p.style.color = if layer.color_map == crate::colormap::ColorMap::Classic {
-                    crate::SeriesColor::Palette(0)
-                } else {
-                    crate::SeriesColor::Rgb(layer.color_map.sample(0.0))
-                };
             }
         }
     }

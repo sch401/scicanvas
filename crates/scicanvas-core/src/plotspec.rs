@@ -455,6 +455,26 @@ impl PlotSpec {
             y_keys,
             ..Default::default()
         };
+        if plot_type == PlotType::LineSeries {
+            if let Some(label) = cols
+                .iter()
+                .find(|c| matches!(c.data.kind(), crate::DataKind::Text | crate::DataKind::Category))
+            {
+                spec.x_key = Some(label.key.clone());
+            } else if !selected.is_empty()
+                && spec
+                    .x_key
+                    .as_ref()
+                    .and_then(|k| book.column(k))
+                    .is_some_and(|c| matches!(c.data.kind(), crate::DataKind::Text | crate::DataKind::Category))
+            {
+                spec.x_key = None;
+            }
+            spec.y_keys.retain(|key| {
+                book.column(key)
+                    .is_some_and(|c| matches!(c.data.kind(), crate::DataKind::Num | crate::DataKind::DateTime))
+            });
+        }
         spec.set_plot_type(plot_type)?;
         if plot_type == PlotType::Pie {
             spec.y_keys.truncate(1);

@@ -25,6 +25,7 @@ impl Model {
             | Model::PseudoFirstOrder
             | Model::PseudoSecondOrder => self.guess_adsorption(xs, ys, hi),
             Model::Sine
+            | Model::SquareWave
             | Model::SineDamp
             | Model::Pulse
             | Model::SubstrateInhibition

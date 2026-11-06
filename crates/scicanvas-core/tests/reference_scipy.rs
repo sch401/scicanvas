@@ -973,3 +973,25 @@ fn a4_extended_models_and_inhibition_global_fits_match_scipy() {
         }
     }
 }
+
+#[test]
+fn square_wave_matches_scipy_with_automatic_and_manual_initials() {
+    use scicanvas_core::nlfit::{self, Model};
+    for case in cases("square_wave") {
+        let name = case["name"].as_str().unwrap();
+        for initial in [None, Some(numbers(&case["extra_initial"]))] {
+            let fit = nlfit::fit(
+                Model::SquareWave,
+                &numbers(&case["x"]),
+                &numbers(&case["y"]),
+                initial.as_deref(),
+                &[],
+            )
+            .unwrap();
+            assert!(fit.converged, "{name}: {:?}", fit.params);
+            array(&fit.params, &case["params"], 1e-6, name);
+            near(fit.rss, &case["rss"], 1e-6, name);
+            assert!((fit.params[3] - 2.5).abs() < 0.1, "{name}: wrong fundamental period");
+        }
+    }
+}
