@@ -675,7 +675,7 @@ fn graphics_tools(commands: &mut Vec<Command>) {
             "graph",
             "",
             "图形",
-            "theme Nature import export 新图使用主题",
+            "theme 主题 样式 期刊 import export 新图使用主题",
             |_| Ok(()),
             |a| a.open_graph_themes(),
         ),

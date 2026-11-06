@@ -171,9 +171,9 @@ fn review_new_colormaps_are_continuous_and_manual_mapping_is_retained() {
         draft.color_map = ColorMap::Colorblind;
         let explicit: scicanvas_core::page::LayerSpec = draft.into();
         assert_eq!(explicit.color_map, ColorMap::Colorblind);
-        p.graphs[0].first_layer_mut().color_map = ColorMap::Origin;
+        p.graphs[0].first_layer_mut().color_map = ColorMap::Classic;
         p.graphs[0].first_layer_mut().edit_draft(|d| d.rows = Some((0, 2)));
-        assert_eq!(p.graphs[0].first_layer().color_map, ColorMap::Origin);
+        assert_eq!(p.graphs[0].first_layer().color_map, ColorMap::Classic);
         #[cfg(feature = "serde")]
         {
             let json = scicanvas_core::project_file::to_json(&p).unwrap();
@@ -221,10 +221,10 @@ fn supplement_declarative_origin_is_not_replaced_by_ui_defaults() {
                 vec!["B".into(), "C".into()]
             },
             plot_type: kind,
-            color_map: ColorMap::Origin,
+            color_map: ColorMap::Classic,
             ..Default::default()
         };
         let id = p.plot_spec(spec).unwrap();
-        assert_eq!(p.graph(id).unwrap().first_layer().color_map, ColorMap::Origin);
+        assert_eq!(p.graph(id).unwrap().first_layer().color_map, ColorMap::Classic);
     }
 }

@@ -1672,7 +1672,7 @@ fn batch_export_controls_return_selected_graphs_and_format() {
 }
 
 #[test]
-fn supplement_builder_color_choice_defaults_then_preserves_manual_origin() {
+fn supplement_builder_color_choice_defaults_then_preserves_manual_palette() {
     use scicanvas_core::colormap::ColorMap;
     let mut app = app();
     app.active = Some(1);
@@ -1734,23 +1734,23 @@ fn supplement_builder_color_choice_defaults_then_preserves_manual_origin() {
     assert_eq!(app.plot_draft.as_ref().unwrap().plot_type, PlotType::ColorScatter);
     assert_eq!(app.plot_draft.as_ref().unwrap().color_map, ColorMap::Viridis);
     let output = harness.frame(&mut app, vec![]);
-    harness.click_text(&mut app, &output, "分类色（Origin）");
+    harness.click_text(&mut app, &output, "经典分类色");
     for _ in 0..3 {
         harness.frame(&mut app, vec![]);
     }
-    assert_eq!(app.plot_draft.as_ref().unwrap().color_map, ColorMap::Origin);
+    assert_eq!(app.plot_draft.as_ref().unwrap().color_map, ColorMap::Classic);
     let output = harness.frame(&mut app, vec![]);
     harness.click_text(&mut app, &output, "创建图形");
     assert!(app.plot_draft.is_none());
     assert_eq!(
         app.project.graphs.last().unwrap().first_layer().color_map,
-        ColorMap::Origin
+        ColorMap::Classic
     );
     roundtrip(&mut app, &before);
     let id = app.project.graphs.last().unwrap().id;
     app.active = Some(id);
     app.open_plot_builder();
-    assert_eq!(app.plot_draft.as_ref().unwrap().color_map, ColorMap::Origin);
+    assert_eq!(app.plot_draft.as_ref().unwrap().color_map, ColorMap::Classic);
 }
 
 fn open_property_section(app: &mut SciApp, ctx: &egui::Context, title: &str) {
@@ -1798,10 +1798,10 @@ fn u3_color_mapping_controls_are_saved_and_undoable() {
     let out = harness.frame(&mut app, vec![]);
     harness.click_text(&mut app, &out, "Viridis（连续）");
     let out = harness.frame(&mut app, vec![]);
-    harness.click_text(&mut app, &out, "分类色（Origin）");
+    harness.click_text(&mut app, &out, "经典分类色");
     assert_eq!(
         app.project.graph(gid).unwrap().first_layer().color_map,
-        ColorMap::Origin
+        ColorMap::Classic
     );
     let after = app.project.clone();
     app.undo();

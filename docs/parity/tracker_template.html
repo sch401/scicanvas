@@ -100,9 +100,9 @@ footer{font-size:12.5px;color:var(--muted);max-width:80ch}
 
 <div class="wrap">
   <header>
-    <span class="eyebrow">SciCanvas · Origin 功能对照</span>
+    <span class="eyebrow">SciCanvas · 功能进度</span>
     <h1>SciCanvas 对照清单</h1>
-    <p class="lead">按 Origin 帮助文档目录整理的 <b id="total"></b> 个功能点，每项标了优先级、当前状态、Rust 实现方案和验证方法。“Origin 参考”是对应的帮助章节标题，可以回原文档查阅。改状态会保存下来，其他打开此页的人也能看到。</p>
+    <p class="lead">SciCanvas 的 <b id="total"></b> 个功能点，记录优先级、当前状态、实现方案和验证方法。可按模块、优先级和状态筛选。</p>
     <p class="lead">安装包体积估算：全部功能完成后约 <b>100–130 MB</b>，其中软件本体约 20–40 MB，内置 Python 运行时及 numpy、scipy、pandas 约 60–90 MB（均为压缩后）。</p>
     <p class="lead">状态按当前 Rust 桌面版核对：<b>部分实现</b>＝仍缺明确功能；<b>已实现待验收</b>＝功能已接通，剩人工/参考对照；<b>已完成</b>＝完成当前条目既定验证。旧网页演示单独说明。</p>
     <p class="lead">子项分别统计已完成、待验收与未开始；条目状态调整后，子项仍按代码核对结果显示。参考目录与规划数量在备注中注明，重叠目录分别查看。</p>
@@ -112,7 +112,7 @@ footer{font-size:12.5px;color:var(--muted);max-width:80ch}
   <section class="miles" id="miles" aria-label="里程碑进度"></section>
 
   <div class="tools" role="search">
-    <input type="search" id="q" placeholder="搜索功能、Origin 章节或实现方案" aria-label="搜索">
+    <input type="search" id="q" placeholder="搜索功能或实现方案" aria-label="搜索">
     <div class="chips" id="stChips" aria-label="按状态筛选"></div>
     <select id="mod" aria-label="按模块筛选"></select>
     <span class="count" id="count"></span>
@@ -121,13 +121,13 @@ footer{font-size:12.5px;color:var(--muted);max-width:80ch}
 
   <div class="tablewrap">
     <table>
-      <thead><tr><th style="width:62px">编号</th><th>功能 / Origin 参考</th><th style="width:118px">优先级</th><th style="width:154px">状态</th><th>实现方案</th><th>验证方法</th></tr></thead>
+      <thead><tr><th style="width:62px">编号</th><th>功能</th><th style="width:118px">优先级</th><th style="width:154px">状态</th><th>实现方案</th><th>验证方法</th></tr></thead>
       <tbody id="rows"></tbody>
     </table>
     <div class="empty" id="empty" hidden>没有符合筛选条件的功能。</div>
   </div>
 
-  <footer>本清单只记录功能点，不含 Origin 文档正文。实现时按公开说明和观察到的行为编写，不复制 Origin 的代码、文字或图片。分析与 NIST StRD、SciPy / R 对照；图形与 matplotlib 同数据出图比较数据位置与刻度。</footer>
+  <footer>功能状态按代码与验收证据维护。分析与 NIST StRD、SciPy / R 对照，图形与 Matplotlib 同数据参考比较位置与刻度。</footer>
 </div>
 
 <script>
@@ -200,7 +200,7 @@ function renderRows(){
     const s=statusOf(r);
     html+=`<tr class="${s==="不做"?"skip":""}">
       <td class="id">${r.id}</td>
-      <td class="featcell"><span class="feat">${esc(r.feature)}</span><span class="ref">${esc(r.ref)}</span>${subItems(r)}</td>
+      <td class="featcell"><span class="feat">${esc(r.feature)}</span>${subItems(r)}</td>
       <td class="pricell"><span class="pri ${r.pri==="不做"?"skip":r.pri}">${esc(r.pri)}</span><span class="ms">${esc(r.milestone)}</span></td>
       <td class="stcell">${statusCell(r)}</td>
       <td class="small" data-label="实现">${esc(r.how)}</td>

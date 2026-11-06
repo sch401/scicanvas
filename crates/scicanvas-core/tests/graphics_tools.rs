@@ -124,7 +124,7 @@ fn b5_themes_are_style_only_idempotent_and_roundtrip() {
     );
     assert_eq!(theme, GraphTheme::from_json(&theme.to_json().unwrap()).unwrap());
     p.save_graph_theme(theme).unwrap();
-    assert!(p.save_graph_theme(GraphTheme::nature()).is_err());
+    assert!(p.save_graph_theme(GraphTheme::builtin()).is_err());
     assert!(p.remove_graph_theme(GraphTheme::BUILTIN).is_err());
     let json = scicanvas_core::project_file::to_json(&p).unwrap();
     assert_eq!(p, scicanvas_core::project_file::from_json(&json).unwrap());
@@ -148,4 +148,54 @@ fn b5_curve_style_clip_excludes_source_labels_and_mappings() {
         (None, None, None)
     );
     assert_eq!(clip.line_width, Some(3.));
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn neutral_labels_keep_palette_and_theme_file_compatibility() {
+    use scicanvas_core::{colormap::ColorMap, project_file};
+    assert_eq!(ColorMap::Classic.label(), "经典分类色");
+    assert_eq!(ColorMap::Viridis.label(), "Viridis（连续）");
+    assert_eq!(ColorMap::Colorblind.label(), "色盲友好");
+    assert_eq!(serde_json::to_string(&ColorMap::Classic).unwrap(), "\"Origin\"");
+    assert_eq!(
+        serde_json::from_str::<ColorMap>("\"Origin\"").unwrap(),
+        ColorMap::Classic
+    );
+    let mut theme = GraphTheme::builtin();
+    theme.name = "默认（Nature）".into();
+    let json = theme.to_json().unwrap();
+    let imported = GraphTheme::from_json(&json).unwrap();
+    assert_eq!(imported, theme);
+    let mut project = Project::sample();
+    project.save_graph_theme(imported).unwrap();
+    assert_eq!(
+        project_file::from_json(&project_file::to_json(&project).unwrap()).unwrap(),
+        project
+    );
+    assert!(project.save_graph_theme(GraphTheme::builtin()).is_err());
+    assert!(project.remove_graph_theme(GraphTheme::BUILTIN).is_err());
+}
+
+#[cfg(feature = "serde")]
+#[test]
+fn legacy_project_theme_collision_is_renamed_without_other_changes() {
+    use scicanvas_core::project_file;
+    let mut project = Project::sample();
+    for name in ["用户主题", "内置默认（项目）", "内置默认（项目 2）"] {
+        let mut theme = GraphTheme::builtin();
+        theme.name = name.into();
+        theme.line_width = 2.;
+        project.save_graph_theme(theme).unwrap();
+    }
+    let mut wire: serde_json::Value = serde_json::from_str(&project_file::to_json(&project).unwrap()).unwrap();
+    wire["version"] = 38.into();
+    wire["graph_themes"][0]["name"] = GraphTheme::BUILTIN.into();
+    project.graph_themes[0].name = "内置默认（项目 3）".into();
+    let loaded = project_file::from_json(&wire.to_string()).unwrap();
+    assert_eq!(loaded, project);
+    assert_eq!(
+        project_file::from_scv(&project_file::to_scv(&loaded).unwrap()).unwrap(),
+        loaded
+    );
 }

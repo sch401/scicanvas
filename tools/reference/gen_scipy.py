@@ -408,7 +408,7 @@ def builtin_fit_cases():
 
 
 def weighted_fit_cases():
-    # curve_fit(sigma=σ, absolute_sigma=False)：权重 1/σ²，协方差按约化 χ² 缩放（Origin 默认口径）。
+    # curve_fit(sigma=σ, absolute_sigma=False)：权重 1/σ²，协方差按约化 χ² 缩放。
     def exp1(x, y0, a, t):
         return y0 + a*np.exp(-x/t)
     def gauss(x, y0, xc, w, a):

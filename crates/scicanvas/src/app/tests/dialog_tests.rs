@@ -2511,7 +2511,7 @@ fn b5_style_paste_preserves_target_mapping_and_theme_defaults_are_undoable() {
     assert_eq!(style.color_column.as_deref(), Some("C"));
     assert_eq!(style.line_width, Some(4.));
     roundtrip(&mut app, &before);
-    let mut theme = GraphTheme::nature();
+    let mut theme = GraphTheme::builtin();
     theme.line_width = 2.5;
     app.settings.default_graph_theme = Some(theme);
     app.active = Some(1);
@@ -3370,7 +3370,7 @@ fn u6_palette_wheel_scroll_is_retained_and_search_ignores_case() {
             .0
             > 100.
     );
-    for (query, label) in [("voigt", "多峰拟合…"), ("nature", "图形主题与选项…")] {
+    for (query, label) in [("vOiGt", "多峰拟合…"), ("ThEmE", "图形主题与选项…")] {
         app.ui.palette.as_mut().unwrap().query = query.into();
         let out = h.frame(&mut app, vec![]);
         assert!(crate::test_ui::find_text(&out, label).is_some(), "{query}");
@@ -3776,4 +3776,39 @@ fn p13_settings_stay_above_documents_below_menus_and_modal() {
         .data(|d| d.get_temp::<(u64, egui::LayerId)>(egui::Id::new("keyboard-modal-layer")))
         .expect("unsaved modal");
     assert_eq!(modal.order, egui::Order::Foreground);
+}
+
+#[test]
+fn renamed_project_theme_reports_once_when_opened() {
+    let mut app = app();
+    let mut theme = scicanvas_core::graph_theme::GraphTheme::builtin();
+    theme.name = "用户主题".into();
+    app.project.save_graph_theme(theme).unwrap();
+    let wire = scicanvas_core::project_file::to_json(&app.project)
+        .unwrap()
+        .replace("\"name\": \"用户主题\"", "\"name\": \"内置默认\"");
+    let path = std::env::temp_dir().join(format!("scicanvas-theme-wording-{}.scproj", std::process::id()));
+    std::fs::write(&path, wire).unwrap();
+    app.open_path_now(&path);
+    std::fs::remove_file(&path).unwrap();
+    assert_eq!(app.project.graph_themes[0].name, "内置默认（项目）");
+    assert_eq!(app.status.kind, StatusKind::Warn);
+    let notices = |app: &SciApp| {
+        app.status_messages
+            .iter()
+            .filter(|(_, status)| status.text.contains("自动重命名"))
+            .count()
+    };
+    assert_eq!(notices(&app), 1);
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    let mut harness = crate::test_ui::Harness::new(
+        ctx,
+        Some(egui::vec2(1280., 820.)),
+        |app: &mut SciApp, ctx: &egui::Context| app.ui_frame(ctx),
+    );
+    for _ in 0..3 {
+        harness.frame(&mut app, vec![]);
+    }
+    assert_eq!(notices(&app), 1);
 }

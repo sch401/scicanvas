@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 pub const PROJECT_VERSION: u32 = 39;
 pub const GRAPH_TEMPLATE_VERSION: u32 = 1;
 
-/// 列的绘图角色，对应 Origin 里的 X / Y / 忽略。
+/// 列的绘图角色，使用 X / Y / 忽略。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum Role {
@@ -238,7 +238,7 @@ pub fn column_letter(mut i: usize) -> String {
     s.iter().rev().collect()
 }
 
-/// 工作簿（Origin 的 Book），这一版每个工作簿只有一张工作表。
+/// 工作簿，这一版每个工作簿只有一张工作表。
 #[derive(Clone, Debug, PartialEq)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Book {
@@ -1216,7 +1216,7 @@ impl Project {
         ))
     }
 
-    /// 按选中的列绘图，规则与 Origin 一致：
+    /// 按选中的列绘图，规则：
     /// 选中的 Y 列各成一条曲线；X 取选中的 X 列，没有就取工作表里位于第一条 Y 列左边最近的 X 列；
     /// 什么都没选时使用全部 Y 列。
     pub fn plot_from_selection(

@@ -64,7 +64,7 @@ pub fn segment(points: &[[f64; 2]], second: &[f64], i: usize, b: f64) -> f64 {
         + ((a * a * a - a) * second[i] + (b * b * b - b) * second[i + 1]) * h * h / 6.0
 }
 
-/// 两端钳位的均匀三次 B 样条：数据点作控制点，曲线经过首尾两点、逼近中间各点（Origin 的 B-Spline 连接）。
+/// 两端钳位的均匀三次 B 样条：数据点作控制点，曲线经过首尾两点、逼近中间各点。
 /// 节点向量 [0,0,0,0,1,…,n−4,n−3,n−3,n−3,n−3]，每个节点区间取 `subdivisions` 段；不足 4 点时退回折线。
 pub fn bspline(points: &[[f64; 2]], subdivisions: usize) -> Vec<[f64; 2]> {
     let n = points.len();
@@ -98,7 +98,7 @@ pub fn bspline(points: &[[f64; 2]], subdivisions: usize) -> Vec<[f64; 2]> {
 }
 
 /// 分段 Bezier：每 4 个点（相邻段共用端点）组成一段三次 Bezier，曲线经过第 1、4、7… 个点；
-/// 剩余 3 点用二次、2 点用直线（Origin 的 Bezier 连接）。每段取 `subdivisions` 段。
+/// 剩余 3 点用二次、2 点用直线。每段取 `subdivisions` 段。
 pub fn bezier(points: &[[f64; 2]], subdivisions: usize) -> Vec<[f64; 2]> {
     let n = points.len();
     if n < 3 {

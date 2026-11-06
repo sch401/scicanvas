@@ -154,7 +154,7 @@ pub enum FitWeight {
     /// 不加权。
     #[default]
     None,
-    /// 按与 Y 列关联的 Y 误差列加权，wᵢ = 1/σᵢ²（Origin 的“仪器”权重）。
+    /// 按与 Y 列关联的 Y 误差列加权，wᵢ = 1/σᵢ²。
     YError,
 }
 

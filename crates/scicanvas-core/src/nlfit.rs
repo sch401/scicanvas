@@ -1,4 +1,4 @@
-//! 非线性拟合：Levenberg–Marquardt（中心差分雅可比），内置 Origin 同名函数与自动初值。
+//! 非线性拟合：Levenberg–Marquardt（中心差分雅可比），内置常用函数与自动初值。
 //! 标准误按 cov = (JᵀJ)⁻¹ · RSS / (n − p)，与 SciPy `curve_fit`（默认 absolute_sigma=False）一致。
 
 use crate::analysis::mat_inv;
@@ -1092,7 +1092,7 @@ impl<'a> FitSession<'a> {
         j
     }
 
-    /// 总平方和：加权时用加权均值和 wᵢ（与 Origin 加权 R² 口径一致）；不加权时与普通 TSS 相同。
+    /// 总平方和：加权时用加权均值和 wᵢ（按加权残差定义）；不加权时与普通 TSS 相同。
     fn total_sum_of_squares(&self) -> f64 {
         let weight: f64 = self.w.iter().map(|w| w * w).sum();
         let mean = self.ys.iter().zip(&self.w).map(|(y, w)| w * w * y).sum::<f64>() / weight;
@@ -1871,7 +1871,7 @@ pub fn fit_function(
     fit_function_weighted(function, xs, ys, None, initial, limits, constraints)
 }
 
-/// 按 Y 误差加权的拟合，权重 wᵢ = 1/σᵢ²（Origin 的“仪器”权重）。σ 为缺失值（NaN）的点与 X、Y 无效的点
+/// 按 Y 误差加权的拟合，权重 wᵢ = 1/σᵢ²。σ 为缺失值（NaN）的点与 X、Y 无效的点
 /// 一样跳过；0、负数或无穷大报错。协方差按约化 χ² 缩放，与 SciPy `curve_fit(sigma=σ, absolute_sigma=False)` 相同。
 pub fn fit_function_weighted(
     function: FitFunction,

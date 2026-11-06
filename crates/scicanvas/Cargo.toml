@@ -1,6 +1,6 @@
 [package]
 name = "scicanvas"
-description = "SciCanvas：仿 Origin 界面的开源科研绘图软件（原型）"
+description = "SciCanvas：开源科研绘图与数据分析桌面软件"
 version.workspace = true
 edition.workspace = true
 license.workspace = true

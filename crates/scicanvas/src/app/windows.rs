@@ -666,7 +666,7 @@ impl SciApp {
                     }
                 }
                 ui.menu_button("应用主题", |ui| {
-                    let themes: Vec<_> = std::iter::once(scicanvas_core::graph_theme::GraphTheme::nature())
+                    let themes: Vec<_> = std::iter::once(scicanvas_core::graph_theme::GraphTheme::builtin())
                         .chain(self.project.graph_themes.iter().cloned())
                         .collect();
                     for theme in themes {

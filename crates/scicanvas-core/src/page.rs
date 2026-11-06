@@ -840,7 +840,7 @@ impl Layer {
         crate::stat::prepare(self, &mut series);
         // 样式：默认按图层递增，再用逐曲线设置覆盖（图型、颜色、符号、线宽、符号大小、右侧 Y 轴）
         let mut styles = crate::model::series_styles(&series, g.plot_type);
-        if g.color_map != crate::colormap::ColorMap::Origin {
+        if g.color_map != crate::colormap::ColorMap::Classic {
             let n = series.iter().filter(|s| !s.line_only).count();
             for style in &mut styles {
                 if let crate::SeriesColor::Palette(i) = style.color {

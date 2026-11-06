@@ -91,7 +91,7 @@ def render(rows):
     priorities, statuses = Counter(r["pri"] for r in rows), Counter(r["status"] for r in rows)
     md = [
         "# SciCanvas 功能对照清单", "",
-        "条目按 Origin 帮助文档的目录整理，只引用章节标题；实现按公开说明和观察到的行为编写。",
+        "记录 SciCanvas 的功能范围、实现进度与验证证据。",
         "数据源为 `parity.json`，页面模板为 `tracker_template.html`。运行 `python docs/parity/build_parity.py` 生成文档与页面；`--check` 检查同步，`--desktop` 同步桌面副本。新增条目追加稳定编号，已有编号保留。", "",
         f"共 {len(rows)} 项：" + "，".join(f"{k} {priorities[k]} 项" for k in MILESTONES) + "。",
         "状态：" + "，".join(f"{k} {statuses[k]} 项" for k in STATUSES) + "。", "",
@@ -103,14 +103,14 @@ def render(rows):
         "- **子项**：`sub_items` 按名称记录 `total`、`done`、可选 `review` / `partial`、`note`。已完成与待验收分别计数；未开始为总数减去以上计数。",
         "- 子项独立于共享存储中的条目状态，修改条目状态不会自动增加子项完成数。规划目标与路线参考基数在备注中标明；重叠目录分别查看，避免重复加总。",
         "- F489 起补充第三阶段需求。F514 为 F148–F156 的目录总览，239 是路线参考数；当前通用线性/多项式回归单独计数。",
-        "- Origin 私有格式与脚本兼容保留原范围；扩展包采用 SciCanvas 自有格式。", "",
+        "- 第三方专有格式与脚本兼容保留原范围；扩展包采用 SciCanvas 自有格式。", "",
         "验证原则：分析与 NIST StRD、SciPy / R 对照；图形与 matplotlib 同数据出图比较数据位置与刻度。", "",
     ]
     for module in dict.fromkeys(r["module"] for r in rows):
-        md += [f"## {module}", "", "| 编号 | 功能 | Origin 参考 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |", "|---|---|---|---|---|---|---|---|"]
+        md += [f"## {module}", "", "| 编号 | 功能 | 优先级 | 状态 | 实现方案 | 验证方法 | 子项进度 |", "|---|---|---|---|---|---|---|"]
         for row in rows:
             if row["module"] == module:
-                cells = [row[k] for k in ["id", "feature", "ref", "pri", "status", "how", "verify"]] + [sub_text(row)]
+                cells = [row[k] for k in ["id", "feature", "pri", "status", "how", "verify"]] + [sub_text(row)]
                 md.append("| " + " | ".join(str(c or "—").replace("|", "\\|").replace("\n", " ") for c in cells) + " |")
         md.append("")
     template = (HERE / "tracker_template.html").read_text(encoding="utf-8")

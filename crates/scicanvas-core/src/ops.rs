@@ -1,5 +1,5 @@
 //! 在项目上执行分析：确定输入数据、调用 analysis.rs 计算、把结果写成新列并更新图形。
-//! 规则与 Origin 一致：结果列紧挨着原始列，拟合曲线加到图里显示为红色实线。
+//! 规则：结果列紧挨着原始列，拟合曲线加到图里显示为红色实线。
 
 use crate::analysis::{self, Describe, NormalizeMethod, PolyFit, SmoothMethod};
 use crate::interpolate::{self, InterpMethod};

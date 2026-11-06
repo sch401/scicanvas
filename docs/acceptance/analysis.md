@@ -106,4 +106,4 @@
 
 ### F508 定义待确认（A7）
 
-方法卡允许定义不清时跳过。本轮保留未开始。需明确检验统计量、比较组、窗口宽度/步长及边界规则。官方来源：[Randomness Tests / Runs Test](https://www.originlab.com/fileExchange/details.aspx?fid=377)、[Moving Average](https://www.originlab.com/videos/details.aspx?id=257)。
+方法卡允许定义不清时跳过。本轮保留未开始。需明确检验统计量、比较组、窗口宽度/步长及边界规则。
