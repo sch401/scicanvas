@@ -15,7 +15,7 @@ def suggest(row):
     needs = ["auto"]
     if re.search(r"NIST|SciPy|NumPy|numpy|参考值|\bR\b", text):
         needs.append("reference")
-    if re.search(r"绘图|图类型|作图|导出与发布", row["module"]) and re.search(r"目视|科研绘图 同数据|视觉|对照", text):
+    if re.search(r"绘图|图类型|作图|导出与发布", row["module"]) and re.search(r"目视|matplotlib|视觉|对照", text):
         needs.append("visual")
     if re.search(r"人工|手工|手动操作|实际拖放|粘贴到 Word|原生文件选择", text):
         needs.append("manual")

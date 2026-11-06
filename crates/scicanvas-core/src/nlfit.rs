@@ -1092,7 +1092,7 @@ impl<'a> FitSession<'a> {
         j
     }
 
-    /// 总平方和：加权时用加权均值和 wᵢ（按加权残差定义）；不加权时与普通 TSS 相同。
+    /// 总平方和：加权时用加权均值和 wᵢ（加权 R² 口径）；不加权时与普通 TSS 相同。
     fn total_sum_of_squares(&self) -> f64 {
         let weight: f64 = self.w.iter().map(|w| w * w).sum();
         let mean = self.ys.iter().zip(&self.w).map(|(y, w)| w * w * y).sum::<f64>() / weight;
