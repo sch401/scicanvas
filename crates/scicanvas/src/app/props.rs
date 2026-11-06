@@ -163,17 +163,12 @@ fn props_section(ui: &mut egui::Ui, key: &str, title: &str, open: bool, content:
 fn color_mapping(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, group: &mut Option<egui::Id>) {
     use scicanvas_core::{colormap::ColorMap, page::ColorScale};
     ui.label("色表");
-    let text = match g.color_map {
-        ColorMap::Origin => "分类色（Origin）",
-        ColorMap::Viridis => "Viridis（连续）",
-        ColorMap::Colorblind => "色盲友好",
-    };
     let response = egui::ComboBox::from_id_salt("props-color-map")
-        .selected_text(text)
+        .selected_text(g.color_map.label())
         .show_ui(ui, |ui| {
-            ui.selectable_value(&mut g.color_map, ColorMap::Origin, "分类色（Origin）");
-            ui.selectable_value(&mut g.color_map, ColorMap::Viridis, "Viridis（连续）");
-            ui.selectable_value(&mut g.color_map, ColorMap::Colorblind, "色盲友好");
+            for color_map in [ColorMap::Classic, ColorMap::Viridis, ColorMap::Colorblind] {
+                ui.selectable_value(&mut g.color_map, color_map, color_map.label());
+            }
         })
         .response;
     edit_group(&response, group);

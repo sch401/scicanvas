@@ -96,7 +96,7 @@ class ParityTests(unittest.TestCase):
                 self.assertTrue(row.get("needs"), row["id"])
             if row["pri"] == "P0" and "manual" in row.get("needs", []):
                 self.assertIn("manual", row.get("evidence", {}), row["id"])
-            self.assertNotRegex(row["verify"], r"Origin[^；。]*(?:待做|待验收)")
+            self.assertEqual(row["ref"], "")
 
 
 if __name__ == "__main__":

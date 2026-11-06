@@ -98,7 +98,7 @@ fn clean_zero(s: String) -> String {
 }
 
 fn scientific(v: f64, p: usize) -> String {
-    // Rust 的 {:e} 给出 1.23e3 / 1.23e-3，按 Origin 习惯写成大写 E
+    // Rust 的 {:e} 给出 1.23e3 / 1.23e-3，采用大写 E
     let s = format!("{v:.p$e}");
     let (mantissa, exp) = s.split_once('e').unwrap_or((&s, "0"));
     format!("{}E{}", clean_zero(mantissa.to_string()), exp)

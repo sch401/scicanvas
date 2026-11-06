@@ -429,7 +429,7 @@ pub(crate) fn columns(layer: &crate::page::Layer, prepared: &mut [crate::page::P
                 e[0] = None;
             }
             if p.plot.style.as_ref().is_none_or(|s| s.color.is_none()) {
-                p.style.color = if layer.color_map == crate::colormap::ColorMap::Origin {
+                p.style.color = if layer.color_map == crate::colormap::ColorMap::Classic {
                     crate::SeriesColor::Palette(0)
                 } else {
                     crate::SeriesColor::Rgb(layer.color_map.sample(0.0))

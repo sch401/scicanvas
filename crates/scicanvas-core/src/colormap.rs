@@ -6,16 +6,25 @@ use serde::{Deserialize, Serialize};
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub enum ColorMap {
     #[default]
-    Origin,
+    #[cfg_attr(feature = "serde", serde(rename = "Origin"))]
+    Classic,
     Viridis,
     Colorblind,
 }
 
 impl ColorMap {
+    pub fn label(self) -> &'static str {
+        match self {
+            Self::Classic => "经典分类色",
+            Self::Viridis => "Viridis（连续）",
+            Self::Colorblind => "色盲友好",
+        }
+    }
+
     pub fn sample(self, t: f64) -> (u8, u8, u8) {
         let t = if t.is_finite() { t.clamp(0.0, 1.0) } else { 0.0 };
         match self {
-            Self::Origin => crate::PALETTE[(t * (crate::PALETTE.len() - 1) as f64).round() as usize],
+            Self::Classic => crate::PALETTE[(t * (crate::PALETTE.len() - 1) as f64).round() as usize],
             Self::Colorblind => {
                 const COLORS: [(u8, u8, u8); 8] = [
                     (0, 114, 178),

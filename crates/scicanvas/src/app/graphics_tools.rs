@@ -66,7 +66,7 @@ impl SciApp {
                     .graph(id)
                     .map(|g| GraphTheme::capture(&g.page.layers()[self.layer_index(id)]))
             })
-            .unwrap_or_else(GraphTheme::nature);
+            .unwrap_or_else(GraphTheme::builtin);
         self.dialog = Some(Dialog::GraphThemes(Box::new(dialogs::GraphThemeEditor {
             pending_remove: None,
             default: self.settings.default_graph_theme.as_ref().is_some_and(|t| {

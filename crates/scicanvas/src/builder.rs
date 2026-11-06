@@ -184,7 +184,7 @@ fn select_plot_type(layer: &mut Layer, kind: PlotType) -> Result<(), String> {
     layer.set_plot_type(kind)?;
     if previous != kind
         && matches!(kind, PlotType::ColorScatter | PlotType::BubbleColor)
-        && layer.color_map == ColorMap::Origin
+        && layer.color_map == ColorMap::Classic
     {
         layer.color_map = ColorMap::Viridis;
     }
@@ -224,8 +224,8 @@ fn column_chips(ui: &mut egui::Ui, book: &scicanvas_core::Book) {
 
 fn palette_choices(ui: &mut egui::Ui, layer: &mut Layer) {
     ui.horizontal_wrapped(|ui| {
-        ui.selectable_value(&mut layer.color_map, ColorMap::Origin, "分类色（Origin）");
-        ui.selectable_value(&mut layer.color_map, ColorMap::Viridis, "Viridis（连续）");
-        ui.selectable_value(&mut layer.color_map, ColorMap::Colorblind, "色盲友好");
+        for color_map in [ColorMap::Classic, ColorMap::Viridis, ColorMap::Colorblind] {
+            ui.selectable_value(&mut layer.color_map, color_map, color_map.label());
+        }
     });
 }

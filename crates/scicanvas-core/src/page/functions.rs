@@ -89,7 +89,7 @@ impl Layer {
             let len = points.len();
             let color = function.style.color.map_or_else(
                 || {
-                    if self.color_map == crate::colormap::ColorMap::Origin {
+                    if self.color_map == crate::colormap::ColorMap::Classic {
                         crate::SeriesColor::Palette(plots.len())
                     } else {
                         crate::SeriesColor::Rgb(

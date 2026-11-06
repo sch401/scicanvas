@@ -366,7 +366,7 @@ fn source_group_3() -> Vec<(&'static str, String)> {
     ]
 }
 
-/// 图类型画廊缩略图：白底，Origin 默认配色，两种主题通用。
+/// 图类型画廊缩略图：白底，默认配色，两种主题通用。
 /// 图型缩略图：功能区画廊与悬停说明共用。配色与实际出图一致（深蓝、砖红）。
 fn base_thumbnails() -> Vec<(&'static str, String)> {
     vec![

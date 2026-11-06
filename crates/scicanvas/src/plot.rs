@@ -499,7 +499,7 @@ pub fn page_rect(canvas: Rect, size: [f64; 2]) -> Rect {
     Rect::from_center_size(inner.center(), logical * scale)
 }
 
-/// Origin 式画布：灰色工作区里放一张带阴影和细边框的白色页面。
+/// 固定页面画布：灰色工作区里放一张带阴影和细边框的白色页面。
 fn paint_canvas(ui: &egui::Ui, canvas: Rect, page: Rect) {
     let painter = ui.painter_at(canvas);
     let dark = ui.visuals().dark_mode;

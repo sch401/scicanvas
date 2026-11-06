@@ -21,8 +21,8 @@ pub struct GraphTheme {
     pub color_map: ColorMap,
 }
 impl GraphTheme {
-    pub const BUILTIN: &'static str = "默认（Nature）";
-    pub fn nature() -> Self {
+    pub const BUILTIN: &'static str = "内置默认";
+    pub fn builtin() -> Self {
         let mut theme = Self::capture(&Layer::default());
         theme.name = Self::BUILTIN.into();
         theme
@@ -120,6 +120,25 @@ impl crate::Project {
 }
 
 impl crate::Project {
+    pub(crate) fn rename_builtin_graph_theme(&mut self) -> bool {
+        let Some(index) = self
+            .graph_themes
+            .iter()
+            .position(|theme| theme.name == GraphTheme::BUILTIN)
+        else {
+            return false;
+        };
+        let names: std::collections::BTreeSet<_> = self.graph_themes.iter().map(|theme| theme.name.as_str()).collect();
+        let mut name = "内置默认（项目）".to_string();
+        let mut number = 2;
+        while names.contains(name.as_str()) {
+            name = format!("内置默认（项目 {number}）");
+            number += 1;
+        }
+        self.graph_themes[index].name = name;
+        true
+    }
+
     pub(crate) fn validate_graph_themes(&self) -> Result<(), String> {
         let mut theme_names = std::collections::BTreeSet::new();
         for theme in &self.graph_themes {

@@ -497,7 +497,7 @@ mod tests {
         let mut p = Project::sample();
         p.books.reserve(3);
         p.graphs.reserve(2);
-        let mut theme = crate::graph_theme::GraphTheme::nature();
+        let mut theme = crate::graph_theme::GraphTheme::builtin();
         theme.name = reserved("Science", 512);
         p.graph_themes.push(theme);
         let layer = p.graphs[0].first_layer_mut();

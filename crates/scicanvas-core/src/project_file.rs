@@ -174,6 +174,10 @@ pub fn migrate(mut value: Value) -> Result<Value, String> {
 }
 
 pub fn from_json(text: &str) -> Result<Project, String> {
+    from_json_with_theme_notice(text).map(|(project, _)| project)
+}
+
+fn from_json_with_theme_notice(text: &str) -> Result<(Project, bool), String> {
     let mut value: Value = serde_json::from_str(text).map_err(|e| format!("JSON 格式错误：{e}"))?;
     let old_version = value.get("version").and_then(Value::as_u64).unwrap_or(0);
     if old_version < 21 {
@@ -229,8 +233,9 @@ pub fn from_json(text: &str) -> Result<Project, String> {
         .max()
         .unwrap_or(0);
     project.next_id = project.next_id.max(max_id.checked_add(1).ok_or("项目对象编号已用尽")?);
+    let renamed_theme = project.rename_builtin_graph_theme();
     validate(&project)?;
-    Ok(project)
+    Ok((project, renamed_theme))
 }
 
 pub fn to_json(project: &Project) -> Result<String, String> {
@@ -802,6 +807,10 @@ fn scv_text(zip: &mut zip::ZipArchive<Cursor<&[u8]>>, name: &str) -> Result<Opti
 
 /// 只读取 `project.json`；`tables/`、`graphs/` 下的预览文件即使被修改或删除也不影响打开。
 pub fn from_scv(bytes: &[u8]) -> Result<Project, String> {
+    from_scv_with_theme_notice(bytes).map(|(project, _)| project)
+}
+
+fn from_scv_with_theme_notice(bytes: &[u8]) -> Result<(Project, bool), String> {
     let mut zip = zip::ZipArchive::new(Cursor::new(bytes)).map_err(|e| format!("不是有效的 .scv 文件：{e}"))?;
     if let Some(mimetype) = scv_text(&mut zip, "mimetype")? {
         if mimetype.trim() != SCV_MIMETYPE {
@@ -821,20 +830,29 @@ pub fn from_scv(bytes: &[u8]) -> Result<Project, String> {
         }
     }
     let json = scv_text(&mut zip, PROJECT_ENTRY)?.ok_or("压缩包缺少 project.json")?;
-    from_json(&json)
+    from_json_with_theme_notice(&json)
 }
 
 /// 按内容识别格式：ZIP 文件头为 `.scv`，否则按旧版 JSON 读取。
 pub fn from_bytes(bytes: &[u8]) -> Result<Project, String> {
+    from_bytes_with_theme_notice(bytes).map(|(project, _)| project)
+}
+
+fn from_bytes_with_theme_notice(bytes: &[u8]) -> Result<(Project, bool), String> {
     if bytes.starts_with(b"PK") {
-        return from_scv(bytes);
+        return from_scv_with_theme_notice(bytes);
     }
     let text = std::str::from_utf8(bytes).map_err(|_| "项目文件既不是 .scv 压缩包，也不是 UTF-8 JSON")?;
-    from_json(text.trim_start_matches('\u{feff}'))
+    from_json_with_theme_notice(text.trim_start_matches('\u{feff}'))
 }
 
 pub fn load(path: &Path) -> Result<Project, String> {
     from_bytes(&std::fs::read(path).map_err(|e| e.to_string())?)
+}
+
+/// 读取项目并返回是否为兼容内置主题名称而进行了重命名；提示不写入项目文件。
+pub fn load_with_theme_notice(path: &Path) -> Result<(Project, bool), String> {
+    from_bytes_with_theme_notice(&std::fs::read(path).map_err(|e| e.to_string())?)
 }
 
 /// 扩展名为 `.scproj` 时保存旧版 JSON，其余（含 `.scv`）保存为压缩包。

@@ -115,7 +115,7 @@ impl GraphThemeEditor {
                     }
                 });
                 form(ui, "theme-list", |f| {
-                    for theme in std::iter::once(GraphTheme::nature()).chain(project.graph_themes.iter().cloned()) {
+                    for theme in std::iter::once(GraphTheme::builtin()).chain(project.graph_themes.iter().cloned()) {
                         f.row(&theme.name, |ui| {
                             ui.horizontal(|ui| {
                                 if ui.button("应用").clicked() {

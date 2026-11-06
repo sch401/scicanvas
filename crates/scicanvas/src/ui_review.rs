@@ -1038,3 +1038,42 @@ fn u6_group_icons_are_distinct() {
     }
     assert!(duplicates.is_empty(), "{duplicates:?}");
 }
+
+#[test]
+fn product_source_literals_use_neutral_wording() {
+    fn scan(path: &std::path::Path) {
+        for entry in std::fs::read_dir(path).unwrap() {
+            let path = entry.unwrap().path();
+            if path.is_dir() {
+                if path.file_name().unwrap() != "tests" {
+                    scan(&path);
+                }
+                continue;
+            }
+            if path.extension().is_none_or(|extension| extension != "rs")
+                || path.file_name().is_some_and(|name| name == "ui_review.rs")
+            {
+                continue;
+            }
+            let source = std::fs::read_to_string(&path).unwrap();
+            for (offset, text) in rust_ui_literals(&source) {
+                let legacy_wire_name = path.file_name().unwrap() == "colormap.rs"
+                    && source[..offset].trim_end().ends_with("serde(rename =");
+                if legacy_wire_name {
+                    continue;
+                }
+                for word in text.split(|character: char| !character.is_ascii_alphabetic()) {
+                    assert!(
+                        !["Origin", "Nature", "CHM", "LabTalk"].contains(&word),
+                        "product wording at {}:{}",
+                        path.display(),
+                        offset
+                    );
+                }
+            }
+        }
+    }
+    let native = std::path::Path::new(env!("CARGO_MANIFEST_DIR"));
+    scan(&native.join("src"));
+    scan(&native.parent().unwrap().join("scicanvas-core/src"));
+}

@@ -1,7 +1,7 @@
 //! 内置模型定义、公式与 Voigt 线形。
 use std::f64::consts::{LN_2 as LN2, PI};
 
-/// 内置拟合函数。峰、指数、S 形和幂函数的公式与参数名与 Origin 相同；
+/// 内置拟合函数。峰、指数、S 形和幂函数的公式与参数名采用常用定义；
 /// 吸附与酶动力学函数使用文献通用写法（x 为浓度或时间）。
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 #[cfg_attr(feature = "serde", derive(serde::Serialize, serde::Deserialize))]

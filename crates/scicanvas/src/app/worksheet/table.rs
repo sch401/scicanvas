@@ -222,7 +222,7 @@ impl SheetFrame {
                 if resp.clicked() || (resp.secondary_clicked() && !self.sel_flags[ci]) {
                     self.clicked = Some(ci);
                 }
-                // 双击列标题打开列属性（与 Origin 相同）
+                // 双击列标题打开列属性（采用常用定义）
                 if resp.double_clicked() {
                     self.action = Some((ci, ColAction::Props));
                 }

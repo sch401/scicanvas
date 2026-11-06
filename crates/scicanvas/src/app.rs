@@ -910,15 +910,23 @@ impl SciApp {
         self.request_discard(PendingDiscard::Open(path.to_path_buf()));
     }
     fn open_path_now(&mut self, path: &std::path::Path) {
-        match scicanvas_core::project_file::load(path) {
-            Ok(p) => {
+        match scicanvas_core::project_file::load_with_theme_notice(path) {
+            Ok((p, renamed_theme)) => {
                 self.clear_recovery();
                 self.load_project(p, Some(path.to_path_buf()));
                 self.settings.remember(path);
                 self.persist_settings();
-                self.status_ok(format!("已打开 {}", path.display()));
+                self.project_loaded_status(format!("已打开 {}", path.display()), renamed_theme);
             }
             Err(e) => self.status_err(format!("无法打开项目：{}", e)),
+        }
+    }
+
+    fn project_loaded_status(&mut self, message: String, renamed_theme: bool) {
+        if renamed_theme {
+            self.status_warn(format!("{message}；与内置默认主题重名的项目主题已自动重命名"));
+        } else {
+            self.status_ok(message);
         }
     }
 
@@ -2036,7 +2044,7 @@ impl SciApp {
                     });
             }
             self.prepare_modal_focus(ctx);
-            // 子窗口放在面板之间剩下的区域里（Origin 的 MDI 工作区）
+            // 子窗口放在面板之间剩下的区域里
             self.refresh_book_preview();
             self.child_windows(ctx);
             egui::CentralPanel::default()
@@ -2259,16 +2267,16 @@ impl SciApp {
     fn restore_recovery(&mut self, path: &std::path::Path) {
         match (
             scicanvas_core::project_file::session::lock_recovery(path),
-            scicanvas_core::project_file::load(path),
+            scicanvas_core::project_file::load_with_theme_notice(path),
         ) {
-            (Ok(lock), Ok(mut project)) => {
+            (Ok(lock), Ok((mut project, renamed_theme))) => {
                 project.recalc_computed(false);
                 let source = scicanvas_core::project_file::session::recovery_source(path);
                 self.load_project(project, source);
                 self.saved_generation = None;
                 self.recovery_file = Some(path.to_path_buf());
                 self.recovery_lock = Some(lock);
-                self.status_ok("已恢复自动备份，请保存项目".into());
+                self.project_loaded_status("已恢复自动备份，请保存项目".into(), renamed_theme);
             }
             (_, Err(error)) => self.status_err(format!("恢复失败：{error}")),
             (Err(error), _) => self.status_err(format!("恢复文件正在使用：{error}")),
