@@ -4,6 +4,40 @@ use super::*;
 use scicanvas_core::plotspec::{default_x, BookLookup, DataRef};
 
 impl SciApp {
+    pub(super) fn reference_window(&mut self, ctx: &egui::Context) {
+        let Some((gid, index)) = self.reference_for else { return };
+        let Some(graph) = self.project.graph(gid) else {
+            self.reference_for = None;
+            return;
+        };
+        let Some(before) = graph.page.layers().get(index).cloned() else {
+            self.reference_for = None;
+            return;
+        };
+        let title = format!("参考线 — {} / 图层 {}", graph.name, index + 1);
+        let mut after = before.clone();
+        let mut group = None;
+        let mut open = true;
+        dialogs::window(ctx, &title)
+            .id(egui::Id::new("reference-lines-window"))
+            .open(&mut open)
+            .default_width(480.)
+            .show(ctx, |ui| {
+                dialogs::live_hint(ui);
+                dialogs::form(ui, "reference-lines-editor", |ui| {
+                    reference_lines(ui, &mut after, gid, &mut group);
+                });
+            });
+        if after != before {
+            self.edit_grouped("编辑参考线", group, |project| {
+                project.graph_mut(gid).unwrap().page.layers_mut()[index] = after
+            });
+        }
+        if !open {
+            self.reference_for = None;
+        }
+    }
+
     pub(super) fn props_window(&mut self, ctx: &egui::Context) {
         let Some(gid) = self.props_for else { return };
         let Some(g0) = self.project.graph(gid) else {
@@ -156,19 +190,16 @@ impl SciApp {
     }
 }
 
-fn props_section(ui: &mut egui::Ui, key: &str, title: &str, open: bool, content: impl FnOnce(&mut egui::Ui)) {
+fn props_section(ui: &mut egui::Ui, key: &str, title: &str, open: bool, content: impl FnOnce(&mut dialogs::Form<'_>)) {
     egui::CollapsingHeader::new(title)
         .id_salt(("props-section", key))
         .default_open(open)
         .show(ui, |ui| {
-            egui::Grid::new(("props-form", key))
-                .num_columns(2)
-                .spacing([crate::theme::space::M, crate::theme::space::S])
-                .show(ui, content);
+            dialogs::form(ui, ("props-form", key), content);
         });
 }
 
-fn color_mapping(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, group: &mut Option<egui::Id>) {
+fn color_mapping(ui: &mut dialogs::Form<'_>, g: &mut scicanvas_core::page::Layer, group: &mut Option<egui::Id>) {
     use scicanvas_core::{colormap::ColorMap, page::ColorScale};
     ui.label("色表");
     let response = egui::ComboBox::from_id_salt("props-color-map")
@@ -319,7 +350,7 @@ fn source_options(project: &Project) -> SourceOptions {
     }
 }
 
-fn page(ui: &mut egui::Ui, graph: &mut scicanvas_core::Graph, group: &mut Option<egui::Id>) {
+fn page(ui: &mut dialogs::Form<'_>, graph: &mut scicanvas_core::Graph, group: &mut Option<egui::Id>) {
     ui.label("页面尺寸");
     ui.horizontal_wrapped(|ui| {
         for value in [&mut graph.page.width_mm, &mut graph.page.height_mm] {
@@ -336,12 +367,12 @@ fn page(ui: &mut egui::Ui, graph: &mut scicanvas_core::Graph, group: &mut Option
         for (i, side) in ["左", "上", "右", "下"].into_iter().enumerate() {
             let span = if i % 2 == 0 { page.width_mm } else { page.height_mm };
             let max = (span - page.margin_mm[(i + 2) % 4] - 1.).max(0.);
-            ui.label(side);
             edit_group(
                 &ui.add(
                     egui::DragValue::new(&mut page.margin_mm[i])
                         .range(0.0..=max)
                         .speed(0.5)
+                        .prefix(format!("{side} "))
                         .suffix(" mm"),
                 ),
                 group,
@@ -364,7 +395,7 @@ fn page(ui: &mut egui::Ui, graph: &mut scicanvas_core::Graph, group: &mut Option
     ui.end_row();
 }
 fn page_layout(
-    ui: &mut egui::Ui,
+    ui: &mut dialogs::Form<'_>,
     graph: &mut scicanvas_core::Graph,
     mut selected: usize,
     group: &mut Option<egui::Id>,
@@ -397,7 +428,13 @@ fn page_layout(
     ui.end_row();
     selected
 }
-fn layer(ui: &mut egui::Ui, graph: &mut scicanvas_core::Graph, _gid: u64, index: usize, group: &mut Option<egui::Id>) {
+fn layer(
+    ui: &mut dialogs::Form<'_>,
+    graph: &mut scicanvas_core::Graph,
+    _gid: u64,
+    index: usize,
+    group: &mut Option<egui::Id>,
+) {
     let count = graph.page.layers().len();
     let g = &mut graph.page.layers_mut()[index];
     for (label, link) in [("联动 X 轴", &mut g.link_x), ("联动 Y 轴", &mut g.link_y)] {
@@ -439,7 +476,7 @@ fn layer(ui: &mut egui::Ui, graph: &mut scicanvas_core::Graph, _gid: u64, index:
 }
 
 fn data_source(
-    ui: &mut egui::Ui,
+    ui: &mut dialogs::Form<'_>,
     g: &mut scicanvas_core::page::Layer,
     book_specs: &[(u64, String, Option<scicanvas_core::plotspec::PlotSpec>)],
 ) {
@@ -517,7 +554,7 @@ fn data_source(
     ui.end_row();
 }
 
-fn columns(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, cols: &[(String, String)]) {
+fn columns(ui: &mut dialogs::Form<'_>, g: &mut scicanvas_core::page::Layer, cols: &[(String, String)]) {
     ui.label("X 列");
     let x_text = g
         .x_key
@@ -550,7 +587,7 @@ fn columns(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, cols: &[(Stri
 }
 
 fn foreign_curves(
-    ui: &mut egui::Ui,
+    ui: &mut dialogs::Form<'_>,
     g: &mut scicanvas_core::page::Layer,
     book_specs: &[(u64, String, Option<scicanvas_core::plotspec::PlotSpec>)],
     curve_options: &CurveOptions,
@@ -601,7 +638,7 @@ fn foreign_curves(
     }
 }
 
-fn titles(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_group: &mut Option<egui::Id>) {
+fn titles(ui: &mut dialogs::Form<'_>, g: &mut scicanvas_core::page::Layer, history_group: &mut Option<egui::Id>) {
     ui.label("文字格式");
     ui.checkbox(&mut g.rich_text, "启用科学文字格式")
         .on_hover_text("支持上下标、局部粗体斜体和希腊字母。关闭时按原文显示。");
@@ -627,7 +664,7 @@ fn titles(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_group:
 }
 
 fn number_format(
-    ui: &mut egui::Ui,
+    ui: &mut dialogs::Form<'_>,
     label: &str,
     id: &str,
     value: &mut scicanvas_core::format::NumberFormat,
@@ -656,7 +693,7 @@ fn number_format(
     ui.end_row();
 }
 fn range_controls(
-    ui: &mut egui::Ui,
+    ui: &mut dialogs::Form<'_>,
     auto: &mut bool,
     min: &mut f64,
     max: &mut f64,
@@ -682,7 +719,7 @@ fn range_controls(
     ui.end_row();
 }
 fn axes(
-    ui: &mut egui::Ui,
+    ui: &mut dialogs::Form<'_>,
     g: &mut scicanvas_core::page::Layer,
     group: &mut Option<egui::Id>,
     actual: &scicanvas_core::coord::AxisSet,
@@ -756,7 +793,7 @@ fn axes(
 }
 
 fn axis_controls(
-    ui: &mut egui::Ui,
+    ui: &mut dialogs::Form<'_>,
     g: &mut scicanvas_core::page::Layer,
     x: bool,
     group: &mut Option<egui::Id>,
@@ -818,7 +855,7 @@ fn axis_controls(
 }
 
 fn axis_style_controls(
-    ui: &mut egui::Ui,
+    ui: &mut dialogs::Form<'_>,
     style: &mut scicanvas_core::page::AxisStyle,
     scale: f64,
     group: &mut Option<egui::Id>,
@@ -898,7 +935,7 @@ fn axis_style_controls(
 }
 
 fn auto_pt(
-    ui: &mut egui::Ui,
+    ui: &mut dialogs::Form<'_>,
     (key, label): (&str, &str),
     value: &mut Option<f32>,
     automatic: f32,
@@ -942,7 +979,7 @@ fn auto_pt(
 }
 
 fn spacing_controls(
-    ui: &mut egui::Ui,
+    ui: &mut dialogs::Form<'_>,
     label: &str,
     spacing: &mut scicanvas_core::page::TickSpacing,
     axis: &scicanvas_core::ticks::Axis,
@@ -1044,7 +1081,11 @@ fn spacing_controls(
     }
 }
 
-fn curve_offset_options(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_group: &mut Option<egui::Id>) {
+fn curve_offset_options(
+    ui: &mut dialogs::Form<'_>,
+    g: &mut scicanvas_core::page::Layer,
+    history_group: &mut Option<egui::Id>,
+) {
     if g.offset.is_none() && !matches!(g.plot_type, PlotType::OffsetLine | PlotType::Waterfall) {
         return;
     }
@@ -1064,7 +1105,11 @@ fn curve_offset_options(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, 
     }
 }
 
-fn histogram_options(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_group: &mut Option<egui::Id>) {
+fn histogram_options(
+    ui: &mut dialogs::Form<'_>,
+    g: &mut scicanvas_core::page::Layer,
+    history_group: &mut Option<egui::Id>,
+) {
     use scicanvas_core::page::{HistogramBins, HistogramOptions};
     if g.plot_type != PlotType::Histogram {
         return;
@@ -1149,15 +1194,13 @@ fn histogram_options(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, his
         g.histogram = options;
     } else {
         ui.label("设置提示");
-        ui.colored_label(
-            crate::theme::palette_for(ui.ctx()).error,
-            "区间数需为 1–10000，宽度为正数，起点小于终点。",
-        );
+        let error_color = crate::theme::palette_for(ui.ctx()).error;
+        ui.colored_label(error_color, "区间数需为 1–10000，宽度为正数，起点小于终点。");
         ui.end_row();
     }
 }
 
-fn layer_style(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_group: &mut Option<egui::Id>) {
+fn layer_style(ui: &mut dialogs::Form<'_>, g: &mut scicanvas_core::page::Layer, history_group: &mut Option<egui::Id>) {
     ui.label("线宽");
     edit_group(
         &ui.add(
@@ -1194,7 +1237,7 @@ fn layer_style(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_g
 }
 
 fn labels(
-    ui: &mut egui::Ui,
+    ui: &mut dialogs::Form<'_>,
     g: &mut scicanvas_core::page::Layer,
     cols: &[(String, String)],
     history_group: &mut Option<egui::Id>,
@@ -1264,7 +1307,7 @@ fn labels(
     }
 }
 
-fn error_bars(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_group: &mut Option<egui::Id>) {
+fn error_bars(ui: &mut dialogs::Form<'_>, g: &mut scicanvas_core::page::Layer, history_group: &mut Option<egui::Id>) {
     ui.label("误差棒");
     ui.checkbox(&mut g.error_bars.visible, "显示 X / Y 误差");
     ui.end_row();
@@ -1293,7 +1336,7 @@ fn error_bars(ui: &mut egui::Ui, g: &mut scicanvas_core::page::Layer, history_gr
 }
 
 fn reference_lines(
-    ui: &mut egui::Ui,
+    ui: &mut dialogs::Form<'_>,
     g: &mut scicanvas_core::page::Layer,
     gid: u64,
     history_group: &mut Option<egui::Id>,
@@ -1484,7 +1527,11 @@ fn curve_style(
     }
 }
 
-fn pattern_properties(ui: &mut egui::Ui, style: &mut scicanvas_core::page::CurveStyle, group: &mut Option<egui::Id>) {
+fn pattern_properties(
+    ui: &mut dialogs::Form<'_>,
+    style: &mut scicanvas_core::page::CurveStyle,
+    group: &mut Option<egui::Id>,
+) {
     use scicanvas_core::page::PatternKind;
     let mut kind = style.pattern.map(|p| p.kind);
     ui.label("填充图案");
@@ -1547,7 +1594,7 @@ fn pattern_properties(ui: &mut egui::Ui, style: &mut scicanvas_core::page::Curve
 }
 
 fn point_style_properties(
-    ui: &mut egui::Ui,
+    ui: &mut dialogs::Form<'_>,
     gid: u64,
     key: &DataRef,
     style: &mut scicanvas_core::page::CurveStyle,
@@ -1730,7 +1777,7 @@ fn source_rows(
     }
 }
 fn function_properties(
-    ui: &mut egui::Ui,
+    ui: &mut dialogs::Form<'_>,
     g: &mut scicanvas_core::page::Layer,
     group: &mut Option<egui::Id>,
 ) -> Option<usize> {
@@ -1827,9 +1874,9 @@ mod histogram_tests {
             Some(egui::vec2(700., 500.)),
             |state: &mut (CurveStyle, Option<egui::Id>), ctx: &egui::Context| {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    egui::Grid::new("pattern-controls")
-                        .num_columns(2)
-                        .show(ui, |ui| super::pattern_properties(ui, &mut state.0, &mut state.1));
+                    dialogs::form(ui, "pattern-controls", |ui| {
+                        super::pattern_properties(ui, &mut state.0, &mut state.1)
+                    });
                 });
             },
         );
@@ -2047,7 +2094,8 @@ mod range_review_tests {
             Some(egui::vec2(600., 200.)),
             |values: &mut (bool, f64, f64), ctx: &egui::Context| {
                 egui::CentralPanel::default().show(ctx, |ui| {
-                    egui::Grid::new("range-review").show(ui, |ui| {
+                    dialogs::form(ui, "range-review", |ui| {
+                        ui.label("范围");
                         range_controls(ui, &mut values.0, &mut values.1, &mut values.2, [2., 8.], &mut None)
                     });
                 });

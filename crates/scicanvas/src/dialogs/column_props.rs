@@ -169,7 +169,7 @@ impl Dialog {
                     }
                 }
                 ui.end_row();
-                let preview = match (edit.kind, sample) {
+                let preview = match (edit.kind, sample.as_ref()) {
                     (DataKind::Num, Some(v)) => Some(edit.format.number.apply(*v).unwrap_or_else(|| fmt_num(*v))),
                     (DataKind::DateTime, Some(ms)) => edit.format.date.apply_in(*ms as i64, edit.format.utc_offset),
                     _ => None,

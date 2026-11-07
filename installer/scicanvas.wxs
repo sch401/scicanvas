@@ -1,50 +1,24 @@
 <?xml version="1.0" encoding="utf-8"?>
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <Package Name="SciCanvas" Manufacturer="SciCanvas" Version="$(var.Version)"
+           Language="2052" Codepage="65001"
            UpgradeCode="{B23A1965-9D4C-45E7-9549-71E074996F32}" Scope="perUser">
-    <MajorUpgrade DowngradeErrorMessage="已安装更新版本的 SciCanvas。" Schedule="afterInstallInitialize" AllowSameVersionUpgrades="yes" />
+    <MajorUpgrade DowngradeErrorMessage="已安装更新版本的 SciCanvas。" Schedule="afterInstallInitialize"
+                  AllowSameVersionUpgrades="yes" IgnoreLanguage="yes" />
     <MediaTemplate EmbedCab="yes" />
     <Feature Id="Application" Title="SciCanvas" Level="1">
       <ComponentGroupRef Id="Payload" />
     </Feature>
-    <Property Id="DefaultUIFont" Value="DefaultFont" />
+    <Icon Id="ProductIcon" SourceFile="$(var.InstallerAssets)/product.ico" />
+    <Property Id="ARPPRODUCTICON" Value="ProductIcon" />
     <Property Id="DELETEUSERDATA" Secure="yes" />
+    <Property Id="WIXUI_EXITDIALOGOPTIONALTEXT" Value="现在可以从开始菜单打开 SciCanvas。感谢使用！" />
+    <ui:WixUI Id="WixUI_InstallDir" InstallDirectory="INSTALLFOLDER" />
+    <WixVariable Id="WixUIDialogBmp" Value="$(var.InstallerAssets)/dialog.bmp" />
+    <WixVariable Id="WixUIBannerBmp" Value="$(var.InstallerAssets)/banner.bmp" />
+    <WixVariable Id="WixUILicenseRtf" Value="$(var.InstallerAssets)/license.rtf" />
     <UI>
-      <TextStyle Id="DefaultFont" FaceName="Segoe UI" Size="9" />
-      <TextStyle Id="HeadingFont" FaceName="Segoe UI" Size="14" Bold="yes" />
-      <Dialog Id="WelcomeDialog" Width="370" Height="210" Title="SciCanvas 安装向导">
-        <Control Id="Heading" Type="Text" X="20" Y="20" Width="330" Height="25"
-                 Text="{\HeadingFont}欢迎安装 SciCanvas" />
-        <Control Id="Description" Type="Text" X="20" Y="60" Width="330" Height="35"
-                 Text="向导将安装或更新 SciCanvas，并添加开始菜单快捷方式。" />
-        <Control Id="Location" Type="Text" X="20" Y="105" Width="330" Height="40"
-                 Text="安装位置：[INSTALLFOLDER]" />
-        <Control Id="Install" Type="PushButton" X="205" Y="175" Width="65" Height="20" Default="yes" Text="安装">
-          <Publish Event="EndDialog" Value="Return" />
-        </Control>
-        <Control Id="Cancel" Type="PushButton" X="280" Y="175" Width="65" Height="20" Cancel="yes" Text="取消">
-          <Publish Event="EndDialog" Value="Exit" />
-        </Control>
-      </Dialog>
-      <Dialog Id="ProgressDialog" Width="370" Height="150" Title="SciCanvas 安装向导" Modeless="yes">
-        <Control Id="Heading" Type="Text" X="20" Y="20" Width="330" Height="25"
-                 Text="正在安装，请稍候…" TabSkip="no" />
-        <Control Id="Status" Type="Text" X="20" Y="55" Width="330" Height="25">
-          <Subscribe Event="ActionText" Attribute="Text" />
-        </Control>
-        <Control Id="Progress" Type="ProgressBar" X="20" Y="95" Width="330" Height="15" ProgressBlocks="yes">
-          <Subscribe Event="SetProgress" Attribute="Progress" />
-        </Control>
-      </Dialog>
-      <Dialog Id="CompletedDialog" Width="370" Height="180" Title="SciCanvas 安装完成">
-        <Control Id="Heading" Type="Text" X="20" Y="20" Width="330" Height="25"
-                 Text="{\HeadingFont}SciCanvas 安装完成" />
-        <Control Id="Description" Type="Text" X="20" Y="65" Width="330" Height="45"
-                 Text="可以在开始菜单中搜索 SciCanvas 来启动程序。点击“完成”关闭安装向导。" />
-        <Control Id="Finish" Type="PushButton" X="280" Y="140" Width="65" Height="20" Default="yes" Cancel="yes" Text="完成">
-          <Publish Event="EndDialog" Value="Return" />
-        </Control>
-      </Dialog>
       <Dialog Id="RemoveDataDialog" Width="370" Height="150" Title="卸载 SciCanvas">
         <Control Id="Question" Type="Text" X="20" Y="20" Width="330" Height="35"
                  Text="卸载程序时是否同时删除本机的 SciCanvas 恢复数据？默认保留数据。" />
@@ -54,16 +28,13 @@
           <Publish Event="EndDialog" Value="Return" />
         </Control>
         <Control Id="Cancel" Type="PushButton" X="280" Y="115" Width="65" Height="18" Cancel="yes" Text="取消">
-          <Publish Event="EndDialog" Value="Exit" />
+          <Publish Event="SpawnDialog" Value="CancelDlg" />
         </Control>
       </Dialog>
     </UI>
     <CustomAction Id="RemoveUserData" Directory="SystemFolder" Execute="immediate" Return="ignore"
                   ExeCommand="cmd.exe /c rmdir /s /q &quot;[LocalAppDataFolder]SciCanvas&quot;" />
     <InstallUISequence>
-      <Show Dialog="WelcomeDialog" Before="ProgressDialog" Condition="NOT REMOVE~=&quot;ALL&quot;" />
-      <Show Dialog="ProgressDialog" Before="ExecuteAction" Condition="NOT REMOVE~=&quot;ALL&quot;" />
-      <Show Dialog="CompletedDialog" OnExit="success" Condition="NOT REMOVE~=&quot;ALL&quot;" />
       <Show Dialog="RemoveDataDialog" Before="ExecuteAction"
             Condition="Installed AND REMOVE=&quot;ALL&quot; AND NOT UPGRADINGPRODUCTCODE" />
     </InstallUISequence>

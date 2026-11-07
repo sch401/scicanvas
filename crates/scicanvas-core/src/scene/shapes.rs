@@ -52,12 +52,13 @@ pub fn shape_primitives(shape: &ShapeObject, w: f64, h: f64) -> Vec<Prim> {
     let mut items = Vec::new();
     match shape.kind {
         ShapeKind::Line | ShapeKind::Arrow => {
-            items.push(outline(vec![a, b], color, width, shape.dashed));
             let length = (b[0] - a[0]).hypot(b[1] - a[1]);
             if shape.kind == ShapeKind::Arrow && length > 0. && shape.head_pt > 0. {
-                let size = shape.head_pt * 96. / 72.;
+                let size = (shape.head_pt * 96. / 72.).max(width * 2.).min(length);
                 let u = [(b[0] - a[0]) / length, (b[1] - a[1]) / length];
                 let base = [b[0] - size * u[0], b[1] - size * u[1]];
+                let shaft_end = [b[0] - 2. * size / 3. * u[0], b[1] - 2. * size / 3. * u[1]];
+                items.push(outline(vec![a, shaft_end], color, width, shape.dashed));
                 items.push(Prim::Triangles {
                     pts: vec![
                         b,
@@ -67,6 +68,8 @@ pub fn shape_primitives(shape: &ShapeObject, w: f64, h: f64) -> Vec<Prim> {
                     color,
                     opacity: 1.,
                 });
+            } else {
+                items.push(outline(vec![a, b], color, width, shape.dashed));
             }
         }
         ShapeKind::Rect => {

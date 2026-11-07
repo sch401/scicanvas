@@ -630,3 +630,37 @@ fn capture_axis_style_comparison() {
         }
     }
 }
+
+#[test]
+#[ignore = "Explicit filter dropdown screenshots"]
+fn capture_filter_dropdown() {
+    let directory = std::path::PathBuf::from(std::env::var("SCICANVAS_UI_CAPTURE_DIR").unwrap());
+    std::fs::create_dir_all(&directory).unwrap();
+    let mut capture = Capture::new();
+    for theme in [egui::Theme::Light, egui::Theme::Dark] {
+        let ctx = egui::Context::default();
+        crate::theme::install(&ctx);
+        crate::fonts::setup(&ctx);
+        crate::icons::install_loaders(&ctx);
+        ctx.set_theme(theme);
+        let mut app = SciApp::initial(crate::theme::palette(theme));
+        app.active = Some(2);
+        for _ in 0..8 {
+            capture.app_frame(&ctx, &mut app, vec![]);
+        }
+        let at = ctx
+            .data(|data| {
+                data.get_temp::<(egui::Rect, egui::Rect)>(egui::Id::new(("sheet-filter-button", 1_u64, 1_usize)))
+            })
+            .unwrap()
+            .0
+            .center();
+        capture.app_frame(
+            &ctx,
+            &mut app,
+            vec![egui::Event::PointerMoved(at), crate::test_ui::button(at, true)],
+        );
+        capture.app_frame(&ctx, &mut app, vec![crate::test_ui::button(at, false)]);
+        capture.app_capture(&ctx, &mut app, &directory.join(format!("filter-{theme:?}.png")));
+    }
+}

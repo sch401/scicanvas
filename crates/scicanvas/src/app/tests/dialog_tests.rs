@@ -3677,41 +3677,6 @@ fn p8_idle_books_do_not_compute_context_menu_states() {
 }
 
 #[test]
-fn d4_wheel_view_becomes_one_undoable_axis_edit() {
-    let ctx = egui::Context::default();
-    crate::fonts::setup(&ctx);
-    let mut app = app();
-    app.active = Some(2);
-    // Use the real graph widget and wheel event, then its shared menu action.
-    let page = object_frame(&mut app, &ctx, vec![], false);
-    let scene = scicanvas_core::scene::layout_page(app.project.graph(2).unwrap(), &app.project, &[]);
-    let [x, y, w, h] = scene.plot;
-    let scale = page.width() / scene.w as f32;
-    let at = page.min + egui::vec2((x + w / 2.) as f32 * scale, (y + h / 2.) as f32 * scale);
-    object_frame(
-        &mut app,
-        &ctx,
-        vec![
-            egui::Event::PointerMoved(at),
-            egui::Event::MouseWheel {
-                unit: egui::MouseWheelUnit::Point,
-                delta: egui::vec2(0., 120.),
-                modifiers: egui::Modifiers::NONE,
-            },
-        ],
-        false,
-    );
-    let view = plot::current_view(&ctx, 2, 0).expect("wheel creates a zoomed view");
-    let before = app.project.clone();
-    app.commit_view_range(&ctx, 2, 0);
-    let layer = app.project.graph(2).unwrap().first_layer();
-    assert_eq!((layer.x_min, layer.x_max), view.x);
-    assert_eq!((layer.y_min, layer.y_max), view.y);
-    assert!(!layer.x_auto && !layer.y_auto);
-    roundtrip(&mut app, &before);
-}
-
-#[test]
 fn p13_settings_stay_above_documents_below_menus_and_modal() {
     let ctx = egui::Context::default();
     crate::fonts::setup(&ctx);
@@ -3811,4 +3776,46 @@ fn renamed_project_theme_reports_once_when_opened() {
         harness.frame(&mut app, vec![]);
     }
     assert_eq!(notices(&app), 1);
+}
+
+#[test]
+fn filter_dropdown_stays_inside_header_and_above_documents() {
+    for theme in [egui::Theme::Light, egui::Theme::Dark] {
+        for dpi in [1.0, 1.25, 1.5] {
+            let ctx = egui::Context::default();
+            crate::theme::install(&ctx);
+            crate::fonts::setup(&ctx);
+            crate::icons::install_loaders(&ctx);
+            ctx.set_theme(theme);
+            ctx.set_pixels_per_point(dpi);
+            let mut app = app();
+            app.active = Some(2);
+            let mut h = crate::test_ui::Harness::new(
+                ctx.clone(),
+                Some(egui::vec2(1280., 820.)),
+                |app: &mut SciApp, ctx: &egui::Context| app.ui_frame(ctx),
+            );
+            for _ in 0..5 {
+                h.frame(&mut app, vec![]);
+            }
+            for column in 0..3_usize {
+                let (button, header) = ctx
+                    .data(|data| {
+                        data.get_temp::<(egui::Rect, egui::Rect)>(egui::Id::new(("sheet-filter-button", 1_u64, column)))
+                    })
+                    .unwrap();
+                assert!(
+                    header.contains_rect(button),
+                    "{theme:?} {dpi} {column}: {button:?} / {header:?}"
+                );
+                h.click(&mut app, button.center());
+                let out = h.frame(&mut app, vec![]);
+                let at =
+                    crate::test_ui::find_text(&out, "筛选…").expect("filter dropdown is visible") + egui::vec2(3., 3.);
+                assert_eq!(ctx.layer_id_at(at).unwrap().order, egui::Order::Foreground);
+                assert_eq!(app.active, Some(1));
+                h.key(egui::Key::Escape, |ctx| app.ui_frame(ctx));
+            }
+        }
+    }
 }

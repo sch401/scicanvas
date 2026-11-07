@@ -124,6 +124,5 @@ pub(super) fn create(
         selected: None,
         action,
         dragging,
-        block_pan: true,
     }
 }

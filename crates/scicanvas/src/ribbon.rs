@@ -697,6 +697,11 @@ fn group(
                         ui.vertical(|ui| {
                             scale_menu(ui, true, app, clicked);
                             scale_menu(ui, false, app, clicked);
+                            if let Some(command) = commands::find("graph.reference.manage") {
+                                if small_button(ui, app, command, pal, clicked).clicked() {
+                                    *clicked = Some(command.id);
+                                }
+                            }
                         });
                     }
                 }
@@ -736,7 +741,10 @@ fn group_width(ui: &egui::Ui, group: &Group, preview_count: usize) -> f32 {
             .filter_map(|id| commands::find(id))
             .map(|c| text_width(ui, c.label, font.clone()) + 34.0)
             .fold(0.0, f32::max),
-        Scales => menu_width(ui, "X 刻度类型"),
+        Scales => menu_width(ui, "X 刻度类型").max(
+            commands::find("graph.reference.manage")
+                .map_or(0.0, |command| text_width(ui, command.label, font.clone()) + 34.0),
+        ),
         Gallery(ids) => {
             let tiles = ids
                 .iter()
@@ -778,7 +786,7 @@ fn gallery_preview_count(ui: &egui::Ui, tab: &Tab, available: f32) -> usize {
     } else {
         (available - prefix - 117.0).max(0.0)
     };
-    let limit = preferred;
+    let limit = ids.len();
     (0..=limit)
         .rev()
         .find(|&count| cumulative[count] <= budget)
@@ -1380,42 +1388,42 @@ pub fn palette(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palett
         ps.sel = ps.sel.min(list.len() - 1);
     }
 
-    let (up, down, enter, esc) = ctx.input_mut(|i| {
-        (
-            i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp),
-            i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown),
-            i.consume_key(egui::Modifiers::NONE, egui::Key::Enter),
-            i.consume_key(egui::Modifiers::NONE, egui::Key::Escape),
-        )
-    });
-    if esc {
-        st.palette = None;
-        return;
-    }
-    if up {
-        ps.sel = ps.sel.saturating_sub(1);
-    }
-    if down && ps.sel + 1 < list.len() {
-        ps.sel += 1;
-    }
-    let mut scroll = up || down || previous != ps.sel;
     let mut run: Option<&'static str> = None;
-    if enter {
-        if let Some(c) = list.get(ps.sel) {
-            run = Some(c.id);
-        }
-    }
-
     let mut close = false;
-    egui::Window::new("命令面板")
+    let mut open = true;
+    crate::dialogs::window(ctx, "命令面板")
         .id(egui::Id::new("scicanvas-palette"))
-        .constrain_to(crate::dialogs::floating_bounds(ctx))
+        .open(&mut open)
         .resizable(false)
-        .collapsible(false)
-        .pivot(Align2::CENTER_TOP)
-        .default_pos(egui::pos2(ctx.screen_rect().center().x, 80.0))
-        .fixed_size(vec2(520.0, 440.0))
+        .default_width(520.)
+        .default_height(440.)
         .show(ctx, |ui| {
+            let ctx = ui.ctx().clone();
+            let (up, down, enter, esc) = ctx.input_mut(|i| {
+                (
+                    i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowUp),
+                    i.consume_key(egui::Modifiers::NONE, egui::Key::ArrowDown),
+                    i.consume_key(egui::Modifiers::NONE, egui::Key::Enter),
+                    i.consume_key(egui::Modifiers::NONE, egui::Key::Escape),
+                )
+            });
+            if esc {
+                close = true;
+                return;
+            }
+            if up {
+                ps.sel = ps.sel.saturating_sub(1);
+            }
+            if down && ps.sel + 1 < list.len() {
+                ps.sel += 1;
+            }
+            let mut scroll = up || down || previous != ps.sel;
+            if enter {
+                if let Some(c) = list.get(ps.sel) {
+                    run = Some(c.id);
+                }
+            }
+
             let te = ui.add(
                 egui::TextEdit::singleline(&mut ps.query)
                     .hint_text("输入功能名称，例如 拟合、排序、导出")
@@ -1506,8 +1514,8 @@ pub fn palette(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palett
             ui.add_space(crate::theme::space::XS);
             ui.label(RichText::new("↑ ↓ 选择 · 回车执行 · Esc 关闭").small().color(pal.weak));
         });
-    // 点到面板外面也关闭
-    if ctx.input(|i| i.pointer.any_pressed()) {
+    // 内嵌模式中点击面板外关闭；桌面窗口使用系统关闭按钮。
+    if ctx.embed_viewports() && ctx.input(|i| i.pointer.any_pressed()) {
         let inside = ctx
             .layer_id_at(ctx.input(|i| i.pointer.interact_pos()).unwrap_or_default())
             .is_some_and(|l| l.id == egui::Id::new("scicanvas-palette"));
@@ -1519,7 +1527,7 @@ pub fn palette(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palett
         *clicked = Some(id);
         close = true;
     }
-    if close {
+    if close || !open {
         st.palette = None;
     }
 }

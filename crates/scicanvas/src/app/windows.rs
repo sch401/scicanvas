@@ -526,14 +526,6 @@ impl SciApp {
                 egui::FontId::proportional(crate::theme::size::LABEL),
                 plot::PAGE_HINT,
             );
-        } else if out.zoomed {
-            ui.painter().text(
-                rect.right_bottom() + egui::vec2(-8.0, -6.0),
-                egui::Align2::RIGHT_BOTTOM,
-                "双击恢复原始范围 · 导出按坐标轴范围",
-                egui::FontId::proportional(crate::theme::size::LABEL),
-                plot::PAGE_HINT_WEAK,
-            );
         }
 
         let (act, remove, object_action) =
@@ -548,21 +540,6 @@ impl SciApp {
             self.active = Some(id);
             self.run_command(cid);
         }
-    }
-
-    pub(super) fn commit_view_range(&mut self, ctx: &egui::Context, id: u64, index: usize) {
-        let Some(view) = plot::current_view(ctx, id, index) else {
-            return;
-        };
-        self.edit_grouped("将当前视图设为坐标范围", None, |project| {
-            let layer = &mut project.graph_mut(id).unwrap().page.layers_mut()[index];
-            (layer.x_min, layer.x_max) = view.x;
-            (layer.y_min, layer.y_max) = view.y;
-            layer.x_auto = false;
-            layer.y_auto = false;
-        });
-        plot::reset_view(ctx, id, index);
-        self.status_ok("已将当前视图设为坐标范围（Ctrl+Z 撤销）".into());
     }
 
     fn graph_context_menu(
@@ -642,8 +619,10 @@ impl SciApp {
             ui.menu_button("坐标轴", |ui| {
                 crate::ribbon::scale_menu(ui, true, self, &mut act);
                 crate::ribbon::scale_menu(ui, false, self, &mut act);
-                if crate::menus::menu_command(ui, &state, "graph.grid") {
-                    act = Some("graph.grid");
+                for command in ["graph.grid", "graph.reference.manage"] {
+                    if crate::menus::menu_command(ui, &state, command) {
+                        act = Some(command);
+                    }
                 }
             });
             for cid in ["graph.legend", "graph.labels"] {
@@ -697,17 +676,6 @@ impl SciApp {
                     }
                 }
             });
-            ui.separator();
-            let layer = self.layer_index(id);
-            if plot::current_view(ui.ctx(), id, layer).is_some() && ui.button("将当前视图设为坐标范围").clicked()
-            {
-                self.commit_view_range(ui.ctx(), id, layer);
-                ui.close_menu();
-            }
-            if ui.button("恢复原始范围").clicked() {
-                plot::reset_view(ui.ctx(), id, self.layer_index(id));
-                ui.close_menu();
-            }
         });
         (act, remove, object_action)
     }
@@ -805,11 +773,9 @@ impl SciApp {
     }
 
     pub(super) fn about_window(&mut self, ctx: &egui::Context) {
-        egui::Window::new("关于 SciCanvas")
+        dialogs::window(ctx, "关于 SciCanvas")
             .id(egui::Id::new("scicanvas-about"))
-            .constrain_to(dialogs::floating_bounds(ctx))
             .open(&mut self.show_about)
-            .collapsible(false)
             .show(ctx, |ui| {
                 ui.label(format!("版本：{}", env!("CARGO_PKG_VERSION")));
                 ui.label(format!("提交：{}", env!("SCICANVAS_COMMIT")));
@@ -818,11 +784,9 @@ impl SciApp {
     }
 
     pub(super) fn help_window(&mut self, ctx: &egui::Context) {
-        egui::Window::new("快速上手")
+        dialogs::window(ctx, "快速上手")
             .id(egui::Id::new("scicanvas-help"))
-            .constrain_to(dialogs::floating_bounds(ctx))
             .open(&mut self.show_help)
-            .collapsible(false)
             .default_width(460.0)
             .show(ctx, |ui| {
                 for text in [

@@ -1,15 +1,13 @@
-//! 图形窗口里的绘图区：把核心库排好的图元（scene）画到屏幕上，并处理缩放和平移。
+//! 图形窗口里的绘图区：把核心库排好的图元（scene）画到屏幕上，并处理对象交互。
 //!
 //! 画法和 SVG 导出共用同一份图元，屏幕上看到的就是导出的样子。
-//! 操作：滚轮缩放（以鼠标位置为中心），Shift+滚轮只缩放 X，Alt+滚轮只缩放 Y，
-//! 左键拖动平移，双击恢复原始范围。
+//! 坐标范围由图层属性控制。滚轮、触控缩放和拖动空白区域均不改变范围。
 
 mod shapes;
 
 use std::f32::consts::FRAC_PI_2;
 
 use eframe::egui::{self, pos2, vec2, Color32, Pos2, Rect, Sense, Shape, Stroke};
-use scicanvas_core::page::Layer;
 pub use scicanvas_core::scene::ObjectTarget;
 use scicanvas_core::scene::{self, Anchor, Prim, Rgb, Scene, View};
 use scicanvas_core::{Graph, Project};
@@ -20,17 +18,6 @@ use crate::fonts::plot_font;
 pub const PAGE_BG: Color32 = Color32::WHITE;
 pub const PAGE_INK: Color32 = Color32::BLACK;
 pub const PAGE_HINT: Color32 = Color32::from_gray(110);
-pub const PAGE_HINT_WEAK: Color32 = Color32::from_gray(140);
-
-/// 缩放平移后的视图，按图形保存在 egui 的临时内存里。
-/// 记下当时的坐标轴设置，在“绘图属性”里改了范围或对数轴后自动作废。
-#[derive(Clone)]
-struct Saved {
-    view: View,
-    key: [f64; 8],
-    offset: Option<scicanvas_core::page::CurveOffset>,
-    spec: scicanvas_core::page::LayerSpec,
-}
 
 /// 场景缓存：图形设置、视图和所引用的数据都没变时，复用上一帧的排版（百万点的图不必每帧重算）。
 #[derive(Clone)]
@@ -194,49 +181,14 @@ fn paint_cached(ui: &mut egui::Ui, id: egui::Id, rect: Rect, scene: &std::sync::
     }
 }
 
-fn axis_key(g: &Layer) -> [f64; 8] {
-    let b = |v: bool| if v { 1.0 } else { 0.0 };
-    [
-        b(g.x_auto),
-        g.x_min,
-        g.x_max,
-        g.effective_x_scale() as u8 as f64,
-        b(g.y_auto),
-        g.y_min,
-        g.y_max,
-        g.effective_y_scale() as u8 as f64,
-    ]
-}
-
 fn view_id(graph: u64) -> egui::Id {
     egui::Id::new(("scicanvas-plot-view", graph))
-}
-
-pub(crate) fn current_view(ctx: &egui::Context, graph: u64, index: usize) -> Option<View> {
-    ctx.data(|d| d.get_temp::<Vec<Option<Saved>>>(view_id(graph)))?
-        .get(index)?
-        .as_ref()
-        .map(|saved| saved.view)
-}
-
-/// 恢复原始范围（例如改了坐标轴设置之后）。
-pub fn reset_view(ctx: &egui::Context, graph: u64, index: usize) {
-    ctx.data_mut(|d| {
-        if let Some(mut saved) = d.get_temp::<Vec<Option<Saved>>>(view_id(graph)) {
-            if let Some(view) = saved.get_mut(index) {
-                *view = None;
-            }
-            d.insert_temp(view_id(graph), saved);
-        }
-    });
 }
 
 pub struct PlotOutput {
     pub response: egui::Response,
     /// 鼠标所在位置的数据坐标。
     pub hover: Option<(f64, f64)>,
-    /// 当前是否处于缩放 / 平移后的视图。
-    pub zoomed: bool,
     pub selected_layer: Option<usize>,
     pub hover_layer: Option<usize>,
     /// 鼠标吸附到的数据点。
@@ -288,7 +240,6 @@ struct ObjectInteraction {
     selected: Option<ObjectTarget>,
     action: Option<ObjectAction>,
     dragging: bool,
-    block_pan: bool,
 }
 fn object_position(g: &Graph, target: ObjectTarget) -> Option<Option<[f64; 2]>> {
     match target {
@@ -408,7 +359,6 @@ fn interact_objects(
     } else {
         false
     };
-    let block_pan = config.adding || drag.is_some() || (hover.is_some() && response.double_clicked());
     if config.adding && response.clicked() {
         if let Some(p) = point {
             action = Some(ObjectAction::AddText([
@@ -456,7 +406,6 @@ fn interact_objects(
         selected,
         action,
         dragging,
-        block_pan,
     }
 }
 
@@ -471,23 +420,6 @@ fn page_transform(rect: Rect, size: [f64; 2]) -> egui::emath::TSTransform {
     egui::emath::TSTransform::new(rect.min.to_vec2() + (rect.size() - logical * scale) * 0.5, scale)
 }
 
-/// 在变换后的空间里（对数轴取 lg）平移 / 缩放一个范围。
-/// shift 是按范围宽度计的平移比例，zoom 是缩放倍数，center 是缩放中心在范围里的位置（0..1）。
-fn adjust(r: (f64, f64), scale: scicanvas_core::ticks::AxisScale, shift: f64, zoom: f64, center: f64) -> (f64, f64) {
-    let (a, b) = (scale.forward(r.0), scale.forward(r.1));
-    let span = b - a;
-    let (a, b) = (a + shift * span, b + shift * span);
-    let c = a + center * (b - a);
-    let (a, b) = (c - (c - a) * zoom, c + (b - c) * zoom);
-    let (a, b) = (scale.inverse(a), scale.inverse(b));
-    if scale.range_ok(a, b) && (b - a) > 1e-12 * a.abs().max(b.abs()).max(1e-300) {
-        (a, b)
-    } else {
-        r
-    }
-}
-
-/// 画布与页面之间留出的灰边。
 const CANVAS_MARGIN: f32 = 14.0;
 
 /// 页面在画布里的位置：按页面宽高比整体缩放到能放下的最大尺寸并居中，
@@ -515,100 +447,6 @@ fn paint_canvas(ui: &egui::Ui, canvas: Rect, page: Rect) {
         0.0,
         Stroke::new(1.0_f32, Color32::from_gray(if dark { 20 } else { 110 })),
     );
-}
-
-#[derive(Clone, Copy)]
-struct ViewInput<'a> {
-    response: &'a egui::Response,
-    transform: egui::emath::TSTransform,
-    hovered: Option<usize>,
-    dragging: Option<usize>,
-    block_pan: bool,
-}
-
-fn update_saved_view(
-    ui: &mut egui::Ui,
-    id: egui::Id,
-    g: &Graph,
-    project: &Project,
-    mut sc: std::sync::Arc<Scene>,
-    saved: &mut [Option<Saved>],
-    input: ViewInput<'_>,
-) -> std::sync::Arc<Scene> {
-    let mut changed = false;
-    if let Some(index) = input.dragging.or(input.hovered).filter(|_| !input.block_pan) {
-        let layer = &g.page.layers()[index];
-        if !layer.projection.is_cartesian() || layer.plot_type == scicanvas_core::PlotType::Pie {
-            return sc;
-        }
-        let layout = &sc.layers[index];
-        if input.response.double_clicked() {
-            saved[index] = None;
-            changed = true;
-        } else {
-            let mut view = layout.view();
-            if input.dragging.is_some() {
-                let d = input.response.drag_delta();
-                if d != egui::Vec2::ZERO {
-                    view.x = adjust(
-                        view.x,
-                        layer.effective_x_scale(),
-                        -d.x as f64 / f64::from(input.transform.scaling) / layout.plot[2],
-                        1.0,
-                        0.5,
-                    );
-                    view.y = adjust(
-                        view.y,
-                        layer.effective_y_scale(),
-                        d.y as f64 / f64::from(input.transform.scaling) / layout.plot[3],
-                        1.0,
-                        0.5,
-                    );
-                    changed = true;
-                }
-            } else if let Some(p) = input.response.hover_pos() {
-                let (scroll, zoom_delta, alt) = ui.input(|i| (i.smooth_scroll_delta, i.zoom_delta(), i.modifiers.alt));
-                let (mut zx, mut zy) = (1.0, 1.0);
-                if scroll.y != 0.0 {
-                    let z = (-scroll.y as f64 * 0.0025).exp();
-                    zy = z;
-                    if !alt {
-                        zx = z;
-                    }
-                } else if scroll.x != 0.0 {
-                    zx = (-scroll.x as f64 * 0.0025).exp();
-                }
-                if zoom_delta != 1.0 {
-                    zx /= zoom_delta as f64;
-                    zy /= zoom_delta as f64;
-                }
-                if zx != 1.0 || zy != 1.0 {
-                    let (x, y) = {
-                        let point = input.transform.inverse() * p;
-                        (point.x as f64, point.y as f64)
-                    };
-                    let fx = ((x - layout.plot[0]) / layout.plot[2]).clamp(0.0, 1.0);
-                    let fy = ((layout.plot[1] + layout.plot[3] - y) / layout.plot[3]).clamp(0.0, 1.0);
-                    view.x = adjust(view.x, layer.effective_x_scale(), 0.0, zx, fx);
-                    view.y = adjust(view.y, layer.effective_y_scale(), 0.0, zy, fy);
-                    changed = true;
-                }
-            }
-            if changed {
-                saved[index] = Some(Saved {
-                    view,
-                    key: axis_key(layer),
-                    offset: layer.offset,
-                    spec: layer.spec.clone(),
-                });
-            }
-        }
-    }
-    if changed {
-        let views = saved.iter().map(|s| s.as_ref().map(|s| s.view)).collect::<Vec<_>>();
-        sc = cached_layout(ui, id, g, project, views);
-    }
-    sc
 }
 
 fn warn_dense_ticks(ui: &egui::Ui, id: egui::Id, g: &Graph, project: &Project, sc: &Scene) {
@@ -653,21 +491,7 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize, ob
         let p = transform.inverse() * p;
         (p.x as f64, p.y as f64)
     };
-    // ponytail: 视图按图层序号缓存；增删时清空，支持重排时改用稳定图层编号。
-    let mut saved = ui.data(|d| d.get_temp::<Vec<Option<Saved>>>(id)).unwrap_or_default();
-    if saved.len() != g.page.layers().len() {
-        saved = vec![None; g.page.layers().len()];
-    }
-    for (state, layer) in saved.iter_mut().zip(g.page.layers()) {
-        if state
-            .as_ref()
-            .is_some_and(|s| s.key != axis_key(layer) || s.offset != layer.offset || !s.spec.same_mapping(&layer.spec))
-        {
-            *state = None;
-        }
-    }
-    let views = |saved: &[Option<Saved>]| saved.iter().map(|s| s.as_ref().map(|s| s.view)).collect::<Vec<_>>();
-    let sc = cached_layout(ui, id, g, project, views(&saved));
+    let sc = cached_layout(ui, id, g, project, vec![]);
     warn_dense_ticks(ui, id, g, project, &sc);
     let object = interact_objects(ui, &response, g, &sc, transform, objects);
     let hovered = response.hover_pos().and_then(|p| {
@@ -687,23 +511,7 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize, ob
         } else {
             None
         };
-    // 拖动锁定按下时的图层，越过其他图层也继续操作原图层。
-    let dragging = if !object.block_pan && response.dragged_by(egui::PointerButton::Primary) {
-        ui.input(|i| i.pointer.press_origin()).and_then(|p| {
-            let (x, y) = local(p);
-            sc.layer_at(x, y).filter(|index| sc.layers[*index].contains(x, y))
-        })
-    } else {
-        None
-    };
-    let input = ViewInput {
-        response: &response,
-        transform,
-        hovered,
-        dragging,
-        block_pan: object.block_pan,
-    };
-    let sc = update_saved_view(ui, id, g, project, sc, &mut saved, input);
+    let dragging = response.dragged_by(egui::PointerButton::Primary);
     paint_cached(ui, id, rect, &sc);
     if let Some(layout) = object.selected.and_then(|t| sc.objects.iter().find(|o| o.target == t)) {
         let [x, y, w, h] = layout.bounds;
@@ -740,7 +548,7 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize, ob
         });
     // 数据点提示：屏幕上 8 像素以内吸附到最近的数据点
     let point = match (hovered, response.hover_pos()) {
-        (Some(index), Some(p)) if dragging.is_none() && !object.dragging && object.hover.is_none() && !adding => {
+        (Some(index), Some(p)) if !dragging && !object.dragging && object.hover.is_none() && !adding => {
             let (x, y) = local(p);
             let layer = &g.page.layers()[index];
             scene::nearest_point(
@@ -771,44 +579,25 @@ pub fn show(ui: &mut egui::Ui, g: &Graph, project: &Project, selected: usize, ob
             ui.label(text);
         });
     }
-    update_cursor(
-        ui,
-        hover.is_some(),
-        response.dragged(),
-        dragging.is_some(),
-        object.dragging,
-        adding,
-        object.hover.is_some(),
-    );
+    update_cursor(ui, hover.is_some(), object.dragging, adding, object.hover.is_some());
     shapes::draw_overlay(ui, g, object.selected, &sc, transform, objects.adding_shape.is_some());
-    let zoomed = saved.iter().any(Option::is_some);
-    ui.data_mut(|d| d.insert_temp(id, saved));
     PlotOutput {
         object: object.hover,
         action: object.action,
         object_dragging: object.dragging,
         response,
         hover,
-        zoomed,
         selected_layer,
         hover_layer: hovered,
         point,
     }
 }
 
-fn update_cursor(
-    ui: &egui::Ui,
-    hovered: bool,
-    response_dragged: bool,
-    view_dragged: bool,
-    object_dragged: bool,
-    adding: bool,
-    object_hovered: bool,
-) {
-    if hovered && !response_dragged {
+fn update_cursor(ui: &egui::Ui, hovered: bool, object_dragged: bool, adding: bool, object_hovered: bool) {
+    if hovered && !object_dragged {
         ui.ctx().set_cursor_icon(egui::CursorIcon::Crosshair);
     }
-    if view_dragged || object_dragged {
+    if object_dragged {
         ui.ctx().set_cursor_icon(egui::CursorIcon::Grabbing);
     } else if adding {
         ui.ctx().set_cursor_icon(egui::CursorIcon::Text);
@@ -976,32 +765,6 @@ fn paint_items(free: egui::Painter, transform: egui::emath::TSTransform, items: 
 
 #[cfg(test)]
 mod tests {
-    #[test]
-    fn b6_view_changes_use_each_transform_space() {
-        use scicanvas_core::ticks::AxisScale as S;
-        for (scale, range) in [
-            (S::Linear, (1., 10.)),
-            (S::Log10, (1., 100.)),
-            (S::Log2, (1., 16.)),
-            (S::Ln, (1., 4f64.exp())),
-            (S::Reciprocal, (1., 10.)),
-            (S::Reciprocal, (-10., -1.)),
-            (S::Probability, (1., 99.)),
-            (S::Logit, (0.01, 0.99)),
-        ] {
-            let center = scale.inverse((scale.forward(range.0) + scale.forward(range.1)) / 2.);
-            let zoom = super::adjust(range, scale, 0., 0.8, 0.5);
-            assert!(scale.range_ok(zoom.0, zoom.1));
-            let fraction =
-                (scale.forward(center) - scale.forward(zoom.0)) / (scale.forward(zoom.1) - scale.forward(zoom.0));
-            assert!((fraction - 0.5).abs() < 1e-10);
-            let pan = super::adjust(range, scale, 0.1, 1., 0.5);
-            let shift =
-                (scale.forward(pan.0) - scale.forward(range.0)) / (scale.forward(range.1) - scale.forward(range.0));
-            assert!((shift - 0.1).abs() < 1e-10);
-        }
-    }
-
     use super::*;
 
     fn project() -> Project {
@@ -1062,7 +825,6 @@ mod tests {
                 ObjectTarget::ColorScale(_) | ObjectTarget::Shape(_) => unreachable!(),
             }
             frame(&ctx, &p, vec![button(end, false)]);
-            assert!(!frame(&ctx, &p, vec![]).zoomed);
             let after = scene::layout_page(&p.graphs[0], &p, &[]);
             let at = object_point(&after, target, initial.response.rect);
             let mut edits = Vec::new();
@@ -1082,7 +844,6 @@ mod tests {
                 matches!(edits.last(), Some(Some(ObjectAction::Edit(t))) if *t == target),
                 "{target:?}: {edits:?}, {info:?}, {at:?}"
             );
-            assert!(!frame(&ctx, &p, vec![]).zoomed);
         }
         let sc = scene::layout_page(&p.graphs[0], &p, &[]);
         let at = object_point(&sc, ObjectTarget::Text(id), initial.response.rect);
@@ -1449,76 +1210,7 @@ mod tests {
     }
 
     #[test]
-    fn click_and_wheel_target_second_layer_and_reset_keeps_other_view() {
-        let ctx = egui::Context::default();
-        crate::fonts::setup(&ctx);
-        let p = project();
-        let initial = frame(&ctx, &p, vec![]);
-        let sc = scene::layout_page(&p.graphs[0], &p, &[]);
-        let at = point(initial.response.rect, &sc, 1);
-        let output = frame(&ctx, &p, vec![egui::Event::PointerMoved(at), button(at, true)]);
-        assert_eq!(output.selected_layer, Some(1));
-        frame(&ctx, &p, vec![button(at, false)]);
-        let wheel = |at| {
-            vec![
-                egui::Event::PointerMoved(at),
-                egui::Event::MouseWheel {
-                    unit: egui::MouseWheelUnit::Point,
-                    delta: vec2(0.0, 120.0),
-                    modifiers: egui::Modifiers::NONE,
-                },
-            ]
-        };
-        let output = frame(&ctx, &p, wheel(at));
-        assert_eq!(output.hover_layer, Some(1));
-        let states = ctx.data(|d| d.get_temp::<Vec<Option<Saved>>>(view_id(2))).unwrap();
-        assert!(states[0].is_none());
-        assert!(states[1].is_some());
-        let first = point(initial.response.rect, &sc, 0);
-        frame(&ctx, &p, wheel(first));
-        reset_view(&ctx, 2, 1);
-        let states = ctx.data(|d| d.get_temp::<Vec<Option<Saved>>>(view_id(2))).unwrap();
-        assert!(states[0].is_some());
-        assert!(states[1].is_none());
-    }
-
-    #[test]
-    fn curve_style_edits_preserve_saved_zoom_but_mapping_edits_reset_it() {
-        let ctx = egui::Context::default();
-        crate::fonts::setup(&ctx);
-        let mut p = Project::sample();
-        frame(&ctx, &p, vec![]);
-        let layer = p.graphs[0].first_layer();
-        let view = View {
-            x: (2.0, 8.0),
-            y: (-2.0, 4.0),
-        };
-        let state = Saved {
-            view,
-            offset: None,
-            key: axis_key(layer),
-            spec: layer.spec.clone(),
-        };
-        ctx.data_mut(|d| d.insert_temp(view_id(2), vec![Some(state)]));
-        for key in ["B", "style-only"] {
-            p.graphs[0].first_layer_mut().set_plot_style(
-                key,
-                Some(scicanvas_core::page::CurveStyle {
-                    color: Some([90, 20, 30]),
-                    right_axis: true,
-                    ..Default::default()
-                }),
-            );
-            assert!(frame(&ctx, &p, vec![]).zoomed);
-            let state = ctx.data(|d| d.get_temp::<Vec<Option<Saved>>>(view_id(2))).unwrap();
-            assert_eq!(state[0].as_ref().unwrap().view, view);
-        }
-        p.graphs[0].first_layer_mut().x_key = None;
-        assert!(!frame(&ctx, &p, vec![]).zoomed);
-    }
-
-    #[test]
-    fn pan_stays_on_press_layer_when_pointer_crosses_into_next_panel() {
+    fn canvas_gestures_keep_axis_ranges_fixed() {
         let ctx = egui::Context::default();
         crate::fonts::setup(&ctx);
         let p = project();
@@ -1526,12 +1218,35 @@ mod tests {
         let sc = scene::layout_page(&p.graphs[0], &p, &[]);
         let start = point(initial.response.rect, &sc, 0);
         let end = point(initial.response.rect, &sc, 1);
+        let key = view_id(2).with("scene-cache");
+        let before = ctx.data(|data| data.get_temp::<CachedScene>(key)).unwrap().scene;
+        for modifiers in [
+            egui::Modifiers::NONE,
+            egui::Modifiers::SHIFT,
+            egui::Modifiers::ALT,
+            egui::Modifiers::COMMAND,
+        ] {
+            frame(
+                &ctx,
+                &p,
+                vec![
+                    egui::Event::PointerMoved(start),
+                    egui::Event::MouseWheel {
+                        unit: egui::MouseWheelUnit::Point,
+                        delta: vec2(0., 120.),
+                        modifiers,
+                    },
+                ],
+            );
+        }
+        frame(&ctx, &p, vec![egui::Event::Zoom(1.3)]);
         frame(&ctx, &p, vec![egui::Event::PointerMoved(start), button(start, true)]);
-        frame(&ctx, &p, vec![egui::Event::PointerMoved(start + vec2(12.0, 0.0))]);
+        frame(&ctx, &p, vec![egui::Event::PointerMoved(start + vec2(12., 0.))]);
         frame(&ctx, &p, vec![egui::Event::PointerMoved(end)]);
-        let states = ctx.data(|d| d.get_temp::<Vec<Option<Saved>>>(view_id(2))).unwrap();
-        assert!(states[0].is_some());
-        assert!(states[1].is_none());
+        frame(&ctx, &p, vec![button(end, false)]);
+        let after = ctx.data(|data| data.get_temp::<CachedScene>(key)).unwrap().scene;
+        assert_eq!(before, after);
+        assert!(std::sync::Arc::ptr_eq(&before, &after));
     }
 
     #[test]

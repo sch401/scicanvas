@@ -74,12 +74,12 @@ impl Host {
 }
 
 #[test]
-fn floating_titles_stop_at_the_ribbon_but_other_edges_remain_free() {
+fn floating_windows_move_freely_across_all_edges() {
     let mut host = Host::new();
     host.settle();
     host.title_drag("First", egui::pos2(700.0, -120.0));
     let rect = host.rect("First");
-    assert_eq!(rect.top(), host.ctx.available_rect().top());
+    assert!(rect.top() < 0.0, "{rect:?}");
     assert!(rect.is_finite());
     let id = egui::Id::new(("scicanvas-dialog", "First"));
     assert_eq!(docks(&host.ctx).panels.iter().find(|p| p.id == id).unwrap().side, None);
@@ -99,7 +99,6 @@ fn floating_titles_stop_at_the_ribbon_but_other_edges_remain_free() {
         } else {
             assert!(rect.bottom() > 900.0);
         }
-        assert!(rect.top() >= host.ctx.available_rect().top());
         assert_eq!(docks(&host.ctx).panels.iter().find(|p| p.id == id).unwrap().side, None);
     }
 }
@@ -243,4 +242,80 @@ fn p13_drag_guide_remains_visible_above_middle_settings() {
     }));
     assert!(egui::Order::Foreground > layer.order);
     assert_eq!(layer.id, id);
+}
+
+#[test]
+fn floating_panel_uses_a_desktop_viewport_with_independent_input_and_close() {
+    use std::{
+        cell::{Cell, RefCell},
+        rc::Rc,
+    };
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    ctx.set_embed_viewports(false);
+    let closing = Rc::new(Cell::new(false));
+    let typing = Rc::new(Cell::new(false));
+    let descriptors = Rc::new(RefCell::new(Vec::new()));
+    egui::Context::set_immediate_viewport_renderer({
+        let closing = closing.clone();
+        let typing = typing.clone();
+        let descriptors = descriptors.clone();
+        move |ctx, mut viewport| {
+            descriptors.borrow_mut().push((viewport.ids, viewport.builder.clone()));
+            let mut input = egui::RawInput {
+                viewport_id: viewport.ids.this,
+                screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(420., 560.))),
+                ..Default::default()
+            };
+            input.viewports.insert(
+                viewport.ids.this,
+                egui::ViewportInfo {
+                    parent: Some(viewport.ids.parent),
+                    outer_rect: Some(egui::Rect::from_min_size(
+                        egui::pos2(1500., -200.),
+                        egui::vec2(440., 600.),
+                    )),
+                    events: if closing.get() {
+                        vec![egui::ViewportEvent::Close]
+                    } else {
+                        vec![]
+                    },
+                    focused: Some(true),
+                    ..Default::default()
+                },
+            );
+            if typing.get() {
+                input.events.push(egui::Event::Text("updated".into()));
+            }
+            let _ = ctx.run(input, |child| (viewport.viewport_ui_cb)(child));
+        }
+    });
+    let id = egui::Id::new("desktop-panel-test");
+    let mut open = true;
+    let mut text = String::new();
+    for step in 0..3 {
+        typing.set(step == 1);
+        closing.set(step == 2);
+        let _ = ctx.run(egui::RawInput::default(), |ctx| {
+            window(ctx, "Desktop panel")
+                .id(id)
+                .open(&mut open)
+                .default_width(420.)
+                .show(ctx, |ui| {
+                    assert_eq!(ui.ctx().viewport_id(), egui::ViewportId(id));
+                    assert!(ui.ctx().input(|i| i.viewport().outer_rect.unwrap().left() > 1000.));
+                    ui.text_edit_singleline(&mut text).request_focus();
+                });
+        });
+    }
+    assert_eq!(text, "updated");
+    assert!(!open);
+    for (ids, builder) in descriptors.borrow().iter() {
+        assert_eq!(ids.this, egui::ViewportId(id));
+        assert_eq!(ids.parent, egui::ViewportId::ROOT);
+        assert_eq!(builder.decorations, Some(true));
+        assert_eq!(builder.resizable, Some(true));
+        assert_eq!(builder.inner_size.unwrap().x, 420.);
+    }
+    assert_eq!(docks(&ctx).panels.iter().find(|p| p.id == id).unwrap().side, None);
 }

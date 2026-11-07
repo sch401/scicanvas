@@ -25,7 +25,11 @@ class MsiTests(unittest.TestCase):
             values = xml.findall(".//w:RegistryValue", ns)
             keys = {v.get("Key") for v in values}
             self.assertTrue({r"Software\Classes\.scv", r"Software\Classes\.scgt", r"Software\Classes\.scfn"} <= keys)
-            self.assertEqual(len(xml.findall(".//w:Shortcut", ns)), 1)
+            shortcuts = xml.findall(".//w:Shortcut", ns)
+            self.assertEqual(len(shortcuts), 1)
+            self.assertEqual(shortcuts[0].get("Icon"), "ProductIcon")
+            self.assertEqual(shortcuts[0].get("IconIndex"), "0")
+            self.assertEqual(len([key for key in keys if key.endswith(r"\DefaultIcon")]), 3)
 
     def test_user_data_removal_requires_an_explicit_choice_and_is_skipped_on_upgrade(self):
         ns = {"w": build_msi.WIX}
@@ -40,6 +44,19 @@ class MsiTests(unittest.TestCase):
         self.assertEqual(action.get("After"), "InstallFinalize")
         check = xml.find(".//w:Control[@Id='DeleteData']", ns)
         self.assertEqual(check.get("Property"), "DELETEUSERDATA")
+
+
+    def test_standard_wizard_has_path_selection_and_product_branding(self):
+        ns = {"w": build_msi.WIX, "ui": build_msi.WIX + "/ui"}
+        xml = ET.parse(build_msi.ROOT / "installer/scicanvas.wxs")
+        wizard = xml.find(".//ui:WixUI", ns)
+        self.assertEqual(wizard.get("Id"), "WixUI_InstallDir")
+        self.assertEqual(wizard.get("InstallDirectory"), "INSTALLFOLDER")
+        self.assertEqual(xml.find(".//w:MajorUpgrade", ns).get("IgnoreLanguage"), "yes")
+        variables = {v.get("Id") for v in xml.findall(".//w:WixVariable", ns)}
+        self.assertTrue({"WixUIDialogBmp", "WixUIBannerBmp", "WixUILicenseRtf"} <= variables)
+        for name in ["dialog.bmp", "banner.bmp", "product.ico", "license.rtf"]:
+            self.assertGreater((build_msi.ROOT / "installer/assets" / name).stat().st_size, 0)
 
 
 if __name__ == "__main__":

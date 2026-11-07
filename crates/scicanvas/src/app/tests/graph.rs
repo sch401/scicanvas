@@ -1462,6 +1462,37 @@ fn reference_line_properties_add_and_remove_live_with_history() {
 }
 
 #[test]
+fn reference_manager_deletes_both_orientations_with_undo() {
+    for command in ["graph.reference.vertical", "graph.reference.horizontal"] {
+        let mut app = app();
+        app.active = Some(2);
+        app.run_command(command);
+        let before = app.project.clone();
+        app.run_command("graph.reference.manage");
+        assert_eq!(app.reference_for, Some((2, 0)));
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        ctx.style_mut(|s| s.animation_time = 0.);
+        let mut h = crate::test_ui::Harness::new(
+            ctx,
+            Some(egui::vec2(900., 700.)),
+            |a: &mut SciApp, c: &egui::Context| {
+                a.history_group = None;
+                a.reference_window(c);
+                a.finish_frame_edit(a.history_group);
+            },
+        );
+        for _ in 0..4 {
+            h.frame(&mut app, vec![]);
+        }
+        let out = h.frame(&mut app, vec![]);
+        h.click_text(&mut app, &out, "删除");
+        assert!(app.project.graph(2).unwrap().first_layer().reference_lines.is_empty());
+        roundtrip(&mut app, &before);
+    }
+}
+
+#[test]
 fn builder_edits_keep_draft_mapping_and_create_with_the_existing_undo_transaction() {
     for kind in [PlotType::LineSymbol, PlotType::FloatingBar] {
         let mut app = app();

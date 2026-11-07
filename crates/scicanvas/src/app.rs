@@ -218,6 +218,7 @@ pub struct SciApp {
     explorer_focus: bool,
     /// 正在编辑属性的图形。
     pub(crate) props_for: Option<u64>,
+    reference_for: Option<(u64, usize)>,
     adding_text: Option<u64>,
     shape_tool: Option<(u64, scicanvas_core::page::ShapeKind)>,
     object_editor: Option<ObjectEditor>,
@@ -395,6 +396,7 @@ impl SciApp {
             explorer_rename: None,
             explorer_focus: false,
             props_for: None,
+            reference_for: None,
             active_layers: HashMap::new(),
             dialog_error: None,
             dialog_error_for: None,
@@ -434,6 +436,7 @@ impl SciApp {
     }
 
     fn load_project(&mut self, project: Project, path: Option<PathBuf>) {
+        self.reference_for = None;
         self.dialog = None;
         self.book_preview = None;
         self.analysis_curves.clear();
@@ -1856,6 +1859,12 @@ impl SciApp {
         }
     }
 
+    pub(crate) fn manage_reference_lines(&mut self) {
+        if let Some(id) = self.active_graph_id() {
+            self.reference_for = Some((id, self.layer_index(id)));
+        }
+    }
+
     pub(crate) fn add_reference_line(&mut self, axis: scicanvas_core::page::ReferenceAxis) {
         let Some(gid) = self.active_graph_id() else { return };
         let index = self.layer_index(gid);
@@ -2068,6 +2077,7 @@ impl SciApp {
         }
 
         self.props_window(ctx);
+        self.reference_window(ctx);
         self.object_window(ctx);
         self.help_window(ctx);
         self.about_window(ctx);
