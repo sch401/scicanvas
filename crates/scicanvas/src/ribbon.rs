@@ -590,13 +590,7 @@ pub fn show(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palette, 
                 ui.set_width(ctx.screen_rect().width());
                 panel(ui, app, st.tab, pal, clicked);
             });
-        let area_rect = area.response.rect;
-        let outside = ctx.input(|i| {
-            i.pointer.any_pressed()
-                && i.pointer
-                    .interact_pos()
-                    .is_some_and(|p| !area_rect.contains(p) && !st.tab_rect.contains(p))
-        });
+        let outside = press_outside_transient(ctx, area.response.layer_id, &[area.response.rect, st.tab_rect]);
         if outside || clicked.is_some() {
             st.flyout = false;
         }
@@ -685,7 +679,7 @@ fn group(
                         ui.vertical(|ui| {
                             for id in *ids {
                                 if let Some(c) = commands::find(id) {
-                                    if small_button(ui, app, c, pal, clicked).clicked() {
+                                    if small_button(ui, app, c, pal, clicked, false).clicked() {
                                         *clicked = Some(c.id);
                                     }
                                 }
@@ -698,7 +692,7 @@ fn group(
                             scale_menu(ui, true, app, clicked);
                             scale_menu(ui, false, app, clicked);
                             if let Some(command) = commands::find("graph.reference.manage") {
-                                if small_button(ui, app, command, pal, clicked).clicked() {
+                                if small_button(ui, app, command, pal, clicked, false).clicked() {
                                     *clicked = Some(command.id);
                                 }
                             }
@@ -810,7 +804,7 @@ fn plot_gallery(
             ui.horizontal(|ui| {
                 for id in ids.iter().take(preview_count) {
                     if let Some(command) = commands::find(id) {
-                        if gallery_tile(ui, app, command, pal, clicked, None).clicked() {
+                        if gallery_tile(ui, app, command, pal, clicked, None, false).clicked() {
                             *clicked = Some(command.id);
                         }
                     }
@@ -848,7 +842,7 @@ fn thumbnail_grid(
                 .show(ui, |ui| {
                     for (index, id) in ids.iter().enumerate() {
                         if let Some(command) = commands::find(id) {
-                            let response = gallery_tile(ui, app, command, pal, clicked, Some(tile_width));
+                            let response = gallery_tile(ui, app, command, pal, clicked, Some(tile_width), true);
                             #[cfg(test)]
                             ui.data_mut(|data| {
                                 data.insert_temp(egui::Id::new(("gallery-grid-tile", command.id)), response.rect)
@@ -910,7 +904,7 @@ fn overflow_group(
                                 match item {
                                     Big(id) => {
                                         if let Some(command) = commands::find(id) {
-                                            if small_button(ui, app, command, pal, clicked).clicked() {
+                                            if small_button(ui, app, command, pal, clicked, true).clicked() {
                                                 *clicked = Some(command.id);
                                             }
                                         }
@@ -918,7 +912,7 @@ fn overflow_group(
                                     Smalls(ids) => {
                                         for id in *ids {
                                             if let Some(command) = commands::find(id) {
-                                                if small_button(ui, app, command, pal, clicked).clicked() {
+                                                if small_button(ui, app, command, pal, clicked, true).clicked() {
                                                     *clicked = Some(command.id);
                                                 }
                                             }
@@ -1001,12 +995,58 @@ fn big_button(ui: &mut egui::Ui, app: &SciApp, c: &Command, pal: &Palette) -> eg
     resp.on_hover_text(commands::tooltip(app, c))
 }
 
+fn plot_control(
+    ui: &mut egui::Ui,
+    rect: Rect,
+    c: &Command,
+    pal: &Palette,
+    clicked: &mut Option<&'static str>,
+    in_menu: bool,
+    enabled: bool,
+) -> egui::Response {
+    let example = crate::examples::ALL
+        .iter()
+        .find(|e| e.plot_command == c.id)
+        .filter(|_| in_menu);
+    let button = Rect::from_min_size(egui::pos2(rect.right() - 18., rect.top()), vec2(18., 18.));
+    let body = if example.is_some() {
+        Rect::from_min_max(rect.min, egui::pos2(button.left(), rect.bottom()))
+    } else {
+        rect
+    };
+    let mut response = ui.interact(
+        body,
+        ui.make_persistent_id(("plot-body", c.id)),
+        if enabled { Sense::click() } else { Sense::hover() },
+    );
+    if let Some(example) = example {
+        let example_id = ui.make_persistent_id(("plot-example", c.id));
+        if ui.rect_contains_pointer(rect) || response.has_focus() || ui.memory(|m| m.has_focus(example_id)) {
+            let r = ui.interact(button, example_id, Sense::click());
+            button_bg(ui, button, &r, true, false, pal);
+            icons::icon("open", pal.dark)
+                .tint(pal.ink)
+                .paint_at(ui, button.shrink(3.));
+            #[cfg(test)]
+            ui.data_mut(|d| d.insert_temp(egui::Id::new(("gallery-example-button", c.id)), button));
+            if r.clicked() {
+                *clicked = Some(example.command);
+                ui.close_menu();
+            }
+            r.on_hover_text("打开示例");
+        }
+    }
+    response.rect = rect;
+    response
+}
+
 fn small_button(
     ui: &mut egui::Ui,
     app: &SciApp,
     c: &Command,
     pal: &Palette,
     clicked: &mut Option<&'static str>,
+    in_menu: bool,
 ) -> egui::Response {
     let enabled = (c.when)(app).is_ok();
     let checked = c.checked.is_some_and(|f| f(app));
@@ -1015,8 +1055,14 @@ fn small_button(
         FontId::proportional(crate::theme::size::COMPACT),
         text_color(enabled, pal),
     );
-    let size = vec2(galley.size().x + 34.0, 23.0);
-    let (rect, resp) = ui.allocate_exact_size(size, if enabled { Sense::click() } else { Sense::hover() });
+    let extra = if in_menu && crate::examples::ALL.iter().any(|e| e.plot_command == c.id) {
+        20.
+    } else {
+        0.
+    };
+    let size = vec2(galley.size().x + 34.0 + extra, 23.0);
+    let (rect, _) = ui.allocate_exact_size(size, Sense::hover());
+    let resp = plot_control(ui, rect, c, pal, clicked, in_menu, enabled);
     button_bg(ui, rect, &resp, enabled, checked, pal);
     let icon_rect = Rect::from_min_size(egui::pos2(rect.left() + 5.0, rect.center().y - 8.5), vec2(17.0, 17.0));
     icons::icon(c.icon, pal.dark)
@@ -1026,14 +1072,14 @@ fn small_button(
     ui.painter().galley(text_pos, galley, pal.ink);
     // 图型命令（如“图形”选项卡里的图类型）与画廊相同：悬停显示缩略图、用法和示例
     if crate::examples::ALL.iter().any(|e| e.plot_command == c.id) {
-        resp.on_hover_ui(|ui| plot_hover(ui, app, c, clicked))
+        resp.on_hover_ui(|ui| plot_hover(ui, app, c, clicked, in_menu))
     } else {
         resp.on_hover_text(commands::tooltip(app, c))
     }
 }
 
 /// 图型命令的悬停说明：较大的缩略图、用途与数据排列说明，以及“打开示例”。
-fn plot_hover(ui: &mut egui::Ui, app: &SciApp, c: &Command, clicked: &mut Option<&'static str>) {
+fn plot_hover(ui: &mut egui::Ui, app: &SciApp, c: &Command, clicked: &mut Option<&'static str>, in_menu: bool) {
     ui.set_max_width(300.0);
     if app.active_graph_id().is_some() {
         ui.strong("将当前图形改为此类型");
@@ -1044,7 +1090,9 @@ fn plot_hover(ui: &mut egui::Ui, app: &SciApp, c: &Command, clicked: &mut Option
         ui.add(icons::thumb(kind).fit_to_exact_size(vec2(145.0, 100.0)));
         ui.label(example.description);
         ui.separator();
-        if ui.button("打开示例").clicked() {
+        if in_menu {
+            ui.weak("点击磁贴右上角的按钮打开示例");
+        } else if ui.button("打开示例").clicked() {
             *clicked = Some(example.command);
         }
     }
@@ -1060,6 +1108,7 @@ fn gallery_tile(
     pal: &Palette,
     clicked: &mut Option<&'static str>,
     width: Option<f32>,
+    in_menu: bool,
 ) -> egui::Response {
     let enabled = (c.when)(app).is_ok();
     let label = ui.painter().layout_no_wrap(
@@ -1068,7 +1117,8 @@ fn gallery_tile(
         text_color(enabled, pal),
     );
     let width = width.unwrap_or_else(|| (label.size().x + 12.0).max(72.0));
-    let (rect, resp) = ui.allocate_exact_size(vec2(width, 62.0), if enabled { Sense::click() } else { Sense::hover() });
+    let (rect, _) = ui.allocate_exact_size(vec2(width, 62.), Sense::hover());
+    let resp = plot_control(ui, rect, c, pal, clicked, in_menu, enabled);
     let checked = app.active_layer().is_some_and(|layer| {
         crate::examples::ALL
             .iter()
@@ -1087,7 +1137,7 @@ fn gallery_tile(
         FontId::proportional(crate::theme::size::LABEL),
         text_color(enabled, pal),
     );
-    resp.on_hover_ui(|ui| plot_hover(ui, app, c, clicked))
+    resp.on_hover_ui(|ui| plot_hover(ui, app, c, clicked, in_menu))
 }
 
 fn icon_button(ui: &mut egui::Ui, app: &SciApp, c: &Command, dark: bool, pal: &Palette, size: f32) -> egui::Response {
@@ -1515,13 +1565,14 @@ pub fn palette(ctx: &egui::Context, app: &SciApp, st: &mut UiState, pal: &Palett
             ui.label(RichText::new("↑ ↓ 选择 · 回车执行 · Esc 关闭").small().color(pal.weak));
         });
     // 内嵌模式中点击面板外关闭；桌面窗口使用系统关闭按钮。
-    if ctx.embed_viewports() && ctx.input(|i| i.pointer.any_pressed()) {
-        let inside = ctx
-            .layer_id_at(ctx.input(|i| i.pointer.interact_pos()).unwrap_or_default())
-            .is_some_and(|l| l.id == egui::Id::new("scicanvas-palette"));
-        if !inside {
-            close = true;
-        }
+    if ctx.embed_viewports()
+        && press_outside_transient(
+            ctx,
+            egui::LayerId::new(egui::Order::Middle, egui::Id::new("scicanvas-palette")),
+            &[],
+        )
+    {
+        close = true;
     }
     if let Some(id) = run {
         *clicked = Some(id);
@@ -1565,6 +1616,17 @@ pub(crate) fn scale_menu(ui: &mut egui::Ui, x: bool, app: &SciApp, clicked: &mut
     )
     .response
     .on_disabled_hover_text("极坐标角度轴不支持切换刻度类型");
+}
+
+fn press_outside_transient(ctx: &egui::Context, own_layer: egui::LayerId, extra_rects: &[Rect]) -> bool {
+    let (pressed, pos) = ctx.input(|i| (i.pointer.any_pressed(), i.pointer.interact_pos()));
+    pressed
+        && pos.is_some_and(|p| {
+            !extra_rects.iter().any(|r| r.contains(p))
+                && ctx.layer_id_at(p).is_none_or(|layer| {
+                    layer != own_layer && !matches!(layer.order, egui::Order::Foreground | egui::Order::Tooltip)
+                })
+        })
 }
 
 #[cfg(test)]
