@@ -18,7 +18,7 @@
 | 工作表 | CSV、文本和 Excel 导入，列角色与单位，公式、筛选、排序、查找替换，转置、堆叠、拆分和抽取 |
 | 科研绘图 | 33 种基础图型，包括折线、散点、误差带、柱形、条形、面积、瀑布、气泡、直方图、Q-Q 图、箱线图、小提琴图、饼图和极坐标图，另支持表达式函数曲线 |
 | 图形设置 | 多图层、双 Y 轴、七种坐标轴刻度、逐点颜色/大小/符号映射、色阶条、图形主题、文本和形状标注、填充图案 |
-| 拟合 | 线性、多项式、38 个内置非线性模型及自定义函数，支持误差加权、固定参数、参数限制、线性约束、全局拟合、多峰拟合、模型比较和残差分析 |
+| 拟合 | 线性、多项式、39 个内置非线性模型及自定义函数，支持误差加权、固定参数、参数限制、线性约束、全局拟合、多峰拟合、模型比较和残差分析 |
 | 分析与统计 | 平滑、插值、微分、积分、FFT、基线与寻峰，描述统计、相关性、正态性、离群值、KS 双样本检验及方差分析 |
 | 项目与导出 | 工作表、图形和 Note 统一保存，图形/工作簿模板，批量绘图与导出，SVG、PDF、PNG、TIFF、CSV 和 Excel 输出 |
 
@@ -26,15 +26,17 @@
 
 ### 绘图示例
 
-下图来自仓库中的真实绘图用例。配套数据和 `.scv` 项目见 [samples](samples/README.md)。
+下图由 SciCanvas 使用仓库中的示例数据绘制，文档版统一了字号、线条与配色。原始 `.scv` 项目见 [samples](samples/README.md)。
 
-| 颜色映射散点图 | 直方图与分布曲线 |
+| 颜色映射散点图 | 直方图与正态分布曲线 |
 | --- | --- |
-| ![颜色映射散点图](docs/parity/visual/color-scatter/scicanvas.svg) | ![直方图与分布曲线](docs/parity/visual/histogram-options/scicanvas.svg) |
+| ![颜色映射散点图](docs/images/readme/color-scatter.svg) | ![直方图与正态分布曲线](docs/images/readme/histogram.svg) |
 
 | 小提琴图 | 饼图 |
 | --- | --- |
-| ![小提琴图](docs/parity/visual/violin/scicanvas.svg) | ![饼图](docs/parity/visual/pie/scicanvas.svg) |
+| ![小提琴图](docs/images/readme/violin.svg) | ![饼图](docs/images/readme/pie.svg) |
+
+直方图展示单组粒径样本及其正态分布曲线；饼图展示示例中的前四类。
 
 ## 快速上手
 
@@ -76,7 +78,7 @@ cargo build --release --locked -p scicanvas
 
 ### Windows 安装包
 
-项目支持生成 **MSI 安装包**和**便携 ZIP**。当前尚未发布正式版本，可按 [安装包构建说明](installer/README.md) 自行打包；后续发布将放在 [Releases](https://github.com/sch401/scicanvas/releases)。
+下载 [Windows x64 MSI 安装包](https://github.com/sch401/scicanvas/releases/latest)，或按 [安装包构建说明](installer/README.md) 自行生成 MSI 和便携 ZIP。版本说明及校验文件见 [Releases](https://github.com/sch401/scicanvas/releases)。
 
 MSI 提供欢迎页、安装进度和完成提示，安装到当前用户的 `%LOCALAPPDATA%\Programs\SciCanvas`，添加开始菜单快捷方式，并注册项目及模板文件关联。
 
