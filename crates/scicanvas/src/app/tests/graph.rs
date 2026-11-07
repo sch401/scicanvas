@@ -1994,3 +1994,172 @@ fn linked_axis_spacing_controls_follow_effective_scale_inheritance() {
     let scene = scene::layout_page(app.project.graph(2).unwrap(), &app.project, &[]);
     assert_eq!(scene.layers[1].axes.x.ticks, [1., 100., 1e4, 1e6]);
 }
+
+fn open_example_test_gallery(h: &mut crate::test_ui::Harness, app: &SciApp, state: &mut UiState) {
+    for _ in 0..4 {
+        ribbon_frame(h, app, state, vec![]);
+    }
+    if state.collapsed && !state.flyout {
+        let out = ribbon_frame(h, app, state, vec![]).0;
+        let at = crate::test_ui::find_text(&out, "绘图").unwrap() + egui::vec2(5., 5.);
+        for pressed in [true, false] {
+            ribbon_frame(
+                h,
+                app,
+                state,
+                vec![egui::Event::PointerMoved(at), crate::test_ui::button(at, pressed)],
+            );
+        }
+    }
+    for _ in 0..3 {
+        ribbon_frame(h, app, state, vec![]);
+    }
+    let at = h
+        .ctx
+        .data(|d| d.get_temp::<egui::Rect>(egui::Id::new("ribbon-gallery-menu-rect")))
+        .unwrap()
+        .center();
+    for pressed in [true, false] {
+        ribbon_frame(
+            h,
+            app,
+            state,
+            vec![egui::Event::PointerMoved(at), crate::test_ui::button(at, pressed)],
+        );
+    }
+    ribbon_frame(
+        h,
+        app,
+        state,
+        vec![
+            egui::Event::PointerMoved(at + egui::vec2(40., 100.)),
+            egui::Event::MouseWheel {
+                unit: egui::MouseWheelUnit::Point,
+                delta: egui::vec2(0., -1800.),
+                modifiers: egui::Modifiers::NONE,
+            },
+        ],
+    );
+    for _ in 0..12 {
+        ribbon_frame(h, app, state, vec![]);
+    }
+}
+
+#[test]
+fn dropdown_examples_and_collapsed_gallery_preserve_full_clicks() {
+    for (width, kind, id, collapsed) in [
+        (1800., PlotType::Pie, "pie", false),
+        (900., PlotType::PolarScatter, "polar_scatter", false),
+        (900., PlotType::Pie, "pie", true),
+    ] {
+        let mut app = app();
+        let ctx = egui::Context::default();
+        crate::fonts::setup(&ctx);
+        ctx.style_mut(|s| {
+            s.animation_time = 0.;
+            s.interaction.tooltip_delay = 0.;
+        });
+        let mut h = crate::test_ui::Harness::new(ctx.clone(), Some(egui::vec2(width, 820.)), ()).with_step(0.02);
+        let mut state = UiState::default();
+        state.tab = "plot";
+        state.collapsed = collapsed;
+        let plot = format!("plot.{id}");
+        open_example_test_gallery(&mut h, &app, &mut state);
+        let tile = ctx
+            .data(|d| d.get_temp::<egui::Rect>(egui::Id::new(("gallery-grid-tile", plot.as_str()))))
+            .unwrap();
+        ribbon_frame(&mut h, &app, &mut state, vec![egui::Event::PointerMoved(tile.center())]);
+        let button = ctx
+            .data(|d| d.get_temp::<egui::Rect>(egui::Id::new(("gallery-example-button", plot.as_str()))))
+            .unwrap()
+            .center();
+        let mut command = None;
+        for pressed in [true, false] {
+            let (_, clicked) = ribbon_frame(
+                &mut h,
+                &app,
+                &mut state,
+                vec![
+                    egui::Event::PointerMoved(button),
+                    crate::test_ui::button(button, pressed),
+                ],
+            );
+            command = command.or(clicked);
+        }
+        assert_eq!(
+            command,
+            Some(crate::examples::ALL.iter().find(|e| e.kind == kind).unwrap().command)
+        );
+        let count = app.project.books.len();
+        app.run_command(command.unwrap());
+        assert_eq!(app.project.books.len(), count + 1);
+        assert_eq!(app.project.graphs.last().unwrap().first_layer().plot_type, kind);
+        open_example_test_gallery(&mut h, &app, &mut state);
+        let tile = ctx
+            .data(|d| d.get_temp::<egui::Rect>(egui::Id::new(("gallery-grid-tile", plot.as_str()))))
+            .unwrap();
+        let at = tile.center() - egui::vec2(12., 0.);
+        let mut command = None;
+        for pressed in [true, false] {
+            let (_, clicked) = ribbon_frame(
+                &mut h,
+                &app,
+                &mut state,
+                vec![egui::Event::PointerMoved(at), crate::test_ui::button(at, pressed)],
+            );
+            command = command.or(clicked);
+        }
+        assert_eq!(command, Some(plot.as_str()));
+        if collapsed {
+            open_example_test_gallery(&mut h, &app, &mut state);
+            let at = egui::pos2(width - 10., 810.);
+            ribbon_frame(
+                &mut h,
+                &app,
+                &mut state,
+                vec![egui::Event::PointerMoved(at), crate::test_ui::button(at, true)],
+            );
+            assert!(!state.flyout);
+        }
+    }
+}
+
+#[test]
+fn collapsed_overflow_menu_keeps_commands_alive() {
+    let mut app = app();
+    app.active = Some(2);
+    let ctx = egui::Context::default();
+    crate::fonts::setup(&ctx);
+    ctx.style_mut(|s| s.animation_time = 0.);
+    let mut h = crate::test_ui::Harness::new(ctx, Some(egui::vec2(900., 820.)), ()).with_step(0.05);
+    let mut state = UiState::default();
+    state.tab = "graph";
+    state.collapsed = true;
+    state.flyout = true;
+    for _ in 0..4 {
+        ribbon_frame(&mut h, &app, &mut state, vec![]);
+    }
+    for label in ["更多功能", "导出", commands::find("graph.export").unwrap().label] {
+        let out = ribbon_frame(&mut h, &app, &mut state, vec![]).0;
+        let at =
+            crate::test_ui::find_text(&out, label).unwrap_or_else(|| panic!("missing {label}")) + egui::vec2(5., 5.);
+        let mut command = None;
+        for pressed in [true, false] {
+            let (_, clicked) = ribbon_frame(
+                &mut h,
+                &app,
+                &mut state,
+                vec![egui::Event::PointerMoved(at), crate::test_ui::button(at, pressed)],
+            );
+            command = command.or(clicked);
+        }
+        if label == commands::find("graph.export").unwrap().label {
+            assert_eq!(command, Some("graph.export"));
+        } else {
+            assert!(state.flyout);
+        }
+        for _ in 0..3 {
+            ribbon_frame(&mut h, &app, &mut state, vec![]);
+        }
+    }
+}
