@@ -74,7 +74,7 @@ fn finite_range(vals: &[f64]) -> Option<(f64, f64)> {
 }
 
 /// 计算坐标轴。`auto` 为假时使用给定的 `min..max`；`force_zero` 用于柱状图（范围包含 0）。
-pub fn axis(vals: &[f64], auto: bool, min: f64, max: f64, log: bool, force_zero: bool) -> Axis {
+fn axis_auto(vals: &[f64], auto: bool, min: f64, max: f64, log: bool, force_zero: bool) -> Axis {
     if log {
         let pos: Vec<f64> = vals.iter().copied().filter(|v| *v > 0.0).collect();
         let (mut a, mut b) = if auto {
@@ -158,6 +158,145 @@ pub fn axis(vals: &[f64], auto: bool, min: f64, max: f64, log: bool, force_zero:
         minor,
         scale: AxisScale::Linear,
     }
+}
+
+/// 带可选主、次刻度设置的坐标轴；默认设置保留原有计算路径。
+pub fn axis(
+    vals: &[f64],
+    auto: bool,
+    min: f64,
+    max: f64,
+    log: bool,
+    force_zero: bool,
+    spacing: &crate::page::TickSpacing,
+) -> Axis {
+    with_spacing(
+        axis_auto(vals, auto, min, max, log, force_zero),
+        vals,
+        auto,
+        force_zero,
+        spacing,
+    )
+}
+
+/// 在分配刻度数组前检查密度，供界面显示一次自动回退提示。
+pub fn spacing_too_dense(lo: f64, hi: f64, scale: AxisScale, spacing: &crate::page::TickSpacing) -> bool {
+    spacing.major_step.is_some_and(|step| {
+        let span = if scale == AxisScale::Linear {
+            hi - lo
+        } else if scale.is_log() {
+            scale.forward(hi) - scale.forward(lo)
+        } else {
+            return false;
+        };
+        !step.is_finite()
+            || step <= 0.
+            || !((span / step).floor() + 1.).is_finite()
+            || (span / step).floor() + 1. > 200.
+    })
+}
+
+fn with_spacing(
+    mut axis: Axis,
+    values: &[f64],
+    auto: bool,
+    force_zero: bool,
+    spacing: &crate::page::TickSpacing,
+) -> Axis {
+    let scale = axis.scale;
+    if scale != AxisScale::Linear && !scale.is_log() {
+        return axis;
+    }
+    if spacing.is_default() && axis.ticks.len() <= 200 {
+        return axis;
+    }
+    let requested = spacing
+        .major_step
+        .filter(|v| v.is_finite() && *v > 0. && (!scale.is_log() || v.fract() == 0.));
+    let mut lo = axis.lo;
+    let mut hi = axis.hi;
+    if auto && requested.is_some() {
+        if let Some((a, b)) = finite_range(
+            &values
+                .iter()
+                .copied()
+                .filter(|v| scale.domain_ok(*v))
+                .collect::<Vec<_>>(),
+        ) {
+            if a < b {
+                lo = if force_zero && scale == AxisScale::Linear {
+                    a.min(0.)
+                } else {
+                    a
+                };
+                hi = if force_zero && scale == AxisScale::Linear {
+                    b.max(0.)
+                } else {
+                    b
+                };
+            }
+        }
+    }
+    let too_dense = spacing_too_dense(lo, hi, scale, spacing);
+    let step = requested.filter(|_| !too_dense).unwrap_or_else(|| {
+        if scale.is_log() {
+            ((scale.forward(axis.hi) - scale.forward(axis.lo)) / 199.)
+                .ceil()
+                .max(1.)
+        } else {
+            axis.ticks
+                .windows(2)
+                .next()
+                .map_or_else(|| nice(axis.lo, axis.hi, 5).2, |pair| pair[1] - pair[0])
+        }
+    });
+    if requested.is_some() && !too_dense || axis.ticks.len() > 200 {
+        let transform = |v| if scale.is_log() { scale.forward(v) } else { v };
+        let inverse = |v| if scale.is_log() { scale.inverse(v) } else { v };
+        let (a, b) = (transform(lo), transform(hi));
+        if auto {
+            lo = inverse((a / step + 1e-9).floor() * step);
+            hi = inverse((b / step - 1e-9).ceil() * step);
+        }
+        let first = (transform(lo) / step - 1e-9).ceil();
+        let last = (transform(hi) / step + 1e-9).floor();
+        if last - first + 1. <= 200. {
+            axis.lo = lo;
+            axis.hi = hi;
+            axis.ticks = (0..(last - first + 1.).max(0.) as usize)
+                .map(|i| inverse(round_sig((first + i as f64) * step, 12)))
+                .collect();
+        }
+    }
+    if scale == AxisScale::Linear {
+        if requested.is_some() && !too_dense || spacing.minor_count.is_some() {
+            let count = spacing.minor_count.unwrap_or(1);
+            axis.minor.clear();
+            if count > 0 {
+                let first = (axis.lo / step).floor();
+                let last = (axis.hi / step).ceil();
+                for segment in 0..((last - first).max(0.) as usize).min(201) {
+                    for j in 1..=count {
+                        let tick = round_sig(
+                            (first + segment as f64 + f64::from(j) / f64::from(count + 1)) * step,
+                            12,
+                        );
+                        if tick > axis.lo && tick < axis.hi {
+                            axis.minor.push(tick);
+                        }
+                    }
+                }
+            }
+        }
+    } else if spacing.minor_count == Some(0) {
+        axis.minor.clear();
+    } else if scale == AxisScale::Log10 && requested.is_some() && !too_dense {
+        axis.minor = (axis.lo.log10().floor() as i32..=axis.hi.log10().ceil() as i32)
+            .flat_map(|e| (2..10).map(move |k| f64::from(k) * 10f64.powi(e)))
+            .filter(|v| *v > axis.lo && *v < axis.hi)
+            .collect();
+    }
+    axis
 }
 
 /// 日期刻度的时间单位，决定标签写法。
@@ -381,7 +520,15 @@ mod tests {
 
     #[test]
     fn auto_axis_extends_to_ticks() {
-        let ax = axis(&[0.4, 19.6, f64::NAN], true, 0.0, 0.0, false, false);
+        let ax = axis(
+            &[0.4, 19.6, f64::NAN],
+            true,
+            0.0,
+            0.0,
+            false,
+            false,
+            &Default::default(),
+        );
         assert_eq!(ax.lo, 0.0);
         assert_eq!(ax.hi, 20.0);
         assert_eq!(ax.ticks, vec![0.0, 5.0, 10.0, 15.0, 20.0]);
@@ -390,20 +537,20 @@ mod tests {
 
     #[test]
     fn bar_axis_includes_zero() {
-        let ax = axis(&[3.0, 7.0], true, 0.0, 0.0, false, true);
+        let ax = axis(&[3.0, 7.0], true, 0.0, 0.0, false, true, &Default::default());
         assert_eq!(ax.lo, 0.0);
     }
 
     #[test]
     fn manual_axis() {
-        let ax = axis(&[], false, 1.0, 9.0, false, false);
+        let ax = axis(&[], false, 1.0, 9.0, false, false, &Default::default());
         assert_eq!((ax.lo, ax.hi), (1.0, 9.0));
         assert_eq!(ax.ticks, vec![2.0, 4.0, 6.0, 8.0]);
     }
 
     #[test]
     fn log_axis() {
-        let ax = axis(&[3.0, 450.0, -1.0], true, 0.0, 0.0, true, false);
+        let ax = axis(&[3.0, 450.0, -1.0], true, 0.0, 0.0, true, false, &Default::default());
         assert_eq!((ax.lo, ax.hi), (1.0, 1000.0));
         assert_eq!(ax.ticks, vec![1.0, 10.0, 100.0, 1000.0]);
         assert_eq!(ax.minor.len(), 24);

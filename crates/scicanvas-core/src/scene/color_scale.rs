@@ -1,6 +1,6 @@
 use super::*;
 
-pub(super) fn append(page: &mut Scene, g: &Graph, books: BookLookup<'_, '_>) {
+pub(super) fn append(page: &mut Scene, g: &Graph, books: BookLookup<'_, '_>, styles: &[ResolvedAxisStyle]) {
     for (i, layer) in g.page.layers().iter().enumerate() {
         let Some((name, [lo, hi])) = crate::plotspec::color_scale_data(layer, books) else {
             continue;
@@ -9,8 +9,8 @@ pub(super) fn append(page: &mut Scene, g: &Graph, books: BookLookup<'_, '_>) {
         let plot = view.plot;
         let width = view.bounds[2] * 0.04;
         let scale = g.page.scale();
-        let size = TICK_FONT * scale;
-        let ticks: Vec<_> = axis(&[lo, hi], true, lo, hi, false, false)
+        let size = styles[i].tick_font * scale;
+        let ticks: Vec<_> = axis(&[lo, hi], true, lo, hi, false, false, &Default::default())
             .ticks
             .into_iter()
             .filter(|v| *v >= lo && *v <= hi)

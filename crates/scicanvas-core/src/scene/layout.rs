@@ -50,38 +50,36 @@ fn page_grid(g: &Graph, w: f64, h: f64) -> PageGrid {
     }
 }
 
-fn linked_views<'a>(g: &Graph, others: BookLookup<'a, '_>, views: &[Option<View>]) -> Vec<Option<View>> {
+fn linked_views<'a>(
+    g: &Graph,
+    others: BookLookup<'a, '_>,
+    views: &[Option<View>],
+) -> (Vec<Option<View>>, Vec<crate::coord::AxisSet>) {
     let mut linked: Vec<Option<View>> = (0..g.page.layers().len())
         .map(|i| views.get(i).copied().flatten())
         .collect();
-    if g.page
-        .layers()
-        .iter()
-        .any(|layer| layer.link_x.is_some() || layer.link_y.is_some())
-    {
-        let own: Vec<View> = g
-            .page
+    let own: Vec<_> = if g.page.layers().iter().any(|l| l.link_x.is_some() || l.link_y.is_some()) {
+        g.page
             .layers()
             .iter()
             .enumerate()
-            .map(|(i, layer)| {
-                build_layer(layer, layer.book_id.and_then(others), others, 400.0, 300.0, linked[i]).layers[0].view()
-            })
-            .collect();
-        for (i, layer) in g.page.layers().iter().enumerate() {
-            if layer.link_x.is_none() && layer.link_y.is_none() {
-                continue;
-            }
-            let pick = |link: Option<usize>, axis: fn(&View) -> (f64, f64)| {
-                link.and_then(|j| own.get(j)).map_or(axis(&own[i]), axis)
-            };
-            linked[i] = Some(View {
-                x: pick(layer.link_x, |view| view.x),
-                y: pick(layer.link_y, |view| view.y),
-            });
+            .map(|(i, layer)| build_layer(layer, layer.book_id.and_then(others), others, 400., 300., linked[i]).axes)
+            .collect()
+    } else {
+        Vec::new()
+    };
+    for (i, layer) in g.page.layers().iter().enumerate() {
+        if layer.link_x.is_none() && layer.link_y.is_none() {
+            continue;
         }
+        let x = layer.link_x.and_then(|j| own.get(j)).unwrap_or(&own[i]);
+        let y = layer.link_y.and_then(|j| own.get(j)).unwrap_or(&own[i]);
+        linked[i] = Some(View {
+            x: (x.x.lo, x.x.hi),
+            y: (y.left_y.lo, y.left_y.hi),
+        });
     }
-    linked
+    (linked, own)
 }
 
 fn aligned_margins<'a>(
@@ -90,6 +88,8 @@ fn aligned_margins<'a>(
     views: &[Option<View>],
     grid: &PageGrid,
     k: f64,
+    linked: &[crate::coord::AxisSet],
+    styles: &[ResolvedAxisStyle],
 ) -> Vec<[f64; 4]> {
     let mut cells = Vec::new();
     let mut aligned = vec![[0.0; 4]; g.page.layers().len()];
@@ -98,14 +98,19 @@ fn aligned_margins<'a>(
         for (i, layer) in g.page.layers().iter().enumerate() {
             if layer.placement.is_none() {
                 let (rw, rh) = (grid.cw / k, grid.ch / k);
-                let sc = build_layer(
+                let sc = build_layer_full(LayerContext {
                     layer,
-                    layer.book_id.and_then(others),
+                    book: layer.book_id.and_then(others),
                     others,
-                    rw,
-                    rh,
-                    views.get(i).copied().flatten(),
-                );
+                    w: rw,
+                    h: rh,
+                    view: views.get(i).copied().flatten(),
+                    min: [0.; 4],
+                    legend_outside: false,
+                    style: styles[i],
+                    linked_x: layer.link_x.and_then(|j| linked.get(j)).map(|a| &a.x),
+                    linked_y: layer.link_y.and_then(|j| linked.get(j)).map(|a| &a.left_y),
+                });
                 let [left, top, pw, ph] = sc.plot;
                 let index = cells.len();
                 cells.push((i, index / grid.cols, index % grid.cols));
@@ -143,10 +148,16 @@ pub(super) fn compose<'a>(
     let paper = grid.paper;
     let book = book;
     let others: BookLookup<'a, '_> = &book;
-    let linked = linked_views(g, others, views);
+    let (linked, linked_axes) = linked_views(g, others, views);
     let views = &linked[..];
     let k = g.page.scale();
-    let aligned = aligned_margins(g, others, views, &grid, k);
+    let styles: Vec<_> = g
+        .page
+        .layers()
+        .iter()
+        .map(|layer| ResolvedAxisStyle::new(&layer.axis_style, k))
+        .collect();
+    let aligned = aligned_margins(g, others, views, &grid, k, &linked_axes, &styles);
     let mut grid_index = 0;
     let mut manual_legends = Vec::new();
     let scenes = g
@@ -168,15 +179,19 @@ pub(super) fn compose<'a>(
                     ]
                 }
             };
-            let mut scene = build_layer_min(
+            let mut scene = build_layer_full(LayerContext {
                 layer,
-                layer.book_id.and_then(others),
+                book: layer.book_id.and_then(others),
                 others,
-                lw / k,
-                lh / k,
-                views.get(i).copied().flatten(),
-                aligned[i],
-            );
+                w: lw / k,
+                h: lh / k,
+                view: views.get(i).copied().flatten(),
+                min: aligned[i],
+                legend_outside: false,
+                style: styles[i],
+                linked_x: layer.link_x.and_then(|j| linked_axes.get(j)).map(|a| &a.x),
+                linked_y: layer.link_y.and_then(|j| linked_axes.get(j)).map(|a| &a.left_y),
+            });
             for item in &mut scene.items {
                 scale_prim(&mut item.prim, k);
                 translate(&mut item.prim, dx, dy);
@@ -223,7 +238,7 @@ pub(super) fn compose<'a>(
         })
         .collect();
     let mut page = compose_page(g, scenes, manual_legends, w, h, paper);
-    super::color_scale::append(&mut page, g, others);
+    super::color_scale::append(&mut page, g, others, &styles);
     page
 }
 

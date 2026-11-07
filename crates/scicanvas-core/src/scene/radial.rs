@@ -79,12 +79,13 @@ pub(super) fn build(ctx: &LayerContext<'_, '_, '_>) -> Scene {
         layer.y_max,
         layer.effective_y_scale(),
         true,
+        &Default::default(),
     );
     if r.scale == AxisScale::Linear {
         r.lo = 0.;
     }
     let axes = crate::coord::AxisSet {
-        x: axis(&[], false, 0., 360., false, false),
+        x: axis(&[], false, 0., 360., false, false, &Default::default()),
         left_y: r,
         right_y: None,
     };
@@ -102,21 +103,27 @@ pub(super) fn build(ctx: &LayerContext<'_, '_, '_>) -> Scene {
     let mut objects = Vec::new();
     if layer.plot_type == PlotType::Pie {
         let (slices, _) = slices(layer, &books);
-        draw_pie(&slices, rect, &mut items);
+        draw_pie(&slices, rect, &mut items, &ctx.style);
         if layer.legend {
             let entries: Vec<_> = slices
                 .iter()
                 .enumerate()
                 .map(|(i, s)| (s.label.clone(), crate::model::SeriesColor::Palette(i).rgb()))
                 .collect();
-            legend::draw_row_legend(&entries, [ctx.w - 100., 32.], &mut items, &mut objects);
+            legend::draw_row_legend(&entries, [ctx.w - 100., 32.], &mut items, &mut objects, &ctx.style);
         }
     } else if let Projection::Polar { degrees } = layer.projection {
-        draw_polar(&plots, &polar(&axes.left_y, rect, degrees), &mut items);
+        draw_polar(&plots, &polar(&axes.left_y, rect, degrees), &mut items, &ctx.style);
     }
     if !layer.title.is_empty() {
         items.push(Item {
-            prim: text(ctx.w / 2., 10., layer.title.clone(), TITLE_FONT, Anchor::Middle),
+            prim: text(
+                ctx.w / 2.,
+                10.,
+                layer.title.clone(),
+                ctx.style.title_font,
+                Anchor::Middle,
+            ),
             clip: None,
         });
     }
@@ -136,7 +143,7 @@ pub(super) fn build(ctx: &LayerContext<'_, '_, '_>) -> Scene {
         objects,
     }
 }
-fn draw_pie(slices: &[Slice], rect: [f64; 4], items: &mut Vec<Item>) {
+fn draw_pie(slices: &[Slice], rect: [f64; 4], items: &mut Vec<Item>, style: &ResolvedAxisStyle) {
     let (center, radius) = circle(rect);
     let total = slices.iter().map(|s| s.value).sum::<f64>();
     let mut start = FRAC_PI_2;
@@ -180,7 +187,7 @@ fn draw_pie(slices: &[Slice], rect: [f64; 4], items: &mut Vec<Item>) {
             Anchor::End
         };
         let y_offset = if near_vertical {
-            -mid.sin().signum() * TICK_FONT / 2.
+            -mid.sin().signum() * style.tick_font / 2.
         } else {
             0.
         };
@@ -189,7 +196,7 @@ fn draw_pie(slices: &[Slice], rect: [f64; 4], items: &mut Vec<Item>) {
                 center[0] + radius * 1.12 * mid.cos(),
                 center[1] - radius * 1.12 * mid.sin() + y_offset,
                 format!("{:.1}%", 100. * slice.value / total),
-                TICK_FONT,
+                style.tick_font,
                 anchor,
             ),
             clip: None,
@@ -197,7 +204,7 @@ fn draw_pie(slices: &[Slice], rect: [f64; 4], items: &mut Vec<Item>) {
         start -= angle;
     }
 }
-fn draw_polar(plots: &[crate::page::PreparedPlot], map: &Polar<'_>, items: &mut Vec<Item>) {
+fn draw_polar(plots: &[crate::page::PreparedPlot], map: &Polar<'_>, items: &mut Vec<Item>, style: &ResolvedAxisStyle) {
     for &tick in map.r.ticks.iter().filter(|v| **v >= 0.) {
         let r = map.r.frac(tick) * map.radius;
         let pts = (0..=128)
@@ -220,7 +227,7 @@ fn draw_polar(plots: &[crate::page::PreparedPlot], map: &Polar<'_>, items: &mut 
                 map.center[0] + r * a.cos(),
                 map.center[1] - r * a.sin(),
                 crate::fmt_num(tick),
-                TICK_FONT,
+                style.tick_font,
                 Anchor::Start,
             ),
             clip: None,
@@ -250,7 +257,7 @@ fn draw_polar(plots: &[crate::page::PreparedPlot], map: &Polar<'_>, items: &mut 
                 } else {
                     format!("{:.2}", a)
                 },
-                TICK_FONT,
+                style.tick_font,
                 Anchor::Middle,
             ),
             clip: None,

@@ -21,11 +21,11 @@ function page() {
 
 test('all stable IDs render once and each module has one header', () => {
   const { api, elements } = page();
-  assert.equal(api.BASE.length, 514);
-  assert.equal(new Set(api.BASE.map(r => r.id)).size, 514);
+  assert.equal(api.BASE.length, 515);
+  assert.equal(new Set(api.BASE.map(r => r.id)).size, 515);
   assert.deepEqual(JSON.parse(JSON.stringify(api.BASE)), JSON.parse(fs.readFileSync(path.join(__dirname, 'parity.json'), 'utf8')));
   const html = elements.get('#rows').innerHTML;
-  assert.equal((html.match(/class="id"/g) || []).length, 514);
+  assert.equal((html.match(/class="id"/g) || []).length, 515);
   assert.equal((html.match(/class="group"/g) || []).length, new Set(api.BASE.map(r => r.module)).size);
 });
 
@@ -42,7 +42,7 @@ test('search includes sub-item names and notes, feature overrides keep audited c
   const { api, elements } = page();
   api.state.q = '显函数参考目录';
   api.renderRows();
-  assert.equal(elements.get('#count').textContent, '显示 1 / 514');
+  assert.equal(elements.get('#count').textContent, '显示 1 / 515');
   assert.match(elements.get('#rows').innerHTML, /F514/);
   api.overrides.set('F514', '已完成');
   api.state.status.add('已完成');

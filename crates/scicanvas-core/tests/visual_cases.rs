@@ -285,6 +285,37 @@ fn cases() -> Vec<(String, Project, Graph)> {
     let mut g = p.graph(id).unwrap().clone();
     g.name = "graphical-summary".into();
     cases.push(("graphical-summary".into(), p, g));
+    let (_, mut p, mut g) = case("axis-style", PlotType::LineSymbol);
+    p.book_mut(1).unwrap().columns[0].data = (0..=10).map(|i| i.to_string()).collect();
+    p.book_mut(1).unwrap().columns[1].data = (0..=10).map(|i| 10_f64.powf(i as f64 * 0.6).to_string()).collect();
+    let layer = g.first_layer_mut();
+    layer.x_auto = false;
+    layer.x_min = 0.;
+    layer.x_max = 10.;
+    layer.y_auto = false;
+    layer.y_min = 1.;
+    layer.y_max = 1e6;
+    layer.y_log = true;
+    layer.x_ticks = scicanvas_core::page::TickSpacing {
+        major_step: Some(2.5),
+        minor_count: Some(4),
+    };
+    layer.y_ticks = scicanvas_core::page::TickSpacing {
+        major_step: Some(2.),
+        minor_count: Some(0),
+    };
+    layer.axis_style = scicanvas_core::page::AxisStyle {
+        axis_width_pt: Some(2.),
+        tick_width_pt: Some(0.8),
+        major_len_pt: Some(8.),
+        minor_len_pt: Some(4.),
+        tick_font_pt: Some(12.),
+        label_font_pt: Some(12.),
+        title_font_pt: Some(16.),
+        legend_font_pt: Some(11.),
+    };
+    layer.title = "坐标轴样式".into();
+    cases.push(("axis-style".into(), p, g));
     cases
 }
 
@@ -421,6 +452,11 @@ fn export(p: &Project, g: &Graph) -> (Value, String) {
             .map(|p| p.key.clone())
             .collect();
         let mut entry = json!({"axes":{"x":axis(&view.axes.x),"y":axis(&view.axes.left_y),"right_y":view.axes.right_y.as_ref().map(axis)},"plot":rect,"kind":format!("{:?}",l.plot_type),"connect":format!("{:?}",l.connect),"y_keys":draft.y_keys,"base_by_y":draft.base_by_y,"right_keys":right,"rows":draft.rows,"reference_lines":l.reference_lines.iter().map(|r|json!({"axis":format!("{:?}",r.axis),"value":r.value})).collect::<Vec<_>>(),"marks":{"symbols":symbols,"polylines":lines,"bars":bars,"segments":segments,"area":bounds,"colors":colors}});
+        if !l.axis_style.is_default() {
+            entry["axis_style"] = serde_json::to_value(l.axis_style).unwrap();
+            entry["x_ticks"] = serde_json::to_value(l.x_ticks).unwrap();
+            entry["y_ticks"] = serde_json::to_value(l.y_ticks).unwrap();
+        }
         if let Some(marks) = b4_marks(l, &scene.items, rect) {
             entry["marks"] = marks;
         }

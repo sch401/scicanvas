@@ -184,6 +184,24 @@ def generate(source):
             ax.set_yscale("log")
         ax.set_xlim(xconvert([axes["x"]["lo"], axes["x"]["hi"]]))
         ax.set_ylim(axes["y"]["lo"], axes["y"]["hi"])
+        if doc["case"] == "axis-style":
+            from matplotlib.ticker import MultipleLocator, LogLocator, NullLocator
+            ax.xaxis.set_major_locator(MultipleLocator(2.5))
+            ax.xaxis.set_minor_locator(MultipleLocator(.5))
+            ax.yaxis.set_major_locator(LogLocator(base=100))
+            ax.yaxis.set_minor_locator(NullLocator())
+            style=layer["axis_style"]
+            for spine in ax.spines.values():spine.set_linewidth(style["axis_width_pt"])
+            ax.tick_params(which="major",length=style["major_len_pt"],width=style["tick_width_pt"],labelsize=style["tick_font_pt"])
+            ax.tick_params(which="minor",length=style["minor_len_pt"],width=style["tick_width_pt"])
+            # Query independent locators, including clipped boundary ticks, instead of reusing the application tick list.
+            for direction in ["x","y"]:
+                lo,hi=axes[direction]["lo"],axes[direction]["hi"]
+                coordinate=getattr(ax,direction+"axis")
+                major=[float(v) for v in coordinate.get_majorticklocs() if lo<=v<=hi]
+                minor=[float(v) for v in coordinate.get_minorticklocs() if lo<v<hi]
+                axes[direction]["ticks"]=[dict(value=v,position=0.) for v in major]
+                axes[direction]["minor"]=[dict(value=v,position=0.) for v in minor]
         right = None
         if axes["right_y"]:
             right = ax.twinx()

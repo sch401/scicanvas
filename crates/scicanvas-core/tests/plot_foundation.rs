@@ -590,8 +590,8 @@ fn multiple_books_and_layers_have_independent_layout_and_clipping() {
 #[test]
 fn coordinate_inverse_and_palette_boundaries() {
     for log in [false, true] {
-        let x = scicanvas_core::ticks::axis(&[], false, 1.0, 100.0, log, false);
-        let y = scicanvas_core::ticks::axis(&[], false, 1.0, 1000.0, log, false);
+        let x = scicanvas_core::ticks::axis(&[], false, 1.0, 100.0, log, false, &Default::default());
+        let y = scicanvas_core::ticks::axis(&[], false, 1.0, 1000.0, log, false, &Default::default());
         let coord = Cartesian {
             x: &x,
             y: &y,

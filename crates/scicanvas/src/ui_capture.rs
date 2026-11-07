@@ -578,3 +578,55 @@ fn capture_gallery_alignment() {
         }
     }
 }
+
+#[test]
+#[ignore = "Explicit default/custom axis-style comparison using the real screen renderer"]
+fn capture_axis_style_comparison() {
+    let path = std::path::PathBuf::from(std::env::var("SCICANVAS_UI_CAPTURE_DIR").unwrap());
+    std::fs::create_dir_all(&path).unwrap();
+    let ctx = egui::Context::default();
+    crate::theme::install(&ctx);
+    crate::fonts::setup(&ctx);
+    let p = scicanvas_core::Project::sample();
+    let mut original = p.graph(2).unwrap().clone();
+    original.page.width_mm = 89.;
+    original.page.height_mm = 89.;
+    original.first_layer_mut().title = "默认样式".into();
+    let mut custom = original.clone();
+    custom.first_layer_mut().axis_style = scicanvas_core::page::AxisStyle {
+        axis_width_pt: Some(2.),
+        major_len_pt: Some(8.),
+        tick_font_pt: Some(12.),
+        title_font_pt: Some(16.),
+        label_font_pt: Some(12.),
+        ..Default::default()
+    };
+    custom.first_layer_mut().title = "调整后的样式".into();
+    let mut capture = Capture::new();
+    for pass in 0..3 {
+        let out = ctx.run(
+            egui::RawInput {
+                screen_rect: Some(egui::Rect::from_min_size(egui::Pos2::ZERO, egui::vec2(1280., 820.))),
+                ..Default::default()
+            },
+            |ctx| {
+                egui::CentralPanel::default()
+                    .frame(egui::Frame::none())
+                    .show(ctx, |ui| {
+                        ui.columns(2, |columns| {
+                            for (ui, g) in columns.iter_mut().zip([&original, &custom]) {
+                                let (rect, _) = ui
+                                    .allocate_exact_size(egui::vec2(ui.available_width(), 600.), egui::Sense::hover());
+                                crate::plot::paint(ui, rect, &scicanvas_core::scene::layout_page(g, &p, &[]));
+                            }
+                        });
+                    });
+            },
+        );
+        if pass == 2 {
+            capture.frame(&ctx, out, &path.join("comparison.png"));
+        } else {
+            capture.upload(&out);
+        }
+    }
+}

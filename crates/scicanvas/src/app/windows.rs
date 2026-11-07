@@ -483,6 +483,10 @@ impl SciApp {
         }
         self.book_preview = preview;
         let Some(out) = out else { return };
+        if let Some(message) = ui.data_mut(|d| d.remove_temp::<String>(egui::Id::new("axis-spacing-notice"))) {
+            self.set_status(StatusKind::Warn, message);
+        }
+
         if let Some(action) = out.action {
             self.apply_object_action(id, action);
         }

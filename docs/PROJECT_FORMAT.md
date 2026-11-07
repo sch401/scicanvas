@@ -1,5 +1,12 @@
 # 项目文件格式
 
+## v40 坐标轴外观与刻度间隔
+
+Layer 新增 axis_style（AxisStyle）和 x_ticks / y_ticks / y2_ticks（TickSpacing）。外观含 axis_width_pt、tick_width_pt、major_len_pt、minor_len_pt、tick_font_pt、label_font_pt、title_font_pt、legend_font_pt，均为可选数值，单位是导出页面最终 pt；显式值不乘页面比例。None 沿用原有常量与页面比例，刻度线宽 None 跟随轴线。间隔含可选 major_step（数据单位；对数为整数数量级）和 minor_count（0–9）。四个字段全默认时省略，旧项目缺少字段时读取为默认；读取 v0–v39，新保存为 v40，SCV 容器仍为 1。
+
+轴线/刻度线宽为 0.1–8 pt，刻度长度为 0–20 pt，字号为 1–72 pt；主间隔为有限正数。固定表轴与日期轴忽略间隔，极坐标和色阶条仅使用字号。GraphTheme 的新 axis_style 字段有读取默认值，旧主题能读；新主题包含该字段，旧版本按预期拒绝未知字段。主题不保存逐轴数据间隔。
+
+
 ## v39 绘图对象和填充图案
 
 Page 新增 shapes 数组和 next_shape_id，空数组与默认计数省略。ShapeObject 保存稳定 id、kind、页面比例端点 a/b、描边、宽度、虚线、填充透明度和箭头大小，F494 数据坐标锚定另行实现。CurveStyle 新增可选 pattern，缺省 None 且省略；FillPattern 保存 kind、spacing_pt、width_pt 和可选颜色，颜色缺省时自动使用与底色对比的黑色或白色。线段、箭头、椭圆和填充图案共用几何原语，SVG 不使用 pattern 元素。新文件 v39，读取 v0–v38，SCV 容器版本保持 1。

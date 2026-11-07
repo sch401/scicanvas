@@ -1,6 +1,6 @@
 # matplotlib 同数据位置对照
 
-本组比较数据位置与刻度映射，不比较默认页边距、字号、图例或线宽。53 个样例由测试中的 Project + Graph 生成；单层使用 Scene.plot，多层逐层使用 Scene.layer_plots。SciCanvas 页面坐标换算成框内 (fx, fy)，Y 轴朝上。JSON 记录原始列数据、类别顺序 / UTC 毫秒 / 时区、轴范围和图元。
+本组比较数据位置与刻度映射，不比较默认页边距、字号、图例或线宽。54 个样例由测试中的 Project + Graph 生成；单层使用 Scene.plot，多层逐层使用 Scene.layer_plots。SciCanvas 页面坐标换算成框内 (fx, fy)，Y 轴朝上。JSON 记录原始列数据、类别顺序 / UTC 毫秒 / 时区、轴范围和图元。
 
 ```powershell
 python -m venv .venv-ref
@@ -19,3 +19,5 @@ Matplotlib 使用同一数据和 SciCanvas 的轴范围，通过 transData / tra
 位置绝对容差 1e-6，自然样条另加相对 Y 误差 1e-9。参考 JSON 记录 Python/NumPy/SciPy/matplotlib 版本；PNG 为 300 DPI 透明背景，字体 Arial → Microsoft YaHei。SciCanvas SVG 保留现有固定出版画布行为。
 
 每个目录包含 scicanvas.json、scicanvas.svg、matplotlib.json、matplotlib.png 和并排说明。独立环境重生成的 JSON 应逐字节一致，PNG 不要求字节一致。科学文字排版、图例位置和字号按本轮指南留在本组数值验收范围之外。
+
+AX 的 axis-style 样例使用 MultipleLocator 和 LogLocator 独立生成主、次刻度，并附默认与手动样式截图；已有 53 个位置基线保持不变。

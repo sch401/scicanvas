@@ -78,5 +78,5 @@ fn matplotlib_relative_positions_match_committed_scenes() {
         }
         count += 1;
     }
-    assert_eq!(count, 53, "必须覆盖全部约定样例，禁止静默跳过目录");
+    assert_eq!(count, 54, "必须覆盖全部约定样例，禁止静默跳过目录");
 }

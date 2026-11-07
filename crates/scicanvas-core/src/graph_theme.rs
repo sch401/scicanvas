@@ -19,6 +19,8 @@ pub struct GraphTheme {
     pub tick_dir: TickDir,
     pub legend: bool,
     pub color_map: ColorMap,
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub axis_style: crate::page::AxisStyle,
 }
 impl GraphTheme {
     pub const BUILTIN: &'static str = "内置默认";
@@ -38,6 +40,7 @@ impl GraphTheme {
             tick_dir: layer.tick_dir,
             legend: layer.legend,
             color_map: layer.color_map,
+            axis_style: layer.axis_style,
         }
     }
     pub fn apply(&self, layer: &mut Layer) {
@@ -49,8 +52,10 @@ impl GraphTheme {
         layer.tick_dir = self.tick_dir;
         layer.legend = self.legend;
         layer.color_map = self.color_map;
+        layer.axis_style = self.axis_style;
     }
     pub fn validate(&self) -> Result<(), String> {
+        self.axis_style.validate()?;
         if self.name.trim().is_empty()
             || self.name.len() > 256
             || !self.line_width.is_finite()

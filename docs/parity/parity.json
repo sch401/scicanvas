@@ -1694,7 +1694,7 @@
   "ref": "",
   "pri": "P0",
   "status": "已完成",
-  "how": "ticks.rs（1/2/5 步长）；左 Y 和右 Y 分别支持自动或手动设定范围",
+  "how": "ticks.rs（1/2/5 步长）；左 Y 和右 Y 分别支持自动或手动设定范围。轴线、刻度长度、间隔与字号设置见 F515。",
   "verify": "自动/手动范围和独立左右 Y 范围场景回归",
   "id": "F092",
   "milestone": "M1 日常够用",
@@ -1810,7 +1810,7 @@
   "ref": "",
   "pri": "P0",
   "status": "已完成",
-  "how": "屏幕/SVG 共用主次刻度；默认期刊风格只画左轴和下轴、刻度朝外；属性窗口可开“四边框”（闭合坐标框，顶边和右边画无标签的镜像主次刻度）并选刻度方向朝外/朝内/内外，朝内时刻度标签贴近坐标轴、坐标框相应放大；未设置时项目文件与旧图不变",
+  "how": "屏幕/SVG 共用主次刻度；默认期刊风格只画左轴和下轴、刻度朝外；属性窗口可开“四边框”（闭合坐标框，顶边和右边画无标签的镜像主次刻度）并选刻度方向朝外/朝内/内外，朝内时刻度标签贴近坐标轴、坐标框相应放大；未设置时项目文件与旧图不变。轴线、刻度长度、间隔与字号设置见 F515。",
   "verify": "默认朝外两轴回归与 golden SVG 不变；四边框闭合折线、朝内刻度全部在框内、四边均有刻度、坐标框放大的单元测试；matplotlib 同数据视觉对照待做；matplotlib 同数据位置/刻度对照见 evidence.visual（样式与人工交互另验收）；已核对主要行为自动测试和视觉证据。",
   "id": "F097",
   "milestone": "M1 日常够用",
@@ -8959,6 +8959,45 @@
    ],
    "manual": {
     "checklist": "docs/acceptance/fitting.md#F514",
+    "result": "待做",
+    "date": "",
+    "build": ""
+   }
+  }
+ },
+ {
+  "id": "F515",
+  "module": "绘图基础",
+  "feature": "坐标轴线宽、刻度长度、刻度间隔与文字字号",
+  "ref": "",
+  "pri": "P1",
+  "status": "已实现待验收",
+  "how": "图层 AxisStyle 与逐轴 TickSpacing，单位为导出 pt，显式值不乘页面倍数；自动值保持原有比例。线性间隔以 0 对齐、次刻度 0–9，对数间隔按整数数量级；最多 200 条主刻度，过密回退自动并提示一次。非线性固定表轴和日期轴不支持自定义间隔；极坐标和色阶条仅跟随字号。联动轴在刻度类型相同时继承目标刻度，不同时只同步范围。主题、格式复制和默认主题带上外观，不带间隔；旧主题可读，新主题旧版读不了。后续：刻度文字旋转、单轴标签隐藏、轴颜色、字体族/整体加粗、次网格与网格线型、轴反向、轴位置偏移；断点见 F095。",
+  "verify": "默认 33 个示例场景与 v39 逐元素一致；现有 SVG 基线全部保留。核心回归覆盖刻度、pt、字号布局、联动、v39/40、主题与校验；真实属性控件覆盖自动初值、连续拖动一步撤销及固定表轴禁用；独立 MultipleLocator/LogLocator 位置对照。",
+  "milestone": "M2 论文全流程",
+  "needs": [
+   "auto",
+   "reference",
+   "visual",
+   "manual"
+  ],
+  "evidence": {
+   "auto": [
+    "crates/scicanvas-core/tests/axis_style.rs::custom_spacing_and_density_guard_cover_linear_and_log_axes",
+    "crates/scicanvas-core/tests/axis_style.rs::export_pt_sizes_ignore_page_scale_and_large_text_stays_outside_plot_inside_page",
+    "crates/scicanvas-core/tests/axis_style.rs::linked_axes_inherit_exact_tick_arrays",
+    "crates/scicanvas-core/tests/axis_style.rs::v39_projects_default_fields_theme_capture_and_validation",
+    "crates/scicanvas/src/app/tests/graph.rs::axis_style_auto_initial_value_drag_history_and_fixed_spacing_controls",
+    "crates/scicanvas-core/tests/axis_style.rs::frame_and_right_axis_share_tick_geometry_and_independent_stroke_widths"
+   ],
+   "reference": [
+    "docs/parity/visual/axis-style/matplotlib.json"
+   ],
+   "visual": [
+    "docs/parity/visual/axis-style/README.md"
+   ],
+   "manual": {
+    "checklist": "docs/acceptance/plotting.md#F515",
     "result": "待做",
     "date": "",
     "build": ""
