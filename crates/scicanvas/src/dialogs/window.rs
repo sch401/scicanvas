@@ -8,6 +8,7 @@ pub(crate) struct SettingsWindow<'open> {
     id: egui::Id,
     centered: bool,
     native: egui::ViewportBuilder,
+    defaults: [Option<f32>; 2],
     open: Option<&'open mut bool>,
 }
 
@@ -33,12 +34,12 @@ impl<'open> SettingsWindow<'open> {
     }
     pub(crate) fn default_width(mut self, width: f32) -> Self {
         self.window = self.window.default_width(width);
-        self.native.inner_size.as_mut().unwrap().x = width;
+        self.defaults[0] = Some(width);
         self
     }
     pub(crate) fn default_height(mut self, height: f32) -> Self {
         self.window = self.window.default_height(height);
-        self.native.inner_size.as_mut().unwrap().y = height;
+        self.defaults[1] = Some(height);
         self
     }
     pub(crate) fn show<R>(
@@ -70,6 +71,11 @@ impl<'open> SettingsWindow<'open> {
         panel.visible = true;
         let docked = panel.side;
         let mut dock_size = None;
+        let float_pos = if panel.rect.is_none() {
+            panel.float_pos.take()
+        } else {
+            None
+        };
         if let Some(rect) = panel.rect {
             let size = (rect.size()
                 - egui::vec2(
@@ -81,7 +87,7 @@ impl<'open> SettingsWindow<'open> {
             .max(egui::vec2(1.0, 1.0));
             dock_size = Some(size);
             self.window = self.window.current_pos(rect.min).fixed_size(size);
-        } else if let Some(pos) = panel.float_pos.take() {
+        } else if let Some(pos) = float_pos {
             self.window = self.window.current_pos(pos);
         }
         store_docks(ctx, state);
@@ -108,7 +114,7 @@ impl<'open> SettingsWindow<'open> {
             result
         };
         if docked.is_none() && !ctx.embed_viewports() {
-            return self.show_native(ctx, content);
+            return self.show_native(ctx, content, float_pos);
         }
         if let Some(open) = self.open {
             self.window = self.window.open(open);
@@ -135,11 +141,23 @@ impl<'open> SettingsWindow<'open> {
         mut self,
         ctx: &egui::Context,
         mut contents: impl FnMut(&mut egui::Ui) -> R,
+        float_pos: Option<egui::Pos2>,
     ) -> Option<egui::InnerResponse<Option<R>>> {
         if self.open.as_deref() == Some(&false) {
             return None;
         }
         let id = self.id;
+        let key = id.with("native-builder");
+        let main = ctx.input(|i| i.viewport().inner_rect).unwrap_or(ctx.screen_rect());
+        self.native = native_builder(
+            self.native,
+            main,
+            self.defaults,
+            self.centered,
+            float_pos,
+            ctx.data(|d| d.get_temp(key)),
+        );
+        ctx.data_mut(|d| d.insert_temp(key, self.native.clone()));
         let mut embedded = Some(self.window);
         ctx.show_viewport_immediate(egui::ViewportId(id), self.native, |child, class| {
             if class == egui::ViewportClass::Embedded {
@@ -327,14 +345,11 @@ pub(crate) fn window<'open>(ctx: &egui::Context, title: &str) -> SettingsWindow<
     SettingsWindow {
         id,
         centered: false,
+        defaults: [None, None],
         open: None,
         native: egui::ViewportBuilder::default()
             .with_title(title)
             .with_icon(crate::window_icon())
-            .with_inner_size([
-                crate::theme::dialog::SMALL,
-                (ctx.screen_rect().height() * 0.75).max(240.),
-            ])
             .with_min_inner_size([280., 120.])
             .with_resizable(true)
             .with_decorations(true)
@@ -368,5 +383,67 @@ pub(crate) fn raise_settings(ctx: &egui::Context) {
         .unwrap_or_default()
     {
         ctx.move_to_top(layer);
+    }
+}
+
+fn native_builder(
+    mut builder: egui::ViewportBuilder,
+    main: egui::Rect,
+    defaults: [Option<f32>; 2],
+    centered: bool,
+    float_pos: Option<egui::Pos2>,
+    cached: Option<egui::ViewportBuilder>,
+) -> egui::ViewportBuilder {
+    if let Some(cached) = cached {
+        builder.inner_size = cached.inner_size;
+        builder.position = cached.position;
+    } else {
+        let size = egui::vec2(
+            defaults[0].unwrap_or(crate::theme::dialog::SMALL),
+            defaults[1].unwrap_or((main.height() * 0.75).max(240.)),
+        );
+        builder = builder.with_inner_size(size).with_position(if centered {
+            main.center() - size / 2.
+        } else {
+            main.min + egui::vec2(80., 80.)
+        });
+    }
+    if let Some(pos) = float_pos {
+        builder.position = Some(main.min + pos.to_vec2());
+    }
+    builder
+}
+#[cfg(test)]
+mod native_geometry_tests {
+    use super::*;
+    #[test]
+    fn resizing_main_keeps_native_builder_fixed() {
+        let main = egui::Rect::from_min_size(egui::pos2(100., 100.), egui::vec2(1200., 800.));
+        let first = native_builder(Default::default(), main, [Some(420.), Some(600.)], false, None, None);
+        let next = native_builder(
+            Default::default(),
+            egui::Rect::from_min_size(main.min, egui::vec2(1600., 1200.)),
+            [Some(800.), Some(900.)],
+            false,
+            None,
+            Some(first.clone()),
+        );
+        assert_eq!(first, next);
+    }
+    #[test]
+    fn centered_and_detached_positions_use_main_screen_coordinates() {
+        let main = egui::Rect::from_min_size(egui::pos2(-1500., 100.), egui::vec2(1200., 800.));
+        let first = native_builder(Default::default(), main, [None, None], true, None, None);
+        assert_eq!(first.position.unwrap() + first.inner_size.unwrap() / 2., main.center());
+        assert!(main.contains(first.position.unwrap()));
+        let detached = native_builder(
+            Default::default(),
+            main,
+            [None, None],
+            false,
+            Some(egui::pos2(250., 160.)),
+            Some(first),
+        );
+        assert_eq!(detached.position, Some(egui::pos2(-1250., 260.)));
     }
 }
